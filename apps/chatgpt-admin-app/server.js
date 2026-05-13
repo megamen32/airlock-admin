@@ -101,6 +101,7 @@ function createAdminServer() {
 
 const port = Number(process.env.PORT || 8787);
 const MCP_PATH = '/mcp';
+const MCP_AUTH_TOKEN = process.env.MCP_AUTH_TOKEN;
 
 const httpServer = createServer(async (req, res) => {
   if (!req.url) {
@@ -134,6 +135,23 @@ const httpServer = createServer(async (req, res) => {
   const methods = new Set(['GET', 'POST', 'DELETE']);
 
   if (url.pathname === MCP_PATH && methods.has(req.method)) {
+    if (MCP_AUTH_TOKEN) {
+      const auth = req.headers.authorization || '';
+      const expected = `Bearer ${MCP_AUTH_TOKEN}`;
+
+      if (auth !== expected) {
+        res.writeHead(401, {
+          'content-type': 'application/json',
+          'www-authenticate': 'Bearer realm=\"gptadmin-mcp\"',
+        });
+
+        res.end(JSON.stringify({
+          error: 'unauthorized',
+        }));
+
+        return;
+      }
+    }
     const server = createAdminServer();
 
     const transport = new StreamableHTTPServerTransport({

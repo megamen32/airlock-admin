@@ -7,7 +7,7 @@ APP_USER="roomhacker"
 
 sudo mkdir -p "$APP_DIR"
 
-sudo rsync -a --delete ./ "$APP_DIR/"
+sudo rsync -a --delete --exclude .env ./ "$APP_DIR/"
 
 cd "$APP_DIR"
 
