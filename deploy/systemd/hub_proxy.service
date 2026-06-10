@@ -6,7 +6,7 @@ Requires=hub_proxy.socket
 [Service]
 Type=notify
 WorkingDirectory=/home/roomhacker/gptadmin
-ExecStart=/home/roomhacker/gptadmin/.venv/bin/python /home/roomhacker/gptadmin/services/main_package/hub_proxy.py
+ExecStart=/home/roomhacker/gptadmin/.venv/bin/python /home/roomhacker/gptadmin/hub_proxy.py
 Environment=CTL_TOKEN=chatgpt_secret
 Restart=always
 RestartSec=5

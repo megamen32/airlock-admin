@@ -5,7 +5,7 @@ After=network.target
 [Service]
 WorkingDirectory=/home/roomhacker/gptadmin
 # Запуск из вашего .venv
-ExecStart=/home/roomhacker/gptadmin/.venv/bin/python /home/roomhacker/gptadmin/services/main_package/client/rootd.py
+ExecStart=/home/roomhacker/gptadmin/.venv/bin/python /home/roomhacker/gptadmin/client/rootd.py
 
 # Переменные окружения: агентов регистрируются у Hub по HTTPS
 Environment=ROOTD_TOKEN=srv_secret
