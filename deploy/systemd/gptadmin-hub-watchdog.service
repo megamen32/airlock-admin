@@ -1,0 +1,10 @@
+[Unit]
+Description=GPTAdmin Hub external watchdog
+Documentation=man:systemd.service(5)
+Wants=network-online.target
+After=network-online.target hub_proxy.service
+
+[Service]
+Type=oneshot
+WorkingDirectory=/home/roomhacker/gptadmin
+ExecStart=/home/roomhacker/gptadmin/.venv/bin/python /home/roomhacker/gptadmin/services/main_package/hub_watchdog.py --check-once
