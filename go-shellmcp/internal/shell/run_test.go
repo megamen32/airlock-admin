@@ -68,3 +68,15 @@ func TestRunLiveEvents(t *testing.T) {
 		t.Fatalf("missing events: %#v", events)
 	}
 }
+
+func TestDefaultUserSelection(t *testing.T) {
+	if got, explicit := targetRunUser(Request{Cmd: "id", DefaultUser: "roomhacker"}); got != "roomhacker" || explicit {
+		t.Fatalf("default user not selected: got=%q explicit=%v", got, explicit)
+	}
+	if got, _ := targetRunUser(Request{Cmd: "sudo id", DefaultUser: "roomhacker"}); got != "" {
+		t.Fatalf("sudo command should not use default user, got %q", got)
+	}
+	if got, explicit := targetRunUser(Request{Cmd: "id", RunAsUser: "root", DefaultUser: "roomhacker"}); got != "root" || !explicit {
+		t.Fatalf("explicit user not selected: got=%q explicit=%v", got, explicit)
+	}
+}
