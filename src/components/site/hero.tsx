@@ -80,11 +80,11 @@ export function Hero() {
                   <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
                 </a>
                 <a
-                  href="#mcp"
+                  href="#browser-bridge"
                   className="inline-flex items-center gap-2 rounded-full border border-border/80 bg-white/[0.02] px-5 py-3 text-sm font-medium text-foreground transition-colors hover:border-primary/40 hover:bg-white/[0.04]"
                 >
                   <Puzzle className="h-4 w-4 text-primary" />
-                  MCP Bridge
+                  MCP для любого ИИ
                 </a>
               </div>
             </motion.div>

@@ -10,7 +10,7 @@ const NAV = [
   { href: "#usecases", label: "Use‑cases" },
   { href: "#features", label: "Функции" },
   { href: "#examples", label: "Примеры" },
-  { href: "#security", label: "Безопасность" },
+  { href: "#browser-bridge", label: "MCP для ИИ" },
   { href: "#pricing", label: "Тарифы" },
   { href: "#faq", label: "FAQ" },
 ];

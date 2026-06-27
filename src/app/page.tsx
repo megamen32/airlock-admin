@@ -3,6 +3,7 @@ import { ScrollProgress } from "@/components/site/scroll-progress";
 import { Hero } from "@/components/site/hero";
 import { LogosStrip } from "@/components/site/logos-strip";
 import { McpBridge } from "@/components/site/mcp-bridge";
+import { BrowserBridge } from "@/components/site/browser-bridge";
 import { HowItWorks } from "@/components/site/how-it-works";
 import { UseCases } from "@/components/site/use-cases";
 import { Features } from "@/components/site/features";
@@ -26,6 +27,7 @@ export default function Home() {
         <Hero />
         <LogosStrip />
         <McpBridge />
+        <BrowserBridge />
         <HowItWorks />
         <UseCases />
         <Features />
