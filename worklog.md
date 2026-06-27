@@ -122,3 +122,33 @@ Stage Summary:
 - Site fully re-themed to premium violet/purple (user preference).
 - rootd → shellmcp rename complete end-to-end.
 - OG image, favicon, CSS variables, and all hardcoded colors all consistent in violet.
+
+---
+Task ID: 11
+Agent: main
+Task: Auto-detecting OS install switcher + MCP section + under-the-hood features + web panel + year fix + git push.
+
+Work Log:
+- Built reusable InstallCommand component (src/components/site/install-command.tsx): 4-way segmented switcher (macOS / Linux / Linux·sudo / Windows), auto-detects visitor OS via useSyncExternalStore (hydration-safe, no setState-in-effect lint error), copy-to-clipboard per active OS. `compact` variant for hero/CTA/step cards, `full` variant (with per-OS note) for the install section.
+- Replaced every install command across Hero, HowItWorks (step 1), Install section, and FinalCTA with <InstallCommand>. The old static CopyCommand/Tabs are gone from those spots.
+- Added McpBridge section (id="mcp") right after LogosStrip: headline "Любой AI — доступ ко всем вашим компьютерам", explains GPT‑Админ as an MCP server for Claude/OpenCode/ChatGPT/any agent, "any MCP supported", openmemory quote callout, and a connection diagram (agents → GPT‑Админ hub → servers). Hero "MCP Bridge" button now links to #mcp.
+- Added UnderTheHood section (after Features): 3 engineering cards (Надёжный транспорт, Авто background‑задачи, Умная обрезка вывода / экономия токенов) + a wide "coming soon" web-panel card (очередь заданий / здоровье агентов и MCP / логи) with a mini dashboard preview.
+- Fixed the "делает" letter‑т clipping: added pr-2 + inline-block to the gradient span wrapper so the italic serif glyph is no longer cut on the right (verified: 8px gap, VLM confirms fully visible).
+- Updated footer year: "© 2025–2026 GPT‑Админ · в разработке с мая 2025".
+- ESLint clean (resolved react-hooks/set-state-in-effect by switching to useSyncExternalStore).
+
+Verification (Agent Browser + VLM):
+- 4 OS tabs present in hero and install section; auto-detect picks Linux on this Linux host (curl command shown); manual switch to Windows → iwr command, sudo → `| sudo bash`, macOS → curl — all correct.
+- MCP section renders with openmemory mention and intact connection diagram.
+- Under-the-hood: all 3 engineering features + "Скоро" web-panel present.
+- Footer reads "2025–2026".
+- VLM (glm-4.6v): 'т' fully visible (not clipped), 4-button switcher present, MCP diagram intact, mobile 390px switcher fits without overflow.
+
+Git:
+- Committed locally (5c333e9): "feat: премиальный лендинг GPT‑Админ — фиолетовая тема, MCP, авто‑ОС установка" (9 files, +502/−76).
+- Added remote https://github.com/megamen32/adminchatgpt_website.git.
+- Force-pushed main: 3981d33 (old static site) → 5c333e9 (new premium Next.js site). Verified remote HEAD now matches local HEAD.
+
+Stage Summary:
+- All requested changes shipped and pushed to github.com/megamen32/adminchatgpt_website (main).
+- Old simple static index.html site replaced by the premium violet Next.js landing.
