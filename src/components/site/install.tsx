@@ -42,7 +42,7 @@ export function Install() {
           title={
             <>
               Одна команда —{" "}
-              <span className="text-gradient-emerald">и серверы под управлением</span>
+              <span className="text-gradient-violet">и серверы под управлением</span>
             </>
           }
           lead="После установки откройте ChatGPT → Actions → добавьте выданный API‑URL и ключ. Готово."
@@ -85,7 +85,7 @@ export function Install() {
           </Tabs>
 
           <p className="mt-6 text-center text-sm text-muted-foreground">
-            Быстрый запуск: отвечайте «1» (hub_proxy + rootd), затем «1» (авто‑туннель через FRP).
+            Быстрый запуск: отвечайте «1» (hub_proxy + shellmcp), затем «1» (авто‑туннель через FRP).
             Свой домен или статичный IP не нужны.
           </p>
         </Reveal>

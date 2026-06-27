@@ -10,11 +10,11 @@ const EASE = [0.16, 1, 0.3, 1] as const;
 export function Hero() {
   return (
     <section id="top" className="relative overflow-hidden pt-28 sm:pt-32">
-      {/* Ambient background: layered emerald auroras + grid */}
+      {/* Ambient background: layered violet auroras + grid */}
       <div className="pointer-events-none absolute inset-0 -z-10" aria-hidden>
-        <div className="absolute left-1/2 top-[-10%] h-[520px] w-[820px] -translate-x-1/2 glow-emerald blur-3xl animate-aurora" />
+        <div className="absolute left-1/2 top-[-10%] h-[520px] w-[820px] -translate-x-1/2 glow-violet blur-3xl animate-aurora" />
         <div className="absolute right-[-10%] top-[20%] h-[360px] w-[360px] rounded-full bg-primary/[0.08] blur-3xl animate-aurora" style={{ animationDelay: "-6s" }} />
-        <div className="absolute left-[-8%] bottom-[0%] h-[320px] w-[420px] glow-emerald blur-3xl opacity-50 animate-aurora" style={{ animationDelay: "-12s" }} />
+        <div className="absolute left-[-8%] bottom-[0%] h-[320px] w-[420px] glow-violet blur-3xl opacity-50 animate-aurora" style={{ animationDelay: "-12s" }} />
         <GridFade />
       </div>
 
@@ -44,9 +44,9 @@ export function Hero() {
             >
               Умный помощник для серверов, который{" "}
               <span className="relative whitespace-nowrap">
-                <span className="font-[family-name:var(--font-instrument-serif)] italic text-gradient-emerald">делает</span>
+                <span className="font-[family-name:var(--font-instrument-serif)] italic text-gradient-violet">делает</span>
                 <svg className="absolute -bottom-1 left-0 w-full" viewBox="0 0 200 8" preserveAspectRatio="none" aria-hidden>
-                  <path d="M2 5 Q 50 1, 100 4 T 198 4" stroke="oklch(0.78 0.16 162 / 0.5)" strokeWidth="2" fill="none" strokeLinecap="round" />
+                  <path d="M2 5 Q 50 1, 100 4 T 198 4" stroke="oklch(0.78 0.16 295 / 0.5)" strokeWidth="2" fill="none" strokeLinecap="round" />
                 </svg>
               </span>
               ,<br className="hidden sm:block" /> а не советует
@@ -114,7 +114,7 @@ export function Hero() {
             transition={{ duration: 0.9, delay: 0.2, ease: EASE }}
             className="relative"
           >
-            <div className="absolute -inset-4 -z-10 glow-emerald blur-3xl opacity-40" aria-hidden />
+            <div className="absolute -inset-4 -z-10 glow-violet blur-3xl opacity-40" aria-hidden />
             <TerminalDemo className="animate-float-soft" />
           </motion.div>
         </div>
@@ -129,7 +129,7 @@ function GridFade() {
       className="absolute inset-0 opacity-[0.5]"
       style={{
         backgroundImage:
-          "linear-gradient(to right, oklch(0.78 0.16 162 / 0.06) 1px, transparent 1px), linear-gradient(to bottom, oklch(0.78 0.16 162 / 0.06) 1px, transparent 1px)",
+          "linear-gradient(to right, oklch(0.78 0.16 295 / 0.06) 1px, transparent 1px), linear-gradient(to bottom, oklch(0.78 0.16 295 / 0.06) 1px, transparent 1px)",
         backgroundSize: "56px 56px",
         maskImage: "radial-gradient(ellipse 70% 55% at 50% 35%, #000 40%, transparent 75%)",
         WebkitMaskImage: "radial-gradient(ellipse 70% 55% at 50% 35%, #000 40%, transparent 75%)",

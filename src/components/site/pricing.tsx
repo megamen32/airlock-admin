@@ -31,7 +31,7 @@ const PLANS: Plan[] = [
     price: (
       <>
         <span className="text-muted-foreground line-through decoration-muted-foreground/60">199₽</span>{" "}
-        <span className="text-gradient-emerald">Бесплатно</span>
+        <span className="text-gradient-violet">Бесплатно</span>
       </>
     ),
     blurb: "Для энтузиастов и небольших команд — сейчас без ограничений",
@@ -68,7 +68,7 @@ export function Pricing() {
           title={
             <>
               Начать бесплатно,{" "}
-              <span className="text-gradient-emerald">расти без сюрпризов</span>
+              <span className="text-gradient-violet">расти без сюрпризов</span>
             </>
           }
           lead={
@@ -96,7 +96,7 @@ function PlanCard({ plan }: { plan: Plan }) {
       className={cn(
         "surface relative flex w-full flex-col rounded-2xl p-7",
         plan.featured
-          ? "border-primary/40 shadow-[0_0_0_1px_oklch(0.78_0.16_162_/_0.25),0_30px_80px_-30px_oklch(0.78_0.16_162_/_0.4)]"
+          ? "border-primary/40 shadow-[0_0_0_1px_oklch(0.78_0.16_295_/_0.25),0_30px_80px_-30px_oklch(0.78_0.16_295_/_0.4)]"
           : "surface-hover"
       )}
     >

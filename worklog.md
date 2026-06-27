@@ -72,3 +72,53 @@ Stage Summary:
 - Production-ready premium landing delivered at / (the only user-visible route).
 - Aesthetic: dark + emerald, Linear/Vercel/Raycast-level minimalism, fully Russian content matching the original site's messaging.
 - All interactivity browser-verified. Ready for the user to preview via the Preview Panel.
+
+---
+Task ID: 9
+Agent: general-purpose (sub-agent)
+Task: Regenerate the OpenGraph/social-share image for the GPT-Админ landing page in a VIOLET (purple) color scheme (matching the just-re-themed landing page), overwriting the previous emerald version at /public/og-image.png.
+
+Work Log:
+- Read worklog.md: Task 1 (screenshots), Task 2 (original emerald OG image, learned the 1440x720 API-rejection + JPEG-bytes-with-.png-extension quirks), Tasks 3-8 (full emerald landing built & verified). Current OG file present at /public/og-image.png as a 273,917-byte PNG (emerald).
+- Invoked Skill(command="image-generation") and re-read SKILL.md; used the z-ai CLI workflow learned from Task 2.
+- Ran the generation directly with the safe size `-s 1344x768` (multiple-of-32, API-accepted) — skipped the 1440x720 attempt that Task 2 already proved is rejected.
+- Prompt engineered for premium violet composition: deep near-black bg (#08070b, faint violet undertone), subtle dark VIOLET radial glow from center (#9b5cf5 / violet-500 fading to black), single elegant glassmorphic terminal window (dark, large rounded corners, thin violet-tinted hairline border, soft outer violet bloom), monospace lines in violet + warm off-white ('$ gpt-admin install nginx' prompt → violet-checkmark success lines → blinking block cursor), optional 'GPT-Админ' wordmark (only if crisp), subtle film grain, cinematic volumetric lighting, Linear/Vercel/Raycast refinement. Strict palette explicitly enforced in prompt: near-black + violet/purple + warm white/gray ONLY; explicitly forbade green/emerald/mint/teal/blue/indigo.
+- Command run:
+    z-ai image -p "<full violet premium prompt above>" -o /tmp/og-image-violet-raw.png -s 1344x768
+  → saved 45,053 bytes to /tmp/og-image-violet-raw.png.
+- Confirmed the recurring quirk: `file` reported the .png as `JPEG image data, JFIF standard 1.01 ... 1344x768` (API returns JPEG bytes despite the .png extension).
+- Re-encoded to a genuine PNG with Python PIL and overwrote the existing OG file in place:
+    python3 -c "from PIL import Image; img=Image.open('/tmp/og-image-violet-raw.png'); img=img if img.mode=='RGB' else img.convert('RGB'); img.save('/home/z/my-project/public/og-image.png','PNG',optimize=True)"
+- Verified final artifact with `file`: `PNG image data, 1344 x 768, 8-bit/color RGB, non-interlaced`. Size = 260,615 bytes (~254.5 KB), well above the 20 KB threshold.
+- VLM verification (glm-4.6v via `z-ai vision`) on the final PNG confirmed: accent color is clearly VIOLET/PURPLE (explicitly NOT green/emerald/blue/indigo/teal); terminal window present showing the `gpt-admin install nginx` command; premium, minimalist, dark smooth background; no garbled/gibberish text.
+
+Stage Summary:
+- Final OG image saved at: /home/z/my-project/public/og-image.png (overwrote the previous emerald version).
+- Format: genuine PNG, 1344×768 RGB, ~254.5 KB (260,615 bytes), >20 KB ✓.
+- Composition: dark near-black bg + subtle violet radial center glow, minimalist violet-glow glassmorphic terminal mockup showing `gpt-admin install nginx` success output, premium Linear/Vercel/Raycast vibe. Strict violet/purple + near-black + warm-white palette — matches the re-themed violet landing page.
+- Confirms prior agent's API quirks are still live: (1) use `-s 1344x768` not 1440x720; (2) API returns JPEG bytes — must re-encode via PIL to a true PNG before relying on the .png extension.
+- Ready to be referenced by the landing page's existing OG meta tags (`<meta property="og:image" content="/og-image.png" />` in layout.tsx — no code change needed, same path/size).
+
+---
+Task ID: 10
+Agent: main
+Task: Rename rootd → shellmcp across the site and re-theme from emerald to a rich premium violet/purple palette.
+
+Work Log:
+- Replaced all "rootd" mentions with "shellmcp" in how-it-works.tsx (3 places) and install.tsx (1 place). Verified via rg that no "rootd" remains in src/.
+- Rewrote globals.css with a violet palette: primary oklch(0.62 0.24 295) (rich saturated violet ~ between violet-500 and purple-500), background oklch(0.15 0.006 290) (near-black with faint violet undertone), card/muted/border/ring all shifted to violet hues (290-300). Updated selection color, glow, gradient, surface hover, conic ring, scrollbars to violet.
+- Renamed utility classes glow-emerald → glow-violet and text-gradient-emerald → text-gradient-violet across ALL 13 component files (used replace_all where safe).
+- Replaced all hardcoded emerald OKLCH literals in components (hue 162 → 295 for accent, 160 → 290 for backgrounds): hero.tsx (SVG underline + grid), header.tsx (logo bg + strokes), footer.tsx (logo bg + strokes), terminal-demo.tsx (terminal bg + dot), pricing.tsx (featured plan shadow), final-cta.tsx (grid lines).
+- Updated favicon.svg to violet gradient (#c4a3f8 → #8b3df5).
+- Updated internal comments mentioning "emerald" to "violet" for consistency.
+- Delegated OG image regeneration (Task ID 9) to a subagent → /public/og-image.png regenerated in violet, verified as genuine 1344x768 PNG (~254KB), VLM-confirmed violet palette.
+
+Verification:
+- ESLint clean.
+- Agent Browser: page loads with no errors; --primary CSS var resolves to a violet lab value; body background is near-black; "shellmcp" present in the how-it-works section; "rootd" completely gone from rendered DOM.
+- VLM (glm-4.6v) review of hero + how-it-works screenshots: accent clearly violet/purple, terminal strokes violet, premium/dark/minimalist/expensive look retained, "shellmcp" reads correctly, no visible problems.
+
+Stage Summary:
+- Site fully re-themed to premium violet/purple (user preference).
+- rootd → shellmcp rename complete end-to-end.
+- OG image, favicon, CSS variables, and all hardcoded colors all consistent in violet.

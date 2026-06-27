@@ -11,10 +11,10 @@ export function FinalCTA() {
         <Reveal className="relative overflow-hidden rounded-3xl border border-border/60 bg-card/40 px-6 py-16 backdrop-blur-md sm:px-16 sm:py-20">
           {/* ambient glow */}
           <div className="pointer-events-none absolute inset-0 -z-10" aria-hidden>
-            <div className="absolute left-1/2 top-[-30%] h-[400px] w-[700px] -translate-x-1/2 glow-emerald blur-3xl opacity-70" />
+            <div className="absolute left-1/2 top-[-30%] h-[400px] w-[700px] -translate-x-1/2 glow-violet blur-3xl opacity-70" />
             <div className="absolute inset-0 opacity-[0.4]" style={{
               backgroundImage:
-                "linear-gradient(to right, oklch(0.78 0.16 162 / 0.05) 1px, transparent 1px), linear-gradient(to bottom, oklch(0.78 0.16 162 / 0.05) 1px, transparent 1px)",
+                "linear-gradient(to right, oklch(0.78 0.16 295 / 0.05) 1px, transparent 1px), linear-gradient(to bottom, oklch(0.78 0.16 295 / 0.05) 1px, transparent 1px)",
               backgroundSize: "48px 48px",
               maskImage: "radial-gradient(ellipse 60% 60% at 50% 50%, #000 30%, transparent 70%)",
               WebkitMaskImage: "radial-gradient(ellipse 60% 60% at 50% 50%, #000 30%, transparent 70%)",
@@ -29,7 +29,7 @@ export function FinalCTA() {
             <h2 className="display mt-6 text-balance text-4xl font-semibold tracking-tight sm:text-5xl md:text-6xl">
               Установка занимает минуту.
               <br />
-              <span className="font-[family-name:var(--font-instrument-serif)] italic text-gradient-emerald">
+              <span className="font-[family-name:var(--font-instrument-serif)] italic text-gradient-violet">
                 Вернуться к рутине
               </span>{" "}
               — всегда успеете.

@@ -2,7 +2,7 @@
 
 import { motion, useScroll, useSpring } from "framer-motion";
 
-/** Slim emerald progress bar fixed to the top of the viewport. */
+/** Slim violet progress bar fixed to the top of the viewport. */
 export function ScrollProgress() {
   const { scrollYProgress } = useScroll();
   const scaleX = useSpring(scrollYProgress, {

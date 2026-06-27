@@ -60,7 +60,7 @@ export function Screenshots() {
           title={
             <>
               Так выглядит работа —{" "}
-              <span className="text-gradient-emerald">реальные скриншоты</span>
+              <span className="text-gradient-violet">реальные скриншоты</span>
             </>
           }
           lead="Без постановочных картинок. Это рабочий вывод GPT‑Админа на реальных серверах."

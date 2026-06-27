@@ -54,22 +54,22 @@ export function TerminalDemo({ className }: { className?: string }) {
   return (
     <div
       className={cn(
-        "relative overflow-hidden rounded-2xl border border-border/80 bg-[oklch(0.12_0.005_160)] shadow-2xl shadow-black/50",
+        "relative overflow-hidden rounded-2xl border border-border/80 bg-[oklch(0.12_0.006_290)] shadow-2xl shadow-black/50",
         "hairline-top",
         className
       )}
       onMouseEnter={() => setRunning(false)}
       onMouseLeave={() => setRunning(true)}
     >
-      {/* ambient emerald glow */}
-      <div className="pointer-events-none absolute -top-24 left-1/2 h-48 w-2/3 -translate-x-1/2 glow-emerald blur-2xl" aria-hidden />
+      {/* ambient violet glow */}
+      <div className="pointer-events-none absolute -top-24 left-1/2 h-48 w-2/3 -translate-x-1/2 glow-violet blur-2xl" aria-hidden />
 
       {/* window chrome */}
       <div className="relative flex items-center gap-2 border-b border-border/60 bg-white/[0.02] px-4 py-3">
         <div className="flex gap-1.5" aria-hidden>
           <span className="h-3 w-3 rounded-full bg-[oklch(0.66_0.2_25_/_0.7)]" />
           <span className="h-3 w-3 rounded-full bg-[oklch(0.8_0.12_95_/_0.55)]" />
-          <span className="h-3 w-3 rounded-full bg-[oklch(0.78_0.16_162_/_0.7)]" />
+          <span className="h-3 w-3 rounded-full bg-[oklch(0.78_0.16_295_/_0.7)]" />
         </div>
         <div className="ml-3 flex items-center gap-2 text-xs text-muted-foreground">
           <Terminal className="h-3.5 w-3.5 text-primary/70" />

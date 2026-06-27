@@ -62,7 +62,7 @@ export function UseCases() {
           title={
             <>
               Задачи, которые GPT‑Админ{" "}
-              <span className="text-gradient-emerald">закрывает целиком</span>
+              <span className="text-gradient-violet">закрывает целиком</span>
             </>
           }
           lead="От игрового сервера до продакшн‑инфраструктуры — пишете задачу простыми словами, получаете выполненную работу и отчёт."

@@ -8,11 +8,11 @@ export function Footer() {
       <div className="mx-auto max-w-7xl px-5 py-12 sm:px-8">
         <div className="flex flex-col items-center justify-between gap-6 sm:flex-row">
           <a href="#top" className="flex items-center gap-2.5" aria-label="GPT‑Админ">
-            <span className="relative inline-flex h-9 w-9 items-center justify-center overflow-hidden rounded-xl border border-primary/30 bg-[oklch(0.12_0.005_160)]">
-              <span className="pointer-events-none absolute inset-0 glow-emerald opacity-60" aria-hidden />
+            <span className="relative inline-flex h-9 w-9 items-center justify-center overflow-hidden rounded-xl border border-primary/30 bg-[oklch(0.12_0.006_290)]">
+              <span className="pointer-events-none absolute inset-0 glow-violet opacity-60" aria-hidden />
               <svg viewBox="0 0 24 24" className="relative h-5 w-5" fill="none" aria-hidden>
-                <path d="M6 8 L11 12 L6 16" stroke="oklch(0.78 0.16 162)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-                <line x1="13" y1="16" x2="18" y2="16" stroke="oklch(0.78 0.16 162)" strokeWidth="2" strokeLinecap="round" />
+                <path d="M6 8 L11 12 L6 16" stroke="oklch(0.78 0.16 295)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                <line x1="13" y1="16" x2="18" y2="16" stroke="oklch(0.78 0.16 295)" strokeWidth="2" strokeLinecap="round" />
               </svg>
             </span>
             <span className="text-[15px] font-semibold tracking-tight">

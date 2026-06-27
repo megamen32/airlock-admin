@@ -32,7 +32,7 @@ export function Security() {
             <Eyebrow>Безопасность и приватность</Eyebrow>
             <h2 className="display mt-5 text-balance text-3xl font-semibold tracking-tight sm:text-4xl md:text-5xl">
               Вы даёте доступ{" "}
-              <span className="text-gradient-emerald">только тому, чему нужно</span>
+              <span className="text-gradient-violet">только тому, чему нужно</span>
             </h2>
             <p className="mt-5 max-w-md text-base leading-relaxed text-muted-foreground">
               GPT‑Админ спроектирован по принципу минимальных привилегий. Команды

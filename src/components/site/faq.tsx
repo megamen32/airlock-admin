@@ -44,7 +44,7 @@ export function FAQ() {
           eyebrow="FAQ"
           title={
             <>
-              Частые <span className="text-gradient-emerald">вопросы</span>
+              Частые <span className="text-gradient-violet">вопросы</span>
             </>
           }
         />

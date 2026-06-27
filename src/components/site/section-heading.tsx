@@ -3,7 +3,7 @@
 import { cn } from "@/lib/utils";
 import { Reveal } from "./reveal";
 
-/** Small uppercase eyebrow label with a leading emerald dot. */
+/** Small uppercase eyebrow label with a leading violet dot. */
 export function Eyebrow({
   children,
   className,

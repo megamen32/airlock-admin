@@ -75,7 +75,7 @@ export function Features() {
           title={
             <>
               Полноценный админ —{" "}
-              <span className="text-gradient-emerald">в одном агенте</span>
+              <span className="text-gradient-violet">в одном агенте</span>
             </>
           }
           lead="GPT‑Админ не просто подсказывает команды. Он читает состояние, вносит изменения, валидирует их и отчитывается реальным выводом."
@@ -119,7 +119,7 @@ function FeatureCard({ feature }: { feature: Feature }) {
         </div>
       )}
 
-      <span className="pointer-events-none absolute -right-12 -top-12 h-32 w-32 rounded-full glow-emerald opacity-0 blur-2xl transition-opacity duration-500 group-hover:opacity-100" />
+      <span className="pointer-events-none absolute -right-12 -top-12 h-32 w-32 rounded-full glow-violet opacity-0 blur-2xl transition-opacity duration-500 group-hover:opacity-100" />
     </div>
   );
 }

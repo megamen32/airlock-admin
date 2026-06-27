@@ -10,7 +10,7 @@ const STEPS = [
   {
     n: "01",
     title: "Установка",
-    body: "Ставите hub‑proxy и rootd на главный ПК/VPS и только rootd на остальные машины (Linux/macOS/Windows). Без sudo — в домашнюю папку, через systemctl --user.",
+    body: "Ставите hub‑proxy и shellmcp на главный ПК/VPS и только shellmcp на остальные машины (Linux/macOS/Windows). Без sudo — в домашнюю папку, через systemctl --user.",
     command: "curl -s https://became.bezrabotnyi.com/install.sh | bash",
     note: "После установки вам напишет Hub URL и API‑ключ (Bearer) — запомните их.",
   },
@@ -42,11 +42,11 @@ export function HowItWorks() {
           eyebrow="Как это работает"
           title={
             <>
-              Две части: <span className="text-gradient-emerald">hub‑proxy</span> и{" "}
-              <span className="text-gradient-emerald">rootd</span>
+              Две части: <span className="text-gradient-violet">hub‑proxy</span> и{" "}
+              <span className="text-gradient-violet">shellmcp</span>
             </>
           }
-          lead="Hub проксирует команды, rootd исполняет их локально и безопасно возвращает результат. От установки до первой команды — пара минут."
+          lead="Hub проксирует команды, shellmcp исполняет их локально и безопасно возвращает результат. От установки до первой команды — пара минут."
         />
 
         <Stagger className="mt-16 grid gap-6 lg:grid-cols-3" stagger={0.12}>
