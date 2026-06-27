@@ -19,7 +19,7 @@ export function CopyCommand({ command, label, className, variant = "default" }: 
     <div
       className={cn(
         "group relative flex items-center gap-3 rounded-xl border border-border/80 bg-card/60 pr-2 pl-4 font-mono text-sm backdrop-blur-md transition-colors",
-        "hover:border-primary/30",
+        "hover:border-primary/30 min-w-0",
         variant === "solid" && "border-border bg-background/80",
         className
       )}
@@ -29,7 +29,9 @@ export function CopyCommand({ command, label, className, variant = "default" }: 
           {label}
         </span>
       )}
-      <code className="flex-1 truncate py-3 text-foreground/90">{command}</code>
+      <code className="flex-1 truncate py-3 text-foreground/90" title={command}>
+        {command}
+      </code>
       <button
         type="button"
         onClick={() => copy(command)}
@@ -37,6 +39,7 @@ export function CopyCommand({ command, label, className, variant = "default" }: 
         className={cn(
           "inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-border/70 text-muted-foreground transition-all",
           "hover:border-primary/40 hover:text-primary",
+          "active:scale-95",
           copied && "border-primary/40 text-primary"
         )}
       >
