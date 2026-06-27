@@ -2,7 +2,7 @@
 
 import { motion } from "framer-motion";
 import { ArrowRight, Puzzle, Rocket, ShieldCheck, Sparkles } from "lucide-react";
-import { CopyCommand } from "./copy-command";
+import { InstallCommand } from "./install-command";
 import { TerminalDemo } from "./terminal-demo";
 
 const EASE = [0.16, 1, 0.3, 1] as const;
@@ -43,7 +43,7 @@ export function Hero() {
               className="display mt-6 text-balance text-[2.6rem] font-semibold leading-[1.02] tracking-tight sm:text-6xl lg:text-[4.1rem]"
             >
               Умный помощник для серверов, который{" "}
-              <span className="relative whitespace-nowrap">
+              <span className="relative inline-block whitespace-nowrap pr-2">
                 <span className="font-[family-name:var(--font-instrument-serif)] italic text-gradient-violet">делает</span>
                 <svg className="absolute -bottom-1 left-0 w-full" viewBox="0 0 200 8" preserveAspectRatio="none" aria-hidden>
                   <path d="M2 5 Q 50 1, 100 4 T 198 4" stroke="oklch(0.78 0.16 295 / 0.5)" strokeWidth="2" fill="none" strokeLinecap="round" />
@@ -69,7 +69,7 @@ export function Hero() {
               transition={{ duration: 0.8, delay: 0.22, ease: EASE }}
               className="mt-8 flex w-full max-w-xl flex-col gap-3"
             >
-              <CopyCommand command="curl -s https://became.bezrabotnyi.com/install.sh | bash" label="$" />
+              <InstallCommand variant="compact" />
               <div className="flex flex-wrap items-center gap-3">
                 <a
                   href="#install"
@@ -80,7 +80,7 @@ export function Hero() {
                   <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
                 </a>
                 <a
-                  href="#how"
+                  href="#mcp"
                   className="inline-flex items-center gap-2 rounded-full border border-border/80 bg-white/[0.02] px-5 py-3 text-sm font-medium text-foreground transition-colors hover:border-primary/40 hover:bg-white/[0.04]"
                 >
                   <Puzzle className="h-4 w-4 text-primary" />

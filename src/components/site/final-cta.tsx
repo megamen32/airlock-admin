@@ -2,7 +2,7 @@
 
 import { ArrowRight, Github, Rocket, Star } from "lucide-react";
 import { Reveal } from "./reveal";
-import { CopyCommand } from "./copy-command";
+import { InstallCommand } from "./install-command";
 
 export function FinalCTA() {
   return (
@@ -36,7 +36,7 @@ export function FinalCTA() {
             </h2>
 
             <div className="mt-9 w-full max-w-xl">
-              <CopyCommand command="curl -s https://became.bezrabotnyi.com/install.sh | bash" label="$" />
+              <InstallCommand variant="compact" />
             </div>
 
             <div className="mt-6 flex flex-wrap items-center justify-center gap-3">

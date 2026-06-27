@@ -37,7 +37,7 @@ export function Footer() {
         </div>
 
         <div className="mt-8 flex flex-col items-center justify-between gap-3 border-t border-border/40 pt-6 text-xs text-muted-foreground/70 sm:flex-row">
-          <p>© 2025 GPT‑Админ. Все права защищены.</p>
+          <p>© 2025–2026 GPT‑Админ · в разработке с мая 2025</p>
           <p className="flex items-center gap-1.5">
             <span className="inline-flex h-1.5 w-1.5 rounded-full bg-primary/70 shadow-[0_0_8px_1px] shadow-primary/50" />
             Сделано для тех, кто устал копипастить команды

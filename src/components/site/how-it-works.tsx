@@ -4,14 +4,14 @@ import { motion } from "framer-motion";
 import { ArrowRight, Terminal } from "lucide-react";
 import { Reveal, Stagger, StaggerItem } from "./reveal";
 import { SectionHeading } from "./section-heading";
-import { CopyCommand } from "./copy-command";
+import { InstallCommand } from "./install-command";
 
 const STEPS = [
   {
     n: "01",
     title: "Установка",
     body: "Ставите hub‑proxy и shellmcp на главный ПК/VPS и только shellmcp на остальные машины (Linux/macOS/Windows). Без sudo — в домашнюю папку, через systemctl --user.",
-    command: "curl -s https://became.bezrabotnyi.com/install.sh | bash",
+    install: true,
     note: "После установки вам напишет Hub URL и API‑ключ (Bearer) — запомните их.",
   },
   {
@@ -74,9 +74,9 @@ function StepCard({ step }: { step: Step }) {
       <h3 className="mt-5 text-xl font-semibold tracking-tight">{step.title}</h3>
       <p className="mt-3 text-sm leading-relaxed text-muted-foreground">{step.body}</p>
 
-      {"command" in step && step.command && (
+      {"install" in step && step.install && (
         <div className="mt-5">
-          <CopyCommand command={step.command} label="$" />
+          <InstallCommand variant="compact" />
           {"note" in step && step.note && (
             <p className="mt-3 text-xs leading-relaxed text-muted-foreground/80">{step.note}</p>
           )}
