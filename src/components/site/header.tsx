@@ -9,6 +9,7 @@ const NAV = [
   { href: "#how", label: "Как работает" },
   { href: "#usecases", label: "Use‑cases" },
   { href: "#features", label: "Функции" },
+  { href: "#examples", label: "Примеры" },
   { href: "#security", label: "Безопасность" },
   { href: "#pricing", label: "Тарифы" },
   { href: "#faq", label: "FAQ" },

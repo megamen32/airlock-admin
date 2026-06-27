@@ -9,6 +9,7 @@ import { Features } from "@/components/site/features";
 import { UnderTheHood } from "@/components/site/under-the-hood";
 import { Security } from "@/components/site/security";
 import { Screenshots } from "@/components/site/screenshots";
+import { LiveExamples } from "@/components/site/live-examples";
 import { Pricing } from "@/components/site/pricing";
 import { Install } from "@/components/site/install";
 import { FAQ } from "@/components/site/faq";
@@ -31,6 +32,7 @@ export default function Home() {
         <UnderTheHood />
         <Security />
         <Screenshots />
+        <LiveExamples />
         <Pricing />
         <Install />
         <FAQ />
