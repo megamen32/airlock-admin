@@ -52,8 +52,8 @@ export const CHAT_DEMOS: ChatDemo[] = [
         headline: "Без гаданий — смотрю фактическое состояние",
         body: [
           "Сначала найду доступные агенты и память по проекту, потом посмотрю логи и статусы на нужном сервере.",
-          "Вижу важное: {{code}}shell:roomhacker-server-100{{/code}} сейчас offline в MCP, а {{code}}server-44{{/code}} и {{code}}88{{/code}} — online. OpenMemory тоже offline, диагностирую через доступные shell‑агенты.",
-          "Память подсказала: {{code}}opencode.bezrabotnyi.com{{/code}} проксируется nginx на OpenChamber {{code}}127.0.0.1:3020{{/code}}, сервисы работают от {{code}}roomhacker{{/code}}.",
+          "Вижу важное: {{code}}shell:server-01{{/code}} сейчас offline в MCP, а {{code}}server-44{{/code}} и {{code}}server-88{{/code}} — online. OpenMemory тоже offline, диагностирую через доступные shell‑агенты.",
+          "Память подсказала: {{code}}opencode.bezrabotnyi.com{{/code}} проксируется nginx на OpenChamber {{code}}127.0.0.1:3020{{/code}}, сервисы работают от вашего пользователя.",
         ],
       },
       {
@@ -99,10 +99,10 @@ export const CHAT_DEMOS: ChatDemo[] = [
     messages: [
       {
         role: "assistant",
-        headline: "Сделаю с сотого — аккуратно",
+        headline: "Сделаю с сервера — аккуратно",
         body: [
           "Сначала проверю текущий checkout/remote/ветку, потом почищу ветку, прогоню проверки и запушу через {{code}}--force-with-lease{{/code}}, если всё сходится.",
-          "MCP доступен, сотый онлайн. В памяти нашёл прошлую чистку OpenChamber от 23 июня.",
+          "MCP доступен, сервер онлайн. В памяти нашёл прошлую чистку OpenChamber от 23 июня.",
         ],
       },
       {
@@ -114,7 +114,7 @@ export const CHAT_DEMOS: ChatDemo[] = [
         headline: "Память подсказала — нашёл правильный repo",
         body: [
           "Да, память смотрел: она подсказала прошлую работу от 23 июня, но путь к repo не вытащился. Проверю {{code}}.config/opencode{{/code}}.",
-          "Нашёл: {{code}}/home/roomhacker/.config/opencode/apps/forks/openchamber{{/code}}. Локально ветка уже перебазирована на свежий {{code}}origin/main{{/code}}, но содержит те же два лишних коммита. Оставлю только feature‑коммит.",
+          "Нашёл: {{code}}~/.config/opencode/apps/forks/openchamber{{/code}}. Локально ветка уже перебазирована на свежий {{code}}origin/main{{/code}}, но содержит те же два лишних коммита. Оставлю только feature‑коммит.",
           "Лишние {{code}}.github/workflows/pr-review.yml{{/code}} и {{code}}.gitignore{{/code}} убраны локальным reset’ом. Перед push — стандартные проверки.",
         ],
       },

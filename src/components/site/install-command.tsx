@@ -1,11 +1,11 @@
 "use client";
 
 import { useSyncExternalStore, useState } from "react";
-import { Lock, Monitor, Terminal, Command as CommandIcon } from "lucide-react";
+import { Monitor, Terminal } from "lucide-react";
 import { CopyCommand } from "./copy-command";
 import { cn } from "@/lib/utils";
 
-type OsId = "macos" | "linux" | "sudo" | "windows";
+type OsId = "unix" | "windows";
 
 type Option = {
   id: OsId;
@@ -18,28 +18,12 @@ type Option = {
 
 const OPTIONS: Option[] = [
   {
-    id: "macos",
-    label: "macOS",
-    short: "macOS",
-    icon: CommandIcon,
-    command: "curl -s https://became.bezrabotnyi.com/install.sh | bash",
-    note: "Ставит в ~/.local/share/gptadmin, конфиг в ~/.config/gptadmin, сервисы пользователя через LaunchAgents.",
-  },
-  {
-    id: "linux",
-    label: "Linux",
-    short: "Linux",
+    id: "unix",
+    label: "macOS / Linux",
+    short: "Mac/Linux",
     icon: Terminal,
     command: "curl -s https://became.bezrabotnyi.com/install.sh | bash",
-    note: "Ставит в ~/.local/share/gptadmin, конфиг в ~/.config/gptadmin, сервисы пользователя через systemctl --user.",
-  },
-  {
-    id: "sudo",
-    label: "Linux · sudo",
-    short: "sudo",
-    icon: Lock,
-    command: "curl -s https://became.bezrabotnyi.com/install.sh | sudo bash",
-    note: "Системная установка в /opt/gptadmin и /etc/gptadmin с systemd/LaunchDaemons. Используйте только если нужны системные права.",
+    note: "Одна команда и для macOS, и для Linux. Установщик сам определит режим: без sudo — user‑mode в ~/.local/share/gptadmin (systemctl --user / LaunchAgents); c sudo — system‑mode в /opt/gptadmin. Запустите без sudo, если не уверены.",
   },
   {
     id: "windows",
@@ -47,35 +31,32 @@ const OPTIONS: Option[] = [
     short: "Windows",
     icon: Monitor,
     command: "iwr -UseBasicParsing https://became.bezrabotnyi.com/install_win.ps1 | iex",
-    note: "Без админки ставится в %LOCALAPPDATA%\\gptadmin и создаёт Scheduled Task. Administrator нужен только для system‑mode.",
+    note: "Без админки ставится в %LOCALAPPDATA%\\gptadmin и создаёт Scheduled Task на вход текущего пользователя. Administrator нужен только для system‑mode.",
   },
 ];
 
-/** Detect the visitor's OS from the browser. Falls back to Linux. */
+/** Detect the visitor's OS from the browser. Falls back to unix (mac/linux). */
 function detectOs(): OsId {
-  if (typeof navigator === "undefined") return "linux";
+  if (typeof navigator === "undefined") return "unix";
   const ua = navigator.userAgent || (navigator as Navigator).platform || "";
   if (/Win/i.test(ua)) return "windows";
-  if (/Mac/i.test(ua)) return "macos";
-  if (/Linux/i.test(ua)) return "linux";
-  return "linux";
+  return "unix";
 }
 
 // useSyncExternalStore lets us read a client-only value (navigator) without a
-// hydration mismatch: the server snapshot is the neutral "linux", the client
+// hydration mismatch: the server snapshot is the neutral "unix", the client
 // snapshot is the actually detected OS.
 const subscribe = () => () => {};
-const serverSnapshot = (): OsId => "linux";
+const serverSnapshot = (): OsId => "unix";
 
 type Props = {
   variant?: "compact" | "full";
   className?: string;
-  /** Force a specific OS instead of auto-detecting (rarely needed). */
   defaultOs?: OsId;
 };
 
 /**
- * Install command with an OS auto-detecting switcher (macOS / Linux / sudo / Windows).
+ * Install command with an OS auto-detecting switcher (macOS·Linux / Windows).
  * `compact` = slim segmented control + copyable command (hero, CTA, step cards).
  * `full` = larger card with a per-OS note (dedicated install section).
  */

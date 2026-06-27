@@ -130,7 +130,7 @@ function CardView({ card }: { card: Card }) {
 /** Decorative mini dashboard preview for the coming-soon web panel. */
 function MiniDashboard() {
   const rows = [
-    { name: "shellmcp:roomhacker-100", status: "online", w: "92%" },
+    { name: "shellmcp:server-01", status: "online", w: "92%" },
     { name: "shellmcp:server-44", status: "online", w: "64%" },
     { name: "shellmcp:homeassistant", status: "online", w: "38%" },
   ];

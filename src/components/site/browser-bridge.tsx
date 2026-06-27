@@ -63,8 +63,8 @@ const PLATFORMS = [
   {
     icon: Smartphone,
     title: "Android",
-    sub: "Kiwi Browser",
-    body: "Kiwi поддерживает расширения Chrome: ставите Tampermonkey, затем MCP Bridge — и готово.",
+    sub: "Firefox + Tampermonkey",
+    body: "Поставьте Firefox из Google Play, затем Tampermonkey — и установите MCP Bridge. Всё работает прямо с телефона.",
   },
 ];
 
@@ -216,7 +216,7 @@ function BrowserMock() {
         {/* user message */}
         <div className="flex justify-end">
           <div className="max-w-[80%] rounded-2xl rounded-tr-sm border border-border/60 bg-white/[0.03] px-3.5 py-2.5 text-sm text-foreground/90">
-            покажи статус nginx на сотом
+            покажи статус nginx на сервере
           </div>
         </div>
 
@@ -225,7 +225,7 @@ function BrowserMock() {
           <div className="max-w-[88%]">
             <div className="rounded-2xl rounded-tl-sm border border-border/60 bg-white/[0.02] px-3.5 py-2.5">
               <p className="mb-2 text-sm text-muted-foreground">
-                Вызываю shellmcp на сотом:
+                Вызываю shellmcp на сервере:
               </p>
               {/* highlighted mcp block */}
               <div className="rounded-lg border border-primary/30 bg-primary/[0.05] p-3">
@@ -233,7 +233,7 @@ function BrowserMock() {
                   <Cpu className="h-3 w-3" /> mcp · auto-executed
                 </div>
                 <pre className="overflow-x-auto font-mono text-[11px] leading-relaxed text-foreground/85">
-{`{ "target": "shell:roomhacker-100",
+{`{ "target": "shell:server-01",
   "tool": "shell_exec",
   "args": { "cmd": "systemctl status nginx" } }`}
                 </pre>

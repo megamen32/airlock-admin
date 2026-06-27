@@ -73,7 +73,7 @@ export function TerminalDemo({ className }: { className?: string }) {
         </div>
         <div className="ml-3 flex items-center gap-2 text-xs text-muted-foreground">
           <Terminal className="h-3.5 w-3.5 text-primary/70" />
-          <span className="font-mono">gpt-admin · root@bezrabotnyi</span>
+          <span className="font-mono">gpt-admin · your-hub</span>
         </div>
         <span className="ml-auto hidden text-[10px] uppercase tracking-[0.2em] text-muted-foreground/70 sm:inline">
           live demo
