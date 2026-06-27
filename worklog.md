@@ -152,3 +152,29 @@ Git:
 Stage Summary:
 - All requested changes shipped and pushed to github.com/megamen32/adminchatgpt_website (main).
 - Old simple static index.html site replaced by the premium violet Next.js landing.
+
+---
+Task ID: 12
+Agent: main
+Task: Turn shared ChatGPT conversations into showcase pages integrated into the site (secrets stripped, clarity improved).
+
+Work Log:
+- Used z-ai page_reader to extract 3 ChatGPT share URLs. Chat 1 (Установка плагинов opencode-pty) was JS-only and blocked by Cloudflare even via agent-browser — not recoverable. Chats 2 (Проблемы с OpenMemory) and 3 (Пересоздание PR или нет) extracted cleanly.
+- Cleaned the raw HTML: stripped scripts/styles/CSS-class noise, dropped boilerplate (nav, "Stopped talking to App", etc.), parsed into You-said / ChatGPT-said message pairs.
+- Secret scan (github_pat, gh tokens, Bearer, passwords, API keys, openai keys, emails, IPs): no real secrets — only public hostnames (bezrabotnyi.com), local IPs (127.0.0.1, 192.168.x), PIDs and service names, all already public in the project docs.
+- Authored chat-data.ts: 2 curated ChatDemo objects with structured messages (role, headline, body[], status, checks[]). Inline code spans encoded as {{code}}...{{/code}}. Formulations tightened for clarity while keeping the real "agent reads state → acts → validates → reports" flow; each demo links to its original share URL.
+- Built live-examples.tsx: section #examples with a tab switcher between the 2 demos, a summary + tags line, and a chat-window rendering (user bubbles right / gpt-админ bubbles left, violet inline code, a compact "Проверки" checks block with green checkmarks, status pills). AnimatePresence transitions between demos; scrollable up to 600px; RichText renderer for {{code}} spans.
+- Added "Примеры" to header NAV and placed <LiveExamples /> between Screenshots and Pricing in page.tsx.
+
+Verification (Agent Browser + VLM):
+- Section renders, 2 demo switchers, default = "Чиним OpenCode и OpenChamber"; switching to PR demo updates messages, code spans, and checks block (7 checks).
+- Secret scan on rendered DOM: clean (no github_pat / Bearer / password patterns).
+- VLM (glm-4.6v): desktop shows switcher + summary + chat window with user-right/assistant-left bubbles, violet inline code, checks block; mobile 390px layout holds without overflow. No concrete issues.
+- ESLint clean.
+
+Git:
+- Committed 7d8c3a1 (4 files, +394). Force-pushed to github.com/megamen32/adminchatgpt_website main (remote had a stray commit, likely from web UI). Verified remote HEAD = local HEAD.
+
+Stage Summary:
+- Two real GPT‑Админ conversations now showcased as an interactive chat UI inside the landing page, secret-free and clarity-improved.
+- Chat 1 could not be extracted (Cloudflare blocks the share page) — only 2 of 3 links became demos.
