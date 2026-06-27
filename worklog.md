@@ -178,3 +178,32 @@ Git:
 Stage Summary:
 - Two real GPT‑Админ conversations now showcased as an interactive chat UI inside the landing page, secret-free and clarity-improved.
 - Chat 1 could not be extracted (Cloudflare blocks the share page) — only 2 of 3 links became demos.
+
+---
+Task ID: 13
+Agent: main
+Task: Restore the lost browser-extension selling point from mcp-help.html — MCP Bridge userscript that turns any free web AI (Алиса/Сбер/Qwen/DeepSeek/ChatGPT) into GPTAdmin.
+
+Work Log:
+- Re-read /tmp/source-site/mcp-help.html (cloned earlier) — it documents the MCP Bridge userscript: adds MCP buttons to ChatGPT/DeepSeek/Qwen/Алиса web UIs, auto-executes ```mcp blocks, supports Chrome+Tampermonkey / iPhone+Userscripts / Android+Kiwi.
+- Built BrowserBridge section (src/components/site/browser-bridge.tsx, id="browser-bridge"):
+  - Headline "Любой бесплатный ИИ — превращается в GPT‑Админ" — emphasizes free web AIs.
+  - Badge row of 6 supported AIs: ChatGPT, DeepSeek, Qwen, Алиса (Яндекс), GigaChat (Сбер), Claude.
+  - 3 "how it works" cards: MCP All (Alt+M), MCP (точечный выбор), Авто‑выполнение (```mcp block → hub → result).
+  - Browser chat mockup: qwen.ai URL bar, a user msg, an assistant msg with a highlighted mcp code block ("auto-executed") + result line, and an input row with MCP All / MCP buttons.
+  - 3 platform install cards: macOS·Windows·Linux (Chrome+Tampermonkey), iPhone (Safari+Userscripts), Android (Kiwi).
+  - CTA "Установить MCP Bridge" → mcp-bridge.user.js, with Alt+M / Alt+K hints.
+- Placed <BrowserBridge /> right after <McpBridge /> in page.tsx (both MCP stories together, near the top).
+- Renamed hero secondary button to "MCP для любого ИИ" → links to #browser-bridge.
+- Added "MCP для ИИ" to header NAV (replacing "Безопасность" which is still reachable by scroll).
+
+Verification (Agent Browser + VLM):
+- Section renders with no errors. Heading, all 6 AI badges (incl. Алиса and GigaChat), all 3 steps, all 3 platforms, install CTA link to mcp-bridge.user.js, and the mock mcp code block all present.
+- Hero button text = "MCP для любого ИИ".
+- VLM (glm-4.6v) full-page mobile 390px recheck: all 6 elements confirmed present; no horizontal overflow.
+
+Git:
+- Committed 0ec6c99 (4 files, +292/−3). Pushed (fast-forward) to github.com/megamen32/adminchatgpt_website main. Verified remote = local HEAD.
+
+Stage Summary:
+- The lost browser-extension selling point is restored as a prominent section near the top of the page: any free web AI (Алиса/Сбер/Qwen/DeepSeek/ChatGPT) becomes a GPTAdmin with MCP access via a userscript.
