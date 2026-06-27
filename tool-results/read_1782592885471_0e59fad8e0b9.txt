@@ -1,0 +1,992 @@
+     1→     1→<!DOCTYPE html>
+     2→     2→<html lang="ru">
+     3→     3→
+     4→     4→<head>
+     5→     5→  <meta charset="UTF-8" />
+     6→     6→  <meta name="viewport" content="width=device-width, initial-scale=1" />
+     7→     7→  <title>GPT‑Админ — умный помощник для серверов</title>
+     8→     8→  <meta name="description"
+     9→     9→    content="GPT‑Админ подключает ChatGPT к вашим серверам: выполняет команды, ставит софт, правит конфиги, анализирует логи и следит за сервисами. Установка за 1 минуту." />
+    10→    10→  <link rel="preconnect" href="https://fonts.googleapis.com">
+    11→    11→  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    12→    12→  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700;800&display=swap" rel="stylesheet">
+    13→    13→  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css"
+    14→    14→    integrity="sha512-SnH5WK+bZxgPHs44uWIX+LLJAJ9/2PkfYVfV7Z0e6Vx1Y7R9K9GQ8d3GQxZ8H8o5i7sC3z7R9mY8QXbQxZb8wA=="
+    15→    15→    crossorigin="anonymous" referrerpolicy="no-referrer" />
+    16→    16→
+    17→    17→  <!-- Minimal, self‑contained CSS for a clean, modern landing page -->
+    18→    18→  <style>
+    19→    19→    :root {
+    20→    20→      --bg: #0b0f14;
+    21→    21→      /* almost black */
+    22→    22→      --bg-soft: #0f141b;
+    23→    23→      /* section cards */
+    24→    24→      --card: #111821;
+    25→    25→      /* cards */
+    26→    26→      --muted: #9ab0c2;
+    27→    27→      /* secondary text */
+    28→    28→      --text: #e9f1f7;
+    29→    29→      /* main text */
+    30→    30→      --brand: #5ed3f3;
+    31→    31→      /* cyan */
+    32→    32→      --brand-2: #7cf59a;
+    33→    33→      /* green */
+    34→    34→      --accent: #c8f169;
+    35→    35→      /* lime */
+    36→    36→      --danger: #ff6b6b;
+    37→    37→      /* red */
+    38→    38→      --shadow: 0 20px 60px rgba(0, 0, 0, .45);
+    39→    39→      --radius: 22px;
+    40→    40→      --radius-sm: 14px;
+    41→    41→      --max: 1220px;
+    42→    42→    }
+    43→    43→
+    44→    44→    * {
+    45→    45→      box-sizing: border-box
+    46→    46→    }
+    47→    47→
+    48→    48→    html,
+    49→    49→    body {
+    50→    50→      margin: 0;
+    51→    51→      padding: 0;
+    52→    52→      background: var(--bg);
+    53→    53→      color: var(--text);
+    54→    54→      font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif
+    55→    55→    }
+    56→    56→
+    57→    57→    a {
+    58→    58→      color: var(--brand)
+    59→    59→    }
+    60→    60→
+    61→    61→    img {
+    62→    62→      max-width: 100%;
+    63→    63→      height: auto;
+    64→    64→      display: block
+    65→    65→    }
+    66→    66→
+    67→    67→    .container {
+    68→    68→      width: min(var(--max), 100%);
+    69→    69→      margin-inline: auto;
+    70→    70→      padding: 24px
+    71→    71→    }
+    72→    72→
+    73→    73→    /* Top nav */
+    74→    74→    .topbar {
+    75→    75→      position: sticky;
+    76→    76→      top: 0;
+    77→    77→      z-index: 50;
+    78→    78→      background: linear-gradient(180deg, rgba(11, 15, 20, .96), rgba(11, 15, 20, .75) 70%, rgba(11, 15, 20, 0));
+    79→    79→      backdrop-filter: blur(8px);
+    80→    80→      border-bottom: 1px solid rgba(255, 255, 255, .06)
+    81→    81→    }
+    82→    82→
+    83→    83→    .topbar-inner {
+    84→    84→      display: flex;
+    85→    85→      align-items: center;
+    86→    86→      gap: 18px;
+    87→    87→      padding: 14px 24px
+    88→    88→    }
+    89→    89→
+    90→    90→    .logo {
+    91→    91→      display: flex;
+    92→    92→      align-items: center;
+    93→    93→      gap: 12px;
+    94→    94→      text-decoration: none
+    95→    95→    }
+    96→    96→
+    97→    97→    .logo i {
+    98→    98→      color: var(--brand);
+    99→    99→      font-size: 22px
+   100→   100→    }
+   101→   101→
+   102→   102→    .logo b {
+   103→   103→      font-weight: 800;
+   104→   104→      letter-spacing: .2px
+   105→   105→    }
+   106→   106→
+   107→   107→    .nav {
+   108→   108→      margin-left: auto;
+   109→   109→      display: flex;
+   110→   110→      gap: 18px;
+   111→   111→      flex-wrap: wrap
+   112→   112→    }
+   113→   113→
+   114→   114→    .nav a {
+   115→   115→      padding: 10px 12px;
+   116→   116→      border-radius: 12px;
+   117→   117→      text-decoration: none;
+   118→   118→      color: var(--text);
+   119→   119→      opacity: .9
+   120→   120→    }
+   121→   121→
+   122→   122→    .nav a:hover {
+   123→   123→      background: #0f1722
+   124→   124→    }
+   125→   125→
+   126→   126→    .cta {
+   127→   127→      display: inline-flex;
+   128→   128→      align-items: center;
+   129→   129→      gap: 10px;
+   130→   130→      background: linear-gradient(135deg, var(--brand), var(--brand-2));
+   131→   131→      color: #071018;
+   132→   132→      border-radius: 16px;
+   133→   133→      padding: 12px 18px;
+   134→   134→      text-decoration: none;
+   135→   135→      font-weight: 700;
+   136→   136→      box-shadow: var(--shadow)
+   137→   137→    }
+   138→   138→
+   139→   139→    /* Hero */
+   140→   140→    .hero {
+   141→   141→      position: relative;
+   142→   142→      overflow: hidden;
+   143→   143→      border-radius: var(--radius);
+   144→   144→      background: radial-gradient(1200px 600px at 70% -20%, rgba(94, 211, 243, .25), transparent 50%),
+   145→   145→        radial-gradient(800px 500px at -10% 10%, rgba(124, 245, 154, .18), transparent 55%),
+   146→   146→        linear-gradient(180deg, #0c1219, #0a0f15 60%)
+   147→   147→    }
+   148→   148→
+   149→   149→    .hero-wrap {
+   150→   150→      display: grid;
+   151→   151→      grid-template-columns: 1.1fr .9fr;
+   152→   152→      gap: 28px;
+   153→   153→      align-items: center;
+   154→   154→      padding: 38px
+   155→   155→    }
+   156→   156→
+   157→   157→    .hero h1 {
+   158→   158→      font-size: 44px;
+   159→   159→      line-height: 1.06;
+   160→   160→      margin: 8px 0 12px
+   161→   161→    }
+   162→   162→
+   163→   163→    .hero p {
+   164→   164→      font-size: 18px;
+   165→   165→      color: var(--muted);
+   166→   166→      margin: 0 0 18px
+   167→   167→    }
+   168→   168→
+   169→   169→    .badges {
+   170→   170→      display: flex;
+   171→   171→      gap: 10px;
+   172→   172→      flex-wrap: wrap;
+   173→   173→      margin: 10px 0 18px
+   174→   174→    }
+   175→   175→
+   176→   176→    .badge {
+   177→   177→      font-size: 13px;
+   178→   178→      padding: 6px 10px;
+   179→   179→      border-radius: 999px;
+   180→   180→      background: #0f1722;
+   181→   181→      border: 1px solid rgba(255, 255, 255, .08);
+   182→   182→      color: #cfe7f6
+   183→   183→    }
+   184→   184→
+   185→   185→    .install {
+   186→   186→      display: flex;
+   187→   187→      gap: 12px;
+   188→   188→      flex-wrap: wrap;
+   189→   189→      align-items: center
+   190→   190→    }
+   191→   191→
+   192→   192→    .code {
+   193→   193→      white-space: pre-wrap;
+   194→   194→      /* разрешаем переносы */
+   195→   195→      word-break: break-all;
+   196→   196→      /* или break-word */
+   197→   197→      overflow-wrap: anywhere;
+   198→   198→      background: #0b1118;
+   199→   199→      border: 1px solid rgba(255, 255, 255, .08);
+   200→   200→      border-radius: 14px;
+   201→   201→      padding: 12px 14px;
+   202→   202→      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace
+   203→   203→    }
+   204→   204→
+   205→   205→    .hero-media {
+   206→   206→      position: relative
+   207→   207→    }
+   208→   208→
+   209→   209→    .hero-card {
+   210→   210→      background: var(--card);
+   211→   211→      border: 1px solid rgba(255, 255, 255, .06);
+   212→   212→      border-radius: 18px;
+   213→   213→      overflow: hidden;
+   214→   214→      box-shadow: var(--shadow)
+   215→   215→    }
+   216→   216→
+   217→   217→    .hero-card img {
+   218→   218→      max-width: 100%;
+   219→   219→      height: auto;
+   220→   220→    }
+   221→   221→
+   222→   222→    .hero-card .cap {
+   223→   223→      padding: 14px;
+   224→   224→      border-top: 1px solid rgba(255, 255, 255, .06);
+   225→   225→      color: var(--muted);
+   226→   226→      font-size: 14px
+   227→   227→    }
+   228→   228→
+   229→   229→    /* Section base */
+   230→   230→    section {
+   231→   231→      margin-top: 38px
+   232→   232→    }
+   233→   233→
+   234→   234→    .section {
+   235→   235→      background: var(--bg-soft);
+   236→   236→      border: 1px solid rgba(255, 255, 255, .06);
+   237→   237→      border-radius: var(--radius);
+   238→   238→      padding: 26px;
+   239→   239→      box-shadow: var(--shadow)
+   240→   240→    }
+   241→   241→
+   242→   242→    .section h2 {
+   243→   243→      margin: 0 0 14px;
+   244→   244→      font-size: 28px
+   245→   245→    }
+   246→   246→
+   247→   247→    .section p.lead {
+   248→   248→      color: var(--muted);
+   249→   249→      margin: 0 0 10px
+   250→   250→    }
+   251→   251→
+   252→   252→    /* Feature grid */
+   253→   253→    .grid {
+   254→   254→      display: grid;
+   255→   255→      gap: 16px
+   256→   256→    }
+   257→   257→
+   258→   258→    .cols-3 {
+   259→   259→      grid-template-columns: repeat(3, minmax(0, 1fr))
+   260→   260→    }
+   261→   261→
+   262→   262→    .cols-4 {
+   263→   263→      grid-template-columns: repeat(4, minmax(0, 1fr))
+   264→   264→    }
+   265→   265→
+   266→   266→    @media (max-width: 980px) {
+   267→   267→      .hero-wrap {
+   268→   268→        grid-template-columns: 1fr
+   269→   269→      }
+   270→   270→
+   271→   271→      .cols-3 {
+   272→   272→        grid-template-columns: 1fr 1fr
+   273→   273→      }
+   274→   274→
+   275→   275→      .cols-4 {
+   276→   276→        grid-template-columns: 1fr 1fr
+   277→   277→      }
+   278→   278→
+   279→   279→      .nav {
+   280→   280→        display: none
+   281→   281→      }
+   282→   282→    }
+   283→   283→
+   284→   284→    @media (max-width: 640px) {
+   285→   285→
+   286→   286→      .cols-3,
+   287→   287→      .cols-4 {
+   288→   288→        grid-template-columns: 1fr
+   289→   289→      }
+   290→   290→    }
+   291→   291→
+   292→   292→    .card {
+   293→   293→      background: var(--card);
+   294→   294→      border: 1px solid rgba(255, 255, 255, .06);
+   295→   295→      border-radius: 18px;
+   296→   296→      overflow: hidden;
+   297→   297→      display: flex;
+   298→   298→      flex-direction: column
+   299→   299→    }
+   300→   300→
+   301→   301→    .card img {
+   302→   302→      width: 100%;
+   303→   303→      height: auto;
+   304→   304→    }
+   305→   305→
+   306→   306→    .card .body {
+   307→   307→      padding: 14px
+   308→   308→    }
+   309→   309→
+   310→   310→    .card .kicker {
+   311→   311→      color: #a8c5d9;
+   312→   312→      font-weight: 700;
+   313→   313→      font-size: 12px;
+   314→   314→      letter-spacing: .08em;
+   315→   315→      text-transform: uppercase
+   316→   316→    }
+   317→   317→
+   318→   318→    .card h3 {
+   319→   319→      margin: 6px 0 8px;
+   320→   320→      font-size: 18px
+   321→   321→    }
+   322→   322→
+   323→   323→    .muted {
+   324→   324→      color: var(--muted)
+   325→   325→    }
+   326→   326→
+   327→   327→    /* Steps */
+   328→   328→    .steps {
+   329→   329→      counter-reset: step
+   330→   330→    }
+   331→   331→
+   332→   332→    .step {
+   333→   333→      display: flex;
+   334→   334→      gap: 14px;
+   335→   335→      align-items: flex-start;
+   336→   336→      padding: 14px;
+   337→   337→      border-radius: 14px;
+   338→   338→      background: #0c1219;
+   339→   339→      border: 1px solid rgba(255, 255, 255, .06)
+   340→   340→    }
+   341→   341→
+   342→   342→    .step-num {
+   343→   343→      min-width: 36px;
+   344→   344→      height: 36px;
+   345→   345→      border-radius: 10px;
+   346→   346→      background: linear-gradient(135deg, var(--brand), var(--brand-2));
+   347→   347→      color: #0b1118;
+   348→   348→      display: grid;
+   349→   349→      place-items: center;
+   350→   350→      font-weight: 800
+   351→   351→    }
+   352→   352→
+   353→   353→    /* Testimonials */
+   354→   354→    .testi {
+   355→   355→      display: grid;
+   356→   356→      gap: 16px;
+   357→   357→      grid-template-columns: repeat(3, minmax(0, 1fr))
+   358→   358→    }
+   359→   359→
+   360→   360→    @media (max-width:980px) {
+   361→   361→      .testi {
+   362→   362→        grid-template-columns: 1fr 1fr
+   363→   363→      }
+   364→   364→    }
+   365→   365→
+   366→   366→    @media (max-width:640px) {
+   367→   367→      .testi {
+   368→   368→        grid-template-columns: 1fr
+   369→   369→      }
+   370→   370→    }
+   371→   371→
+   372→   372→    .quote {
+   373→   373→      background: var(--card);
+   374→   374→      border: 1px solid rgba(255, 255, 255, .06);
+   375→   375→      border-radius: 18px;
+   376→   376→      padding: 16px;
+   377→   377→      display: flex;
+   378→   378→      gap: 12px
+   379→   379→    }
+   380→   380→
+   381→   381→    .quote img {
+   382→   382→      width: 44px;
+   383→   383→      height: 44px;
+   384→   384→      border-radius: 50%;
+   385→   385→      object-fit: cover
+   386→   386→    }
+   387→   387→
+   388→   388→    .quote b {
+   389→   389→      display: block
+   390→   390→    }
+   391→   391→
+   392→   392→    /* Screenshots carousel */
+   393→   393→    .shots {
+   394→   394→      display: flex;
+   395→   395→      gap: 14px;
+   396→   396→      overflow: auto;
+   397→   397→      scroll-snap-type: x mandatory;
+   398→   398→      padding-bottom: 6px
+   399→   399→    }
+   400→   400→
+   401→   401→    .shots img {
+   402→   402→      width: auto;
+   403→   403→      max-width: 80vw;
+   404→   404→      max-height: 400px;
+   405→   405→      border-radius: 16px;
+   406→   406→      border: 1px solid rgba(255, 255, 255, .06);
+   407→   407→      scroll-snap-align: center;
+   408→   408→      box-shadow: var(--shadow)
+   409→   409→    }
+   410→   410→
+   411→   411→    /* Pricing */
+   412→   412→    .pricing {
+   413→   413→      display: grid;
+   414→   414→      gap: 16px;
+   415→   415→      grid-template-columns: repeat(3, minmax(0, 1fr))
+   416→   416→    }
+   417→   417→
+   418→   418→    @media (max-width:980px) {
+   419→   419→      .pricing {
+   420→   420→        grid-template-columns: 1fr 1fr
+   421→   421→      }
+   422→   422→    }
+   423→   423→
+   424→   424→    @media (max-width:640px) {
+   425→   425→      .pricing {
+   426→   426→        grid-template-columns: 1fr
+   427→   427→      }
+   428→   428→    }
+   429→   429→
+   430→   430→    .plan {
+   431→   431→      background: linear-gradient(180deg, #0e151d, #0a0f15);
+   432→   432→      border: 1px solid rgba(255, 255, 255, .08);
+   433→   433→      border-radius: 20px;
+   434→   434→      padding: 18px;
+   435→   435→      box-shadow: var(--shadow);
+   436→   436→      display: flex;
+   437→   437→      flex-direction: column
+   438→   438→    }
+   439→   439→
+   440→   440→    .price {
+   441→   441→      font-size: 36px;
+   442→   442→      font-weight: 800;
+   443→   443→      margin: 8px 0
+   444→   444→    }
+   445→   445→
+   446→   446→    .ul {
+   447→   447→      display: grid;
+   448→   448→      gap: 8px;
+   449→   449→      margin: 12px 0 14px
+   450→   450→    }
+   451→   451→
+   452→   452→    .ul li {
+   453→   453→      display: flex;
+   454→   454→      gap: 8px;
+   455→   455→      align-items: flex-start
+   456→   456→    }
+   457→   457→
+   458→   458→    /* FAQ */
+   459→   459→    details {
+   460→   460→      border: 1px solid rgba(255, 255, 255, .08);
+   461→   461→      border-radius: 16px;
+   462→   462→      padding: 12px 14px;
+   463→   463→      background: #0c1219
+   464→   464→    }
+   465→   465→
+   466→   466→    summary {
+   467→   467→      cursor: pointer;
+   468→   468→      font-weight: 600
+   469→   469→    }
+   470→   470→
+   471→   471→    details+details {
+   472→   472→      margin-top: 10px
+   473→   473→    }
+   474→   474→
+   475→   475→    /* Footer */
+   476→   476→    footer {
+   477→   477→      margin-top: 38px;
+   478→   478→      padding: 26px;
+   479→   479→      background: #0b1118;
+   480→   480→      border-top: 1px solid rgba(255, 255, 255, .06)
+   481→   481→    }
+   482→   482→
+   483→   483→    .foot {
+   484→   484→      display: flex;
+   485→   485→      gap: 16px;
+   486→   486→      flex-wrap: wrap;
+   487→   487→      align-items: center;
+   488→   488→      justify-content: space-between
+   489→   489→    }
+   490→   490→
+   491→   491→    .small {
+   492→   492→      font-size: 13px;
+   493→   493→      color: #a9bfd2
+   494→   494→    }
+   495→   495→
+   496→   496→    /* Appear on scroll */
+   497→   497→    .fade {
+   498→   498→      opacity: 0;
+   499→   499→      transform: translateY(16px);
+   500→   500→      transition: opacity .5s ease, transform .6s ease
+   501→   501→    }
+   502→   502→
+   503→   503→    .fade.visible {
+   504→   504→      opacity: 1;
+   505→   505→      transform: none
+   506→   506→    }
+   507→   507→
+   508→   508→    /* Image placeholders and modal */
+   509→   509→    .img-placeholder {
+   510→   510→      color: var(--muted);
+   511→   511→      font-size: 14px;
+   512→   512→      text-align: center;
+   513→   513→      margin-top: 4px
+   514→   514→    }
+   515→   515→
+   516→   516→    .img-modal {
+   517→   517→      position: fixed;
+   518→   518→      inset: 0;
+   519→   519→      background: rgba(0, 0, 0, .8);
+   520→   520→      display: none;
+   521→   521→      align-items: center;
+   522→   522→      justify-content: center;
+   523→   523→      z-index: 1000
+   524→   524→    }
+   525→   525→
+   526→   526→    .img-modal.show {
+   527→   527→      display: flex
+   528→   528→    }
+   529→   529→
+   530→   530→    .img-modal img {
+   531→   531→      max-width: 90vw;
+   532→   532→      max-height: 90vh
+   533→   533→    }
+   534→   534→
+   535→   535→    .img-modal .close {
+   536→   536→      position: absolute;
+   537→   537→      top: 20px;
+   538→   538→      right: 20px;
+   539→   539→      font-size: 32px;
+   540→   540→      color: #fff;
+   541→   541→      cursor: pointer
+   542→   542→    }
+   543→   543→
+   544→   544→    .free-banner {
+   545→   545→      background: linear-gradient(135deg, var(--accent), var(--brand-2));
+   546→   546→      color: #071018;
+   547→   547→      text-align: center;
+   548→   548→      padding: 12px 16px;
+   549→   549→      font-size: 15px;
+   550→   550→      font-weight: 600;
+   551→   551→      position: sticky;
+   552→   552→      top: 0;
+   553→   553→      z-index: 100;
+   554→   554→    }
+   555→   555→  </style>
+   556→   556→</head>
+   557→   557→
+   558→   558→<body>
+   559→   559→  <div class="free-banner">🎉 GPT‑Админ <strong>временно бесплатен</strong> — пользуйтесь всеми функциями без ограничений до конца лета! 🎉</div>
+   560→   560→
+   561→   561→  <header class="topbar">
+   562→   562→    <div class="topbar-inner container">
+   563→   563→      <a class="logo" href="#top" aria-label="Домой">
+   564→   564→        <i class="fa-solid fa-robot"></i>
+   565→   565→        <b>GPT‑Админ</b>
+   566→   566→      </a>
+   567→   567→      <nav class="nav" aria-label="Главная навигация">
+   568→   568→        <a href="#how">Как работает</a>
+   569→   569→        <a href="#usecases">Use‑cases</a>
+   570→   570→        <a href="#features">Функции</a>
+   571→   571→        <a href="#security">Безопасность</a>
+   572→   572→        <a href="#pricing">Тарифы</a>
+   573→   573→        <a href="#faq">FAQ</a>
+   574→   574→      </nav>
+   575→   575→      <a class="cta" href="#install"><i class="fa-solid fa-rocket"></i> Установить за 1 минуту</a>
+   576→   576→    </div>
+   577→   577→  </header>
+   578→   578→
+   579→   579→  <main id="top" class="container">
+   580→   580→    <!-- HERO -->
+   581→   581→    <section class="hero fade">
+   582→   582→      <div class="hero-wrap">
+   583→   583→        <div>
+   584→   584→          <div class="badges">
+   585→   585→            <span class="badge"><i class="fa-solid fa-shield"></i> Локальное исполнение</span>
+   586→   586→            <span class="badge"><i class="fa-solid fa-terminal"></i> Linux, macOS & Windows</span>
+   587→   587→            <span class="badge"><i class="fa-solid fa-bolt"></i> Ошибко‑устойчивый</span>
+   588→   588→          </div>
+   589→   589→          <h1>Умный помощник для серверов, который <u>делает</u>, а не советует</h1>
+   590→   590→          <p>Подключите ChatGPT к своим машинам: GPT‑Админ ставит софт, правит конфиги, перезапускает сервисы, читает
+   591→   591→            логи и возвращает отчёты. Никаких копипаст — всё автоматически.</p>
+   592→   592→          <div class="install">
+   593→   593→            <a class="cta" href="#install"><i class="fa-solid fa-plug"></i> Быстрый старт</a>
+   594→   594→            <a class="cta" href="/mcp-help"><i class="fa-solid fa-puzzle-piece"></i> MCP Bridge для ChatGPT / Claude / Alice</a>
+   595→   595→            <code class="code"
+   596→   596→              aria-label="Команда установки на Linux/macOS без sudo">curl -s https://became.bezrabotnyi.com/install.sh | bash</code>
+   597→   597→          </div>
+   598→   598→          <p class="muted" style="margin-top:8px">✅ По умолчанию ставится без sudo: в домашнюю папку пользователя, с user-service. Нужны системные права? Используйте <code>curl -s https://became.bezrabotnyi.com/install.sh | sudo bash</code>.</p>
+   599→   599→        </div>
+   600→   600→        <div class="hero-media">
+   601→   601→          <figure class="hero-card">
+   602→   602→            <img loading="lazy" src="ChatGPT Image 4 сент. 2025 г., 17_30_36.png" alt="Серверная стойка и терминал" />
+   603→   603→            <figcaption class="cap">Установка в одну команду, вам не нужен свой домен или статичный ip</figcaption>
+   604→   604→          </figure>
+   605→   605→        </div>
+   606→   606→      </div>
+   607→   607→    </section>
+   608→   608→
+   609→   609→    <!-- TRUST / LOGOS PLACEHOLDER -->
+   610→   610→    <!--   <section class="section fade" aria-label="Доверяют">
+   611→   611→      <p class="lead">Уже используют для домашних серверов, pet‑проектов и продакшн‑окружений.</p>
+   612→   612→      <div class="grid cols-4" style="align-items:center">
+   613→   613→        <div class="card" style="padding:16px;align-items:center;justify-content:center;min-height:92px"><i class="fa-brands fa-ubuntu"></i>&nbsp;Ubuntu</div>
+   614→   614→        <div class="card" style="padding:16px;align-items:center;justify-content:center;min-height:92px"><i class="fa-brands fa-docker"></i>&nbsp;Docker</div>
+   615→   615→        <div class="card" style="padding:16px;align-items:center;justify-content:center;min-height:92px"><i class="fa-solid fa-network-wired"></i>&nbsp;WireGuard</div>
+   616→   616→        <div class="card" style="padding:16px;align-items:center;justify-content:center;min-height:92px"><i class="fa-solid fa-database"></i>&nbsp;PostgreSQL</div>
+   617→   617→      </div>
+   618→   618→    </section> -->
+   619→   619→
+   620→   620→    <!-- HOW IT WORKS -->
+   621→   621→    <section id="how" class="section fade">
+   622→   622→      <h2>Как это работает</h2>
+   623→   623→      <p class="lead">Две части: <b>hub‑proxy</b> (на главной машине) и <b>rootd</b> (на целевых). Hub проксирует
+   624→   624→        команды, rootd исполняет их локально и безопасно возвращает результат.</p>
+   625→   625→      <div class="grid cols-3">
+   626→   626→        <div class="step">
+   627→   627→          <div class="step-num">1</div>
+   628→   628→          <div>
+   629→   629→            <b>Установка</b>
+   630→   630→            <p class="muted">Ставите hub‑proxy и rootd на главный ПК/VPS и только rootd на остальные машины
+   631→   631→              (Linux/macOS/Windows).
+   632→   632→            </p>
+   633→   633→            <pre class="code">curl -s https://became.bezrabotnyi.com/install.sh | bash</pre>
+   634→   634→            <p class="muted">Для быстрого запуска отвечаете "1": установить hub_proxy и rootd,
+   635→   635→              затем снова "1": Авто-туннель через наш FRP. Без sudo установка идёт в <code>~/.local/share/gptadmin</code> и запускается через <code>systemctl --user</code>.
+   636→   636→              После установки вам напишет ваш Hub URL и API-ключ(Bearer), запомните их</p>
+   637→   637→          </div>
+   638→   638→        </div>
+   639→   639→        <div class="step">
+   640→   640→          <div class="step-num">2</div>
+   641→   641→          <div>
+   642→   642→            <b>Подключение к ChatGPT</b>
+   643→   643→            <p class="muted">
+   644→   644→              1) Перейдите на
+   645→   645→              <a href="https://chatgpt.com/gpts/editor" target="_blank" rel="noopener">
+   646→   646→                chatgpt.com/gpts/editor
+   647→   647→              </a>
+   648→   648→            </p>
+   649→   649→
+   650→   650→            <p class="muted">
+   651→   651→              2) Нажмите «Создать новое действие».
+   652→   652→            </p>
+   653→   653→
+   654→   654→
+   655→   655→
+   656→   656→            <p class="muted">
+   657→   657→              3) Выберите импорт по URL:
+   658→   658→              <a href="https://became.bezrabotnyi.com/api.json" target="_blank" rel="noopener">
+   659→   659→                became.bezrabotnyi.com/api.json
+   660→   660→              </a>
+   661→   661→            </p>
+   662→   662→
+   663→   663→            <p class="muted">
+   664→   664→              4) Заменитие в "servers": "url": на свой Hub URL
+   665→   665→            </p>
+   666→   666→
+   667→   667→            <p class="muted">
+   668→   668→              5) В разделе «Аутентификация» выберите тип <b>API ключ, Bearer</b>
+   669→   669→              и вставьте ключ CTL_TOKEN, полученный на первом шаге.
+   670→   670→            </p>
+   671→   671→          </div>
+   672→   672→        </div>
+   673→   673→        <div class="step">
+   674→   674→          <div class="step-num">3</div>
+   675→   675→          <div>
+   676→   676→            <b>Работа</b>
+   677→   677→            <p class="muted">Вы пишете: «Поставь WireGuard», «Почини nginx». GPT‑Админ запускает команды, читает логи,
+   678→   678→              исправляет ошибки и возвращает отчёт.</p>
+   679→   679→          </div>
+   680→   680→        </div>
+   681→   681→      </div>
+   682→   682→      <div class="shots" style="margin-top:14px">
+   683→   683→        <img loading="lazy" src="real_install.png" alt="Диаграмма сети и серверов" />
+   684→   684→        <img loading="lazy" src="instructionsgpradmin.png" alt="Терминал и логи" />
+   685→   685→        <img loading="lazy" src="Снимок экрана 2025-09-04 в 17.25.20.png" alt="Панель мониторинга" />
+   686→   686→      </div>
+   687→   687→    </section>
+   688→   688→
+   689→   689→    <!-- USE CASES / EXAMPLES -->
+   690→   690→    <section id="usecases" class="section fade">
+   691→   691→      <h2>Use‑cases, которые закрывает GPT‑Админ</h2>
+   692→   692→      <div class="grid cols-3">
+   693→   693→        <article class="card">
+   694→   694→          <img loading="lazy" src="RunMinecraftServer.webp" alt="Установка Minecraft‑сервера" />
+   695→   695→          <div class="body">
+   696→   696→            <span class="kicker">Игровые сервера</span>
+   697→   697→            <h3>Minecraft «под ключ»</h3>
+   698→   698→            <p class="muted">Устанавливает Java, качает дистрибутив, создаёт systemd‑сервис, открывает порты и
+   699→   699→              настраивает резервные копии.
+   700→   700→            </p>
+   701→   701→          </div>
+   702→   702→        </article>
+   703→   703→        <article class="card">
+   704→   704→          <img loading="lazy"
+   705→   705→            src="https://images.unsplash.com/photo-1520607162513-77705c0f0d4a?q=80&w=1600&auto=format&fit=crop"
+   706→   706→            alt="Безопасный доступ к локальной сети" />
+   707→   707→          <div class="body">
+   708→   708→            <span class="kicker">Безопасность</span>
+   709→   709→            <h3>Доступ как в локальной сети</h3>
+   710→   710→            <p class="muted">Работайте с серверами как будто они рядом: частная оверлейная сеть, ключи доступа, клиенты для iOS/Android, QR‑коды и ротация
+   711→   711→              по расписанию.</p>
+   712→   712→          </div>
+   713→   713→        </article>
+   714→   714→        <article class="card">
+   715→   715→          <img loading="lazy" src="https://tabby.sh/af40d0002d27979f81ad.png" alt="Работа с логами и nginx" />
+   716→   716→          <div class="body">
+   717→   717→            <span class="kicker">Веб‑инфраструктура</span>
+   718→   718→            <h3>Чиним сайт</h3>
+   719→   719→            <p class="muted">Валидирует конфиги nginx, проверяет Certbot, логи ошибок, перезапускает сервисы, правит
+   720→   720→              firewall и HSTS.</p>
+   721→   721→          </div>
+   722→   722→        </article>
+   723→   723→        <article class="card">
+   724→   724→          <img loading="lazy" src="https://tabby.sh/b3698dea6520b70d4c4b.png" alt="Мониторинг ресурсов" />
+   725→   725→          <div class="body">
+   726→   726→            <span class="kicker">Ресурсы</span>
+   727→   727→            <h3>Память/диски/сеть</h3>
+   728→   728→            <p class="muted">Находит утечки, чистит логи, анализирует iostat/iftop, даёт рекомендации по лимитам и
+   729→   729→              троттлингу.</p>
+   730→   730→          </div>
+   731→   731→        </article>
+   732→   732→        <article class="card">
+   733→   733→          <img loading="lazy" src="https://www.pgadmin.org/static/COMPILED/assets/img/screenshot.png"
+   734→   734→            alt="Базы данных" />
+   735→   735→          <div class="body">
+   736→   736→            <span class="kicker">Базы</span>
+   737→   737→            <h3>PostgreSQL / Redis</h3>
+   738→   738→            <p class="muted">Настройка конфигов, бэкапы, репликация, VACUUM‑план, диагностика долгих запросов и
+   739→   739→              deadlock’ов.</p>
+   740→   740→          </div>
+   741→   741→        </article>
+   742→   742→        <article class="card">
+   743→   743→          <img loading="lazy"
+   744→   744→            src="https://images.unsplash.com/photo-1555066931-4365d14bab8c?q=80&w=1600&auto=format&fit=crop"
+   745→   745→            alt="CI/CD и Docker" />
+   746→   746→          <div class="body">
+   747→   747→            <span class="kicker">DevOps</span>
+   748→   748→            <h3>Docker/CI</h3>
+   749→   749→            <p class="muted">Собирает и пушит образы, настраивает docker‑compose, healthcheck’и, перезапуски и
+   750→   750→              лог‑драйверы.</p>
+   751→   751→          </div>
+   752→   752→        </article>
+   753→   753→      </div>
+   754→   754→    </section>
+   755→   755→
+   756→   756→    <!-- FEATURES -->
+   757→   757→    <section id="features" class="section fade">
+   758→   758→      <h2>Что умеет GPT‑Админ</h2>
+   759→   759→      <div class="grid cols-3">
+   760→   760→        <div class="card" style="padding:14px">
+   761→   761→          <div class="body">
+   762→   762→            <h3><i class="fa-solid fa-gear"></i> Администрирование</h3>
+   763→   763→            <p class="muted">Перезапуск и статус systemd, включение автозапуска, управление firewall, конфигурирование
+   764→   764→              sshd, fail2ban и уведомления.</p>
+   765→   765→          </div>
+   766→   766→        </div>
+   767→   767→        <div class="card" style="padding:14px">
+   768→   768→          <div class="body">
+   769→   769→            <h3><i class="fa-solid fa-file-pen"></i> Файлы и конфиги</h3>
+   770→   770→            <p class="muted">Читает/редактирует конфиги с валидацией синтаксиса, делает резервные копии и дифф‑патчи.
+   771→   771→            </p>
+   772→   772→          </div>
+   773→   773→        </div>
+   774→   774→        <div class="card" style="padding:14px">
+   775→   775→          <div class="body">
+   776→   776→            <h3><i class="fa-solid fa-screwdriver-wrench"></i> Софт и обновления</h3>
+   777→   777→            <p class="muted">Ставит пакеты, добавляет репозитории, обновляет версии с миграциями данных.</p>
+   778→   778→          </div>
+   779→   779→        </div>
+   780→   780→        <div class="card" style="padding:14px">
+   781→   781→          <div class="body">
+   782→   782→            <h3><i class="fa-solid fa-scroll"></i> Логи и отладка</h3>
+   783→   783→            <p class="muted">Парсит journalctl/nginx/postgres‑логи, находит аномалии, предлагает фиксы и применяет их.
+   784→   784→            </p>
+   785→   785→          </div>
+   786→   786→        </div>
+   787→   787→        <div class="card" style="padding:14px">
+   788→   788→          <div class="body">
+   789→   789→            <h3><i class="fa-solid fa-microchip"></i> Ресурсы</h3>
+   790→   790→            <p class="muted">Мониторит CPU/RAM/IO/NET, настраивает алерты, ротацию логов и service healthchecks.</p>
+   791→   791→          </div>
+   792→   792→        </div>
+   793→   793→        <div class="card" style="padding:14px">
+   794→   794→          <div class="body">
+   795→   795→            <h3><i class="fa-solid fa-diagram-project"></i> Интеграции</h3>
+   796→   796→            <p class="muted">Docker, Nginx, WireGuard, PostgreSQL, Redis, Fail2Ban, ufw, iptables, Certbot и др.</p>
+   797→   797→          </div>
+   798→   798→        </div>
+   799→   799→      </div>
+   800→   800→    </section>
+   801→   801→
+   802→   802→    <!-- SECURITY -->
+   803→   803→    <section id="security" class="section fade">
+   804→   804→      <h2>Безопасность и приватность</h2>
+   805→   805→      <div class="grid cols-3">
+   806→   806→        <div class="card" style="padding:14px">
+   807→   807→          <div class="body">
+   808→   808→            <h3><i class="fa-solid fa-lock"></i> Минимально необходимые права</h3>
+   809→   809→            <p class="muted">Root/Administrator не нужен для обычной установки. По умолчанию используется user-mode; системный режим через sudo/Administrator включаете только там, где он нужен. Поддерживаются ограниченные
+   810→   810→              списки команд, polkit/ACL и audit‑логи.</p>
+   811→   811→          </div>
+   812→   812→        </div>
+   813→   813→        <div class="card" style="padding:14px">
+   814→   814→          <div class="body">
+   815→   815→            <h3><i class="fa-solid fa-key"></i> Токены и IP‑allowlist</h3>
+   816→   816→            <p class="muted">Каждый агент имеет уникальный токен. Можно ограничить доступ по IP/подсетям и времени.</p>
+   817→   817→          </div>
+   818→   818→        </div>
+   819→   819→        <div class="card" style="padding:14px">
+   820→   820→          <div class="body">
+   821→   821→            <h3><i class="fa-solid fa-eye-slash"></i> Логи без секретов</h3>
+   822→   822→            <p class="muted">Секреты маскируются в журналах. Для команд с чувствительными данными поддерживается режим
+   823→   823→              «только локально».</p>
+   824→   824→          </div>
+   825→   825→        </div>
+   826→   826→      </div>
+   827→   827→    </section>
+   828→   828→
+   829→   829→    <!-- SCREENSHOTS -->
+   830→   830→    <section class="section fade">
+   831→   831→      <h2>Скриншоты</h2>
+   832→   832→      <div class="shots">
+   833→   833→        <img loading="lazy" src="Снимок экрана 2025-09-04 в 17.22.55.png" alt="Журнал событий systemd" />
+   834→   834→        <img loading="lazy" src="Снимок экрана 2025-09-04 в 17.25.20.png" alt="Консоль и диагностика" />
+   835→   835→        <img loading="lazy" src="Снимок экрана 2025-09-04 в 17.29.42.png" alt="Мониторинг ресурсов" />
+   836→   836→      </div>
+   837→   837→    </section>
+   838→   838→
+   839→   839→    <!-- PRICING -->
+   840→   840→    <section id="pricing" class="section fade">
+   841→   841→      <h2>Тарифы</h2>
+   842→   842→      <p class="lead" style="font-size:18px;color:var(--brand-2);font-weight:700">🔥 Все функции <strong>бесплатно до конца лета</strong> — никаких ограничений!</p>
+   843→   843→      <div class="pricing">
+   844→   844→        <div class="plan" style="outline:2px solid var(--accent)">
+   845→   845→          <h3>Starter</h3>
+   846→   846→          <div class="price">₽0</div>
+   847→   847→          <ul class="ul">
+   848→   848→            <li><i class="fa-solid fa-check"></i> 1 хаб + 1 агент</li>
+   849→   849→            <li><i class="fa-solid fa-check"></i> Базовые команды и логи</li>
+   850→   850→            <li><i class="fa-solid fa-check"></i> Установка в 1 клик</li>
+   851→   851→          </ul>
+   852→   852→          <a class="cta" href="#install">Начать</a>
+   853→   853→        </div>
+   854→   854→        <div class="plan" style="outline:2px solid var(--brand)">
+   855→   855→          <h3>Pro</h3>
+   856→   856→          <div class="price"><span style="text-decoration:line-through;color:var(--muted);font-size:20px">199₽</span> Бесплатно</div>
+   857→   857→          <ul class="ul">
+   858→   858→            <li><i class="fa-solid fa-check"></i> До 3 агентов</li>
+   859→   859→            <li><i class="fa-solid fa-check"></i> Расширенные интеграции</li>
+   860→   860→            <li><i class="fa-solid fa-check"></i> Алерты в Telegram</li>
+   861→   861→            <li><i class="fa-solid fa-check"></i> Неограниченные команды</li>
+   862→   862→            <li><i class="fa-solid fa-check"></i> Приоритетная поддержка</li>
+   863→   863→          </ul>
+   864→   864→          <a class="cta" href="#install">Подключить бесплатно</a>
+   865→   865→        </div>
+   866→   866→        <div class="plan">
+   867→   867→          <h3>Enterprise</h3>
+   868→   868→          <div class="price">По запросу</div>
+   869→   869→          <ul class="ul">
+   870→   870→            <li><i class="fa-solid fa-check"></i> SSO, частный сетевой доступ, аудит, политика команд</li>
+   871→   871→            <li><i class="fa-solid fa-check"></i> Частный хостинг</li>
+   872→   872→            <li><i class="fa-solid fa-check"></i> SLA и поддержка</li>
+   873→   873→          </ul>
+   874→   874→          <a class="cta" href="https://t.me/careviolan" target="_blank" rel="noopener">Связаться</a>
+   875→   875→        </div>
+   876→   876→      </div>
+   877→   877→    </section>
+   878→   878→
+   879→   879→    <!-- OPEN SOURCE -->
+   880→   880→    <section class="section fade" style="text-align:center;background:var(--card)">
+   881→   881→      <h2>Открытый исходный код</h2>
+   882→   882→      <p class="lead">Код GPT‑Админа (на пару версий назад) доступен в публичном репозитории. Вы можете самостоятельно развернуть и настроить систему.</p>
+   883→   883→      <a class="cta" href="https://github.com/megamen32/gptadmin_opensource" target="_blank" rel="noopener" style="margin-top:8px">
+   884→   884→        <i class="fa-brands fa-github"></i> GitHub — gptadmin_opensource
+   885→   885→      </a>
+   886→   886→    </section>
+   887→   887→
+   888→   888→    <!-- INSTALL -->
+   889→   889→    <section id="install" class="section fade">
+   890→   890→      <h2>Установка</h2>
+   891→   891→      <div class="grid cols-3">
+   892→   892→        <div class="card" style="padding:14px">
+   893→   893→          <div class="body">
+   894→   894→            <h3><i class="fa-brands fa-ubuntu"></i> Linux/macOS — без sudo</h3>
+   895→   895→            <pre class="code">curl -s https://became.bezrabotnyi.com/install.sh | bash</pre>
+   896→   896→            <p class="muted">Ставит в <code>~/.local/share/gptadmin</code>, конфиг в <code>~/.config/gptadmin</code>, сервисы пользователя через <code>systemctl --user</code> или <code>LaunchAgents</code>.</p>
+   897→   897→          </div>
+   898→   898→        </div>
+   899→   899→        <div class="card" style="padding:14px">
+   900→   900→          <div class="body">
+   901→   901→            <h3><i class="fa-solid fa-lock"></i> System mode — когда нужен root</h3>
+   902→   902→            <pre class="code">curl -s https://became.bezrabotnyi.com/install.sh | sudo bash</pre>
+   903→   903→            <p class="muted">Системная установка в <code>/opt/gptadmin</code> и <code>/etc/gptadmin</code> с systemd/LaunchDaemons. Используйте только если нужны системные права.</p>
+   904→   904→          </div>
+   905→   905→        </div>
+   906→   906→        <div class="card" style="padding:14px">
+   907→   907→          <div class="body">
+   908→   908→            <h3><i class="fa-brands fa-windows"></i> Windows — без Administrator</h3>
+   909→   909→            <pre class="code">iwr -UseBasicParsing https://became.bezrabotnyi.com/install_win.ps1 | iex</pre>
+   910→   910→            <p class="muted">Без админки ставится в <code>%LOCALAPPDATA%\gptadmin</code> и создаёт Scheduled Task на вход текущего пользователя. Administrator нужен только для system-mode.</p>
+   911→   911→          </div>
+   912→   912→        </div>
+   913→   913→      </div>
+   914→   914→      <p class="muted" style="margin-top:10px">После установки откройте ChatGPT → <i>Actions</i> → добавьте выданный
+   915→   915→        API‑URL/ключ. Готово.</p>
+   916→   916→    </section>
+   917→   917→
+   918→   918→    <!-- FAQ -->
+   919→   919→    <section id="faq" class="section fade">
+   920→   920→      <h2>Частые вопросы</h2>
+   921→   921→      <details>
+   922→   922→        <summary>Насколько безопасно давать GPT доступ к серверам?</summary>
+   923→   923→        <p class="muted">Доступ ограничен вашим хабом и списком разрешённых endpoint’ов. Все действия логируются,
+   924→   924→          секреты маскируются, можно включить approve‑режим.</p>
+   925→   925→      </details>
+   926→   926→      <details>
+   927→   927→        <summary>Будет ли GPT что‑то делать без моего ведома?</summary>
+   928→   928→        <p class="muted">Нет. Команды запускаются только по вашему запросу в чате, а для критичных операций доступен
+   929→   929→          ручной approve.</p>
+   930→   930→      </details>
+   931→   931→      <details>
+   932→   932→        <summary>Что если команда упадёт с ошибкой?</summary>
+   933→   933→        <p class="muted">Агент пришлёт логи и выполнит авто‑диагностику: предложит исправления и повторит запуск после
+   934→   934→          подтверждения.</p>
+   935→   935→      </details>
+   936→   936→      <details>
+   937→   937→        <summary>Можно ли развернуть всё в изолированной сети?</summary>
+   938→   938→        <p class="muted">Да. Хаб и агенты могут работать в локальной или частной оверлейной сети. Можно подключаться к серверам как будто вы в одной сети из любой точки мира; внешний доступ не требуется, если используете
+   939→   939→          локальный ChatGPT‑шлюз.</p>
+   940→   940→      </details>
+   941→   941→    </section>
+   942→   942→
+   943→   943→    <!-- FINAL CTA -->
+   944→   944→    <section class="section fade" style="text-align:center">
+   945→   945→      <h2>Готовы попробовать?</h2>
+   946→   946→      <p class="lead">Установка занимает минуту. Вернуться к рутине — всегда успеете.</p>
+   947→   947→      <div style="display:flex;gap:12px;justify-content:center;flex-wrap:wrap">
+   948→   948→        <a class="cta" href="#install"><i class="fa-solid fa-rocket"></i> Установить</a>
+   949→   949→        <a class="cta" style="background:linear-gradient(135deg,var(--accent),#fff);" href="#how"><i
+   950→   950→            class="fa-solid fa-circle-question"></i> Как это работает</a>
+   951→   951→      </div>
+   952→   952→    </section>
+   953→   953→  </main>
+   954→   954→
+   955→   955→  <footer>
+   956→   956→    <div class="container foot">
+   957→   957→      <div style="display:flex;align-items:center;gap:10px"><i class="fa-solid fa-robot"></i><b>GPT‑Админ</b></div>
+   958→   958→      <div class="small">© 2025. Все права защищены. Телеграм для связи: <a
+   959→   959→          href="https://t.me/careviolan">@careviolan</a></div>
+   960→   960→    </div>
+   961→   961→  </footer>
+   962→   962→
+   963→   963→  <script>
+   964→   964→    // Fade‑in on view
+   965→   965→    const io = new IntersectionObserver((entries) => {
+   966→   966→      entries.forEach(e => { if (e.isIntersecting) e.target.classList.add('visible') })
+   967→   967→    }, { threshold: 0.15 });
+   968→   968→    document.querySelectorAll('.fade').forEach(n => io.observe(n));
+   969→   969→
+   970→   970→    // Image placeholders and zoom
+   971→   971→    const modal = document.createElement('div');
+   972→   972→    modal.className = 'img-modal';
+   973→   973→    modal.innerHTML = '<span class="close">&times;</span><img src="" alt="">';
+   974→   974→    document.body.appendChild(modal);
+   975→   975→    const modalImg = modal.querySelector('img');
+   976→   976→    modal.querySelector('.close').addEventListener('click', () => modal.classList.remove('show'));
+   977→   977→
+   978→   978→    document.querySelectorAll('img').forEach(img => {
+   979→   979→      const ph = document.createElement('div');
+   980→   980→      ph.className = 'img-placeholder';
+   981→   981→      img.insertAdjacentElement('afterend', ph);
+   982→   982→      img.style.cursor = 'zoom-in';
+   983→   983→      img.addEventListener('click', () => {
+   984→   984→        modalImg.src = img.src;
+   985→   985→        modal.classList.add('show');
+   986→   986→      });
+   987→   987→    });
+   988→   988→  </script>
+   989→   989→</body>
+   990→   990→
+   991→   991→</html>
+   992→   992→
