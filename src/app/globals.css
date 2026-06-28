@@ -137,6 +137,8 @@
   }
   html {
     scroll-behavior: smooth;
+    /* offset for the fixed header (64px) so anchored sections aren't hidden under it */
+    scroll-padding-top: 5rem;
     -webkit-text-size-adjust: 100%;
   }
   body {
@@ -155,10 +157,10 @@
   }
 }
 
-/* Prevent horizontal page scroll on mobile. Outside @layer base so it wins
-   over Tailwind utility resets. Decorative aurora/marquee elements can still
-   overflow their local containers, but they won't widen the page. */
-html,
+/* Prevent horizontal page scroll on mobile WITHOUT breaking vertical
+   anchor-scroll / scroll-behavior. Apply overflow-x to BODY only —
+   html stays the scrolling element, so anchor nav + smooth scroll work.
+   max-width:100vw stops the body from being widened by decorative aurora. */
 body {
   overflow-x: hidden !important;
   max-width: 100vw !important;
