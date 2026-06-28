@@ -30,7 +30,7 @@ export function ChatGptPage() {
   return (
     <>
       <PageHero
-        eyebrow="Способ 1 · Custom GPT"
+        eyebrow="Адаптер 1 · OpenAI Action"
         title={
           <>
             Превратите ChatGPT в{" "}

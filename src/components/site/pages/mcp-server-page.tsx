@@ -1,7 +1,6 @@
 "use client";
 
-import { ArrowRight, Boxes, BrainCircuit, Cpu, Plug, Server, Terminal, Check, Copy } from "lucide-react";
-import { useState } from "react";
+import { ArrowRight, Boxes, BrainCircuit, Cpu, Plug, Server, Terminal, Check, Copy, Radio } from "lucide-react";
 import { PageHero, Step } from "../page-hero";
 import { Reveal, Stagger, StaggerItem } from "../reveal";
 import { InstallCommand } from "../install-command";
@@ -14,13 +13,14 @@ const CLIENTS = [
   { name: "OpenCode", icon: Cpu },
 ];
 
-// Example MCP client config (Claude Desktop format).
+// MCP remote SSE (Streamable HTTP) config — Claude Desktop / Codex / OpenCode format.
 const MCP_CONFIG = `{
   "mcpServers": {
-    "gpt-admin": {
-      "url": "https://your-hub.bezrabotnyi.com/mcp",
+    "gptadmin": {
+      "type": "http",
+      "url": "http://localhost:25900/mcp",
       "headers": {
-        "Authorization": "Bearer YOUR_CTL_TOKEN"
+        "Authorization": "Bearer  asdasdasdas"
       }
     }
   }
@@ -32,15 +32,19 @@ export function McpServerPage() {
   return (
     <>
       <PageHero
-        eyebrow="Способ 2 · MCP сервер"
+        eyebrow="Адаптер 2 · MCP remote SSE"
         title={
           <>
             MCP‑сервер для{" "}
             <span className="text-gradient-violet">Claude · Codex · OpenCode</span>
           </>
         }
-        lead="GPT‑Админ работает как MCP‑сервер. Подключите его в настройках вашего клиента — и AI получает единый доступ ко всем машинам через нативные tool calls. Поддерживаются любые MCP."
+        lead="GPT‑Админ — это MCP remote SSE (Streamable HTTP). Подключите его в настройках клиента — и AI получает единый доступ ко всей инфраструктуре через нативные tool calls. Тот же хаб, что и для других адаптеров."
       >
+        <div className="inline-flex items-center gap-2 rounded-full border border-primary/25 bg-primary/[0.06] px-3 py-1.5 text-xs font-medium text-primary">
+          <Radio className="h-3.5 w-3.5" />
+          MCP remote SSE · Streamable HTTP
+        </div>
         <div className="w-full max-w-xl">
           <InstallCommand variant="compact" />
         </div>
@@ -172,7 +176,7 @@ export function McpServerPage() {
               <Step n={2} title="Добавьте MCP‑сервер в клиент">
                 В настройках вашего клиента (Claude Desktop →{" "}
                 <code className="font-mono text-[#c4a3f8]">claude_desktop_config.json</code>,
-                Codex, OpenCode) добавьте конфиг GPT‑Админа как MCP‑сервер:
+                Codex, OpenCode) добавьте GPT‑Админ как MCP remote SSE (Streamable HTTP):
                 <ConfigBlock />
               </Step>
             </StaggerItem>

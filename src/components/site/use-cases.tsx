@@ -1,120 +1,103 @@
 "use client";
 
-import { Boxes, Database, Gamepad2, Globe, HardDrive, Network, Wrench } from "lucide-react";
-import Image from "next/image";
+import {
+  Bug,
+  FileCode2,
+  GitPullRequest,
+  Globe,
+  ScrollText,
+  ServerCog,
+  type LucideIcon,
+} from "lucide-react";
 import { Stagger, StaggerItem, Reveal } from "./reveal";
 import { SectionHeading } from "./section-heading";
 
 type UseCase = {
-  icon: React.ElementType;
-  kicker: string;
+  icon: LucideIcon;
   title: string;
   body: string;
-  image?: string;
+  tag?: string;
 };
 
-const USE_CASES: UseCase[] = [
+const CASES: UseCase[] = [
   {
-    icon: Gamepad2,
-    kicker: "Игровые сервера",
-    title: "Minecraft «под ключ»",
-    body: "Устанавливает Java, качает дистрибутив, создаёт systemd‑сервис, открывает порты и настраивает резервные копии.",
-    image: "/screenshots/minecraft.webp",
+    icon: ServerCog,
+    title: "Администрирование серверов",
+    body: "Перезапуск systemd, firewall, nginx, fail2ban, sshd. Ставит софт, правит конфиги, открывает порты — и валидирует результат.",
+    tag: "systemd · nginx · ufw",
   },
   {
-    icon: Network,
-    kicker: "Безопасность",
-    title: "Доступ как в локальной сети",
-    body: "Работайте с серверами как будто они рядом: частная оверлейная сеть, ключи, клиенты для iOS/Android, QR‑коды и ротация.",
+    icon: FileCode2,
+    title: "Написание и запуск кода",
+    body: "Правит код, прогоняет проверки и может запустить сабагента — «запусти codex для фикса этого бага», пока вы занимаетесь другим.",
+    tag: "subagents",
+  },
+  {
+    icon: GitPullRequest,
+    title: "Фикс и чистка PR",
+    body: "Находит форк в памяти, оставляет один feature-коммит, прогоняет type-check/lint/build и делает force-push через SSH.",
+    tag: "git · force-with-lease",
+  },
+  {
+    icon: ScrollText,
+    title: "Проверка логов",
+    body: "Парсит journalctl, nginx, postgres-логи, находит аномалии, предлагает фиксы и применяет их после подтверждения.",
+    tag: "journalctl · grep",
   },
   {
     icon: Globe,
-    kicker: "Веб‑инфраструктура",
-    title: "Чиним сайт",
-    body: "Валидирует конфиги nginx, проверяет Certbot, логи ошибок, перезапускает сервисы, правит firewall и HSTS.",
+    title: "Поиск в интернете",
+    body: "Через chrome-devtools MCP — агент сам открывает страницы, читает докумен­тацию и ищет решение, не выходя из чата.",
+    tag: "chrome-devtools mcp",
   },
   {
-    icon: HardDrive,
-    kicker: "Ресурсы",
-    title: "Память / диски / сеть",
-    body: "Находит утечки, чистит логи, анализирует iostat/iftop, даёт рекомендации по лимитам и троттлингу.",
-  },
-  {
-    icon: Database,
-    kicker: "Базы данных",
-    title: "PostgreSQL / Redis",
-    body: "Настройка конфигов, бэкапы, репликация, VACUUM‑план, диагностика долгих запросов и deadlock’ов.",
-  },
-  {
-    icon: Boxes,
-    kicker: "DevOps",
-    title: "Docker / CI",
-    body: "Собирает и пушит образы, настраивает docker‑compose, healthcheck’и, перезапуски и лог‑драйверы.",
+    icon: Bug,
+    title: "Диагностика инцидентов",
+    body: "Сам находит упавший сервис, читает логи, понимает причину (ECONNREFUSED, 503, OOM) и чинит — с отчётом и проверками.",
+    tag: "auto-diagnose",
   },
 ];
 
+/** Capabilities of the hub — independent of which AI adapter you use. */
 export function UseCases() {
   return (
-    <section id="usecases" className="relative scroll-mt-20 py-24 sm:py-32">
+    <section className="relative py-20 sm:py-28">
       <div className="mx-auto max-w-7xl px-5 sm:px-8">
         <SectionHeading
-          eyebrow="Use‑cases"
+          eyebrow="Что можно делать через хаб"
           title={
             <>
-              Задачи, которые GPT‑Админ{" "}
-              <span className="text-gradient-violet">закрывает целиком</span>
+              Любой AI —{" "}
+              <span className="text-gradient-violet">любыми способами</span>
             </>
           }
-          lead="От игрового сервера до продакшн‑инфраструктуры — пишете задачу простыми словами, получаете выполненную работу и отчёт."
+          lead="Возможности даёт сам хаб, а не конкретный адаптер. Какой бы AI вы ни подключили — Claude, DeepSeek или ChatGPT — он получит доступ ко всему этому."
         />
 
-        <Stagger className="mt-16 grid gap-5 sm:grid-cols-2 lg:grid-cols-3" stagger={0.08}>
-          {USE_CASES.map((uc, i) => (
-            <StaggerItem key={uc.title}>
-              <UseCaseCard uc={uc} featured={i === 0} />
+        <Stagger className="mt-14 grid gap-5 sm:grid-cols-2 lg:grid-cols-3" stagger={0.07}>
+          {CASES.map((c) => (
+            <StaggerItem key={c.title}>
+              <div className="surface surface-hover group relative flex h-full flex-col overflow-hidden rounded-2xl p-6">
+                <div className="flex items-center gap-3">
+                  <span className="inline-flex h-11 w-11 items-center justify-center rounded-xl border border-primary/20 bg-primary/[0.06] transition-colors group-hover:border-primary/40">
+                    <c.icon className="h-5 w-5 text-primary" />
+                  </span>
+                  <h3 className="text-base font-semibold tracking-tight">{c.title}</h3>
+                </div>
+                <p className="mt-3 text-sm leading-relaxed text-muted-foreground">{c.body}</p>
+                {c.tag && (
+                  <div className="mt-auto pt-5">
+                    <span className="rounded-md border border-border/60 bg-white/[0.02] px-2 py-1 font-mono text-[11px] text-muted-foreground">
+                      {c.tag}
+                    </span>
+                  </div>
+                )}
+                <span className="pointer-events-none absolute -right-12 -top-12 h-32 w-32 rounded-full glow-violet opacity-0 blur-2xl transition-opacity duration-500 group-hover:opacity-100" />
+              </div>
             </StaggerItem>
           ))}
         </Stagger>
       </div>
     </section>
-  );
-}
-
-function UseCaseCard({ uc, featured }: { uc: UseCase; featured?: boolean }) {
-  return (
-    <article className="surface surface-hover group relative flex h-full flex-col overflow-hidden rounded-2xl">
-      {uc.image ? (
-        <div className="relative aspect-[16/9] overflow-hidden border-b border-border/60">
-          <Image
-            src={uc.image}
-            alt={uc.title}
-            fill
-            sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
-            className="object-cover opacity-90 transition-transform duration-700 group-hover:scale-105"
-          />
-          <div className="absolute inset-0 bg-gradient-to-t from-background via-background/30 to-transparent" />
-          <span className="absolute left-4 top-4 inline-flex items-center gap-2 rounded-full border border-border/60 bg-background/70 px-3 py-1 text-xs font-medium backdrop-blur-md">
-            <uc.icon className="h-3.5 w-3.5 text-primary" />
-            {uc.kicker}
-          </span>
-        </div>
-      ) : (
-        <div className="flex items-center gap-3 px-6 pt-6">
-          <span className="inline-flex h-11 w-11 items-center justify-center rounded-xl border border-border/70 bg-primary/[0.06]">
-            <uc.icon className="h-5 w-5 text-primary" />
-          </span>
-          <span className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground/70">
-            {uc.kicker}
-          </span>
-        </div>
-      )}
-
-      <div className="flex flex-1 flex-col p-6 pt-5">
-        <h3 className="text-lg font-semibold tracking-tight">{uc.title}</h3>
-        <p className="mt-2 text-sm leading-relaxed text-muted-foreground">{uc.body}</p>
-      </div>
-
-      <span className="pointer-events-none absolute inset-x-0 bottom-0 h-px bg-gradient-to-r from-transparent via-primary/30 to-transparent opacity-0 transition-opacity duration-500 group-hover:opacity-100" />
-    </article>
   );
 }

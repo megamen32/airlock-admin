@@ -42,7 +42,7 @@ export function McpExtensionPage() {
   return (
     <>
       <PageHero
-        eyebrow="Способ 3 · Браузерное расширение"
+        eyebrow="Адаптер 3 · Браузерное расширение"
         title={
           <>
             Любой бесплатный ИИ —{" "}
