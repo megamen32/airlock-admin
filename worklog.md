@@ -268,3 +268,19 @@ Git:
 Stage Summary:
 - All plain-text URLs in how-it-works are now clickable links.
 - LiveExamples no longer looks like a CLI — it faithfully recreates the real ChatGPT conversation UI (user bubbles right, OpenAI-logo assistant left, thinking meta, tool-result checks block), validated by VLM against actual ChatGPT screenshots.
+
+---
+Task ID: 16
+Agent: main
+Task: Sync local with user's push + merge; verify merged site.
+
+Work Log:
+- User pushed and merged on remote (commits d64732b "Update website" + 8ca3db0 merge).
+- d64732b config changes (kept): next.config.ts → images.unoptimized: true (so next/image works without optimizer in standalone build under /website/); package.json build script → copies static+public into .next/standalone/website/ subdir for deployment.
+- Local had diverged (9fc20a4 — an accidental commit that included skills/ and upload/ junk). No uncommitted local work to preserve.
+- git fetch + git reset --hard FETCH_HEAD → local now = 8ca3db0 (remote), working tree clean.
+- Verified: next.config.ts images.unoptimized preserved; dev server runs; ESLint clean; upload/ and skills/ gitignored (won't re-pollute repo).
+- Agent Browser mobile 390px: scrollWidth=390=viewport (no horizontal overflow), hero H1 renders, 2 bezrabotnyi.com footer links present.
+
+Stage Summary:
+- Local fully synced to remote 8ca3db0. Merged site (premium violet landing + user's standalone-deploy config) verified working on mobile and desktop. Repo clean of junk files.
