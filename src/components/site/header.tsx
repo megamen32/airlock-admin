@@ -2,20 +2,18 @@
 
 import { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Menu, X, Terminal } from "lucide-react";
+import { Menu, X } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useHashRoute, pageHref, type PageId } from "@/hooks/use-hash-route";
 
-const NAV = [
-  { href: "#how", label: "Как работает" },
-  { href: "#usecases", label: "Use‑cases" },
-  { href: "#features", label: "Функции" },
-  { href: "#examples", label: "Примеры" },
-  { href: "#browser-bridge", label: "MCP для ИИ" },
-  { href: "#pricing", label: "Тарифы" },
-  { href: "#faq", label: "FAQ" },
+const PAGE_TABS: { id: PageId; label: string }[] = [
+  { id: "chatgpt", label: "ChatGPT плагин" },
+  { id: "mcp-server", label: "MCP сервер" },
+  { id: "mcp-extension", label: "MCP расширение" },
 ];
 
 export function Header() {
+  const { page, navigate } = useHashRoute();
   const [scrolled, setScrolled] = useState(false);
   const [open, setOpen] = useState(false);
 
@@ -26,7 +24,6 @@ export function Header() {
     return () => window.removeEventListener("scroll", onScroll);
   }, []);
 
-  // Lock body scroll when the mobile menu is open.
   useEffect(() => {
     document.body.style.overflow = open ? "hidden" : "";
     return () => {
@@ -44,32 +41,55 @@ export function Header() {
       )}
     >
       <div className="mx-auto flex h-16 max-w-7xl items-center justify-between gap-4 px-5 sm:px-8">
-        <a href="#top" className="group flex items-center gap-2.5" aria-label="GPT‑Админ — на главную">
+        {/* Logo → home */}
+        <a
+          href={pageHref("home")}
+          onClick={(e) => {
+            e.preventDefault();
+            navigate("home");
+          }}
+          className="group flex items-center gap-2.5"
+          aria-label="GPT‑Админ — на главную"
+        >
           <Logo />
           <span className="text-[15px] font-semibold tracking-tight">
             GPT<span className="text-muted-foreground">‑</span>Админ
           </span>
         </a>
 
-        <nav className="hidden items-center gap-1 lg:flex" aria-label="Главное меню">
-          {NAV.map((item) => (
-            <a
-              key={item.href}
-              href={item.href}
-              className="rounded-lg px-3 py-2 text-sm text-muted-foreground transition-colors hover:text-foreground"
-            >
-              {item.label}
-            </a>
-          ))}
+        {/* Page tabs — desktop */}
+        <nav className="hidden items-center gap-1 lg:flex" aria-label="Разделы">
+          {PAGE_TABS.map((tab) => {
+            const active = page === tab.id;
+            return (
+              <a
+                key={tab.id}
+                href={pageHref(tab.id)}
+                onClick={(e) => {
+                  e.preventDefault();
+                  navigate(tab.id);
+                }}
+                className={cn(
+                  "rounded-lg px-3 py-2 text-sm transition-colors",
+                  active ? "bg-primary/10 text-primary" : "text-muted-foreground hover:text-foreground"
+                )}
+                aria-current={active ? "page" : undefined}
+              >
+                {tab.label}
+              </a>
+            );
+          })}
         </nav>
 
         <div className="flex items-center gap-2">
           <a
-            href="#install"
-            className="group relative hidden items-center gap-2 overflow-hidden rounded-full bg-primary px-5 py-2.5 text-sm font-medium text-primary-foreground transition-transform hover:scale-[1.02] sm:inline-flex"
+            href={pageHref("chatgpt")}
+            onClick={(e) => {
+              e.preventDefault();
+              navigate("chatgpt");
+            }}
+            className="hidden rounded-full bg-primary px-5 py-2.5 text-sm font-medium text-primary-foreground transition-transform hover:scale-[1.02] sm:inline-flex"
           >
-            <span className="absolute inset-0 -translate-x-full bg-gradient-to-r from-transparent via-white/30 to-transparent transition-transform duration-700 group-hover:translate-x-full" />
-            <Terminal className="h-4 w-4" />
             Установить
           </a>
 
@@ -97,24 +117,37 @@ export function Header() {
             aria-label="Мобильное меню"
           >
             <div className="mx-auto flex max-w-7xl flex-col gap-1 px-5 py-4">
-              {NAV.map((item) => (
+              <a
+                href={pageHref("home")}
+                onClick={(e) => {
+                  e.preventDefault();
+                  navigate("home");
+                  setOpen(false);
+                }}
+                className={cn(
+                  "rounded-lg px-3 py-3 text-base transition-colors hover:bg-white/[0.04]",
+                  page === "home" ? "bg-primary/10 text-primary" : "text-muted-foreground"
+                )}
+              >
+                Главная
+              </a>
+              {PAGE_TABS.map((tab) => (
                 <a
-                  key={item.href}
-                  href={item.href}
-                  onClick={() => setOpen(false)}
-                  className="rounded-lg px-3 py-3 text-base text-muted-foreground transition-colors hover:bg-white/[0.04] hover:text-foreground"
+                  key={tab.id}
+                  href={pageHref(tab.id)}
+                  onClick={(e) => {
+                    e.preventDefault();
+                    navigate(tab.id);
+                    setOpen(false);
+                  }}
+                  className={cn(
+                    "rounded-lg px-3 py-3 text-base transition-colors hover:bg-white/[0.04]",
+                    page === tab.id ? "bg-primary/10 text-primary" : "text-muted-foreground"
+                  )}
                 >
-                  {item.label}
+                  {tab.label}
                 </a>
               ))}
-              <a
-                href="#install"
-                onClick={() => setOpen(false)}
-                className="mt-2 inline-flex items-center justify-center gap-2 rounded-full bg-primary px-5 py-3 text-sm font-medium text-primary-foreground"
-              >
-                <Terminal className="h-4 w-4" />
-                Установить за 1 минуту
-              </a>
             </div>
           </motion.nav>
         )}
