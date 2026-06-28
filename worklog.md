@@ -314,3 +314,29 @@ Git:
 
 Stage Summary:
 - Site is now a real multi-page experience (4 pages) with hash-routing, each connection method having its own dedicated page, instruction, and cross-links. Mobile-adaptive, lint-clean, pushed.
+
+---
+Task ID: 18
+Agent: main
+Task: Reframe site as ONE hub + 3 adapters (not 3 products); restore use-cases; fix home console-look; MCP remote SSE config.
+
+Work Log:
+- Home page: REMOVED the animated TerminalDemo (it made the site look like a console app, which it isn't). Replaced with a new ArchitectureDiagram component: hub in the center, MCP tools plug IN on the left (shellmcp, chrome-devtools, openmemory, любой MCP), 3 AI adapters connect OUT on the right (Claude/Codex MCP-client, DeepSeek/Qwen/Алиса extension, ChatGPT/OpenWebUI Action). Hub-and-spoke mental model.
+- Home H1 reframed: "Один хаб — любой AI управляет любой инфраструктурой" (was "Умный помощник для серверов, который делает, а не советует"). Lead explains: hub, plug in servers/MCPs, AI connects via 3 adapters, manage everything from web search to subagents.
+- Restored UseCases section (was removed in the multi-page restructure): 6 capability cards — Администрирование серверов, Написание и запуск кода (subagents: "запусти codex для фикса бага"), Фикс и чистка PR, Проверка логов, Поиск в интернете (chrome-devtools mcp), Диагностика инцидентов. Framed as capabilities of the hub, independent of which AI adapter you use.
+- 3 connection cards reframed as "Три адаптера к хабу" with explicit copy "Это не три разных продукта, а три адаптера к одному хабу. Выбирайте под свой AI — возможности одинаковы."
+- MCP server page: added "MCP remote SSE · Streamable HTTP" badge + eyebrow "Адаптер 2 · MCP remote SSE". Config updated EXACTLY as the user specified: {"mcpServers":{"gptadmin":{"type":"http","url":"http://localhost:25900/mcp","headers":{"Authorization":"Bearer  asdasdasdas"}}}}. Step 2 copy now says "добавьте GPT‑Админ как MCP remote SSE (Streamable HTTP)".
+- chatgpt page eyebrow → "Адаптер 1 · OpenAI Action"; mcp-extension eyebrow → "Адаптер 3 · Браузерное расширение". Consistent "адаптер" framing across all 3 pages.
+
+Verification (Agent Browser + VLM):
+- Home: TerminalDemo gone (no .cursor-blink). H1 = "Один хаб — любой AI управляет любой инфраструктурой". Architecture diagram renders with shellmcp/chrome-devtools/openmemory. All 6 use-cases present. "Один хаб — три способа подключить AI" adapters section present.
+- MCP server page: "MCP remote SSE" + "Streamable HTTP" badge present; config contains "type": "http", "gptadmin", Bearer  asdasdasdas.
+- Mobile 390px: scrollWidth=390=viewport (no h-overflow); architecture diagram stacks vertically and fits; hub visible.
+- VLM confirmed: diagram stacks on mobile without overflow; use-cases cards render.
+- ESLint clean.
+
+Git:
+- Committed 30faae8 (7 files, +275/−159; new: architecture-diagram.tsx; reworked: use-cases.tsx, home-page.tsx, mcp-server-page.tsx, chatgpt-page.tsx, mcp-extension-page.tsx). Pushed (fast-forward) to github.com/megamen32/adminchatgpt_website main. Verified remote = local HEAD.
+
+Stage Summary:
+- Site now reads as ONE product (an MCP hub) with 3 adapters — not 3 products. Home is no longer console-looking (terminal replaced by architecture diagram). Use-cases restored. MCP server page documents it as MCP remote SSE with the exact config requested.
