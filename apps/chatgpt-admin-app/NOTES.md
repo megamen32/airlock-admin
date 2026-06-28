@@ -9,7 +9,7 @@ ChatGPT
   -> OAuth + MCP
   -> Node MCP adapter at /opt/chatgpt-admin-app
   -> hub_proxy on http://127.0.0.1:9001
-  -> rootd servers
+  -> shellmcp servers
 ```
 
 Important decisions:

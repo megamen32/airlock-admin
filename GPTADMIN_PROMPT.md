@@ -153,7 +153,7 @@ If fallback was used, say so in the final report.
 
 ## Config changes
 
-For serious nginx/systemd/networking/GPTAdmin/rootd/firewall/cron/env changes:
+For serious nginx/systemd/networking/GPTAdmin/shellmcp/firewall/cron/env changes:
 
 1. Read current state first:
 
