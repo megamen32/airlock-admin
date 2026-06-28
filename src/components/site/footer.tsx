@@ -1,6 +1,6 @@
 "use client";
 
-import { Send } from "lucide-react";
+import { Globe, Send } from "lucide-react";
 
 export function Footer() {
   return (
@@ -26,6 +26,14 @@ export function Footer() {
             <a href="#pricing" className="transition-colors hover:text-foreground">Тарифы</a>
             <a href="#faq" className="transition-colors hover:text-foreground">FAQ</a>
             <a
+              href="https://bezrabotnyi.com"
+              target="_blank"
+              rel="noopener"
+              className="inline-flex items-center gap-1.5 transition-colors hover:text-foreground"
+            >
+              <Globe className="h-3.5 w-3.5" /> bezrabotnyi.com
+            </a>
+            <a
               href="https://t.me/careviolan"
               target="_blank"
               rel="noopener"
@@ -38,10 +46,22 @@ export function Footer() {
 
         <div className="mt-8 flex flex-col items-center justify-between gap-3 border-t border-border/40 pt-6 text-xs text-muted-foreground/70 sm:flex-row">
           <p>© 2025–2026 GPT‑Админ · в разработке с мая 2025</p>
-          <p className="flex items-center gap-1.5">
-            <span className="inline-flex h-1.5 w-1.5 rounded-full bg-primary/70 shadow-[0_0_8px_1px] shadow-primary/50" />
-            Сделано для тех, кто устал копипастить команды
-          </p>
+          <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-2">
+            <a
+              href="https://bezrabotnyi.com"
+              target="_blank"
+              rel="noopener"
+              className="inline-flex items-center gap-1.5 transition-colors hover:text-primary"
+            >
+              <Globe className="h-3 w-3" />
+              bezrabotnyi.com — все проекты
+            </a>
+            <span className="hidden sm:inline text-muted-foreground/40">·</span>
+            <p className="flex items-center gap-1.5">
+              <span className="inline-flex h-1.5 w-1.5 rounded-full bg-primary/70 shadow-[0_0_8px_1px] shadow-primary/50" />
+              Сделано для тех, кто устал копипастить команды
+            </p>
+          </div>
         </div>
       </div>
     </footer>

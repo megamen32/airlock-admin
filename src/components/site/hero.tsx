@@ -21,7 +21,7 @@ export function Hero() {
       <div className="mx-auto max-w-7xl px-5 sm:px-8">
         <div className="grid items-center gap-12 lg:grid-cols-[1.05fr_0.95fr] lg:gap-10">
           {/* LEFT — copy */}
-          <div className="flex flex-col items-start">
+          <div className="flex min-w-0 flex-col items-start">
             <motion.a
               href="#pricing"
               initial={{ opacity: 0, y: 10 }}
@@ -40,10 +40,10 @@ export function Hero() {
               initial={{ opacity: 0, y: 16 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.8, delay: 0.06, ease: EASE }}
-              className="display mt-6 text-balance text-[2.6rem] font-semibold leading-[1.02] tracking-tight sm:text-6xl lg:text-[4.1rem]"
+              className="display mt-6 max-w-xl text-balance text-[2rem] font-semibold leading-[1.05] tracking-tight sm:text-6xl lg:max-w-none lg:text-[4.1rem]"
             >
               Умный помощник для серверов, который{" "}
-              <span className="relative inline-block whitespace-nowrap pr-2">
+              <span className="relative inline-block pr-2 sm:whitespace-nowrap">
                 <span className="font-[family-name:var(--font-instrument-serif)] italic text-gradient-violet">делает</span>
                 <svg className="absolute -bottom-1 left-0 w-full" viewBox="0 0 200 8" preserveAspectRatio="none" aria-hidden>
                   <path d="M2 5 Q 50 1, 100 4 T 198 4" stroke="oklch(0.78 0.16 295 / 0.5)" strokeWidth="2" fill="none" strokeLinecap="round" />

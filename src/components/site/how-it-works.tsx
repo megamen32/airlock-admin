@@ -19,9 +19,9 @@ const STEPS = [
     title: "Подключение к ChatGPT",
     body: "Создаёте новое действие в ChatGPT и импортируете OpenAPI-описание. Подставляете свой Hub URL и Bearer-ключ CTL_TOKEN.",
     steps: [
-      "Откройте chatgpt.com/gpts/editor",
+      "Откройте {{link:https://chatgpt.com/gpts/editor}}chatgpt.com/gpts/editor{{/link}}",
       "Нажмите «Создать новое действие»",
-      "Импорт по URL: became.bezrabotnyi.com/api.json",
+      "Импорт по URL: {{link:https://became.bezrabotnyi.com/api.json}}became.bezrabotnyi.com/api.json{{/link}}",
       "Замените url в «servers» на свой Hub URL",
       "Auth → API ключ, Bearer → CTL_TOKEN",
     ],
@@ -90,7 +90,9 @@ function StepCard({ step }: { step: Step }) {
               <span className="mt-0.5 inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-md border border-border/70 bg-white/[0.02] font-mono text-[11px] text-primary/80">
                 {i + 1}
               </span>
-              <span className="text-foreground/80">{s}</span>
+              <span className="text-foreground/80">
+                <StepRichText text={s} />
+              </span>
             </li>
           ))}
         </ol>
@@ -117,5 +119,31 @@ function StepCard({ step }: { step: Step }) {
         </div>
       )}
     </div>
+  );
+}
+
+/** Render a step string with {{link:url}}text{{/link}} spans as <a>. */
+function StepRichText({ text }: { text: string }) {
+  const parts = text.split(/(\{\{link:[^}]+\}\}[\s\S]*?\{\{\/link\}\})/g);
+  return (
+    <>
+      {parts.map((part, i) => {
+        const m = part.match(/^\{\{link:([^}]+)\}\}([\s\S]*?)\{\{\/link\}\}$/);
+        if (m) {
+          return (
+            <a
+              key={i}
+              href={m[1]}
+              target="_blank"
+              rel="noopener"
+              className="font-mono text-primary underline decoration-primary/40 underline-offset-2 transition-colors hover:decoration-primary"
+            >
+              {m[2]}
+            </a>
+          );
+        }
+        return <span key={i}>{part}</span>;
+      })}
+    </>
   );
 }

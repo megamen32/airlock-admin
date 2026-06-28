@@ -207,3 +207,64 @@ Git:
 
 Stage Summary:
 - The lost browser-extension selling point is restored as a prominent section near the top of the page: any free web AI (Алиса/Сбер/Qwen/DeepSeek/ChatGPT) becomes a GPTAdmin with MCP access via a userscript.
+
+---
+Task ID: 14
+Agent: main
+Task: Restructure connection story into 3 ways, add OpenMemory link, remove real server names, simplify install (mac/linux together, auto-elevation), Android=Firefox.
+
+Work Log:
+- Checked /tmp/target-repo/deploy/install.sh: confirmed the installer auto-detects mode (root/sudo → system /opt/gptadmin, otherwise → user ~/.local/share/gptadmin). No need for a separate sudo variant.
+- InstallCommand (install-command.tsx): simplified from 4 tabs to 2 — "macOS / Linux" (single curl command; note explains the installer auto-detects user/system mode) + "Windows". Removed the separate sudo tab. useSyncExternalStore kept for hydration-safe OS detection.
+- McpBridge (mcp-bridge.tsx): restructured into "Три способа подключения" — 3 cards: (1) MCP‑клиенты Claude·Codex·OpenCode, (2) Веб‑чаты Qwen·GigaChat·Алиса, (3) Custom GPT chatgpt.com·Open WebUI. Each card has a CTA. Below: openmemory quote (now a real <a> link to https://github.com/CaviraOSS/OpenMemory) + connection diagram. Diagram agent pills changed ChatGPT→Codex; server chips changed to generic "server-01", "vps-prod", "home-lab".
+- BrowserBridge (browser-bridge.tsx): Android platform card changed Kiwi→Firefox+Tampermonkey; mock mcp block "shell:roomhacker-100"→"shell:server-01"; "на сотом"→"на сервере".
+- chat-data.ts: removed all roomhacker refs — "shell:roomhacker-server-100"→"shell:server-01", "88"→"server-88", "работают от roomhacker"→"работают от вашего пользователя", "/home/roomhacker/.config/..."→"~/.config/...", "с сотого"/"сотый онлайн"→neutral server phrasing.
+- under-the-hood.tsx: "shellmcp:roomhacker-100"→"shellmcp:server-01".
+- terminal-demo.tsx: "root@bezrabotnyi"→"your-hub".
+- Verified via grep: no "roomhacker"/"сотом"/"сотый"/"server-100" left anywhere in src/.
+
+Verification (Agent Browser + VLM):
+- 3 ways all present: MCP‑клиенты (Claude·Codex·OpenCode), Веб‑чаты (Qwen·GigaChat·Алиса), Custom GPT (chatgpt.com·Open WebUI).
+- openmemory is a clickable <a> link to CaviraOSS/OpenMemory (VLM confirmed: purple underlined link).
+- Install: 2 tabs (macOS/Linux + Windows) in both hero and install section.
+- Android = Firefox + Tampermonkey (Kiwi gone).
+- No "roomhacker" anywhere in rendered DOM.
+- Connection diagram: generic server names (server-01, vps-prod, home-lab), violet online dots.
+- ESLint clean.
+
+Git:
+- Committed cd539e8 (6 files, +145/−72). Force-pushed (remote had a stray commit). Verified remote = local HEAD = cd539e8.
+
+Stage Summary:
+- Connection story is now 3 clear ways (MCP clients / web chats / Custom GPT) with Codex added.
+- OpenMemory is a working link. Real server names are gone everywhere. Install simplified to mac/linux + windows. Android uses Firefox.
+
+---
+Task ID: 15
+Agent: main
+Task: Fix non-clickable text-URLs in how-it-works; restyle LiveExamples to faithfully look like real ChatGPT (not a CLI mock).
+
+Work Log:
+- Problem 1 — text "links": In how-it-works step 02, "chatgpt.com/gpts/editor" and "became.bezrabotnyi.com/api.json" were plain text. Introduced a {{link:url}}text{{/link}} markup convention + a StepRichText renderer that parses it into real <a target=_blank>. Updated the two step strings. Verified in DOM: 1 editor link + 1 api.json link, both clickable.
+- Problem 2 — synthetic CLI look: Studied real ChatGPT UI via VLM analysis of public/screenshots/shot-1.png and shot-2.png. Key findings: USER = right-aligned gray rounded bubble, NO avatar; ASSISTANT = small OpenAI knot/flower logo avatar on the left, text directly on background, NO bubble; gray "Thought for N seconds" meta line above assistant text; inline code = dark gray bg monospace; canvas ~#1f1f23; tight spacing.
+- Rewrote live-examples.tsx MessageBubble → ChatMessageRow:
+  · User: max-w-78% rounded-3xl bg-[#2f2f33] right-aligned, no avatar, no "вы" label.
+  · Assistant: 7×7 circular avatar with a real OpenAI SVG knot-mark (path d="M22.282..."), text on bg with NO bubble, a ChevronDown + headline "thinking" meta button above body (mimics "Thought for a few seconds").
+  · Checks: ChatGPT tool-result style — rounded-xl with a header row (green Check + "Готово") and a monospace check list, each with a small green check circle.
+  · Status pill (no-checks case) kept.
+  · Inline code: bg-[#2a2a2e] border, text-[#c4a3f8], font-mono 13px.
+  · Window chrome: mac dots + "ChatGPT · GPT‑Админ" with OpenAiMark; fake input bar at bottom with + and send icons.
+  · Canvas #1f1f23, message gap-7 (tight-ish).
+
+Verification (Agent Browser + VLM):
+- DOM: 2 user messages (justify-end, gray bubble #2f2f33, radius 24px), 4 OpenAI knot-mark SVGs rendered, thinking-meta buttons present.
+- VLM (glm-4.6v) on the chat window screenshot: confirmed (1) user = right gray rounded bubble no avatar, (2) assistant = small circular avatar with OpenAI logo + text directly on dark bg no bubble, (3) gray thinking meta line above assistant text. On scrolled-to-bottom screenshot: confirmed (4) result block with green check + "Готово" header + check list, matches ChatGPT tool-result styling.
+- Links: 1 editor + 1 api.json real <a> in #how.
+- ESLint clean.
+
+Git:
+- Committed c088520 (2 files, +160/−98). Pushed (fast-forward) to github.com/megamen32/adminchatgpt_website main. Verified remote = local HEAD.
+
+Stage Summary:
+- All plain-text URLs in how-it-works are now clickable links.
+- LiveExamples no longer looks like a CLI — it faithfully recreates the real ChatGPT conversation UI (user bubbles right, OpenAI-logo assistant left, thinking meta, tool-result checks block), validated by VLM against actual ChatGPT screenshots.
