@@ -284,3 +284,33 @@ Work Log:
 
 Stage Summary:
 - Local fully synced to remote 8ca3db0. Merged site (premium violet landing + user's standalone-deploy config) verified working on mobile and desktop. Repo clean of junk files.
+
+---
+Task ID: 17
+Agent: main
+Task: Restructure site into a multi-page experience — 3 ways to connect, each with its own page + instruction.
+
+Work Log:
+- Environment constraint: only the `/` route is visible in the preview, so implemented a real multi-page UX via hash-routing inside `/` (URLs: #/chatgpt, #/mcp-server, #/mcp-extension, #/). Shareable links work; hash changes update content + scroll-to-top.
+- useHashRoute hook (useSyncExternalStore, hydration-safe): parses hash → PageId, navigate(to) updates history + dispatches hashchange + scrolls to top.
+- Header rewritten: 3 page tabs (ChatGPT плагин / MCP сервер / MCP расширение) + logo → home, active-tab highlighting, mobile menu, "Установить" → chatgpt page.
+- page-hero.tsx: shared PageHero + Step primitives for per-page heroes and numbered instructions.
+- pages/home-page.tsx: hero (install command + terminal demo) + hub of 3 big entry cards that navigate to each page.
+- pages/chatgpt-page.tsx: "Превратите ChatGPT в Codex без лимитов" — 3 benefit cards (Без лимитов Codex / Реальное выполнение / Под контролем) + 5-step instruction (install → open gpts/editor → create action + import api.json → set Bearer CTL_TOKEN → use). Links to chatgpt.com/gpts/editor and became.bezrabotnyi.com/api.json are real <a>. Cross-links to the other 2 pages.
+- pages/mcp-server-page.tsx: "MCP-сервер для Claude · Codex · OpenCode" — connection diagram (agents→hub→servers with generic names), openmemory link (CaviraOSS/OpenMemory), 4-step instruction with a JSON MCP config block (claude_desktop_config.json) + copy button. Cross-links.
+- pages/mcp-extension-page.tsx: "Любой бесплатный ИИ — становится GPT‑Админом" — 6 free-AI badges, browser chat mock with auto-executed mcp block + MCP All/MCP buttons, "how it works" 3 cards (MCP All / MCP / Авто-выполнение), 3 platforms (Chrome+Tampermonkey / iPhone+Userscripts / Android+Firefox), 4 steps (Alt+K / Alt+M), supported-sites table, install CTA. Cross-links.
+- router.tsx: switches on page → renders the right page component.
+- page.tsx: ScrollProgress + Header + <Router/> + Footer.
+
+Verification (Agent Browser + VLM):
+- All 4 pages render: home (hero+hub), chatgpt (h1 "Превратите ChatGPT в Codex без лимитов"), mcp-server (h1 "MCP‑сервер для Claude · Codex · OpenCode"), mcp-extension (h1 "Любой бесплатный ИИ — становится GPT‑Админом").
+- Hash nav works: clicking tabs updates location.hash, renders new page, scrollY resets to 0.
+- Mobile 390px: scrollWidth=390=viewport on all 4 pages (no h-overflow); mobile menu button present.
+- VLM (glm-4.6v) on chatgpt + mcp-server full-page screenshots: both render cleanly, all components (hero, benefit cards, steps, install command, links, diagram, openmemory link, JSON config + copy button) present, no broken layout.
+- ESLint clean.
+
+Git:
+- Committed a658024 (new files: use-hash-route.ts, router.tsx, page-hero.tsx, pages/{home,chatgpt,mcp-server,mcp-extension}-page.tsx; reworked header.tsx + page.tsx). Pushed (fast-forward) to github.com/megamen32/adminchatgpt_website main. Verified remote = local HEAD.
+
+Stage Summary:
+- Site is now a real multi-page experience (4 pages) with hash-routing, each connection method having its own dedicated page, instruction, and cross-links. Mobile-adaptive, lint-clean, pushed.
