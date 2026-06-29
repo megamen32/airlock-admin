@@ -23,7 +23,7 @@ export function Install() {
           <InstallCommand variant="full" />
 
           <p className="mt-6 text-center text-sm text-muted-foreground">
-            Быстрый запуск: отвечайте «1» (hub_proxy + shellmcp), затем «1» (авто‑туннель через FRP).
+            Быстрый запуск: отвечайте «1» (gptadmin_hub + shellmcp), затем «1» (авто‑туннель через FRP).
             Свой домен или статичный IP не нужны.
           </p>
         </Reveal>

@@ -60,7 +60,7 @@ export const AUTH_VARIABLES: AuthVariable[] = [
   {
     env: "OAUTH_CLIENT_SECRET",
     label: "JWT signing secret",
-    usedBy: "сам hub_proxy",
+    usedBy: "сам gptadmin_hub",
     appliesTo: "подпись и проверка OAuth bearer token для /mcp",
     notes: "Не выдаётся пользователю. Это серверный секрет, а не пароль входа.",
   },
@@ -151,7 +151,7 @@ export const HUB_ENV_GROUPS: EnvGroup[] = [
   {
     title: "Auth And OAuth",
     icon: Shield,
-    scope: "hub_proxy.py",
+    scope: "gptadmin_hub.py",
     rows: [
       { env: "CTL_TOKEN", defaultValue: "chatgpt_secret", purpose: "Bearer token for admin HTTP API and web panel." },
       { env: "PUBLIC_ORIGIN", defaultValue: "https://gptadminmcp.bezrabotnyi.com", purpose: "Public HTTPS origin used in OAuth metadata and redirects." },
@@ -169,7 +169,7 @@ export const HUB_ENV_GROUPS: EnvGroup[] = [
   {
     title: "Core Paths And Identity",
     icon: Server,
-    scope: "hub_proxy.py",
+    scope: "gptadmin_hub.py",
     rows: [
       { env: "GPTADMIN_CONFIG_DIR", defaultValue: "repo/config or frozen app config dir", purpose: "Base config directory used to resolve most state files." },
       { env: "GPTADMIN_CLI_PATH", defaultValue: "repo/cli.py", purpose: "Path to GPTAdmin CLI entry used by hub actions." },
@@ -196,7 +196,7 @@ export const HUB_ENV_GROUPS: EnvGroup[] = [
   {
     title: "Relay, Queue, Retry",
     icon: Radio,
-    scope: "hub_proxy.py",
+    scope: "gptadmin_hub.py",
     rows: [
       { env: "DEAD_S", defaultValue: "180", purpose: "Heartbeat freshness threshold for shell servers." },
       { env: "HUB_STATE_TTL_S", defaultValue: "259200", purpose: "Retention TTL for general hub state." },
@@ -222,7 +222,7 @@ export const HUB_ENV_GROUPS: EnvGroup[] = [
   {
     title: "Responses, Spill, Audit",
     icon: Settings2,
-    scope: "hub_proxy.py",
+    scope: "gptadmin_hub.py",
     rows: [
       { env: "LOG_LEVEL", defaultValue: "INFO", purpose: "Top-level Python logging level." },
       { env: "GPTADMIN_AUDIT_LOG", defaultValue: "/var/log/gptadmin/audit.log", purpose: "Audit log file path." },
@@ -247,7 +247,7 @@ export const HUB_ENV_GROUPS: EnvGroup[] = [
   {
     title: "Network And Runtime",
     icon: Lock,
-    scope: "hub_proxy.py",
+    scope: "gptadmin_hub.py",
     rows: [
       { env: "HUB_PORT", defaultValue: "9001", purpose: "TCP port when socket activation is not used." },
       { env: "HUB_BIND", defaultValue: "0.0.0.0", purpose: "Preferred bind host for uvicorn." },
@@ -312,7 +312,7 @@ export const HUB_DETAIL_ROWS: DetailRow[] = [
   },
   {
     name: "Главный код",
-    value: "hub_proxy.py",
+    value: "gptadmin_hub.py",
     notes: "Основной HTTP-сервис с admin API, OAuth, relay, queue fallback и legacy shell endpoints.",
   },
   {
@@ -332,7 +332,7 @@ export const HUB_DETAIL_ROWS: DetailRow[] = [
   },
   {
     name: "systemd",
-    value: "deploy/systemd/hub_proxy.service",
+    value: "deploy/systemd/gptadmin_hub.service",
     notes: "В репо есть unit для hub; actual deployment может переопределять пути и env.",
   },
 ];

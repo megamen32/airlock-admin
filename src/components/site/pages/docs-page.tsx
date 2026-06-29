@@ -44,7 +44,7 @@ export function DocsPage() {
             <span className="text-gradient-violet">справка по auth, endpoint и env</span>
           </>
         }
-        lead="Ниже перечислены реальные переменные окружения и реальные правила auth из кода hub_proxy.py и go-shellmcp."
+        lead="Ниже перечислены реальные переменные окружения и реальные правила auth из кода gptadmin_hub.py и go-shellmcp."
       />
 
       <DocSection
@@ -135,9 +135,8 @@ export function DocsPage() {
       <DocSection
         id="hub-env"
         icon={ShieldAlert}
-        title="Все ENV для hub"
-        kicker="hub_proxy.py"
-        lead="Полный список переменных окружения, которые читаются hub_proxy.py напрямую."
+        kicker="gptadmin_hub.py"
+        lead="Полный список переменных окружения, которые читаются gptadmin_hub.py напрямую."
       >
         <SubSection
           title="Hub: что это такое"
