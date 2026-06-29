@@ -4,6 +4,7 @@ import { ArrowRight, Zap, Infinity as InfinityIcon, ShieldCheck, KeyRound, FileJ
 import { PageHero, Step } from "../page-hero";
 import { Reveal, Stagger, StaggerItem } from "../reveal";
 import { InstallCommand } from "../install-command";
+import { InstallCastPlayer } from "../install-cast-player";
 import { useHashRoute } from "@/hooks/use-hash-route";
 
 const BENEFITS = [
@@ -82,6 +83,16 @@ export function ChatGptPage() {
                 и <code className="rounded border border-border/50 bg-[oklch(0.12_0.006_290)] px-1.5 py-0.5 font-mono text-[13px] text-[#c4a3f8]">CTL_TOKEN</code> (Bearer) — запомните их.
                 <div className="mt-3">
                   <InstallCommand variant="compact" />
+                </div>
+                <div className="mt-4 overflow-hidden rounded-2xl border border-border/80 bg-card/60 p-4">
+                  <p className="mb-3 text-xs text-muted-foreground">
+                    Ниже — реальная запись полной установки: старое состояние удаляется, затем ставятся hub, ShellMCP и FRP.
+                  </p>
+                  <InstallCastPlayer
+                    src="/examples/mac-gptadmin-full-reinstall.cast"
+                    title="macOS full hub + ShellMCP + FRP install.cast"
+                    className="shadow-none"
+                  />
                 </div>
               </Step>
             </StaggerItem>
