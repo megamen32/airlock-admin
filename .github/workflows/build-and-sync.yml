@@ -25,8 +25,8 @@ jobs:
 
       - name: Build binaries
         run: |
-          chmod +x build.sh
-          ./build.sh
+          chmod +x tools/build.sh
+          ./tools/build.sh
 
       - name: Checkout opensource repo
         uses: actions/checkout@v4
