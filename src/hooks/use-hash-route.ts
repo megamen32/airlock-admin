@@ -2,9 +2,9 @@
 
 import { useSyncExternalStore, useCallback } from "react";
 
-export type PageId = "home" | "chatgpt" | "mcp-server" | "mcp-extension";
+export type PageId = "home" | "chatgpt" | "mcp-server" | "mcp-extension" | "docs";
 
-const PAGES: PageId[] = ["home", "chatgpt", "mcp-server", "mcp-extension"];
+const PAGES: PageId[] = ["home", "chatgpt", "mcp-server", "mcp-extension", "docs"];
 
 /** Parse the current hash into a PageId. */
 function parseHash(): PageId {
@@ -49,4 +49,5 @@ export const PAGE_META: Record<PageId, { label: string; short: string }> = {
   chatgpt: { label: "ChatGPT плагин", short: "ChatGPT" },
   "mcp-server": { label: "MCP сервер", short: "MCP сервер" },
   "mcp-extension": { label: "MCP расширение", short: "Расширение" },
+  docs: { label: "Документация", short: "Доки" },
 };

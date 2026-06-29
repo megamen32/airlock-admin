@@ -10,6 +10,7 @@ const PAGE_TABS: { id: PageId; label: string }[] = [
   { id: "chatgpt", label: "ChatGPT плагин" },
   { id: "mcp-server", label: "MCP сервер" },
   { id: "mcp-extension", label: "MCP расширение" },
+  { id: "docs", label: "Документация" },
 ];
 
 export function Header() {
