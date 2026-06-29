@@ -61,7 +61,7 @@ export function InstallCastPlayer({ src, title = "macOS full install.cast", clas
 
     if (events.length === 0) return;
 
-    const speed = 0.55; // faster than the original wall-clock recording, slow enough to read.
+    const speed = 1.0; // play demo timing as authored; readable install pace.
     events.forEach(([time, , chunk]) => {
       const id = window.setTimeout(() => {
         setOutput((current) => current + chunk);
