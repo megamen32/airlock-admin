@@ -23,6 +23,8 @@ const MCP_CONFIG = `{
   }
 }`;
 
+const CODEX_LOCAL_MCP_COMMAND = "bash <<'SH'\nset -euo pipefail\nENV_FILE=\"${GPTADMIN_CONFIG_DIR:-$HOME/.config/gptadmin}/gptadmin.env\"\n[ -f \"$ENV_FILE\" ] || { echo \"Не найден $ENV_FILE. Сначала установите GPT-Админ.\" >&2; exit 1; }\ncommand -v codex >/dev/null || { echo \"Не найден codex CLI.\" >&2; exit 1; }\nmkdir -p \"$HOME/.config/gptadmin\" \"$HOME/.codex\"\n\npython3 - \"$ENV_FILE\" > \"$HOME/.config/gptadmin/codex-mcp-token.env\" <<'PY'\nfrom pathlib import Path\nimport base64, hashlib, hmac, json, os, time, sys\n\ndef read_env(path):\n    env = {}\n    for line in Path(path).read_text().splitlines():\n        line = line.strip()\n        if not line or line.startswith(\"#\") or \"=\" not in line:\n            continue\n        k, v = line.split(\"=\", 1)\n        env[k] = v.strip().strip('\"').strip(\"'\")\n    return env\n\ndef b64url(data):\n    return base64.urlsafe_b64encode(data).rstrip(b\"=\").decode()\n\nenv = read_env(sys.argv[1])\nsecret = env.get(\"OAUTH_CLIENT_SECRET\")\nif not secret:\n    raise SystemExit(\"В gptadmin.env нет OAUTH_CLIENT_SECRET; обновите GPT-Админ или переустановите hub.\")\norigin = (env.get(\"HUB_PUBLIC_URL\") or env.get(\"PUBLIC_ORIGIN\") or \"http://127.0.0.1:9001\").rstrip(\"/\")\nresource = (env.get(\"MCP_RESOURCE\") or origin).rstrip(\"/\")\nnow = int(time.time())\nheader = {\"alg\": \"HS256\", \"typ\": \"JWT\"}\npayload = {\n    \"sub\": \"admin\",\n    \"scope\": \"gptadmin.read gptadmin.exec\",\n    \"client_id\": \"codex-local\",\n    \"iss\": origin,\n    \"aud\": resource,\n    \"iat\": now,\n    \"exp\": now + 365 * 24 * 3600,\n}\nmsg = f\"{b64url(json.dumps(header, separators=(',', ':')).encode())}.{b64url(json.dumps(payload, separators=(',', ':')).encode())}\".encode()\ntoken = msg.decode() + \".\" + b64url(hmac.new(secret.encode(), msg, hashlib.sha256).digest())\nprint(\"export GPTADMIN_CODEX_MCP_BEARER=\" + json.dumps(token))\nPY\nchmod 600 \"$HOME/.config/gptadmin/codex-mcp-token.env\"\n# shellcheck disable=SC1090\n. \"$HOME/.config/gptadmin/codex-mcp-token.env\"\nlaunchctl setenv GPTADMIN_CODEX_MCP_BEARER \"$GPTADMIN_CODEX_MCP_BEARER\" 2>/dev/null || true\n\ncodex mcp remove gptadmin >/dev/null 2>&1 || true\ncodex mcp add gptadmin --url http://127.0.0.1:9001/mcp --bearer-token-env-var GPTADMIN_CODEX_MCP_BEARER\ncodex mcp get gptadmin\nprintf '\\nГотово. Для Codex Desktop перезапустите приложение, чтобы оно увидело launchctl env.\\n'\nprintf 'Для Codex CLI в новом терминале выполните: source ~/.config/gptadmin/codex-mcp-token.env\\n'\nSH";
+
 export function McpServerPage() {
   const { navigate } = useHashRoute();
 
@@ -180,6 +182,19 @@ export function McpServerPage() {
                   <code>CTL_TOKEN</code> вручную как bearer для <code>/mcp</code>.
                   Для подробностей смотрите раздел <code>#/docs</code>.
                 </p>
+                <div className="mt-5 rounded-2xl border border-primary/20 bg-primary/[0.04] p-4">
+                  <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
+                    <Terminal className="h-4 w-4 text-primary" />
+                    Codex на macOS: добавить локальный MCP без переустановки
+                  </div>
+                  <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
+                    Если GPT‑Админ уже установлен и hub работает на{" "}
+                    <code>http://127.0.0.1:9001/mcp</code>, выполните одну команду ниже.
+                    Она выпускает Codex‑токен из локального <code>gptadmin.env</code>, прописывает{" "}
+                    <code>bearer_token_env_var</code> и заменяет старый no‑auth MCP entry.
+                  </p>
+                  <CommandBlock label="macOS · Codex CLI/Desktop" command={CODEX_LOCAL_MCP_COMMAND} />
+                </div>
               </Step>
             </StaggerItem>
             <StaggerItem>
@@ -239,6 +254,28 @@ function Connector() {
   return (
     <div className="relative mx-auto my-2 h-7 w-px bg-gradient-to-b from-primary/50 to-primary/10" aria-hidden>
       <span className="absolute left-1/2 top-1/2 h-1.5 w-1.5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-primary shadow-[0_0_10px_2px] shadow-primary/50" />
+    </div>
+  );
+}
+
+function CommandBlock({ label, command }: { label: string; command: string }) {
+  const { copied, copy } = useCopy();
+  return (
+    <div className="mt-3 overflow-hidden rounded-xl border border-border/60 bg-[oklch(0.12_0.006_290)]">
+      <div className="flex items-center justify-between border-b border-white/[0.06] px-3.5 py-2">
+        <span className="font-mono text-[11px] text-muted-foreground">{label}</span>
+        <button
+          type="button"
+          onClick={() => copy(command)}
+          className="inline-flex items-center gap-1 text-[11px] text-muted-foreground transition-colors hover:text-primary"
+        >
+          {copied ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
+          {copied ? "скопировано" : "копировать"}
+        </button>
+      </div>
+      <pre className="nice-scroll max-h-[28rem] overflow-x-auto px-3.5 py-3 font-mono text-[12px] leading-relaxed text-foreground/85">
+{command}
+      </pre>
     </div>
   );
 }
