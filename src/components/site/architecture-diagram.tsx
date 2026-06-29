@@ -20,16 +20,10 @@ import { cn } from "@/lib/utils";
 
 const EASE = [0.16, 1, 0.3, 1] as const;
 
-// ── Column data: AI (top) → tunnel → hub → transport → server+MCP (bottom) ──
-
 type Column = {
-  // AI node (top)
   ai: { icon: LucideIcon; label: string; sub: string; detail: string; href: string };
-  // Tunnel label (between AI and hub)
   tunnel: { label: string; sub: string };
-  // Transport label (between hub and server)
   transport: { label: string; sub: string };
-  // Server node (bottom) + what MCP runs on it
   server: { icon: LucideIcon; label: string; sub: string; mcp: { icon: LucideIcon; label: string }; detail: string };
 };
 
@@ -39,10 +33,10 @@ const COLUMNS: Column[] = [
       icon: BrainCircuit,
       label: "Claude · Codex",
       sub: "MCP-клиент",
-      detail: "Подключается как MCP remote SSE. Нативные tool calls — агент вызывает команды напрямую.",
+      detail: "Подключается как MCP Streamable HTTP. Нативные tool calls — агент вызывает команды напрямую.",
       href: "#/mcp-server",
     },
-    tunnel: { label: "MCP SSE", sub: "через туннель" },
+    tunnel: { label: "Streamable HTTP", sub: "через туннель" },
     transport: { label: "long-poll", sub: "пробивает любой NAT" },
     server: {
       icon: Server,
@@ -100,48 +94,28 @@ export function ArchitectureDiagram({ className }: { className?: string }) {
           {/* LAYER 1 — label */}
           <LayerLabel>ваш AI</LayerLabel>
 
-          {/* LAYER 2 — 3 AI nodes (always 3 columns) */}
+          {/* LAYER 2 — 3 AI nodes (top row) */}
           <div className="grid grid-cols-3 gap-1.5 sm:gap-3">
             {COLUMNS.map((col, i) => (
               <FlowNode key={`ai-${i}`} node={col.ai} index={i} variant="ai" />
             ))}
           </div>
 
-          {/* LAYER 3 — 3 tunnel connectors (one per column) */}
-          <div className="grid grid-cols-3 gap-1.5 sm:gap-3">
-            {COLUMNS.map((col, i) => (
-              <Connector
-                key={`tun-${i}`}
-                label={col.tunnel.label}
-                sub={col.tunnel.sub}
-                icon={Globe}
-                delay={0.3 + i * 0.1}
-              />
-            ))}
-          </div>
+          {/* LAYER 3 — fork connectors: AI → hub ( \|/ shape) */}
+          <ForkLayer columns={COLUMNS.map(c => ({ label: c.tunnel.label, sub: c.tunnel.sub }))} direction="down" delay={0.3} />
 
-          {/* LAYER 4 — Hub (spans all 3 columns) */}
+          {/* LAYER 4 — Hub (center) */}
           <div className="flex justify-center py-1">
             <HubNode />
           </div>
 
-          {/* LAYER 5 — 3 transport connectors (one per column) */}
-          <div className="grid grid-cols-3 gap-1.5 sm:gap-3">
-            {COLUMNS.map((col, i) => (
-              <Connector
-                key={`tr-${i}`}
-                label={col.transport.label}
-                sub={col.transport.sub}
-                icon={col.transport.label === "webhook" ? Zap : col.transport.label === "long-poll" ? Radio : Lock}
-                delay={0.6 + i * 0.1}
-              />
-            ))}
-          </div>
+          {/* LAYER 5 — fork connectors: hub → servers ( /|\ shape) */}
+          <ForkLayer columns={COLUMNS.map(c => ({ label: c.transport.label, sub: c.transport.sub }))} direction="down" delay={0.6} icon={Lock} />
 
           {/* LAYER 6 — label */}
           <LayerLabel>ваши серверы</LayerLabel>
 
-          {/* LAYER 7 — 3 server nodes with MCP (always 3 columns) */}
+          {/* LAYER 7 — 3 server nodes with MCP */}
           <div className="grid grid-cols-3 gap-1.5 sm:gap-3">
             {COLUMNS.map((col, i) => (
               <ServerNode key={`srv-${i}`} col={col} index={i} />
@@ -217,7 +191,6 @@ function FlowNode({
         </div>
       </a>
 
-      {/* Hover detail popover */}
       {hover && (
         <motion.div
           initial={{ opacity: 0, y: -4 }}
@@ -226,9 +199,7 @@ function FlowNode({
           className="absolute left-1/2 top-full z-20 mt-2 w-52 -translate-x-1/2 rounded-xl border border-border/60 bg-[oklch(0.16_0.006_290)] p-3 shadow-xl shadow-black/40"
         >
           <p className="text-[11px] leading-relaxed text-muted-foreground">{node.detail}</p>
-          <span className="mt-2 inline-block text-[11px] font-medium text-primary">
-            подробнее →
-          </span>
+          <span className="mt-2 inline-block text-[11px] font-medium text-primary">подробнее →</span>
         </motion.div>
       )}
     </motion.div>
@@ -261,14 +232,12 @@ function ServerNode({ col, index }: { col: Column; index: number }) {
         </span>
         <p className="hidden truncate font-mono text-[11px] font-medium leading-tight text-foreground/90 sm:block">{col.server.label}</p>
         <p className="hidden truncate text-[10px] leading-tight text-muted-foreground/70 sm:block">{col.server.sub}</p>
-        {/* MCP badge */}
         <span className="mt-0.5 hidden items-center gap-0.5 rounded-md border border-primary/20 bg-primary/[0.06] px-1 py-0.5 sm:inline-flex">
           <McpIcon className="h-2.5 w-2.5 text-primary" />
-          <span className="font-mono text-[8px] text-primary/90 sm:text-[9px]">{col.server.mcp.label}</span>
+          <span className="font-mono text-[9px] text-primary/90">{col.server.mcp.label}</span>
         </span>
       </div>
 
-      {/* Hover detail popover */}
       {hover && (
         <motion.div
           initial={{ opacity: 0, y: -4 }}
@@ -306,17 +275,22 @@ function HubNode() {
   );
 }
 
-function Connector({
-  label,
-  sub,
-  icon: Icon,
+/**
+ * Fork layer: 3 nodes at top converge to center ( \|/ ), or center diverges to 3 ( /|\ ).
+ * Draws an SVG with 3 diagonal lines + animated packets travelling along each.
+ */
+function ForkLayer({
+  columns,
+  direction,
   delay,
+  icon: Icon,
 }: {
-  label: string;
-  sub: string;
-  icon: LucideIcon;
+  columns: { label: string; sub: string }[];
+  direction: "down";
   delay: number;
+  icon?: LucideIcon;
 }) {
+  // SVG viewBox: 300 wide, 60 tall. Top has 3 points at x=50,150,250. Bottom converges at x=150.
   return (
     <motion.div
       initial={{ opacity: 0 }}
@@ -325,28 +299,78 @@ function Connector({
       transition={{ duration: 0.5, delay }}
       className="flex flex-col items-center"
     >
-      {/* label pill */}
-      <div className="flex items-center gap-1 rounded-full border border-border/50 bg-white/[0.02] px-1 py-0.5 sm:px-1.5">
-        <Icon className="h-2 w-2 text-primary/70" />
-        <span className="text-[8px] font-medium text-muted-foreground/80 sm:text-[10px]">{label}</span>
+      {/* labels row (desktop only) */}
+      <div className="hidden w-full max-w-md grid-cols-3 gap-1 sm:grid">
+        {columns.map((c, i) => (
+          <div key={i} className="flex flex-col items-center">
+            <div className="flex items-center gap-1 rounded-full border border-border/50 bg-white/[0.02] px-1.5 py-0.5">
+              {Icon && <Icon className="h-2.5 w-2.5 text-primary/70" />}
+              <span className="text-[10px] font-medium text-muted-foreground/80">{c.label}</span>
+            </div>
+          </div>
+        ))}
       </div>
 
-      {/* vertical line with animated packets */}
-      <div className="relative h-8 w-px bg-gradient-to-b from-primary/30 to-primary/10 sm:h-10">
-        <motion.span
-          className="absolute left-1/2 h-1.5 w-1.5 -translate-x-1/2 rounded-full bg-primary shadow-[0_0_6px_1px] shadow-primary/50"
-          animate={{ top: ["0%", "100%"], opacity: [0, 1, 1, 0] }}
-          transition={{ duration: 1.6, repeat: Infinity, ease: "easeIn", delay: 0 }}
-        />
-        <motion.span
-          className="absolute left-1/2 h-1.5 w-1.5 -translate-x-1/2 rounded-full bg-primary shadow-[0_0_6px_1px] shadow-primary/50"
-          animate={{ top: ["0%", "100%"], opacity: [0, 1, 1, 0] }}
-          transition={{ duration: 1.6, repeat: Infinity, ease: "easeIn", delay: 0.8 }}
-        />
-      </div>
+      {/* SVG fork — 3 lines converging to center bottom */}
+      <svg
+        viewBox="0 0 300 60"
+        className="h-10 w-full max-w-md sm:h-12" preserveAspectRatio="xMidYMid meet"
+        
+        aria-hidden
+      >
+        <defs>
+          <linearGradient id="forkGrad" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="oklch(0.62 0.24 295 / 0.35)" />
+            <stop offset="100%" stopColor="oklch(0.62 0.24 295 / 0.1)" />
+          </linearGradient>
+        </defs>
+        {/* left line: (50,0) → (150,60) */}
+        <line x1="50" y1="2" x2="150" y2="58" stroke="url(#forkGrad)" strokeWidth="1.5" />
+        {/* center line: (150,0) → (150,60) */}
+        <line x1="150" y1="2" x2="150" y2="58" stroke="url(#forkGrad)" strokeWidth="1.5" />
+        {/* right line: (250,0) → (150,60) */}
+        <line x1="250" y1="2" x2="150" y2="58" stroke="url(#forkGrad)" strokeWidth="1.5" />
 
-      {/* sub-label */}
-      <p className="hidden text-center text-[9px] leading-tight text-muted-foreground/50 sm:block">{sub}</p>
+        {/* animated packets — each travels along its line */}
+        <PacketFollower x1="50" y1="2" x2="150" y2="58" delay={0} />
+        <PacketFollower x1="150" y1="2" x2="150" y2="58" delay={0.6} />
+        <PacketFollower x1="250" y1="2" x2="150" y2="58" delay={1.2} />
+      </svg>
+
+      {/* sub-labels (desktop only) */}
+      <div className="hidden w-full max-w-md grid-cols-3 gap-1 sm:grid">
+        {columns.map((c, i) => (
+          <p key={i} className="text-center text-[9px] leading-tight text-muted-foreground/50">{c.sub}</p>
+        ))}
+      </div>
     </motion.div>
+  );
+}
+
+/** Animated circle following a line path via SMIL animateMotion. */
+function PacketFollower({
+  x1, y1, x2, y2, delay,
+}: {
+  x1: number; y1: number; x2: number; y2: number; delay: number;
+}) {
+  const path = `M${x1},${y1} L${x2},${y2}`;
+  return (
+    <circle r="2.5" fill="oklch(0.78 0.16 295)" style={{ filter: "drop-shadow(0 0 4px oklch(0.62 0.24 295 / 0.8))" }}>
+      <animateMotion
+        dur="1.8s"
+        repeatCount="indefinite"
+        begin={`${delay}s`}
+        path={path}
+        keyPoints="0;1"
+        keyTimes="0;1"
+      />
+      <animate
+        attributeName="opacity"
+        values="0;1;1;0"
+        dur="1.8s"
+        begin={`${delay}s`}
+        repeatCount="indefinite"
+      />
+    </circle>
   );
 }
