@@ -23,7 +23,7 @@ const MCP_CONFIG = `{
   }
 }`;
 
-const CODEX_LOCAL_MCP_COMMAND = "bash <<'SH'\nset -euo pipefail\nENV_FILE=\"${GPTADMIN_CONFIG_DIR:-$HOME/.config/gptadmin}/gptadmin.env\"\n[ -f \"$ENV_FILE\" ] || { echo \"Не найден $ENV_FILE. Сначала установите GPT-Админ.\" >&2; exit 1; }\ncommand -v codex >/dev/null || { echo \"Не найден codex CLI.\" >&2; exit 1; }\nmkdir -p \"$HOME/.config/gptadmin\" \"$HOME/.codex\"\n\npython3 - \"$ENV_FILE\" > \"$HOME/.config/gptadmin/codex-mcp-token.env\" <<'PY'\nfrom pathlib import Path\nimport base64, hashlib, hmac, json, os, time, sys\n\ndef read_env(path):\n    env = {}\n    for line in Path(path).read_text().splitlines():\n        line = line.strip()\n        if not line or line.startswith(\"#\") or \"=\" not in line:\n            continue\n        k, v = line.split(\"=\", 1)\n        env[k] = v.strip().strip('\"').strip(\"'\")\n    return env\n\ndef b64url(data):\n    return base64.urlsafe_b64encode(data).rstrip(b\"=\").decode()\n\nenv = read_env(sys.argv[1])\nsecret = env.get(\"OAUTH_CLIENT_SECRET\")\nif not secret:\n    raise SystemExit(\"В gptadmin.env нет OAUTH_CLIENT_SECRET; обновите GPT-Админ или переустановите hub.\")\norigin = (env.get(\"HUB_PUBLIC_URL\") or env.get(\"PUBLIC_ORIGIN\") or \"http://127.0.0.1:9001\").rstrip(\"/\")\nresource = (env.get(\"MCP_RESOURCE\") or origin).rstrip(\"/\")\nnow = int(time.time())\nheader = {\"alg\": \"HS256\", \"typ\": \"JWT\"}\npayload = {\n    \"sub\": \"admin\",\n    \"scope\": \"gptadmin.read gptadmin.exec\",\n    \"client_id\": \"codex-local\",\n    \"iss\": origin,\n    \"aud\": resource,\n    \"iat\": now,\n    \"exp\": now + 365 * 24 * 3600,\n}\nmsg = f\"{b64url(json.dumps(header, separators=(',', ':')).encode())}.{b64url(json.dumps(payload, separators=(',', ':')).encode())}\".encode()\ntoken = msg.decode() + \".\" + b64url(hmac.new(secret.encode(), msg, hashlib.sha256).digest())\nprint(\"export GPTADMIN_CODEX_MCP_BEARER=\" + json.dumps(token))\nPY\nchmod 600 \"$HOME/.config/gptadmin/codex-mcp-token.env\"\n# shellcheck disable=SC1090\n. \"$HOME/.config/gptadmin/codex-mcp-token.env\"\nlaunchctl setenv GPTADMIN_CODEX_MCP_BEARER \"$GPTADMIN_CODEX_MCP_BEARER\" 2>/dev/null || true\n\ncodex mcp remove gptadmin >/dev/null 2>&1 || true\ncodex mcp add gptadmin --url http://127.0.0.1:9001/mcp --bearer-token-env-var GPTADMIN_CODEX_MCP_BEARER\ncodex mcp get gptadmin\nprintf '\\nГотово. Для Codex Desktop перезапустите приложение, чтобы оно увидело launchctl env.\\n'\nprintf 'Для Codex CLI в новом терминале выполните: source ~/.config/gptadmin/codex-mcp-token.env\\n'\nSH";
+const CODEX_LOCAL_MCP_COMMAND = "curl -fsSL https://became.bezrabotnyi.com/codex-mcp-mac.sh | bash";
 
 export function McpServerPage() {
   const { navigate } = useHashRoute();
@@ -190,7 +190,7 @@ export function McpServerPage() {
                   <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
                     Если GPT‑Админ уже установлен и hub работает на{" "}
                     <code>http://127.0.0.1:9001/mcp</code>, выполните одну команду ниже.
-                    Она выпускает Codex‑токен из локального <code>gptadmin.env</code>, прописывает{" "}
+                    Скрипт выпускает Codex‑токен из локального <code>gptadmin.env</code>, прописывает{" "}
                     <code>bearer_token_env_var</code> и заменяет старый no‑auth MCP entry.
                   </p>
                   <CommandBlock label="macOS · Codex CLI/Desktop" command={CODEX_LOCAL_MCP_COMMAND} />
