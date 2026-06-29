@@ -118,7 +118,7 @@ TTL guide:
 Examples:
 
 ```json
-{"action":"backup","path":"/home/roomhacker/gptadmin/hub_proxy.py","ttl_days":30,"label":"before-edit"}
+{"action":"backup","path":"/home/roomhacker/gptadmin/gptadmin_hub.py","ttl_days":30,"label":"before-edit"}
 ```
 
 ```json
@@ -202,7 +202,7 @@ GPTAdmin diagnostics:
 ```bash
 grep -R "class .*Register\|class .*Heartbeat\|/heartbeat\|/mcp-relay/register" -n /home/roomhacker/gptadmin || true
 curl -fsS https://gptadmin.bezrabotnyi.com/actions/openapi.yaml | sed -n '1,220p'
-journalctl -u hub_proxy -n 120 --no-pager || true
+journalctl -u gptadmin_hub -n 120 --no-pager || true
 ```
 
 Do not guess fields/logs when they can be read.
