@@ -89,7 +89,7 @@ export function ChatGptPage() {
                     Ниже — реальная запись полной установки: старое состояние удаляется, затем ставятся hub, ShellMCP и FRP.
                   </p>
                   <InstallCastPlayer
-                    src="/examples/mac-gptadmin-full-reinstall.cast"
+                    src="/examples/mac-gptadmin-install-demo-short.cast"
                     title="macOS full hub + ShellMCP + FRP install.cast"
                     className="shadow-none"
                   />

@@ -44,11 +44,11 @@ export function Install() {
 
             <div className="grid gap-4 p-5 sm:grid-cols-[1fr_auto] sm:items-center">
               <code className="overflow-x-auto rounded-xl border border-border/70 bg-[oklch(0.12_0.006_290)] px-4 py-3 font-mono text-xs text-primary/90">
-                asciinema play /examples/mac-gptadmin-full-reinstall.cast
+                asciinema play /examples/mac-gptadmin-install-demo-short.cast
               </code>
 
               <a
-                href="/examples/mac-gptadmin-full-reinstall.cast"
+                href="/examples/mac-gptadmin-install-demo-short.cast"
                 download
                 className="inline-flex items-center justify-center gap-2 rounded-xl border border-primary/25 bg-primary/[0.08] px-3.5 py-2 text-sm font-medium text-primary transition-colors hover:bg-primary/[0.12]"
               >
@@ -58,7 +58,7 @@ export function Install() {
             </div>
 
             <div className="px-5 pb-5">
-              <InstallCastPlayer src="/examples/mac-gptadmin-full-reinstall.cast" />
+              <InstallCastPlayer src="/examples/mac-gptadmin-install-demo-short.cast" />
             </div>
           </div>
         </Reveal>
