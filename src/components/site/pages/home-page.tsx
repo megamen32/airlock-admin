@@ -7,6 +7,7 @@ import { Eyebrow } from "../section-heading";
 import { InstallCommand } from "../install-command";
 import { ArchitectureDiagram } from "../architecture-diagram";
 import { UseCases } from "../use-cases";
+import { AuthorNote } from "../author-note";
 import { useHashRoute, type PageId } from "@/hooks/use-hash-route";
 
 const EASE = [0.16, 1, 0.3, 1] as const;
@@ -161,6 +162,9 @@ export function HomePage() {
           </div>
         </div>
       </section>
+
+      {/* Personal note from the author */}
+      <AuthorNote />
 
       {/* Use cases — capabilities of the hub */}
       <UseCases />
