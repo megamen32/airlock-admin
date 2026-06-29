@@ -1,0 +1,18 @@
+# internal app/site/private prompt material
+apps/chatgpt-admin-app/
+GPTADMIN_PROMPT.md
+docs/old_prompt.txt
+public/gptadmin_infrastructure_mcp_instructions.md
+public/gptadmin_instructions_under_8000.md
+
+# deployment/private config
+**/.env
+**/*.pem
+**/*.key
+secrets/**
+deploy/nginx/*.conf
+**/__pycache__/**
+**/*.pyc
+
+# publishing config itself
+.gitpublic/
