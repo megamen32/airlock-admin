@@ -340,3 +340,30 @@ Git:
 
 Stage Summary:
 - Site now reads as ONE product (an MCP hub) with 3 adapters — not 3 products. Home is no longer console-looking (terminal replaced by architecture diagram). Use-cases restored. MCP server page documents it as MCP remote SSE with the exact config requested.
+
+---
+Task ID: 19
+Agent: main
+Task: Add a documentation page — web panel /admin, MCP /mcp, OAuth for OpenAI SDK, install paths by OS.
+
+Work Log:
+- Added "docs" PageId to use-hash-route.ts (PageId union + PAGES array + PAGE_META label "Документация").
+- Added "Документация" to header PAGE_TABS (desktop nav + mobile menu).
+- Wired DocsPage into router.tsx switch.
+- Built pages/docs-page.tsx with 4 DocSection blocks:
+  1. Веб‑панель (/admin) — 3 feature cards: Очередь заданий, Здоровье агентов и MCP, Логи. Manage hub from browser, no terminal.
+  2. MCP endpoint (/mcp) — "направляйте сюда MCP remote SSE клиентов". JSON config block (type:http, gptadmin, Bearer) with copy button. Links to #/mcp-server page for full instructions.
+  3. OAuth для OpenAI SDK — supported; "где задать пароль" card (/admin → Security) + OAuth endpoints list (/oauth/authorize, /oauth/token, /.well-known/oauth-authorization-server).
+  4. Куда ставится GPT‑Админ — 3 OS cards (Linux/macOS/Windows), each showing user-mode and system-mode paths (~/.local/share/gptadmin, /opt/gptadmin, %LOCALAPPDATA%\\gptadmin, C:\\Program Files\\gptadmin) + note about installer auto-detecting mode and FRP auto-tunnel.
+
+Verification (Agent Browser + VLM):
+- Page renders at #/docs. H1 = "Веб‑панель, MCP endpoint, OAuth и пути установки". All 4 sections present (Веб‑панель | MCP endpoint | OAuth для OpenAI SDK | Куда ставится GPT‑Админ). /admin and /mcp endpoints present. All OS paths present (~/.local/share/gptadmin, /opt/gptadmin, %LOCALAPPDATA%). OAuth mentioned. Nav "Документация" link works.
+- Mobile 390px: scrollWidth=390=viewport (no h-overflow).
+- VLM (glm-4.6v): all 4 sections render cleanly, no concrete layout issues.
+- ESLint clean.
+
+Git:
+- Committed dc55760 (5 files, +312/−3; new: pages/docs-page.tsx). Pushed (fast-forward) to github.com/megamen32/adminchatgpt_website main. Verified remote = local HEAD.
+
+Stage Summary:
+- Documentation page added at #/docs covering: web panel (/admin — queue/health/logs), MCP endpoint (/mcp — where to point MCP remote SSE clients + config), OAuth for OpenAI SDK (where to set password + endpoints), and install paths per OS (Linux/macOS/Windows × user/system mode). Accessible via nav.
