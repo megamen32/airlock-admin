@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Menu, X } from "lucide-react";
+import { Github, Menu, Star, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useHashRoute, pageHref, type PageId } from "@/hooks/use-hash-route";
 
@@ -83,16 +83,7 @@ export function Header() {
         </nav>
 
         <div className="flex items-center gap-2">
-          <a
-            href={pageHref("chatgpt")}
-            onClick={(e) => {
-              e.preventDefault();
-              navigate("chatgpt");
-            }}
-            className="hidden rounded-full bg-primary px-5 py-2.5 text-sm font-medium text-primary-foreground transition-transform hover:scale-[1.02] sm:inline-flex"
-          >
-            Установить
-          </a>
+          <GitHubButton />
 
           <button
             type="button"
@@ -154,6 +145,34 @@ export function Header() {
         )}
       </AnimatePresence>
     </header>
+  );
+}
+
+function GitHubButton() {
+  const [stars, setStars] = useState<number | null>(null);
+  useEffect(() => {
+    fetch("https://api.github.com/repos/megamen32/gptadmin_opensource")
+      .then((r) => r.json())
+      .then((d) => setStars(typeof d.stargazers_count === "number" ? d.stargazers_count : null))
+      .catch(() => setStars(null));
+  }, []);
+  return (
+    <a
+      href="https://github.com/megamen32/gptadmin_opensource"
+      target="_blank"
+      rel="noopener"
+      className="group inline-flex items-center gap-2 rounded-full border border-border/70 bg-white/[0.02] px-3.5 py-2 text-sm font-medium text-foreground transition-all hover:border-primary/40 hover:bg-white/[0.04]"
+      aria-label="GPT‑Админ на GitHub — opensource"
+    >
+      <Github className="h-4 w-4 text-primary" />
+      <span className="hidden sm:inline">GitHub</span>
+      {stars !== null && (
+        <span className="inline-flex items-center gap-1 border-l border-border/60 pl-2 text-xs text-muted-foreground">
+          <Star className="h-3 w-3 fill-primary/40 text-primary" />
+          {stars}
+        </span>
+      )}
+    </a>
   );
 }
 

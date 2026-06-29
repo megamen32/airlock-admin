@@ -1,6 +1,6 @@
 "use client";
 
-import { Globe, Send } from "lucide-react";
+import { Globe, Github, Send } from "lucide-react";
 
 export function Footer() {
   return (
@@ -23,8 +23,15 @@ export function Footer() {
           <nav className="flex flex-wrap items-center justify-center gap-x-6 gap-y-2 text-sm text-muted-foreground" aria-label="Подвал">
             <a href="#how" className="transition-colors hover:text-foreground">Как работает</a>
             <a href="#features" className="transition-colors hover:text-foreground">Функции</a>
-            <a href="#pricing" className="transition-colors hover:text-foreground">Тарифы</a>
             <a href="#faq" className="transition-colors hover:text-foreground">FAQ</a>
+            <a
+              href="https://github.com/megamen32/gptadmin_opensource"
+              target="_blank"
+              rel="noopener"
+              className="inline-flex items-center gap-1.5 transition-colors hover:text-foreground"
+            >
+              <Github className="h-3.5 w-3.5" /> GitHub
+            </a>
             <a
               href="https://bezrabotnyi.com"
               target="_blank"

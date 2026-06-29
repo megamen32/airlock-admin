@@ -1,7 +1,7 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { ArrowRight, Bot, BrainCircuit, Puzzle, Rocket, ShieldCheck, Sparkles, Terminal } from "lucide-react";
+import { ArrowRight, Bot, BrainCircuit, Github, Puzzle, Rocket, ShieldCheck, Sparkles, Star, Terminal } from "lucide-react";
 import { Reveal, Stagger, StaggerItem } from "../reveal";
 import { Eyebrow } from "../section-heading";
 import { InstallCommand } from "../install-command";
@@ -67,8 +67,19 @@ export function HomePage() {
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.7, ease: EASE }}
+                className="flex flex-wrap items-center gap-2"
               >
-                <Eyebrow>Один MCP‑хаб</Eyebrow>
+                <span className="inline-flex items-center gap-1.5 rounded-full border border-primary/25 bg-primary/[0.06] px-3 py-1.5 text-xs font-medium text-primary">
+                  <Sparkles className="h-3 w-3" /> Open Source · AGPL‑3.0
+                </span>
+                <a
+                  href="https://github.com/megamen32/gptadmin_opensource"
+                  target="_blank"
+                  rel="noopener"
+                  className="inline-flex items-center gap-1.5 rounded-full border border-border/60 bg-white/[0.02] px-3 py-1.5 text-xs font-medium text-foreground transition-colors hover:border-primary/40"
+                >
+                  <Github className="h-3 w-3 text-primary" /> GitHub
+                </a>
               </motion.div>
 
               <motion.h1
