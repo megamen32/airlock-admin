@@ -140,8 +140,8 @@ export const QUICK_SNIPPETS = {
     }
   }
 }`,
-  envExample: `CTL_TOKEN=***REMOVED***
-ADMIN_PASSWORD=***REMOVED***
+  envExample: `CTL_TOKEN=generate-a-strong-random-token
+ADMIN_PASSWORD=choose-a-strong-password
 OAUTH_CLIENT_SECRET=$(openssl rand -hex 32)
 PUBLIC_ORIGIN=https://your-hub.example.com
 MCP_RESOURCE=https://your-hub.example.com`,

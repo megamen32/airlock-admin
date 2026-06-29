@@ -50,9 +50,9 @@ export function DocsPage() {
       <DocSection
         id="truth"
         icon={ShieldAlert}
-        title="Что Было Перепутано"
+        title="Аутентификация: что и где используется"
         kicker="важно"
-        lead="Старая страница смешивала CTL_TOKEN и OAuth. Ниже правильная схема."
+        lead="CTL_TOKEN и OAuth — это разные механизмы. Ниже правильная схема."
       >
         <Callout tone="warn">
           <p>
@@ -75,7 +75,7 @@ export function DocsPage() {
       <DocSection
         id="auth-split"
         icon={ShieldAlert}
-        title="Разделение Токенов"
+        title="Разделение токенов"
         kicker="auth"
         lead="Человеческий смысл каждой переменной и где она реально участвует."
       >
@@ -103,7 +103,7 @@ export function DocsPage() {
       <DocSection
         id="endpoints"
         icon={ShieldAlert}
-        title="Endpoint И Auth Matrix"
+        title="Endpoint и auth-матрица"
         kicker="routes"
         lead="Что чем защищается. Это основной справочный блок, если надо понять почему запрос получает 401."
       >
@@ -116,7 +116,7 @@ export function DocsPage() {
       <DocSection
         id="quick-use"
         icon={ShieldAlert}
-        title="Быстрые Примеры"
+        title="Быстрые примеры"
         kicker="snippets"
         lead="Минимальные рабочие примеры для admin API, relay API и remote MCP."
       >
@@ -135,7 +135,7 @@ export function DocsPage() {
       <DocSection
         id="hub-env"
         icon={ShieldAlert}
-        title="Все ENV Для Hub"
+        title="Все ENV для hub"
         kicker="hub_proxy.py"
         lead="Полный список переменных окружения, которые читаются hub_proxy.py напрямую."
       >
@@ -165,7 +165,7 @@ export function DocsPage() {
       <DocSection
         id="shell-env"
         icon={ShieldAlert}
-        title="Все ENV Для ShellMCP"
+        title="Все ENV для shellmcp"
         kicker="go-shellmcp"
         lead="Переменные из go-shellmcp/internal/server/server.go. Здесь перечислены обе формы: новые SHELL_* и совместимые SHELLMCP_*."
       >
@@ -195,7 +195,7 @@ export function DocsPage() {
       <DocSection
         id="tunnel"
         icon={ShieldAlert}
-        title="Tunnel: Cloudflare И FRP"
+        title="Туннель: Cloudflare и FRP"
         kicker="ingress"
         lead="Tunnel нужен только чтобы открыть hub наружу. Он не заменяет hub и не заменяет shellmcp."
       >
@@ -239,7 +239,7 @@ uv run python -m gptadmin.hub`}
       <DocSection
         id="relay-transport"
         icon={ShieldAlert}
-        title="MCP Relay И Transport"
+        title="MCP relay и transport"
         kicker="mcp-relay"
         lead="Как admin API, virtual agents и real relay agents связаны между собой."
       >
@@ -260,7 +260,7 @@ uv run python -m gptadmin.hub`}
       <DocSection
         id="naming"
         icon={ShieldAlert}
-        title="Про Название CTL_TOKEN"
+        title="Про название CTL_TOKEN"
         kicker="naming"
         lead="Название историческое и действительно неочевидное."
       >
