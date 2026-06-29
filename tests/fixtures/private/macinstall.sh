@@ -56,7 +56,7 @@ find "$HOME/.local/share" "$HOME/.config" "$HOME/Library/LaunchAgents" -maxdepth
 echo
 section 'RUN PUBLIC WEBSITE INSTALLER: FULL HUB + SHELLMCP + FRP + POLLING'
 echo 'site command: curl -s https://became.bezrabotnyi.com/install.sh | bash'
-echo 'answers sent to installer TTY: 1=hub+shellmcp, 1=FRP, 1=polling'
+echo 'answers sent to installer TTY: 1=hub+shellmcp, 1=FRP, 1=polling, y=import Claude MCP servers'
 PY=/Library/Frameworks/Python.framework/Versions/3.11/bin/python3
 [ -x "$PY" ] || PY=$(command -v python3)
 export GPTADMIN_DOWNLOAD_QUIET=1
@@ -68,7 +68,7 @@ import sys
 import time
 
 cmd = "curl -s https://became.bezrabotnyi.com/install.sh | bash"
-answers = ["1\n", "1\n", "1\n"]
+answers = ["1\n", "1\n", "1\n", "y\n"]
 answer_idx = 0
 buffer = ""
 
@@ -97,7 +97,7 @@ try:
                 sys.stdout.flush()
                 buffer += text
                 # install.sh uses /dev/tty for prompts under curl|bash, so answers must go to the PTY.
-                while answer_idx < len(answers) and "Ваш выбор" in buffer:
+                while answer_idx < len(answers) and ("Ваш выбор" in buffer or "Импортировать" in buffer):
                     os.write(fd, answers[answer_idx].encode())
                     sys.stdout.write(answers[answer_idx])
                     sys.stdout.flush()
