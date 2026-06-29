@@ -16,3 +16,6 @@ deploy/nginx/*.conf
 
 # publishing config itself
 .gitpublic/
+
+# private test artifacts; keep in private repo only
+tests/fixtures/private/macinstall.sh
