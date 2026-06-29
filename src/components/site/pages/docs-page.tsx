@@ -1,57 +1,37 @@
 "use client";
 
 import {
-  Activity,
-  Apple,
-  KeyRound,
-  LayoutDashboard,
-  Lock,
-  Monitor,
-  Radio,
-  Server,
-  Terminal,
+  Check,
+  Copy,
   type LucideIcon,
+  ShieldAlert,
 } from "lucide-react";
 import { motion } from "framer-motion";
 import { PageHero } from "../page-hero";
-import { Reveal, Stagger, StaggerItem } from "../reveal";
 import { Eyebrow } from "../section-heading";
+import { Reveal } from "../reveal";
 import { useCopy } from "@/hooks/use-copy";
-import { Check, Copy } from "lucide-react";
+import {
+  AUTH_VARIABLES,
+  ENDPOINT_ROWS,
+  HUB_ENV_GROUPS,
+  HUB_DETAIL_ROWS,
+  HUB_FUNCTION_ROWS,
+  HUB_PATH_ROWS,
+  QUICK_SNIPPETS,
+  RELAY_DETAIL_ROWS,
+  RELAY_FLOW_ROWS,
+  SHELL_ENV_GROUPS,
+  SHELL_DETAIL_ROWS,
+  SHELL_FUNCTION_ROWS,
+  SHELL_PATH_ROWS,
+  TUNNEL_BACKENDS,
+  TUNNEL_DETAIL_ROWS,
+  type DetailRow,
+  type EnvGroup,
+} from "../docs-reference";
 
 const EASE = [0.16, 1, 0.3, 1] as const;
-
-/** What the /admin web panel shows. */
-const PANEL_FEATURES: { icon: LucideIcon; title: string; body: string }[] = [
-  { icon: Activity, title: "Очередь заданий", body: "Активные и завершённые задачи каждого агента — статус, время, результат." },
-  { icon: Server, title: "Здоровье агентов и MCP", body: "Список shellmcp-агентов и подключённых MCP (openmemory, chrome-devtools…) с live-статусом online/offline." },
-  { icon: LayoutDashboard, title: "Логи", body: "Журнал команд и выводов — читайте прямо с сайта, без SSH и терминала." },
-];
-
-/** Install paths per OS. */
-const INSTALL_PATHS: { icon: LucideIcon; os: string; userMode: string; systemMode: string; note: string }[] = [
-  {
-    icon: Terminal,
-    os: "Linux",
-    userMode: "~/.local/share/gptadmin",
-    systemMode: "/opt/gptadmin",
-    note: "user-service через systemctl --user. System: systemd unit, конфиг в /etc/gptadmin.",
-  },
-  {
-    icon: Apple,
-    os: "macOS",
-    userMode: "~/.local/share/gptadmin",
-    systemMode: "/opt/gptadmin",
-    note: "user-mode через LaunchAgents. System: LaunchDaemons, конфиг в /etc/gptadmin.",
-  },
-  {
-    icon: Monitor,
-    os: "Windows",
-    userMode: "%LOCALAPPDATA%\\gptadmin",
-    systemMode: "C:\\Program Files\\gptadmin",
-    note: "user-mode: Scheduled Task на вход пользователя. Administrator нужен только для system-mode.",
-  },
-];
 
 export function DocsPage() {
   return (
@@ -60,169 +40,245 @@ export function DocsPage() {
         eyebrow="Документация"
         title={
           <>
-            Веб‑панель, MCP endpoint,{" "}
-            <span className="text-gradient-violet">OAuth и пути установки</span>
+            Не лендинг, а{" "}
+            <span className="text-gradient-violet">справка по auth, endpoint и env</span>
           </>
         }
-        lead="Куда идти, что настраивать и где что лежит — короткие рецепты для каждого случая."
+        lead="Ниже перечислены реальные переменные окружения и реальные правила auth из кода hub_proxy.py и go-shellmcp."
       />
 
-      {/* Web panel /admin */}
       <DocSection
-        id="admin"
-        icon={LayoutDashboard}
-        title="Веб‑панель"
-        kicker="/admin"
-        lead="Управление хабом из браузера — без терминала."
+        id="truth"
+        icon={ShieldAlert}
+        title="Что Было Перепутано"
+        kicker="важно"
+        lead="Старая страница смешивала CTL_TOKEN и OAuth. Ниже правильная схема."
       >
-        <p className="text-sm leading-relaxed text-muted-foreground">
-          Откройте{" "}
-          <Endpoint href="https://your-hub.bezrabotnyi.com/admin">/admin</Endpoint>{" "}
-          на вашем хабе. Здесь видна вся картина в одном окне:
-        </p>
-        <Stagger className="mt-5 grid gap-3 sm:grid-cols-3" stagger={0.08}>
-          {PANEL_FEATURES.map((f) => (
-            <StaggerItem key={f.title}>
-              <div className="surface surface-hover h-full rounded-xl p-4">
-                <span className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-primary/20 bg-primary/[0.06]">
-                  <f.icon className="h-4 w-4 text-primary" />
-                </span>
-                <h4 className="mt-3 text-sm font-semibold tracking-tight">{f.title}</h4>
-                <p className="mt-1 text-xs leading-relaxed text-muted-foreground">{f.body}</p>
-              </div>
-            </StaggerItem>
-          ))}
-        </Stagger>
+        <Callout tone="warn">
+          <p>
+            <code>/mcp</code> не принимает прямой <code>CTL_TOKEN</code>. Этот endpoint
+            требует OAuth bearer token, который hub подписывает через{" "}
+            <code>OAUTH_CLIENT_SECRET</code>.
+          </p>
+          <p className="mt-2">
+            <code>CTL_TOKEN</code> нужен для <code>/admin</code>,{" "}
+            <code>/admin/api/*</code>, <code>/mcp-relay/*</code>, <code>/servers</code>,
+            <code>/tasks/*</code> и artifact endpoints.
+          </p>
+          <p className="mt-2">
+            <code>ADMIN_PASSWORD</code> нужен только для HTML-формы на{" "}
+            <code>/authorize</code> внутри OAuth flow.
+          </p>
+        </Callout>
       </DocSection>
 
-      {/* MCP endpoint /mcp */}
       <DocSection
-        id="mcp"
-        icon={Radio}
-        title="MCP endpoint"
-        kicker="/mcp"
-        lead="Сюда направляйте клиентов, которые работают через MCP remote SSE."
+        id="auth-split"
+        icon={ShieldAlert}
+        title="Разделение Токенов"
+        kicker="auth"
+        lead="Человеческий смысл каждой переменной и где она реально участвует."
       >
-        <p className="text-sm leading-relaxed text-muted-foreground">
-          Хаб отдаёт MCP remote SSE (Streamable HTTP) на пути{" "}
-          <Endpoint href="https://your-hub.bezrabotnyi.com/mcp">/mcp</Endpoint>.
-          Это точка подключения для Claude Desktop, Codex, OpenCode и любого
-          другого MCP‑клиента. Конфиг для клиента:
-        </p>
-        <ConfigBlock
-          label="claude_desktop_config.json"
-          config={`{
-  "mcpServers": {
-    "gptadmin": {
-      "type": "http",
-      "url": "https://your-hub.bezrabotnyi.com/mcp",
-      "headers": {
-        "Authorization": "Bearer  YOUR_CTL_TOKEN"
-      }
-    }
-  }
-}`}
+        <DenseTable
+          columns={["ENV", "Человеческое имя", "Кто использует", "Куда применяется", "Комментарий"]}
+          rows={AUTH_VARIABLES.map((row) => [
+            row.env,
+            row.label,
+            row.usedBy,
+            row.appliesTo,
+            row.notes,
+          ])}
         />
-        <p className="mt-4 text-xs leading-relaxed text-muted-foreground">
-          Подробнее — на странице{" "}
-          <a href="#/mcp-server" className="text-primary underline decoration-primary/40 underline-offset-2 hover:decoration-primary">
-            MCP сервер
-          </a>
-          .
+        <CodeBlock
+          label="Простой продовый набор"
+          code={QUICK_SNIPPETS.envExample}
+        />
+        <p className="mt-4 text-sm leading-relaxed text-muted-foreground">
+          Если нужен максимально быстрый onboarding без лишних объяснений, можно дать
+          одинаковое значение в <code>CTL_TOKEN</code> и <code>ADMIN_PASSWORD</code>.
+          Это две разные роли, но для маленькой установки так проще.
         </p>
       </DocSection>
 
-      {/* OAuth */}
       <DocSection
-        id="oauth"
-        icon={Lock}
-        title="OAuth для OpenAI SDK"
-        kicker="OpenAI SDK OAuth"
-        lead="Поддерживается OAuth-флоу для OpenAI SDK — клиенты могут подключаться через OAuth, а не по статичному Bearer-ключу."
+        id="endpoints"
+        icon={ShieldAlert}
+        title="Endpoint И Auth Matrix"
+        kicker="routes"
+        lead="Что чем защищается. Это основной справочный блок, если надо понять почему запрос получает 401."
       >
-        <p className="text-sm leading-relaxed text-muted-foreground">
-          Хаб реализует OAuth-эндпоинты, совместимые с OpenAI SDK OAuth. Это
-          позволяет агентам получать токен через стандартный OAuth-флоу вместо
-          ручной вставки Bearer-ключа.
-        </p>
-        <div className="mt-5 grid gap-3 sm:grid-cols-2">
-          <div className="surface rounded-xl p-4">
-            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground/70">
-              где задать пароль
-            </p>
-            <p className="mt-2 text-sm text-foreground/90">
-              В веб‑панели{" "}
-              <Endpoint href="https://your-hub.bezrabotnyi.com/admin">/admin</Endpoint>{" "}
-              → раздел «Security» → задайте пароль для OAuth-клиентов. Хаб сгенерирует
-              client_id/client_secret и endpoints.
-            </p>
-          </div>
-          <div className="surface rounded-xl p-4">
-            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground/70">
-              endpoints
-            </p>
-            <div className="mt-2 flex flex-col gap-1.5 font-mono text-[12px] text-foreground/85">
-              <span><span className="text-primary/70">POST</span> /oauth/authorize</span>
-              <span><span className="text-primary/70">POST</span> /oauth/token</span>
-              <span><span className="text-primary/70">GET</span>  /.well-known/oauth-authorization-server</span>
-            </div>
-          </div>
+        <DenseTable
+          columns={["Path", "Auth", "Назначение", "Комментарий"]}
+          rows={ENDPOINT_ROWS.map((row) => [row.path, row.auth, row.usedFor, row.notes])}
+        />
+      </DocSection>
+
+      <DocSection
+        id="quick-use"
+        icon={ShieldAlert}
+        title="Быстрые Примеры"
+        kicker="snippets"
+        lead="Минимальные рабочие примеры для admin API, relay API и remote MCP."
+      >
+        <div className="grid gap-4 lg:grid-cols-3">
+          <CodeBlock label="Admin API через CTL_TOKEN" code={QUICK_SNIPPETS.adminCurl} />
+          <CodeBlock label="Relay API через CTL_TOKEN" code={QUICK_SNIPPETS.relayCurl} />
+          <CodeBlock label="MCP клиент на /mcp" code={QUICK_SNIPPETS.mcpConfig} />
         </div>
+        <p className="mt-4 text-sm leading-relaxed text-muted-foreground">
+          В конфиге MCP клиента на <code>/mcp</code> не надо вручную писать{" "}
+          <code>Authorization: Bearer CTL_TOKEN</code>. Клиент должен пройти OAuth flow
+          и получить bearer token через <code>/authorize</code> + <code>/token</code>.
+        </p>
       </DocSection>
 
-      {/* Install paths by OS */}
       <DocSection
-        id="paths"
-        icon={Server}
-        title="Куда ставится GPT‑Админ"
-        kicker="пути установки"
-        lead="User-mode (без sudo) и system-mode (с sudo) — на каждой ОС свои пути."
+        id="hub-env"
+        icon={ShieldAlert}
+        title="Все ENV Для Hub"
+        kicker="hub_proxy.py"
+        lead="Полный список переменных окружения, которые читаются hub_proxy.py напрямую."
       >
-        <Stagger className="grid gap-4 lg:grid-cols-3" stagger={0.1}>
-          {INSTALL_PATHS.map((p) => (
-            <StaggerItem key={p.os}>
-              <motion.div
-                initial={{ opacity: 0, y: 12 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true }}
-                transition={{ duration: 0.6, ease: EASE }}
-                className="surface surface-hover flex h-full flex-col rounded-2xl p-5"
-              >
-                <div className="flex items-center gap-2.5">
-                  <span className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-primary/20 bg-primary/[0.06]">
-                    <p.icon className="h-4 w-4 text-primary" />
-                  </span>
-                  <h4 className="text-base font-semibold tracking-tight">{p.os}</h4>
-                </div>
+        <SubSection
+          title="Hub: что это такое"
+          lead="Кратко про роль, код, основные пути и функции hub."
+        >
+          <DetailTable rows={HUB_DETAIL_ROWS} />
+        </SubSection>
+        <SubSection
+          title="Hub: функции"
+          lead="Какие обязанности на hub, а какие не на нём."
+        >
+          <DetailTable rows={HUB_FUNCTION_ROWS} />
+        </SubSection>
+        <SubSection
+          title="Hub: пути и runtime файлы"
+          lead="Что лежит где по умолчанию."
+        >
+          <DetailTable rows={HUB_PATH_ROWS} />
+        </SubSection>
+        {HUB_ENV_GROUPS.map((group) => (
+          <EnvGroupCard key={group.title} group={group} />
+        ))}
+      </DocSection>
 
-                <div className="mt-4 flex flex-col gap-2.5">
-                  <PathRow label="user-mode" path={p.userMode} />
-                  <PathRow label="system-mode" path={p.systemMode} />
-                </div>
+      <DocSection
+        id="shell-env"
+        icon={ShieldAlert}
+        title="Все ENV Для ShellMCP"
+        kicker="go-shellmcp"
+        lead="Переменные из go-shellmcp/internal/server/server.go. Здесь перечислены обе формы: новые SHELL_* и совместимые SHELLMCP_*."
+      >
+        <SubSection
+          title="ShellMCP: что это такое"
+          lead="Роль агента на хосте и его главные endpoint'ы."
+        >
+          <DetailTable rows={SHELL_DETAIL_ROWS} />
+        </SubSection>
+        <SubSection
+          title="ShellMCP: функции"
+          lead="Что именно делает transport layer на машине."
+        >
+          <DetailTable rows={SHELL_FUNCTION_ROWS} />
+        </SubSection>
+        <SubSection
+          title="ShellMCP: пути"
+          lead="Где identity, spool и outbox."
+        >
+          <DetailTable rows={SHELL_PATH_ROWS} />
+        </SubSection>
+        {SHELL_ENV_GROUPS.map((group) => (
+          <EnvGroupCard key={group.title} group={group} />
+        ))}
+      </DocSection>
 
-                <p className="mt-4 text-xs leading-relaxed text-muted-foreground">{p.note}</p>
-              </motion.div>
-            </StaggerItem>
-          ))}
-        </Stagger>
+      <DocSection
+        id="tunnel"
+        icon={ShieldAlert}
+        title="Tunnel: Cloudflare И FRP"
+        kicker="ingress"
+        lead="Tunnel нужен только чтобы открыть hub наружу. Он не заменяет hub и не заменяет shellmcp."
+      >
+        <SubSection
+          title="Tunnel: роль"
+          lead="Что делает tunnel layer."
+        >
+          <DetailTable rows={TUNNEL_DETAIL_ROWS} />
+        </SubSection>
+        <SubSection
+          title="Tunnel backends"
+          lead="Краткая сводка по backend'ам из текущих доков."
+        >
+          <DenseTable
+            columns={["Backend", "Для чего", "ENV", "URL", "Комментарий"]}
+            rows={TUNNEL_BACKENDS.map((row) => [
+              row.backend,
+              row.purpose,
+              row.env,
+              row.urlShape,
+              row.notes,
+            ])}
+          />
+        </SubSection>
+        <CodeBlock
+          label="Cloudflare quick tunnel"
+          code={"TUNNEL_TYPE=cloudflare uv run python -m gptadmin.hub"}
+        />
+        <CodeBlock
+          label="FRP"
+          code={`TUNNEL_TYPE=frp \\
+FRP_SERVER_ADDR=frp.example.com \\
+FRP_SERVER_PORT=7000 \\
+FRP_TOKEN=your-secret-token \\
+FRP_SUBDOMAIN=myhub \\
+FRP_DOMAIN=example.com \\
+uv run python -m gptadmin.hub`}
+        />
+      </DocSection>
 
-        <Reveal className="mt-6">
-          <div className="surface flex items-start gap-3 rounded-xl border-l-2 border-primary/40 p-4">
-            <KeyRound className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
-            <p className="text-xs leading-relaxed text-muted-foreground">
-              <span className="font-medium text-foreground">По умолчанию — user-mode.</span>{" "}
-              Установщик сам определяет режим: без sudo — user-mode в домашней папке,
-              с sudo — system-mode. Свой домен не нужен: авто‑туннель через FRP даёт
-              публичный URL.
-            </p>
-          </div>
-        </Reveal>
+      <DocSection
+        id="relay-transport"
+        icon={ShieldAlert}
+        title="MCP Relay И Transport"
+        kicker="mcp-relay"
+        lead="Как admin API, virtual agents и real relay agents связаны между собой."
+      >
+        <SubSection
+          title="Relay: что это такое"
+          lead="Не путать с /mcp remote endpoint."
+        >
+          <DetailTable rows={RELAY_DETAIL_ROWS} />
+        </SubSection>
+        <SubSection
+          title="Relay transport flow"
+          lead="Последовательность прохождения вызова через relay."
+        >
+          <DetailTable rows={RELAY_FLOW_ROWS} />
+        </SubSection>
+      </DocSection>
+
+      <DocSection
+        id="naming"
+        icon={ShieldAlert}
+        title="Про Название CTL_TOKEN"
+        kicker="naming"
+        lead="Название историческое и действительно неочевидное."
+      >
+        <Callout tone="info">
+          <p>
+            <code>CTL_TOKEN</code> по смыслу это <strong>hub admin bearer</strong> или{" "}
+            <strong>control-plane API token</strong>.
+          </p>
+          <p className="mt-2">
+            Пока переменная в коде называется <code>CTL_TOKEN</code>, потому что на неё
+            уже завязаны панель, тесты, install scripts и runtime. В документации я везде
+            подписал её человеческим именем, чтобы не путать с OAuth password.
+          </p>
+        </Callout>
       </DocSection>
     </>
   );
 }
-
-/* ---------- helpers ---------- */
 
 function DocSection({
   id,
@@ -240,8 +296,8 @@ function DocSection({
   children: React.ReactNode;
 }) {
   return (
-    <section id={id} className="relative scroll-mt-24 py-16 sm:py-20">
-      <div className="mx-auto max-w-4xl px-5 sm:px-8">
+    <section id={id} className="relative scroll-mt-24 py-14 sm:py-16">
+      <div className="mx-auto max-w-6xl px-5 sm:px-8">
         <Reveal className="flex flex-col gap-3">
           <div className="flex items-center gap-3">
             <span className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-primary/20 bg-primary/[0.06]">
@@ -252,7 +308,7 @@ function DocSection({
               <h2 className="display text-2xl font-semibold tracking-tight sm:text-3xl">{title}</h2>
             </div>
           </div>
-          <p className="text-sm leading-relaxed text-muted-foreground sm:text-base">{lead}</p>
+          <p className="max-w-4xl text-sm leading-relaxed text-muted-foreground sm:text-base">{lead}</p>
         </Reveal>
         <Reveal delay={0.08} className="mt-6">
           {children}
@@ -262,42 +318,140 @@ function DocSection({
   );
 }
 
-function Endpoint({ href, children }: { href: string; children: React.ReactNode }) {
-  return (
-    <code className="rounded border border-primary/30 bg-primary/[0.06] px-1.5 py-0.5 font-mono text-[13px] text-primary">
-      {children}
-    </code>
-  );
-}
+function Callout({
+  children,
+  tone,
+}: {
+  children: React.ReactNode;
+  tone: "warn" | "info";
+}) {
+  const classes =
+    tone === "warn"
+      ? "border-amber-500/30 bg-amber-500/[0.08] text-amber-100"
+      : "border-primary/25 bg-primary/[0.06] text-foreground/90";
 
-function PathRow({ label, path }: { label: string; path: string }) {
   return (
-    <div className="flex flex-col gap-0.5">
-      <span className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground/60">{label}</span>
-      <code className="rounded border border-border/50 bg-[oklch(0.12_0.006_290)] px-2 py-1 font-mono text-[12px] text-foreground/85">
-        {path}
-      </code>
+    <div className={`rounded-2xl border p-4 text-sm leading-relaxed ${classes}`}>
+      {children}
     </div>
   );
 }
 
-function ConfigBlock({ label, config }: { label: string; config: string }) {
-  const { copied, copy } = useCopy();
+function DenseTable({
+  columns,
+  rows,
+}: {
+  columns: string[];
+  rows: string[][];
+}) {
   return (
-    <div className="mt-4 overflow-hidden rounded-xl border border-border/60 bg-[oklch(0.12_0.006_290)]">
-      <div className="flex items-center justify-between border-b border-white/[0.06] px-3.5 py-2">
+    <div className="overflow-x-auto rounded-2xl border border-border/60 bg-[oklch(0.12_0.006_290)]">
+      <table className="min-w-full text-left text-sm">
+        <thead className="border-b border-white/[0.08] bg-white/[0.03]">
+          <tr>
+            {columns.map((column) => (
+              <th key={column} className="px-3 py-2.5 font-mono text-[11px] uppercase tracking-wide text-muted-foreground">
+                {column}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((row, rowIndex) => (
+            <tr key={rowIndex} className="border-b border-white/[0.05] last:border-b-0">
+              {row.map((cell, cellIndex) => (
+                <td
+                  key={`${rowIndex}-${cellIndex}`}
+                  className={`px-3 py-2.5 align-top leading-relaxed text-foreground/88 ${
+                    cellIndex === 0 ? "font-mono text-[12px] text-primary" : ""
+                  }`}
+                >
+                  {cell}
+                </td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function DetailTable({ rows }: { rows: DetailRow[] }) {
+  return (
+    <DenseTable
+      columns={["Элемент", "Значение", "Комментарий"]}
+      rows={rows.map((row) => [row.name, row.value, row.notes])}
+    />
+  );
+}
+
+function SubSection({
+  title,
+  lead,
+  children,
+}: {
+  title: string;
+  lead: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="mb-6">
+      <div className="mb-3">
+        <h3 className="text-lg font-semibold tracking-tight">{title}</h3>
+        <p className="mt-1 text-sm leading-relaxed text-muted-foreground">{lead}</p>
+      </div>
+      {children}
+    </div>
+  );
+}
+
+function EnvGroupCard({ group }: { group: EnvGroup }) {
+  const Icon = group.icon;
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 12 }}
+      whileInView={{ opacity: 1, y: 0 }}
+      viewport={{ once: true }}
+      transition={{ duration: 0.45, ease: EASE }}
+      className="mb-5 rounded-2xl border border-border/60 bg-[oklch(0.12_0.006_290)]"
+    >
+      <div className="flex items-center gap-3 border-b border-white/[0.08] px-4 py-3">
+        <span className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-primary/20 bg-primary/[0.06]">
+          <Icon className="h-4 w-4 text-primary" />
+        </span>
+        <div>
+          <div className="text-sm font-semibold tracking-tight">{group.title}</div>
+          <div className="text-xs text-muted-foreground">{group.scope}</div>
+        </div>
+      </div>
+      <DenseTable
+        columns={["ENV", "Default", "Назначение"]}
+        rows={group.rows.map((row) => [row.env, row.defaultValue, row.purpose])}
+      />
+    </motion.div>
+  );
+}
+
+function CodeBlock({ label, code }: { label: string; code: string }) {
+  const { copied, copy } = useCopy();
+
+  return (
+    <div className="overflow-hidden rounded-2xl border border-border/60 bg-[oklch(0.12_0.006_290)]">
+      <div className="flex items-center justify-between border-b border-white/[0.08] px-3.5 py-2">
         <span className="font-mono text-[11px] text-muted-foreground">{label}</span>
         <button
           type="button"
-          onClick={() => copy(config)}
+          onClick={() => copy(code)}
           className="inline-flex items-center gap-1 text-[11px] text-muted-foreground transition-colors hover:text-primary"
         >
           {copied ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
           {copied ? "скопировано" : "копировать"}
         </button>
       </div>
-      <pre className="nice-scroll overflow-x-auto px-3.5 py-3 font-mono text-[12px] leading-relaxed text-foreground/85">
-{config}
+      <pre className="nice-scroll overflow-x-auto px-3.5 py-3 font-mono text-[12px] leading-relaxed text-foreground/88">
+{code}
       </pre>
     </div>
   );

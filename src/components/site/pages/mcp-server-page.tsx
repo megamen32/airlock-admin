@@ -13,15 +13,12 @@ const CLIENTS = [
   { name: "OpenCode", icon: Cpu },
 ];
 
-// MCP remote SSE (Streamable HTTP) config — Claude Desktop / Codex / OpenCode format.
+// MCP remote SSE (Streamable HTTP) config — OAuth flow happens against /mcp.
 const MCP_CONFIG = `{
   "mcpServers": {
     "gptadmin": {
       "type": "http",
-      "url": "http://localhost:25900/mcp",
-      "headers": {
-        "Authorization": "Bearer  asdasdasdas"
-      }
+      "url": "https://your-hub.example.com/mcp"
     }
   }
 }`;
@@ -178,6 +175,11 @@ export function McpServerPage() {
                 <code className="font-mono text-[#c4a3f8]">claude_desktop_config.json</code>,
                 Codex, OpenCode) добавьте GPT‑Админ как MCP remote SSE (Streamable HTTP):
                 <ConfigBlock />
+                <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
+                  Этот endpoint проходит через OAuth flow. Не подставляйте сюда{" "}
+                  <code>CTL_TOKEN</code> вручную как bearer для <code>/mcp</code>.
+                  Для подробностей смотрите раздел <code>#/docs</code>.
+                </p>
               </Step>
             </StaggerItem>
             <StaggerItem>
