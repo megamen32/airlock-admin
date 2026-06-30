@@ -141,9 +141,19 @@ fi
 echo
 section 'POST-INSTALL LAUNCHD STATUS'
 launchctl list | grep -E 'com\.gptadmin\.(hub|shellmcp|frpc)' || true
+mask_sensitive_output() {
+  python3 -c '
+import re, sys
+text = sys.stdin.read()
+text = re.sub(r"eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+", "***JWT_MASKED***", text)
+text = re.sub(r"((?:GPTADMIN_[A-Z0-9_]*(?:TOKEN|BEARER)|CTL_TOKEN|ROOTD_TOKEN)\s*(?:=>|=)\s*)\S+", r"\1***MASKED***", text)
+sys.stdout.write(text)
+'
+}
+
 for label in com.gptadmin.hub com.gptadmin.shellmcp com.gptadmin.frpc; do
   echo "--- $label ---"
-  launchctl print "gui/$UIDN/$label" 2>&1 | sed -n '1,55p' || true
+  launchctl print "gui/$UIDN/$label" 2>&1 | mask_sensitive_output | sed -n '1,55p' || true
 done
 
 echo
