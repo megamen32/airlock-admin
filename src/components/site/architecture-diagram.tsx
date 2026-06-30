@@ -334,14 +334,14 @@ function ForkLayer({
   // Line endpoints based on shape
   const lines = shape === "converge"
     ? [   // top 3 → bottom center:  \|/
-        { x1: 50,  y1: 4, x2: 150, y2: 56 },
-        { x1: 150, y1: 4, x2: 150, y2: 56 },
-        { x1: 250, y1: 4, x2: 150, y2: 56 },
+        { x1: 30,  y1: 4, x2: 150, y2: 76 },
+        { x1: 150, y1: 4, x2: 150, y2: 76 },
+        { x1: 270, y1: 4, x2: 150, y2: 76 },
       ]
     : [   // top center → bottom 3:  /|\
-        { x1: 150, y1: 4, x2: 50,  y2: 56 },
-        { x1: 150, y1: 4, x2: 150, y2: 56 },
-        { x1: 150, y1: 4, x2: 250, y2: 56 },
+        { x1: 150, y1: 4, x2: 30,  y2: 76 },
+        { x1: 150, y1: 4, x2: 150, y2: 76 },
+        { x1: 150, y1: 4, x2: 270, y2: 76 },
       ];
 
   return (
@@ -353,7 +353,7 @@ function ForkLayer({
       className="flex flex-col items-center"
     >
       {/* labels row (desktop only) */}
-      <div className="hidden w-full max-w-md grid-cols-3 gap-1 sm:grid">
+      <div className="hidden w-full grid-cols-3 gap-1 sm:grid">
         {columns.map((c, i) => (
           <div key={i} className="flex flex-col items-center">
             <div className="flex items-center gap-1 rounded-full border border-border/50 bg-white/[0.02] px-1.5 py-0.5">
@@ -366,9 +366,9 @@ function ForkLayer({
 
       {/* SVG fork */}
       <svg
-        viewBox="0 0 300 60"
-        className="h-10 w-full max-w-md sm:h-12"
-        preserveAspectRatio="xMidYMid meet"
+        viewBox="0 0 300 80"
+        className="h-12 w-full sm:h-16"
+        preserveAspectRatio="none"
         aria-hidden
       >
         <defs>
@@ -392,7 +392,7 @@ function ForkLayer({
       </svg>
 
       {/* sub-labels (desktop only) */}
-      <div className="hidden w-full max-w-md grid-cols-3 gap-1 sm:grid">
+      <div className="hidden w-full grid-cols-3 gap-1 sm:grid">
         {columns.map((c, i) => (
           <p key={i} className="text-center text-[9px] leading-tight text-muted-foreground/50">{c.sub}</p>
         ))}
