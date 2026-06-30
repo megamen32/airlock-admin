@@ -48,6 +48,40 @@ export function DocsPage() {
       />
 
       <DocSection
+        id="web-panel"
+        icon={ShieldAlert}
+        title="Веб‑панель после установки"
+        kicker="/admin"
+        lead="Откройте браузер — управляйте хабом без терминала."
+      >
+        <p className="text-sm leading-relaxed text-muted-foreground">
+          После установки откройте{" "}
+          <code className="rounded border border-primary/30 bg-primary/[0.06] px-1.5 py-0.5 font-mono text-[13px] text-primary">
+            https://your-hub.bezrabotnyi.com/admin
+          </code>{" "}
+          в браузере. Введите <code>CTL_TOKEN</code> — и вы увидите:
+        </p>
+        <div className="mt-4 grid gap-3 sm:grid-cols-2">
+          <div className="rounded-xl border border-border/60 bg-white/[0.02] p-4">
+            <p className="text-sm font-semibold text-foreground">Обзор</p>
+            <p className="mt-1 text-xs text-muted-foreground">Агенты online/offline/stale, клиенты, очереди, фоновые jobs — одной страницей.</p>
+          </div>
+          <div className="rounded-xl border border-border/60 bg-white/[0.02] p-4">
+            <p className="text-sm font-semibold text-foreground">Jobs и очереди</p>
+            <p className="mt-1 text-xs text-muted-foreground">Каждая команда с подсветкой JSON. Кнопка «отменить» для running/queued.</p>
+          </div>
+          <div className="rounded-xl border border-border/60 bg-white/[0.02] p-4">
+            <p className="text-sm font-semibold text-foreground">MCP tools tester</p>
+            <p className="mt-1 text-xs text-muted-foreground">Вызовите любой tool прямо из браузера, без AI. С фоновым режимом.</p>
+          </div>
+          <div className="rounded-xl border border-border/60 bg-white/[0.02] p-4">
+            <p className="text-sm font-semibold text-foreground">Audit log</p>
+            <p className="mt-1 text-xs text-muted-foreground">Каждый вызов: кто, откуда, что запускал, результат — с подсветкой.</p>
+          </div>
+        </div>
+      </DocSection>
+
+      <DocSection
         id="truth"
         icon={ShieldAlert}
         title="Аутентификация: что и где используется"
