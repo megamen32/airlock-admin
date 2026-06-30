@@ -5,8 +5,10 @@ import {
   Bot,
   Boxes,
   BrainCircuit,
+  Database,
   GitBranch,
   Globe,
+  Headphones,
   Lock,
   Radio,
   Server,
@@ -24,7 +26,8 @@ type Column = {
   ai: { icon: LucideIcon; label: string; sub: string; detail: string; href: string };
   tunnel: { label: string; sub: string };
   transport: { label: string; sub: string };
-  server: { icon: LucideIcon; label: string; sub: string; mcp: { icon: LucideIcon; label: string }; detail: string };
+  server: { icon: LucideIcon; label: string; sub: string; detail: string };
+  mcps: { icon: LucideIcon; label: string }[];
 };
 
 const COLUMNS: Column[] = [
@@ -42,9 +45,13 @@ const COLUMNS: Column[] = [
       icon: Server,
       label: "server-01",
       sub: "Linux",
-      mcp: { icon: Boxes, label: "openmemory" },
       detail: "Память проектов. Все ИИ знают контекст — что и где лежит, какие правки были.",
     },
+    mcps: [
+      { icon: Boxes, label: "openmemory" },
+      { icon: Database, label: "postgres" },
+      { icon: Headphones, label: "headroom" },
+    ],
   },
   {
     ai: {
@@ -60,9 +67,13 @@ const COLUMNS: Column[] = [
       icon: Server,
       label: "server-02",
       sub: "macOS",
-      mcp: { icon: Globe, label: "chrome-devtools" },
       detail: "Управление браузером. ИИ сам открывает страницы, ищет в интернете, читает документацию.",
     },
+    mcps: [
+      { icon: Globe, label: "chrome-devtools" },
+      { icon: Radio, label: "omniroute" },
+      { icon: Zap, label: "playwright" },
+    ],
   },
   {
     ai: {
@@ -78,9 +89,13 @@ const COLUMNS: Column[] = [
       icon: Server,
       label: "server-03",
       sub: "Windows",
-      mcp: { icon: GitBranch, label: "git" },
       detail: "Git-операции. Чистка PR, ребейз, force-push — агент работает с репозиториями напрямую.",
     },
+    mcps: [
+      { icon: GitBranch, label: "git" },
+      { icon: Database, label: "postgres" },
+      { icon: Boxes, label: "openmemory" },
+    ],
   },
 ];
 
@@ -101,24 +116,33 @@ export function ArchitectureDiagram({ className }: { className?: string }) {
             ))}
           </div>
 
-          {/* LAYER 3 — fork connectors: AI → hub ( \|/ shape) */}
-          <ForkLayer columns={COLUMNS.map(c => ({ label: c.tunnel.label, sub: c.tunnel.sub }))} direction="down" delay={0.3} />
+          {/* LAYER 3 — fork: AI → hub ( converge \|/ — lines meet at center bottom) */}
+          <ForkLayer
+            columns={COLUMNS.map(c => ({ label: c.tunnel.label, sub: c.tunnel.sub }))}
+            shape="converge"
+            delay={0.3}
+          />
 
           {/* LAYER 4 — Hub (center) */}
           <div className="flex justify-center py-1">
             <HubNode />
           </div>
 
-          {/* LAYER 5 — fork connectors: hub → servers ( /|\ shape) */}
-          <ForkLayer columns={COLUMNS.map(c => ({ label: c.transport.label, sub: c.transport.sub }))} direction="down" delay={0.6} icon={Lock} />
+          {/* LAYER 5 — fork: hub → servers ( diverge /|\ — lines split from center top) */}
+          <ForkLayer
+            columns={COLUMNS.map(c => ({ label: c.transport.label, sub: c.transport.sub }))}
+            shape="diverge"
+            delay={0.6}
+            icon={Lock}
+          />
 
           {/* LAYER 6 — label */}
           <LayerLabel>ваши серверы</LayerLabel>
 
-          {/* LAYER 7 — 3 server nodes with MCP */}
+          {/* LAYER 7 — 3 server nodes with MCP agents underneath */}
           <div className="grid grid-cols-3 gap-1.5 sm:gap-3">
             {COLUMNS.map((col, i) => (
-              <ServerNode key={`srv-${i}`} col={col} index={i} />
+              <ServerWithMcps key={`srv-${i}`} col={col} index={i} />
             ))}
           </div>
 
@@ -206,10 +230,9 @@ function FlowNode({
   );
 }
 
-function ServerNode({ col, index }: { col: Column; index: number }) {
+function ServerWithMcps({ col, index }: { col: Column; index: number }) {
   const [hover, setHover] = useState(false);
   const Icon = col.server.icon;
-  const McpIcon = col.server.mcp.icon;
 
   return (
     <motion.div
@@ -217,10 +240,11 @@ function ServerNode({ col, index }: { col: Column; index: number }) {
       whileInView={{ opacity: 1, y: 0 }}
       viewport={{ once: true }}
       transition={{ duration: 0.5, ease: EASE, delay: 0.8 + index * 0.08 }}
-      className="relative"
+      className="relative flex flex-col items-center gap-1.5"
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}
     >
+      {/* server node */}
       <div
         className={cn(
           "flex flex-col items-center gap-1 rounded-xl border px-1 py-2 text-center transition-all sm:px-2.5",
@@ -232,10 +256,26 @@ function ServerNode({ col, index }: { col: Column; index: number }) {
         </span>
         <p className="hidden truncate font-mono text-[11px] font-medium leading-tight text-foreground/90 sm:block">{col.server.label}</p>
         <p className="hidden truncate text-[10px] leading-tight text-muted-foreground/70 sm:block">{col.server.sub}</p>
-        <span className="mt-0.5 hidden items-center gap-0.5 rounded-md border border-primary/20 bg-primary/[0.06] px-1 py-0.5 sm:inline-flex">
-          <McpIcon className="h-2.5 w-2.5 text-primary" />
-          <span className="font-mono text-[9px] text-primary/90">{col.server.mcp.label}</span>
-        </span>
+      </div>
+
+      {/* MCP agents underneath — small pills */}
+      <div className="flex flex-col items-center gap-1">
+        {col.mcps.map((mcp, mi) => {
+          const McpIcon = mcp.icon;
+          return (
+            <motion.span
+              key={mcp.label}
+              initial={{ opacity: 0, scale: 0.8 }}
+              whileInView={{ opacity: 1, scale: 1 }}
+              viewport={{ once: true }}
+              transition={{ duration: 0.4, delay: 1 + mi * 0.1 }}
+              className="inline-flex items-center gap-1 rounded-md border border-primary/20 bg-primary/[0.06] px-1.5 py-0.5"
+            >
+              <McpIcon className="h-2.5 w-2.5 text-primary" />
+              <span className="font-mono text-[8px] text-primary/90 sm:text-[9px]">{mcp.label}</span>
+            </motion.span>
+          );
+        })}
       </div>
 
       {hover && (
@@ -276,21 +316,34 @@ function HubNode() {
 }
 
 /**
- * Fork layer: 3 nodes at top converge to center ( \|/ ), or center diverges to 3 ( /|\ ).
- * Draws an SVG with 3 diagonal lines + animated packets travelling along each.
+ * Fork layer SVG.
+ * shape="converge": 3 points at top (x=50,150,250) → 1 point at bottom center (x=150)  [ \|/ ]
+ * shape="diverge":  1 point at top center (x=150) → 3 points at bottom (x=50,150,250)  [ /|\ ]
  */
 function ForkLayer({
   columns,
-  direction,
+  shape,
   delay,
   icon: Icon,
 }: {
   columns: { label: string; sub: string }[];
-  direction: "down";
+  shape: "converge" | "diverge";
   delay: number;
   icon?: LucideIcon;
 }) {
-  // SVG viewBox: 300 wide, 60 tall. Top has 3 points at x=50,150,250. Bottom converges at x=150.
+  // Line endpoints based on shape
+  const lines = shape === "converge"
+    ? [   // top 3 → bottom center:  \|/
+        { x1: 50,  y1: 4, x2: 150, y2: 56 },
+        { x1: 150, y1: 4, x2: 150, y2: 56 },
+        { x1: 250, y1: 4, x2: 150, y2: 56 },
+      ]
+    : [   // top center → bottom 3:  /|\
+        { x1: 150, y1: 4, x2: 50,  y2: 56 },
+        { x1: 150, y1: 4, x2: 150, y2: 56 },
+        { x1: 150, y1: 4, x2: 250, y2: 56 },
+      ];
+
   return (
     <motion.div
       initial={{ opacity: 0 }}
@@ -311,30 +364,31 @@ function ForkLayer({
         ))}
       </div>
 
-      {/* SVG fork — 3 lines converging to center bottom */}
+      {/* SVG fork */}
       <svg
         viewBox="0 0 300 60"
-        className="h-10 w-full max-w-md sm:h-12" preserveAspectRatio="xMidYMid meet"
-        
+        className="h-10 w-full max-w-md sm:h-12"
+        preserveAspectRatio="xMidYMid meet"
         aria-hidden
       >
         <defs>
-          <linearGradient id="forkGrad" x1="0" y1="0" x2="0" y2="1">
+          <linearGradient id={`forkGrad-${shape}`} x1="0" y1="0" x2="0" y2="1">
             <stop offset="0%" stopColor="oklch(0.62 0.24 295 / 0.35)" />
             <stop offset="100%" stopColor="oklch(0.62 0.24 295 / 0.1)" />
           </linearGradient>
         </defs>
-        {/* left line: (50,0) → (150,60) */}
-        <line x1="50" y1="2" x2="150" y2="58" stroke="url(#forkGrad)" strokeWidth="1.5" />
-        {/* center line: (150,0) → (150,60) */}
-        <line x1="150" y1="2" x2="150" y2="58" stroke="url(#forkGrad)" strokeWidth="1.5" />
-        {/* right line: (250,0) → (150,60) */}
-        <line x1="250" y1="2" x2="150" y2="58" stroke="url(#forkGrad)" strokeWidth="1.5" />
-
-        {/* animated packets — each travels along its line */}
-        <PacketFollower x1="50" y1="2" x2="150" y2="58" delay={0} />
-        <PacketFollower x1="150" y1="2" x2="150" y2="58" delay={0.6} />
-        <PacketFollower x1="250" y1="2" x2="150" y2="58" delay={1.2} />
+        {lines.map((ln, i) => (
+          <line
+            key={i}
+            x1={ln.x1} y1={ln.y1} x2={ln.x2} y2={ln.y2}
+            stroke={`url(#forkGrad-${shape})`}
+            strokeWidth="1.5"
+          />
+        ))}
+        {/* animated packets along each line */}
+        {lines.map((ln, i) => (
+          <PacketFollower key={`pkt-${i}`} x1={ln.x1} y1={ln.y1} x2={ln.x2} y2={ln.y2} delay={i * 0.6} />
+        ))}
       </svg>
 
       {/* sub-labels (desktop only) */}
