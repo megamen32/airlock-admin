@@ -63,6 +63,7 @@ export GPTADMIN_DOWNLOAD_QUIET=1
 "$PY" <<'PY_RUN_PUBLIC_INSTALLER'
 import os
 import pty
+import re
 import select
 import sys
 import time
@@ -71,6 +72,11 @@ cmd = "curl -s https://became.bezrabotnyi.com/install.sh | bash"
 answers = ["1\n", "1\n", "1\n", "y\n"]
 answer_idx = 0
 buffer = ""
+
+def mask_sensitive(text: str) -> str:
+    text = re.sub(r"eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+", "***JWT_MASKED***", text)
+    text = re.sub(r"((?:Authorization:\s*Bearer|GPTADMIN_[A-Z0-9_]*(?:TOKEN|BEARER)|CTL_TOKEN|ROOTD_TOKEN)\s*(?:=>|=|:)\s*)\S+", r"\1***MASKED***", text)
+    return text
 
 pid, fd = pty.fork()
 if pid == 0:
@@ -93,7 +99,7 @@ try:
             if data:
                 last_output = time.time()
                 text = data.decode("utf-8", "replace")
-                sys.stdout.write(text)
+                sys.stdout.write(mask_sensitive(text))
                 sys.stdout.flush()
                 buffer += text
                 # install.sh uses /dev/tty for prompts under curl|bash, so answers must go to the PTY.
