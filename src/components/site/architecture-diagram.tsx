@@ -7,14 +7,15 @@ import {
   BrainCircuit,
   Database,
   GitBranch,
-  Globe,
-  Headphones,
+  Gamepad2,
   Lock,
   Radio,
+  Router,
   Server,
+  Shield,
+  Wifi,
   Sparkles,
   Terminal,
-  Zap,
   type LucideIcon,
 } from "lucide-react";
 import { useState } from "react";
@@ -42,15 +43,15 @@ const COLUMNS: Column[] = [
     tunnel: { label: "Streamable HTTP", sub: "через туннель" },
     transport: { label: "long-poll", sub: "пробивает любой NAT" },
     server: {
-      icon: Server,
-      label: "server-01",
-      sub: "Linux",
-      detail: "Память проектов. Все ИИ знают контекст — что и где лежит, какие правки были.",
+      icon: Router,
+      label: "OpenWRT",
+      sub: "router",
+      detail: "Роутер на краю сети: firewall, VPN, маршруты и пробросы без ручного SSH-квеста.",
     },
     mcps: [
-      { icon: Boxes, label: "openmemory" },
-      { icon: Database, label: "postgres" },
-      { icon: Headphones, label: "headroom" },
+      { icon: Shield, label: "firewall" },
+      { icon: Wifi, label: "wifi" },
+      { icon: Radio, label: "vpn" },
     ],
   },
   {
@@ -66,13 +67,13 @@ const COLUMNS: Column[] = [
     server: {
       icon: Server,
       label: "server-02",
-      sub: "macOS",
-      detail: "Управление браузером. ИИ сам открывает страницы, ищет в интернете, читает документацию.",
+      sub: "Windows",
+      detail: "Windows-сервер для игровых и desktop-задач: Minecraft, RCON, файлы и автоматизация.",
     },
     mcps: [
-      { icon: Globe, label: "chrome-devtools" },
-      { icon: Radio, label: "omniroute" },
-      { icon: Zap, label: "playwright" },
+      { icon: Gamepad2, label: "minecraft" },
+      { icon: Terminal, label: "powershell" },
+      { icon: Radio, label: "rcon" },
     ],
   },
   {
@@ -332,16 +333,15 @@ function ForkLayer({
 }) {
   const paths = shape === "converge"
     ? [
-        "M 18 8 C 78 18, 112 44, 150 72",
-        "M 150 7 C 150 28, 150 51, 150 72",
-        "M 282 8 C 222 18, 188 44, 150 72",
+        "M 18 10 C 72 16, 110 42, 150 72",
+        "M 150 10 C 150 28, 150 52, 150 72",
+        "M 282 10 C 228 16, 190 42, 150 72",
       ]
     : [
-        "M 150 8 C 112 36, 78 62, 18 72",
-        "M 150 8 C 150 29, 150 52, 150 72",
-        "M 150 8 C 188 36, 222 62, 282 72",
+        "M 150 8 C 110 38, 72 64, 18 70",
+        "M 150 8 C 150 28, 150 52, 150 72",
+        "M 150 8 C 190 38, 228 64, 282 70",
       ];
-  const joint = shape === "converge" ? { cx: 150, cy: 72 } : { cx: 150, cy: 8 };
 
   return (
     <motion.div
@@ -372,31 +372,24 @@ function ForkLayer({
       >
         <defs>
           <linearGradient id={`forkLine-${shape}`} x1="0" y1="0" x2="1" y2="0">
-            <stop offset="0%" stopColor="oklch(0.62 0.24 295 / 0.04)" />
-            <stop offset="22%" stopColor="oklch(0.66 0.23 295 / 0.28)" />
-            <stop offset="50%" stopColor="oklch(0.74 0.18 295 / 0.46)" />
-            <stop offset="78%" stopColor="oklch(0.66 0.23 295 / 0.28)" />
-            <stop offset="100%" stopColor="oklch(0.62 0.24 295 / 0.04)" />
+            <stop offset="0%" stopColor="oklch(0.62 0.24 295 / 0.10)" />
+            <stop offset="20%" stopColor="oklch(0.66 0.23 295 / 0.34)" />
+            <stop offset="50%" stopColor="oklch(0.78 0.16 295 / 0.62)" />
+            <stop offset="80%" stopColor="oklch(0.66 0.23 295 / 0.34)" />
+            <stop offset="100%" stopColor="oklch(0.62 0.24 295 / 0.10)" />
           </linearGradient>
-          <radialGradient id={`forkGlow-${shape}`} cx="50%" cy={shape === "converge" ? "90%" : "10%"} r="62%">
-            <stop offset="0%" stopColor="oklch(0.74 0.18 295 / 0.32)" />
-            <stop offset="42%" stopColor="oklch(0.62 0.24 295 / 0.12)" />
-            <stop offset="100%" stopColor="oklch(0.62 0.24 295 / 0)" />
-          </radialGradient>
           <filter id={`forkBlur-${shape}`} x="-20%" y="-30%" width="140%" height="160%">
-            <feGaussianBlur stdDeviation="2.2" />
+            <feGaussianBlur stdDeviation="1.25" />
           </filter>
         </defs>
-
-        <rect width="300" height="80" fill={`url(#forkGlow-${shape})`} opacity="0.42" />
 
         {paths.map((d, i) => (
           <g key={i}>
             <path
               d={d}
               fill="none"
-              stroke="oklch(0.62 0.24 295 / 0.16)"
-              strokeWidth="5"
+              stroke="oklch(0.62 0.24 295 / 0.12)"
+              strokeWidth="3.5"
               strokeLinecap="round"
               filter={`url(#forkBlur-${shape})`}
             />
@@ -404,14 +397,12 @@ function ForkLayer({
               d={d}
               fill="none"
               stroke={`url(#forkLine-${shape})`}
-              strokeWidth="1.35"
+              strokeWidth="1.65"
               strokeLinecap="round"
             />
           </g>
         ))}
 
-        <circle cx={joint.cx} cy={joint.cy} r="2.4" fill="oklch(0.76 0.17 295 / 0.72)" />
-        <circle cx={joint.cx} cy={joint.cy} r="8" fill="none" stroke="oklch(0.70 0.20 295 / 0.10)" strokeWidth="1" />
       </svg>
 
       {/* sub-labels (desktop only) */}
