@@ -316,9 +316,8 @@ function HubNode() {
 }
 
 /**
- * Fork layer SVG.
- * shape="converge": 3 points at top (x=50,150,250) → 1 point at bottom center (x=150)  [ \|/ ]
- * shape="diverge":  1 point at top center (x=150) → 3 points at bottom (x=50,150,250)  [ /|\ ]
+ * Static fork layer SVG.
+ * No moving packets: just quiet, layered curves with a soft center glow.
  */
 function ForkLayer({
   columns,
@@ -331,18 +330,18 @@ function ForkLayer({
   delay: number;
   icon?: LucideIcon;
 }) {
-  // Line endpoints based on shape
-  const lines = shape === "converge"
-    ? [   // top 3 → bottom center:  \|/
-        { x1: 30,  y1: 4, x2: 150, y2: 76 },
-        { x1: 150, y1: 4, x2: 150, y2: 76 },
-        { x1: 270, y1: 4, x2: 150, y2: 76 },
+  const paths = shape === "converge"
+    ? [
+        "M 18 8 C 78 18, 112 44, 150 72",
+        "M 150 7 C 150 28, 150 51, 150 72",
+        "M 282 8 C 222 18, 188 44, 150 72",
       ]
-    : [   // top center → bottom 3:  /|\
-        { x1: 150, y1: 4, x2: 30,  y2: 76 },
-        { x1: 150, y1: 4, x2: 150, y2: 76 },
-        { x1: 150, y1: 4, x2: 270, y2: 76 },
+    : [
+        "M 150 8 C 112 36, 78 62, 18 72",
+        "M 150 8 C 150 29, 150 52, 150 72",
+        "M 150 8 C 188 36, 222 62, 282 72",
       ];
+  const joint = shape === "converge" ? { cx: 150, cy: 72 } : { cx: 150, cy: 8 };
 
   return (
     <motion.div
@@ -364,7 +363,7 @@ function ForkLayer({
         ))}
       </div>
 
-      {/* SVG fork */}
+      {/* Static, soft connection lines */}
       <svg
         viewBox="0 0 300 80"
         className="h-12 w-full sm:h-16"
@@ -372,23 +371,47 @@ function ForkLayer({
         aria-hidden
       >
         <defs>
-          <linearGradient id={`forkGrad-${shape}`} x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="oklch(0.62 0.24 295 / 0.35)" />
-            <stop offset="100%" stopColor="oklch(0.62 0.24 295 / 0.1)" />
+          <linearGradient id={`forkLine-${shape}`} x1="0" y1="0" x2="1" y2="0">
+            <stop offset="0%" stopColor="oklch(0.62 0.24 295 / 0.04)" />
+            <stop offset="22%" stopColor="oklch(0.66 0.23 295 / 0.28)" />
+            <stop offset="50%" stopColor="oklch(0.74 0.18 295 / 0.46)" />
+            <stop offset="78%" stopColor="oklch(0.66 0.23 295 / 0.28)" />
+            <stop offset="100%" stopColor="oklch(0.62 0.24 295 / 0.04)" />
           </linearGradient>
+          <radialGradient id={`forkGlow-${shape}`} cx="50%" cy={shape === "converge" ? "90%" : "10%"} r="62%">
+            <stop offset="0%" stopColor="oklch(0.74 0.18 295 / 0.32)" />
+            <stop offset="42%" stopColor="oklch(0.62 0.24 295 / 0.12)" />
+            <stop offset="100%" stopColor="oklch(0.62 0.24 295 / 0)" />
+          </radialGradient>
+          <filter id={`forkBlur-${shape}`} x="-20%" y="-30%" width="140%" height="160%">
+            <feGaussianBlur stdDeviation="2.2" />
+          </filter>
         </defs>
-        {lines.map((ln, i) => (
-          <line
-            key={i}
-            x1={ln.x1} y1={ln.y1} x2={ln.x2} y2={ln.y2}
-            stroke={`url(#forkGrad-${shape})`}
-            strokeWidth="1.5"
-          />
+
+        <rect width="300" height="80" fill={`url(#forkGlow-${shape})`} opacity="0.42" />
+
+        {paths.map((d, i) => (
+          <g key={i}>
+            <path
+              d={d}
+              fill="none"
+              stroke="oklch(0.62 0.24 295 / 0.16)"
+              strokeWidth="5"
+              strokeLinecap="round"
+              filter={`url(#forkBlur-${shape})`}
+            />
+            <path
+              d={d}
+              fill="none"
+              stroke={`url(#forkLine-${shape})`}
+              strokeWidth="1.35"
+              strokeLinecap="round"
+            />
+          </g>
         ))}
-        {/* animated packets along each line */}
-        {lines.map((ln, i) => (
-          <PacketFollower key={`pkt-${i}`} x1={ln.x1} y1={ln.y1} x2={ln.x2} y2={ln.y2} delay={i * 0.6} />
-        ))}
+
+        <circle cx={joint.cx} cy={joint.cy} r="2.4" fill="oklch(0.76 0.17 295 / 0.72)" />
+        <circle cx={joint.cx} cy={joint.cy} r="8" fill="none" stroke="oklch(0.70 0.20 295 / 0.10)" strokeWidth="1" />
       </svg>
 
       {/* sub-labels (desktop only) */}
@@ -401,30 +424,3 @@ function ForkLayer({
   );
 }
 
-/** Animated circle following a line path via SMIL animateMotion. */
-function PacketFollower({
-  x1, y1, x2, y2, delay,
-}: {
-  x1: number; y1: number; x2: number; y2: number; delay: number;
-}) {
-  const path = `M${x1},${y1} L${x2},${y2}`;
-  return (
-    <circle r="2.5" fill="oklch(0.78 0.16 295)" style={{ filter: "drop-shadow(0 0 4px oklch(0.62 0.24 295 / 0.8))" }}>
-      <animateMotion
-        dur="1.8s"
-        repeatCount="indefinite"
-        begin={`${delay}s`}
-        path={path}
-        keyPoints="0;1"
-        keyTimes="0;1"
-      />
-      <animate
-        attributeName="opacity"
-        values="0;1;1;0"
-        dur="1.8s"
-        begin={`${delay}s`}
-        repeatCount="indefinite"
-      />
-    </circle>
-  );
-}
