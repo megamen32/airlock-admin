@@ -7,14 +7,15 @@ import {
   BrainCircuit,
   Database,
   GitBranch,
-  Globe,
-  Headphones,
+  Gamepad2,
   Lock,
   Radio,
+  Router,
   Server,
+  Shield,
+  Wifi,
   Sparkles,
   Terminal,
-  Zap,
   type LucideIcon,
 } from "lucide-react";
 import { useState } from "react";
@@ -42,15 +43,15 @@ const COLUMNS: Column[] = [
     tunnel: { label: "Streamable HTTP", sub: "через туннель" },
     transport: { label: "long-poll", sub: "пробивает любой NAT" },
     server: {
-      icon: Server,
-      label: "server-01",
-      sub: "Linux",
-      detail: "Память проектов. Все ИИ знают контекст — что и где лежит, какие правки были.",
+      icon: Router,
+      label: "OpenWRT",
+      sub: "router",
+      detail: "Роутер на краю сети: firewall, VPN, маршруты и пробросы без ручного SSH-квеста.",
     },
     mcps: [
-      { icon: Boxes, label: "openmemory" },
-      { icon: Database, label: "postgres" },
-      { icon: Headphones, label: "headroom" },
+      { icon: Shield, label: "firewall" },
+      { icon: Wifi, label: "wifi" },
+      { icon: Radio, label: "vpn" },
     ],
   },
   {
@@ -66,13 +67,13 @@ const COLUMNS: Column[] = [
     server: {
       icon: Server,
       label: "server-02",
-      sub: "macOS",
-      detail: "Управление браузером. ИИ сам открывает страницы, ищет в интернете, читает документацию.",
+      sub: "Windows",
+      detail: "Windows-сервер для игровых и desktop-задач: Minecraft, RCON, файлы и автоматизация.",
     },
     mcps: [
-      { icon: Globe, label: "chrome-devtools" },
-      { icon: Radio, label: "omniroute" },
-      { icon: Zap, label: "playwright" },
+      { icon: Gamepad2, label: "minecraft" },
+      { icon: Terminal, label: "powershell" },
+      { icon: Radio, label: "rcon" },
     ],
   },
   {
@@ -316,9 +317,8 @@ function HubNode() {
 }
 
 /**
- * Fork layer SVG.
- * shape="converge": 3 points at top (x=50,150,250) → 1 point at bottom center (x=150)  [ \|/ ]
- * shape="diverge":  1 point at top center (x=150) → 3 points at bottom (x=50,150,250)  [ /|\ ]
+ * Static fork layer SVG.
+ * No moving packets: just quiet, layered curves with a soft center glow.
  */
 function ForkLayer({
   columns,
@@ -331,17 +331,16 @@ function ForkLayer({
   delay: number;
   icon?: LucideIcon;
 }) {
-  // Line endpoints based on shape
-  const lines = shape === "converge"
-    ? [   // top 3 → bottom center:  \|/
-        { x1: 30,  y1: 4, x2: 150, y2: 76 },
-        { x1: 150, y1: 4, x2: 150, y2: 76 },
-        { x1: 270, y1: 4, x2: 150, y2: 76 },
+  const paths = shape === "converge"
+    ? [
+        "M 18 10 C 72 16, 110 42, 150 72",
+        "M 150 10 C 150 28, 150 52, 150 72",
+        "M 282 10 C 228 16, 190 42, 150 72",
       ]
-    : [   // top center → bottom 3:  /|\
-        { x1: 150, y1: 4, x2: 30,  y2: 76 },
-        { x1: 150, y1: 4, x2: 150, y2: 76 },
-        { x1: 150, y1: 4, x2: 270, y2: 76 },
+    : [
+        "M 150 8 C 110 38, 72 64, 18 70",
+        "M 150 8 C 150 28, 150 52, 150 72",
+        "M 150 8 C 190 38, 228 64, 282 70",
       ];
 
   return (
@@ -364,7 +363,7 @@ function ForkLayer({
         ))}
       </div>
 
-      {/* SVG fork */}
+      {/* Static, soft connection lines */}
       <svg
         viewBox="0 0 300 80"
         className="h-12 w-full sm:h-16"
@@ -372,23 +371,38 @@ function ForkLayer({
         aria-hidden
       >
         <defs>
-          <linearGradient id={`forkGrad-${shape}`} x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="oklch(0.62 0.24 295 / 0.35)" />
-            <stop offset="100%" stopColor="oklch(0.62 0.24 295 / 0.1)" />
+          <linearGradient id={`forkLine-${shape}`} x1="0" y1="0" x2="1" y2="0">
+            <stop offset="0%" stopColor="oklch(0.62 0.24 295 / 0.10)" />
+            <stop offset="20%" stopColor="oklch(0.66 0.23 295 / 0.34)" />
+            <stop offset="50%" stopColor="oklch(0.78 0.16 295 / 0.62)" />
+            <stop offset="80%" stopColor="oklch(0.66 0.23 295 / 0.34)" />
+            <stop offset="100%" stopColor="oklch(0.62 0.24 295 / 0.10)" />
           </linearGradient>
+          <filter id={`forkBlur-${shape}`} x="-20%" y="-30%" width="140%" height="160%">
+            <feGaussianBlur stdDeviation="1.25" />
+          </filter>
         </defs>
-        {lines.map((ln, i) => (
-          <line
-            key={i}
-            x1={ln.x1} y1={ln.y1} x2={ln.x2} y2={ln.y2}
-            stroke={`url(#forkGrad-${shape})`}
-            strokeWidth="1.5"
-          />
+
+        {paths.map((d, i) => (
+          <g key={i}>
+            <path
+              d={d}
+              fill="none"
+              stroke="oklch(0.62 0.24 295 / 0.12)"
+              strokeWidth="3.5"
+              strokeLinecap="round"
+              filter={`url(#forkBlur-${shape})`}
+            />
+            <path
+              d={d}
+              fill="none"
+              stroke={`url(#forkLine-${shape})`}
+              strokeWidth="1.65"
+              strokeLinecap="round"
+            />
+          </g>
         ))}
-        {/* animated packets along each line */}
-        {lines.map((ln, i) => (
-          <PacketFollower key={`pkt-${i}`} x1={ln.x1} y1={ln.y1} x2={ln.x2} y2={ln.y2} delay={i * 0.6} />
-        ))}
+
       </svg>
 
       {/* sub-labels (desktop only) */}
@@ -401,30 +415,3 @@ function ForkLayer({
   );
 }
 
-/** Animated circle following a line path via SMIL animateMotion. */
-function PacketFollower({
-  x1, y1, x2, y2, delay,
-}: {
-  x1: number; y1: number; x2: number; y2: number; delay: number;
-}) {
-  const path = `M${x1},${y1} L${x2},${y2}`;
-  return (
-    <circle r="2.5" fill="oklch(0.78 0.16 295)" style={{ filter: "drop-shadow(0 0 4px oklch(0.62 0.24 295 / 0.8))" }}>
-      <animateMotion
-        dur="1.8s"
-        repeatCount="indefinite"
-        begin={`${delay}s`}
-        path={path}
-        keyPoints="0;1"
-        keyTimes="0;1"
-      />
-      <animate
-        attributeName="opacity"
-        values="0;1;1;0"
-        dur="1.8s"
-        begin={`${delay}s`}
-        repeatCount="indefinite"
-      />
-    </circle>
-  );
-}
