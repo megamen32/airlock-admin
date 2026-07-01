@@ -19,3 +19,6 @@ deploy/nginx/*.conf
 
 # private test artifacts; keep in private repo only
 tests/fixtures/private/macinstall.sh
+
+# private GitHub Actions sync workflow; public mirror is pushed by git-private2public
+.github/workflows/build-and-sync.yml
