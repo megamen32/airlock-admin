@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowRight, Zap, Infinity as InfinityIcon, ShieldCheck, KeyRound, FileJson, Check } from "lucide-react";
+import { ArrowRight, Zap, Infinity as InfinityIcon, ShieldCheck, KeyRound, FileJson, Check, MousePointerClick, Eye } from "lucide-react";
 import { PageHero, Step } from "../page-hero";
 import { Reveal, Stagger, StaggerItem } from "../reveal";
 import { InstallCommand } from "../install-command";
@@ -141,6 +141,83 @@ export function ChatGptPage() {
                 «Поставь nginx», «почини сайт», «покажи память». ChatGPT сам вызывает
                 ваш hub, выполняет команды и возвращает отчёт — без лимитов на tool calls.
               </Step>
+            </StaggerItem>
+          </Stagger>
+        </div>
+      </section>
+
+      {/* Apps SDK + auto-confirm */}
+      <section className="relative py-20 sm:py-28">
+        <div className="mx-auto max-w-3xl px-5 sm:px-8">
+          <Reveal className="mb-10 text-center">
+            <h2 className="display text-balance text-3xl font-semibold tracking-tight sm:text-4xl">
+              Ещё мощнее:{" "}
+              <span className="text-gradient-violet">OpenAI Apps SDK</span>
+            </h2>
+          </Reveal>
+
+          <Stagger className="flex flex-col gap-5" stagger={0.1}>
+            <StaggerItem>
+              <div className="surface surface-hover rounded-2xl p-6">
+                <div className="flex items-center gap-3">
+                  <span className="inline-flex h-11 w-11 items-center justify-center rounded-xl border border-primary/20 bg-primary/[0.06]">
+                    <MousePointerClick className="h-5 w-5 text-primary" />
+                  </span>
+                  <h3 className="text-lg font-semibold tracking-tight">Widget прямо в чате</h3>
+                </div>
+                <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
+                  GPT‑Админ отдаёт{" "}
+                  <a
+                    href="https://developers.openai.com/docs/apps"
+                    target="_blank"
+                    rel="noopener"
+                    className="text-primary underline decoration-primary/40 underline-offset-2"
+                  >
+                    Apps SDK widget
+                  </a>{" "}
+                  — прямо в любом чате ChatGPT. ChatGPT сам понимает, когда
+                  нужно прочитать ваш код, выполнить команду или проверить
+                  логи. Виджет показывает input, result и background job
+                  polling — в реальном времени, внутри диалога.
+                </p>
+              </div>
+            </StaggerItem>
+
+            <StaggerItem>
+              <div className="surface surface-hover rounded-2xl p-6">
+                <div className="flex items-center gap-3">
+                  <span className="inline-flex h-11 w-11 items-center justify-center rounded-xl border border-primary/20 bg-primary/[0.06]">
+                    <Eye className="h-5 w-5 text-primary" />
+                  </span>
+                  <h3 className="text-lg font-semibold tracking-tight">Auto‑confirm extension</h3>
+                </div>
+                <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
+                  По умолчанию ChatGPT спрашивает ваше одобрение перед каждой
+                  командой. Хотите автопилот? Установите{" "}
+                  <a
+                    href="https://github.com/megamen32/auto-confirm-extension"
+                    target="_blank"
+                    rel="noopener"
+                    className="text-primary underline decoration-primary/40 underline-offset-2"
+                  >
+                    auto-confirm-extension
+                  </a>{" "}
+                  — расширение для браузера, которое автоматически одобряет
+                  tool calls. Полностью отключаемо: если выключить — ChatGPT
+                  снова будет спрашивать подтверждение на каждую команду.
+                </p>
+                <div className="mt-4 flex flex-wrap gap-3">
+                  <a
+                    href="https://github.com/megamen32/auto-confirm-extension"
+                    target="_blank"
+                    rel="noopener"
+                    className="inline-flex items-center gap-2 rounded-full border border-border/80 bg-white/[0.02] px-4 py-2 text-sm font-medium transition-colors hover:border-primary/40"
+                  >
+                    <ArrowRight className="h-4 w-4 text-primary" />
+                    GitHub · auto-confirm-extension
+                  </a>
+                </div>
+              </div>
             </StaggerItem>
           </Stagger>
         </div>

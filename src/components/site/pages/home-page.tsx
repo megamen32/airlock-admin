@@ -25,7 +25,7 @@ const ADAPTERS: {
     icon: Terminal,
     kicker: "OpenAI Action",
     title: "ChatGPT · Open WebUI",
-    body: "Создайте Custom GPT или добавьте endpoint в Open WebUI: импорт OpenAPI, Bearer‑ключ — и ChatGPT выполняет команды. Без лимитов платного Codex.",
+    body: "Custom GPT, Open WebUI или Apps SDK widget прямо в чате. ChatGPT сам понимает когда выполнить команду. Без лимитов платного Codex.",
     cta: "Как подключить",
   },
   {

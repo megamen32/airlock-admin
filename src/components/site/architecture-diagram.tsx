@@ -81,7 +81,7 @@ const COLUMNS: Column[] = [
       icon: Terminal,
       label: "ChatGPT · OpenUI",
       sub: "OpenAI Action",
-      detail: "Custom GPT или OpenAPI endpoint. Без лимитов платного Codex.",
+      detail: "Custom GPT, OpenAPI endpoint или Apps SDK widget. ChatGPT сам понимает когда выполнить команду. Auto-confirm extension для автопилота.",
       href: "#/chatgpt",
     },
     tunnel: { label: "REST", sub: "через туннель" },
