@@ -22,3 +22,6 @@ tests/fixtures/private/macinstall.sh
 
 # private GitHub Actions sync workflow; public mirror is pushed by git-private2public
 .github/workflows/build-and-sync.yml
+
+# GitHub token used by public mirror has no workflow scope; keep workflows private.
+.github/workflows/
