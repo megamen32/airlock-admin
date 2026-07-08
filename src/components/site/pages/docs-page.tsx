@@ -81,6 +81,62 @@ export function DocsPage() {
         </div>
       </DocSection>
 
+
+
+      <DocSection
+        id="failover"
+        icon={ShieldAlert}
+        title="Failover и degraded recovery"
+        kicker="fallback"
+        lead="Когда один сервер умер, GPTAdmin должен остаться достаточно живым, чтобы показать что случилось и помочь восстановить primary."
+      >
+        <Callout tone="info">
+          <p>
+            Failover в GPTAdmin — это не обещание, что ничего не потеряется. Это режим
+            <strong> alive and degraded</strong>: control plane остаётся доступным, часть свежего
+            in-memory состояния может быть неполной, но recovery trail сохраняется на диске.
+          </p>
+        </Callout>
+        <div className="mt-4 grid gap-3 sm:grid-cols-2">
+          <div className="rounded-xl border border-border/60 bg-white/[0.02] p-4">
+            <p className="text-sm font-semibold text-foreground">Primary умер</p>
+            <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+              Fallback watchdog видит падение public health, ждёт threshold, подтверждает сбой
+              и поднимает локальный hub/proxy через тот же публичный ingress.
+            </p>
+          </div>
+          <div className="rounded-xl border border-border/60 bg-white/[0.02] p-4">
+            <p className="text-sm font-semibold text-foreground">Сервис живёт урезанно</p>
+            <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+              Можно открыть admin UI, проверить живые shell/MCP servers, читать логи и запускать
+              восстановительные команды на доступных машинах.
+            </p>
+          </div>
+          <div className="rounded-xl border border-border/60 bg-white/[0.02] p-4">
+            <p className="text-sm font-semibold text-foreground">Информация не исчезает навсегда</p>
+            <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+              Jobs, большие stdout/stderr, spool files, outbox responses, registry snapshots и
+              failover logs пишутся на диск. Running process на мёртвом узле может пропасть, но
+              его последние артефакты обычно остаются.
+            </p>
+          </div>
+          <div className="rounded-xl border border-border/60 bg-white/[0.02] p-4">
+            <p className="text-sm font-semibold text-foreground">Primary вернулся</p>
+            <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+              Primary отправляет signed reclaim/demote на активный fallback. Fallback перестаёт
+              быть главным и возвращается в standby/client роль.
+            </p>
+          </div>
+        </div>
+        <CodeBlock
+          label="Операторский минимум"
+          code={`gptadmin urls
+systemctl status gptadmin-hub gptadmin-tunnel-frpc --no-pager
+journalctl -u gptadmin-hub -n 120 --no-pager
+find /var/lib/gptadmin -maxdepth 4 -type f | sort | tail -100`}
+        />
+      </DocSection>
+
       <DocSection
         id="truth"
         icon={ShieldAlert}

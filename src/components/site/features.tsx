@@ -59,6 +59,14 @@ const FEATURES: Feature[] = [
 
   {
     icon: ShieldCheck,
+    title: "Failover и восстановление",
+    body: "Если primary умер, fallback держит урезанный control plane: сервис кое-как живёт, jobs/spool/outbox остаются на диске, а вы восстанавливаете инфраструктуру из панели или CLI.",
+    tags: ["watchdog", "spool", "reclaim"],
+    span: "wide",
+  },
+
+  {
+    icon: ShieldCheck,
     title: "MCP proxy/relay",
     body: "Публикует любой MCP‑сервер через защищённый gateway: как нативный MCP endpoint и как OpenAPI Action для Custom GPT.",
     tags: ["/server/{slug}/mcp", "OpenAPI", "Bearer"],

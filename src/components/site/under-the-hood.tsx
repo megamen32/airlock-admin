@@ -1,6 +1,6 @@
 "use client";
 
-import { Activity, Clock, Scissors, Waves, type LucideIcon } from "lucide-react";
+import { Activity, Clock, Scissors, ServerCrash, Waves, type LucideIcon } from "lucide-react";
 import { motion } from "framer-motion";
 import { Stagger, StaggerItem, Reveal } from "./reveal";
 import { SectionHeading, Eyebrow } from "./section-heading";
@@ -25,6 +25,13 @@ const ENGINEERING: Card[] = [
     body: "Долгие операции уходят в фон, агент получает job_id и опрашивает результат — чат не зависает, а команда дорабатывает до конца.",
     tags: ["job_id", "poll", "async"],
   },
+  {
+    icon: ServerCrash,
+    title: "Fallback без чёрной дыры",
+    body: "При падении primary fallback сохраняет доступ к урезанному hub. Часть свежего in-memory состояния может быть неполной, но очереди, spool, outbox и логи лежат на диске и помогают восстановиться.",
+    tags: ["failover", "disk state", "recovery"],
+  },
+
   {
     icon: Scissors,
     title: "Умная обрезка вывода",
