@@ -118,7 +118,7 @@ TTL guide:
 Examples:
 
 ```json
-{"action":"backup","path":"/home/roomhacker/gptadmin/gptadmin_hub.py","ttl_days":30,"label":"before-edit"}
+{"action":"backup","path":"/home/roomhacker/gptadmin/go-hub/internal/hub/server.go","ttl_days":30,"label":"before-edit"}
 ```
 
 ```json

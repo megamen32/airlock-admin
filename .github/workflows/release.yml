@@ -20,7 +20,7 @@ jobs:
           python-version: '3.11'
 
       - name: Install dependencies
-        run: pip install fastapi uvicorn pydantic psutil requests httpx
+        run: pip install psutil requests httpx
 
       - name: Run tests
         run: python -m pytest tests/ -v || true
@@ -29,7 +29,7 @@ jobs:
         run: |
           mkdir -p build
           tar -czf build/gptadmin-${{ github.ref_name }}.tar.gz \
-            hub_proxy.py hub_watchdog.py server_for_installer.py \
+            go-hub/ go-shellmcp/ server_for_installer.py \
             gptadmin_security.py cli.py telegram_logs_bot.py \
             client/ public/ deploy/ tests/ \
             --exclude='*.pyc' --exclude='__pycache__' || true

@@ -27,4 +27,4 @@ Important decisions:
 
 Next preferred refactor:
 
-Move MCP/OAuth directly into Python `gptadmin_hub.py` so gptadmin_hub itself becomes the MCP server. That should reduce dependencies and simplify deployment on Ubuntu, macOS, Home Assistant and small devices.
+MCP/OAuth now live in the Go hub; Python hub implementation has been removed.
