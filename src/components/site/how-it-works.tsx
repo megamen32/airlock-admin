@@ -17,12 +17,13 @@ const STEPS = [
   {
     n: "02",
     title: "Подключение к ChatGPT",
-    body: "Создаёте новое действие в ChatGPT и импортируете OpenAPI-описание. Подставляете свой Hub URL и Bearer-ключ CTL_TOKEN.",
+    body: "Для Custom GPT импортируете OpenAPI: весь hub или только один MCP‑сервер, например OpenMemory. Для MCP‑совместимых клиентов используете /server/{slug}/mcp.",
     steps: [
       "Откройте {{link:https://chatgpt.com/gpts/editor}}chatgpt.com/gpts/editor{{/link}}",
       "Нажмите «Создать новое действие»",
-      "Импорт по URL: {{link:https://became.bezrabotnyi.com/api.json}}became.bezrabotnyi.com/api.json{{/link}}",
+      "Импорт всего hub: {{link:https://became.bezrabotnyi.com/api.json}}became.bezrabotnyi.com/api.json{{/link}}",
       "Замените url в «servers» на свой Hub URL",
+      "Или для одного MCP: https://your-hub/server/openmemory/actions/openapi.yaml",
       "Auth → API ключ, Bearer → CTL_TOKEN",
     ],
   },
@@ -46,7 +47,7 @@ export function HowItWorks() {
               <span className="text-gradient-violet">shellmcp</span>
             </>
           }
-          lead="Hub проксирует команды, shellmcp исполняет их локально и безопасно возвращает результат. От установки до первой команды — пара минут."
+          lead="Hub проксирует команды и MCP tools, shellmcp исполняет локальные задачи, а внешний AI видит только защищённые endpoints: OpenAPI Actions или MCP-compatible URLs."
         />
 
         <Stagger className="mt-16 grid gap-6 lg:grid-cols-3" stagger={0.12}>

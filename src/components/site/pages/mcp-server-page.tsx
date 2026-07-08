@@ -24,6 +24,7 @@ const MCP_CONFIG = `{
 }`;
 
 const CODEX_LOCAL_MCP_COMMAND = "curl -fsSL https://became.bezrabotnyi.com/codex-mcp-mac.sh | bash";
+const PER_SERVER_MCP = "https://your-hub.example/server/openmemory/mcp";
 
 export function McpServerPage() {
   const { navigate } = useHashRoute();
@@ -38,7 +39,7 @@ export function McpServerPage() {
             <span className="text-gradient-violet">Claude · Codex · OpenCode</span>
           </>
         }
-        lead="GPT‑Админ — это MCP remote SSE (Streamable HTTP). Подключите его в настройках клиента — и AI получает единый доступ ко всей инфраструктуре через нативные tool calls. Тот же хаб, что и для других адаптеров."
+        lead="GPT‑Админ — это MCP‑совместимый gateway. Подключайте весь hub или отдельный server URL вида /server/{slug}/mcp — и AI получает нативные tool calls через защищённый relay."
       >
         <div className="inline-flex items-center gap-2 rounded-full border border-primary/25 bg-primary/[0.06] px-3 py-1.5 text-xs font-medium text-primary">
           <Radio className="h-3.5 w-3.5" />
@@ -60,7 +61,7 @@ export function McpServerPage() {
               </h2>
               <p className="mt-5 max-w-md text-base leading-relaxed text-muted-foreground">
                 Hub проксирует команды, shellmcp исполняет их локально. Любой
-                MCP‑совместимый клиент получает доступ к Linux, macOS и Windows машинам.
+                MCP‑совместимый клиент получает доступ к Linux, macOS и Windows машинам или к одному выбранному MCP‑серверу, например OpenMemory.
               </p>
 
               <Stagger className="mt-7 flex w-full flex-col gap-3" stagger={0.08}>
@@ -194,6 +195,7 @@ export function McpServerPage() {
                     <code>bearer_token_env_var</code> и заменяет старый no‑auth MCP entry.
                   </p>
                   <CommandBlock label="macOS · Codex CLI/Desktop" command={CODEX_LOCAL_MCP_COMMAND} />
+                  <CommandBlock label="Per-server MCP endpoint" command={PER_SERVER_MCP} />
                 </div>
               </Step>
             </StaggerItem>

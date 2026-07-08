@@ -38,7 +38,7 @@ export function ChatGptPage() {
             <span className="text-gradient-violet">Codex без лимитов</span>
           </>
         }
-        lead="Создайте Custom GPT с действием (action): импортируйте OpenAPI, подставьте Hub URL и Bearer‑ключ — и ChatGPT сам выполняет команды на серверах. Без API‑лимитов и платного Codex."
+        lead="Создайте Custom GPT с действием (action): импортируйте OpenAPI всего hub или одного MCP‑сервера, подставьте Hub URL и Bearer‑ключ — и ChatGPT вызывает только разрешённые tools. Без API‑лимитов и платного Codex."
       >
         <div className="w-full max-w-xl">
           <InstallCommand variant="compact" />
@@ -115,14 +115,13 @@ export function ChatGptPage() {
             <StaggerItem>
               <Step n={3} title="Создайте новое действие (Action)">
                 В разделе «Configure» → «Actions» → «Create new action». Выберите
-                импорт по URL и вставьте ваш OpenAPI endpoint:
+                импорт по URL и вставьте OpenAPI endpoint всего hub или одного MCP‑сервера:
                 <div className="mt-3 flex items-center gap-2 rounded-xl border border-border/60 bg-[oklch(0.12_0.006_290)] px-3.5 py-2.5 font-mono text-[13px]">
                   <FileJson className="h-4 w-4 shrink-0 text-primary/70" />
-                  <span className="truncate text-foreground/90">became.bezrabotnyi.com/api.json</span>
+                  <span className="truncate text-foreground/90">your-hub/server/openmemory/actions/openapi.yaml</span>
                 </div>
                 <p className="mt-2 text-xs text-muted-foreground">
-                  Затем замените <code className="font-mono text-[#c4a3f8]">url</code> в блоке{" "}
-                  <code className="font-mono text-[#c4a3f8]">servers</code> на свой Hub URL.
+                  Для полного GPTAdmin используйте общий <code className="font-mono text-[#c4a3f8]">/actions/openapi.yaml</code>. Для одного MCP — <code className="font-mono text-[#c4a3f8]">/server/{"{slug}"}/actions/openapi.yaml</code>, например OpenMemory.
                 </p>
               </Step>
             </StaggerItem>
@@ -139,7 +138,7 @@ export function ChatGptPage() {
             <StaggerItem>
               <Step n={5} title="Готово — пишите простыми словами">
                 «Поставь nginx», «почини сайт», «покажи память». ChatGPT сам вызывает
-                ваш hub, выполняет команды и возвращает отчёт — без лимитов на tool calls.
+                защищённый GPTAdmin gateway и получает ответ от выбранного MCP server — без раскрытия всего relay, если выбран per‑server Action.
               </Step>
             </StaggerItem>
           </Stagger>

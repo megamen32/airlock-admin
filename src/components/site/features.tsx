@@ -6,6 +6,7 @@ import {
   Microchip,
   ScrollText,
   Settings2,
+  ShieldCheck,
   Workflow,
   type LucideIcon,
 } from "lucide-react";
@@ -55,6 +56,14 @@ const FEATURES: Feature[] = [
     tags: ["top", "iostat", "iftop", "alerts"],
     span: "wide",
   },
+
+  {
+    icon: ShieldCheck,
+    title: "MCP proxy/relay",
+    body: "Публикует любой MCP‑сервер через защищённый gateway: как нативный MCP endpoint и как OpenAPI Action для Custom GPT.",
+    tags: ["/server/{slug}/mcp", "OpenAPI", "Bearer"],
+    span: "wide",
+  },
   {
     icon: Workflow,
     title: "Интеграции",
@@ -74,11 +83,11 @@ export function Features() {
           eyebrow="Возможности"
           title={
             <>
-              Полноценный админ —{" "}
+              Безопасный gateway —{" "}
               <span className="text-gradient-violet">в одном агенте</span>
             </>
           }
-          lead="GPT‑Админ не просто подсказывает команды. Он читает состояние, вносит изменения, валидирует их и отчитывается реальным выводом."
+          lead="GPT‑Админ не просто подсказывает команды. Он может быть защищённым proxy/relay для MCP: один HTTPS вход, per‑server URL, OpenAPI Actions и нативные MCP tool calls."
         />
 
         <Stagger className="mt-16 grid gap-5 lg:grid-cols-3" stagger={0.07}>
