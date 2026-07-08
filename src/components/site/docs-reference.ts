@@ -281,7 +281,7 @@ export const SHELL_ENV_GROUPS: EnvGroup[] = [
     icon: Server,
     scope: "go-shellmcp/internal/server/server.go",
     rows: [
-      { env: "LOG_LIMIT_B", defaultValue: "8192", purpose: "Max bytes kept from command output logs." },
+      { env: "LOG_LIMIT_B", defaultValue: "65536", purpose: "Per-agent inline stdout/stderr tail budget. Larger output is spooled; hub/client response budgets are separate." },
       { env: "EXEC_TIMEOUT", defaultValue: "300", purpose: "Default exec timeout in seconds." },
       { env: "SHELL_SPOOL_DIR or SHELLMCP_SPOOL_DIR", defaultValue: "tempdir/shellmcp-go-spool", purpose: "Spool root for task data." },
       { env: "SHELL_OUTBOX_DIR or SHELLMCP_OUTBOX_DIR", defaultValue: "<spool>/outbox", purpose: "Outbox for queued responses." },
