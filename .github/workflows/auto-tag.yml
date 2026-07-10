@@ -1,0 +1,38 @@
+name: Auto-tag release
+
+# When VERSION is bumped on main (the "Release build N" commits), create and
+# push a v<VERSION> git tag if it does not already exist. Pushing that tag then
+# triggers .github/workflows/release.yml, which builds a GitHub Release with
+# auto-generated notes. Idempotent: a repeat push of the same VERSION is a no-op.
+
+on:
+  push:
+    branches: [main]
+    paths: ['VERSION']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  tag:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Create v<VERSION> tag if missing
+        run: |
+          set -euo pipefail
+          v="$(tr -d '[:space:]' < VERSION)"
+          if ! [[ "$v" =~ ^[0-9]+$ ]]; then
+            echo "VERSION '$v' is not a plain integer; refusing to tag"
+            exit 1
+          fi
+          tag="v${v}"
+          if git rev-parse -q --verify "refs/tags/${tag}" >/dev/null; then
+            echo "Tag ${tag} already exists; nothing to do."
+            exit 0
+          fi
+          echo "Creating and pushing tag ${tag}"
+          git tag "${tag}" -m "Release ${tag}"
+          git push origin "${tag}"
