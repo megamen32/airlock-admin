@@ -23,6 +23,8 @@ jobs:
       - name: Create v<VERSION> tag if missing
         run: |
           set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
           v="$(tr -d '[:space:]' < VERSION)"
           if ! [[ "$v" =~ ^[0-9]+$ ]]; then
             echo "VERSION '$v' is not a plain integer; refusing to tag"
@@ -34,5 +36,5 @@ jobs:
             exit 0
           fi
           echo "Creating and pushing tag ${tag}"
-          git tag "${tag}" -m "Release ${tag}"
+          git tag -a "${tag}" -m "Release ${tag}"
           git push origin "${tag}"
