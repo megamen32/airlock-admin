@@ -132,6 +132,7 @@ export const QUICK_SNIPPETS = {
   -H 'Content-Type: application/json' \\
   -d '{"target":"hub"}' \\
   https://your-hub.example.com/mcp-relay/tools`,
+  oauthAuthorizeExample: `https://u-f1102930.t.gptadmin.bezrabotnyi.com/authorize?response_type=code&client_id=chatgpt&redirect_uri=https%3A%2F%2Fchatgpt.com%2Fconnector%2Foauth%2Fcallback&resource=https%3A%2F%2Fu-f1102930.t.gptadmin.bezrabotnyi.com&scope=gptadmin.read%20gptadmin.exec&code_challenge=BASE64URL_SHA256_VERIFIER&code_challenge_method=S256`,
   mcpConfig: `{
   "mcpServers": {
     "gptadmin": {

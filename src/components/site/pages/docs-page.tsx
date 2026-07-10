@@ -138,6 +138,123 @@ find /var/lib/gptadmin -maxdepth 4 -type f | sort | tail -100`}
       </DocSection>
 
       <DocSection
+        id="chatgpt-connect"
+        icon={ShieldAlert}
+        title="ChatGPT, Custom GPT и Apps SDK"
+        kicker="live setup"
+        lead="Ниже ровно те URL и поля, которые нужны для вашего live хаба `u-f1102930.t.gptadmin.bezrabotnyi.com`."
+      >
+        <Callout tone="info">
+          <p>
+            Если открыть просто{" "}
+            <code>https://u-f1102930.t.gptadmin.bezrabotnyi.com/authorize</code>,
+            это не полноценный OAuth-запрос. Endpoint рабочий, но ему нужны OAuth
+            параметры: <code>client_id</code>, <code>redirect_uri</code>,{" "}
+            <code>resource</code>, <code>code_challenge</code> и{" "}
+            <code>code_challenge_method=S256</code>.
+          </p>
+        </Callout>
+        <div className="mt-4 grid gap-4 xl:grid-cols-3">
+          <div className="rounded-2xl border border-border/60 bg-[oklch(0.12_0.006_290)] p-4">
+            <h3 className="text-lg font-semibold tracking-tight">1. Bearer CTL для Custom GPT Action</h3>
+            <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
+              Самый быстрый способ для generated schema / Custom GPT. Импортируйте live OpenAPI
+              и в auth выберите Bearer API key.
+            </p>
+            <DenseTable
+              columns={["Поле", "Значение"]}
+              rows={[
+                ["OpenAPI URL", "https://u-f1102930.t.gptadmin.bezrabotnyi.com/actions/openapi.yaml"],
+                ["Auth type", "API key -> Bearer"],
+                ["Token", "ваш CTL_TOKEN"],
+                ["Official guide", "https://developers.openai.com/api/docs/actions/getting-started"],
+                ["Auth docs", "https://developers.openai.com/api/docs/actions/authentication"],
+              ]}
+            />
+          </div>
+          <div className="rounded-2xl border border-border/60 bg-[oklch(0.12_0.006_290)] p-4">
+            <h3 className="text-lg font-semibold tracking-tight">2. Bearer JWT для generated schema</h3>
+            <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
+              Если нужен JWT вместо CTL, выпускайте его из admin UI. Для generated Action schema
+              подходят и CTL, и корректно подписанный JWT, но у JWT должны совпадать live issuer и audience.
+            </p>
+            <DenseTable
+              columns={["Поле", "Значение"]}
+              rows={[
+                ["Issue in admin", "/admin -> Security -> MCP bearer-токен"],
+                ["Issuer", "https://u-f1102930.t.gptadmin.bezrabotnyi.com"],
+                ["Audience", "https://u-f1102930.t.gptadmin.bezrabotnyi.com"],
+                ["Scope", "gptadmin.read gptadmin.exec"],
+                ["Schema URL", "https://u-f1102930.t.gptadmin.bezrabotnyi.com/actions/openapi.yaml"],
+              ]}
+            />
+          </div>
+          <div className="rounded-2xl border border-border/60 bg-[oklch(0.12_0.006_290)] p-4">
+            <h3 className="text-lg font-semibold tracking-tight">3. ChatGPT app / Apps SDK OAuth2</h3>
+            <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
+              Для developer-mode app в ChatGPT подключайте не OpenAPI, а MCP endpoint{" "}
+              <code>/mcp</code>. ChatGPT сам пройдет OAuth 2.1 + PKCE flow к вашему hub.
+            </p>
+            <DenseTable
+              columns={["Поле", "Значение"]}
+              rows={[
+                ["MCP server URL", "https://u-f1102930.t.gptadmin.bezrabotnyi.com/mcp"],
+                ["Authorization URL", "https://u-f1102930.t.gptadmin.bezrabotnyi.com/authorize"],
+                ["Token URL", "https://u-f1102930.t.gptadmin.bezrabotnyi.com/token"],
+                ["Scope", "gptadmin.read gptadmin.exec"],
+                ["Token exchange", "POST, token_endpoint_auth_method = none"],
+                ["OpenAI docs", "https://developers.openai.com/apps-sdk/deploy/connect-chatgpt"],
+              ]}
+            />
+          </div>
+        </div>
+        <div className="mt-4">
+          <h3 className="text-lg font-semibold tracking-tight">Какие поля заполнять в OpenAI OAuth форме</h3>
+          <p className="mt-1 text-sm leading-relaxed text-muted-foreground">
+            В ChatGPT Actions UI обычно просят client id, client secret, authorization URL, token URL,
+            scope и способ обмена токена. Для вашего hub URL и scope такие:
+          </p>
+          <DenseTable
+            columns={["Поле в OpenAI", "Что ставить"]}
+            rows={[
+              ["ID клиента", "<HIDDEN>"],
+              ["Секрет клиента", "<HIDDEN>"],
+              ["URL-адрес авторизации", "https://u-f1102930.t.gptadmin.bezrabotnyi.com/authorize"],
+              ["URL-адрес токена", "https://u-f1102930.t.gptadmin.bezrabotnyi.com/token"],
+              ["Область действия", "gptadmin.read gptadmin.exec"],
+              ["Метод обмена токенов", "По умолчанию: POST"],
+              ["Client auth", "Basic auth header только если ваш OAuth client этого требует; для /token hub secret клиента не требует"],
+            ]}
+          />
+          <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
+            Redirect URI должен быть разрешён у вас в allow-list. Для ChatGPT смотрите официальную
+            инструкцию OpenAI по auth и redirect URL:
+            {" "}
+            <a className="text-primary underline-offset-4 hover:underline" href="https://developers.openai.com/api/docs/actions/authentication" target="_blank" rel="noreferrer">
+              GPT Action authentication
+            </a>.
+          </p>
+        </div>
+        <div className="mt-4 grid gap-4 xl:grid-cols-2">
+          <CodeBlock label="Рабочий пример authorize URL" code={QUICK_SNIPPETS.oauthAuthorizeExample} />
+          <CodeBlock
+            label="Где взять schema"
+            code={`curl -fsS https://u-f1102930.t.gptadmin.bezrabotnyi.com/actions/openapi.yaml | head\ncurl -fsS https://u-f1102930.t.gptadmin.bezrabotnyi.com/.well-known/oauth-authorization-server | jq`}
+          />
+        </div>
+        <div className="mt-4 rounded-2xl border border-border/60 bg-white/[0.02] p-4">
+          <h3 className="text-lg font-semibold tracking-tight">Официальные ссылки OpenAI</h3>
+          <ul className="mt-2 list-disc space-y-2 pl-5 text-sm leading-relaxed text-muted-foreground">
+            <li><a className="text-primary underline-offset-4 hover:underline" href="https://developers.openai.com/api/docs/actions/getting-started" target="_blank" rel="noreferrer">GPT Actions: getting started</a></li>
+            <li><a className="text-primary underline-offset-4 hover:underline" href="https://developers.openai.com/api/docs/actions/authentication" target="_blank" rel="noreferrer">GPT Actions: authentication</a></li>
+            <li><a className="text-primary underline-offset-4 hover:underline" href="https://developers.openai.com/apps-sdk/build/auth" target="_blank" rel="noreferrer">Apps SDK: authentication</a></li>
+            <li><a className="text-primary underline-offset-4 hover:underline" href="https://developers.openai.com/apps-sdk/deploy/connect-chatgpt" target="_blank" rel="noreferrer">Apps SDK: connect from ChatGPT</a></li>
+            <li><a className="text-primary underline-offset-4 hover:underline" href="https://developers.openai.com/api/docs/mcp" target="_blank" rel="noreferrer">Remote MCP in ChatGPT / API</a></li>
+          </ul>
+        </div>
+      </DocSection>
+
+      <DocSection
         id="truth"
         icon={ShieldAlert}
         title="Аутентификация: что и где используется"
