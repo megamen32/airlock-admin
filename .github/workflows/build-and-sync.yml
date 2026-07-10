@@ -24,10 +24,28 @@ jobs:
         with:
           enable-cache: true
 
-      - name: Install dependencies and test
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: stable
+          cache-dependency-path: |
+            go-hub/go.sum
+            go-shellmcp/go.sum
+
+      - name: Install Python dependencies and test
         run: |
           uv sync
           uv run pytest tests/ -v
+
+      - name: Test Go hub
+        run: |
+          cd go-hub
+          go test ./...
+
+      - name: Test Go shellmcp
+        run: |
+          cd go-shellmcp
+          go test ./...
 
       - name: Build binaries
         run: |
