@@ -167,6 +167,68 @@ PKG_HUB_URL_DEFAULT   = os.environ.get('PKG_HUB_URL',   f'{PKG_BASE_URL_DEFAULT}
 PKG_SHELLMCP_URL_DEFAULT = os.environ.get('PKG_SHELLMCP_URL', f'{PKG_BASE_URL_DEFAULT}/gptadmin-shellmcp.tar.gz')
 REQUIRED_CMDS = ['curl', 'launchctl' if IS_MACOS else 'systemctl']
 
+# ===== macOS plist + launchctl helpers (module-level for cross-platform testability) =====
+# These helpers live at module level so they can be unit-tested on Linux even
+# though they generate launchd-only artifacts. The Darwin-only branch below
+# composes them; Linux never imports them.
+
+def _plist_oneshot(label: str, wrapper: Path, log_file: Path, interval: int | None = None) -> str:
+    """Generate a launchd plist for the auto-update oneshot job.
+
+    Semantics:
+      - RunAtLoad=false and KeepAlive=false: the job does NOT start on its own
+        and does NOT auto-restart. It must be triggered explicitly via
+        `launchctl kickstart` (which is what we use for both periodic and
+        manual update triggers).
+      - AbandonProcessGroup=true: when the wrapper exits, launchd cleans up
+        any straggling children. Without this, a backgrounded update could
+        leak processes between runs.
+      - StartInterval (optional): if provided, launchd schedules the job to
+        run every <interval> seconds. When omitted, the plist is a pure
+        "service unit always present" that does nothing until kicked.
+    """
+    interval_line = (
+        f'    <key>StartInterval</key><integer>{int(interval)}</integer>\n'
+        if interval is not None else ''
+    )
+    return (
+        '<?xml version="1.0" encoding="UTF-8"?>\n'
+        '<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"'
+        ' "http://www.apple.com/DTDs/PropertyList-1.0.dtd">\n'
+        '<plist version="1.0"><dict>\n'
+        f'    <key>Label</key><string>{label}</string>\n'
+        '    <key>ProgramArguments</key><array>\n'
+        '        <string>/bin/sh</string>\n'
+        f'        <string>{wrapper}</string>\n'
+        '    </array>\n'
+        '    <key>RunAtLoad</key><false/>\n'
+        '    <key>KeepAlive</key><false/>\n'
+        '    <key>AbandonProcessGroup</key><true/>\n'
+        f'{interval_line}'
+        f'    <key>StandardOutPath</key><string>{log_file}</string>\n'
+        f'    <key>StandardErrorPath</key><string>{log_file}</string>\n'
+        '</dict></plist>\n'
+    )
+
+
+def _launchctl_kickstart_cmd(label: str, is_user: bool) -> list[str]:
+    """Return the argv for `launchctl kickstart -k <domain>/<label>`.
+
+    The `-k` flag kills any existing instance first, then starts a fresh one.
+    That makes the same invocation safe for both "first ever run" and
+    "already-running, restart" — which is exactly what the auto-update path
+    needs.
+    """
+    if is_user:
+        try:
+            uid = str(os.getuid())
+        except Exception:
+            uid = '0'
+        domain = f'gui/{uid}'
+    else:
+        domain = 'system'
+    return ['launchctl', 'kickstart', '-k', f'{domain}/{label}']
+
 # ===== FRPC defaults =====
 FRPC_VERSION          = os.environ.get('FRPC_VERSION', '0.64.0')
 FRPC_BASE_URL         = os.environ.get('FRPC_BASE_URL', 'https://became.bezrabotnyi.com/frp-mirror')
@@ -565,6 +627,10 @@ if IS_MACOS:
         return script
 
     def _make_plist(label: str, wrapper: Path, log_file: Path) -> str:
+        # Long-running launchd service plist (hub / shellmcp / frpc / cloudflared):
+        # KeepAlive=true so launchd respawns the job if it exits, and RunAtLoad
+        # so it boots with the system. The auto-update path does NOT use this
+        # template — see _plist_oneshot at module level for oneshot semantics.
         return (
             '<?xml version="1.0" encoding="UTF-8"?>\n'
             '<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"'
@@ -582,24 +648,11 @@ if IS_MACOS:
             '</dict></plist>\n'
         )
 
-
     def _make_interval_plist(label: str, wrapper: Path, log_file: Path, interval: int) -> str:
-        return (
-            '<?xml version="1.0" encoding="UTF-8"?>\n'
-            '<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"'
-            ' "http://www.apple.com/DTDs/PropertyList-1.0.dtd">\n'
-            '<plist version="1.0"><dict>\n'
-            f'    <key>Label</key><string>{label}</string>\n'
-            '    <key>ProgramArguments</key><array>\n'
-            '        <string>/bin/sh</string>\n'
-            f'        <string>{wrapper}</string>\n'
-            '    </array>\n'
-            '    <key>RunAtLoad</key><true/>\n'
-            f'    <key>StartInterval</key><integer>{interval}</integer>\n'
-            f'    <key>StandardOutPath</key><string>{log_file}</string>\n'
-            f'    <key>StandardErrorPath</key><string>{log_file}</string>\n'
-            '</dict></plist>\n'
-        )
+        # Kept as a thin wrapper for backwards compatibility with any external
+        # caller. New auto-update code calls module-level _plist_oneshot
+        # directly so the template is testable on Linux.
+        return _plist_oneshot(label, wrapper, log_file, interval=interval)
 
     def svc_daemon_reload():
         pass  # launchd has no daemon-reload
@@ -789,7 +842,13 @@ if IS_MACOS:
             f'exec {CLI_PATH} --{INSTALL_SCOPE} update --auto\n'
         )
         os.chmod(wrapper, 0o755)
-        UNIT_PATH_AUTO_UPDATE.write_text(_make_plist(SVC_AUTO_UPDATE_LABEL, wrapper, LOG_DIR / 'auto-update.log'))
+        # Always present, oneshot-style: RunAtLoad/KeepAlive are false so the
+        # job does nothing on its own. StartInterval is omitted entirely so we
+        # never accidentally auto-run until timer_enable rewrites the plist
+        # with an interval. Keep the wrapper around for both periodic and
+        # manual `launchctl kickstart` invocations.
+        UNIT_PATH_AUTO_UPDATE.write_text(
+            _plist_oneshot(SVC_AUTO_UPDATE_LABEL, wrapper, LOG_DIR / 'auto-update.log'))
 
     def svc_hub_name():  return SVC_HUB_LABEL
     def svc_shellmcp_name(): return SVC_SHELLMCP_LABEL
@@ -808,23 +867,44 @@ if IS_MACOS:
             f'exec {CLI_PATH} --{INSTALL_SCOPE} update --auto\n'
         )
         os.chmod(wrapper, 0o755)
-        UNIT_PATH_AUTO_UPDATE.write_text(_make_interval_plist(
-            SVC_AUTO_UPDATE_LABEL, wrapper, LOG_DIR / 'auto-update.log', auto_update_interval_seconds(env)))
+        # Rewrite the plist WITH StartInterval so launchd schedules the
+        # periodic trigger, then (re)load via the existing helper. The job
+        # was previously either absent or loaded without StartInterval; the
+        # enable_start path handles bootout + bootstrap so the new plist
+        # content is picked up.
+        UNIT_PATH_AUTO_UPDATE.write_text(
+            _plist_oneshot(SVC_AUTO_UPDATE_LABEL, wrapper, LOG_DIR / 'auto-update.log',
+                           interval=auto_update_interval_seconds(env)))
         svc_enable_start(SVC_AUTO_UPDATE_LABEL, UNIT_PATH_AUTO_UPDATE)
 
     def timer_disable(timer_unit: str):
-        svc_disable_stop(SVC_AUTO_UPDATE_LABEL, UNIT_PATH_AUTO_UPDATE)
-        UNIT_PATH_AUTO_UPDATE.write_text(_make_plist(
-            SVC_AUTO_UPDATE_LABEL, BIN_DIR / 'run_auto_update.sh', LOG_DIR / 'auto-update.log'))
+        # Rewrite the plist WITHOUT StartInterval so launchd stops scheduling
+        # periodic runs. Keep the job loaded (do NOT call svc_disable_stop
+        # here) so manual `launchctl kickstart` invocations still work.
+        UNIT_PATH_AUTO_UPDATE.write_text(
+            _plist_oneshot(SVC_AUTO_UPDATE_LABEL, BIN_DIR / 'run_auto_update.sh',
+                           LOG_DIR / 'auto-update.log'))
+        # Reload to pick up the StartInterval removal. The job is still
+        # loaded afterwards; only its schedule changed.
+        svc_enable_start(SVC_AUTO_UPDATE_LABEL, UNIT_PATH_AUTO_UPDATE)
 
     def timer_status(timer_unit: str, timer_path: Path):
         if not _launchd_is_loaded(SVC_AUTO_UPDATE_LABEL):
             print(f'  LaunchAgent {SVC_AUTO_UPDATE_LABEL} not loaded')
             return
-        # For macOS, the status is shown as part of the service unit
-        is_active = _launchd_is_loaded(SVC_AUTO_UPDATE_LABEL)
-        active_str = c_green('● loaded') if is_active else c_red('● not loaded')
-        print(f'  {c_bold(SVC_AUTO_UPDATE_LABEL):<40} {active_str}')
+        # Distinguish periodic vs manual mode by reading the StartInterval
+        # key from the on-disk plist. Periodic = enabled, no key = disabled
+        # but still present (manual kickstart still works).
+        on_disk = UNIT_PATH_AUTO_UPDATE
+        has_interval = False
+        if on_disk.exists():
+            try:
+                plist_xml = on_disk.read_text()
+                has_interval = '<key>StartInterval</key>' in plist_xml
+            except Exception:
+                pass
+        mode_str = c_green('● enabled (periodic)') if has_interval else c_yellow('● disabled (manual kickstart)')
+        print(f'  {c_bold(SVC_AUTO_UPDATE_LABEL):<40} {mode_str}')
 
 else:
     # Linux systemd. In user mode this uses systemd --user and ~/.config/systemd/user.
