@@ -79,3 +79,39 @@ jobs:
         run: |
           echo "OPENSOURCE_PAT secret is not configured or is not available for this run."
           echo "Build finished; skipped checkout/push to megamen32/gptadmin_opensource."
+
+  macos-build:
+    # Catches Darwin-only regressions before merge. We just want real darwin
+    # runtime coverage (syscall/exec behavior used by launchd auto-update) plus
+    # proof that Mac can produce Linux artifacts. No secrets, no opensource
+    # sync, no service install — those are Linux-only and run in build-and-sync.
+    runs-on: macos-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: stable
+          cache-dependency-path: |
+            go-hub/go.sum
+            go-shellmcp/go.sum
+
+      - name: Test Go hub on darwin
+        run: |
+          cd go-hub
+          go test ./...
+
+      - name: Test Go shellmcp on darwin
+        run: |
+          cd go-shellmcp
+          go test ./...
+
+      - name: Cross-compile Linux artifacts from Mac
+        run: |
+          cd go-hub
+          GOOS=linux GOARCH=amd64 go build ./...
+
+      - name: Parse Python CLI
+        run: python3 -c "import ast; ast.parse(open('cli.py').read())"
