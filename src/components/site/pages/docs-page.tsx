@@ -40,65 +40,64 @@ export function DocsPage() {
         eyebrow="Документация"
         title={
           <>
-            Не лендинг, а{" "}
-            <span className="text-gradient-violet">справка по auth, endpoint и env</span>
+            Auth, endpoint и{" "}
+            <span className="text-gradient-violet">переменные окружения</span>
           </>
         }
-        lead="Ниже перечислены реальные переменные окружения и реальные правила auth из кода gptadmin_hub.py и go-shellmcp."
+        lead="Актуальный справочник: как подключиться к hub (Bearer / JWT / OAuth), какие эндпоинты доступны и какие переменные окружения настраивают gptadmin_hub.py и go-shellmcp."
       />
 
       <DocSection
         id="privacy"
         icon={ShieldAlert}
-        title="Privacy и FRP relay"
-        kicker="без сбора данных"
-        lead="GPTAdmin не требует облачного аккаунта и не создаёт централизованную базу ваших команд, файлов или токенов."
+        title="Конфиденциальность"
+        kicker="ваши данные остаются у вас"
+        lead="GPTAdmin работает на вашем компьютере или сервере. Мы не создаём облачную копию ваших команд, файлов, токенов или истории работы."
       >
         <Callout tone="info">
           <p>
-            Я не собираю и не продаю пользовательские данные и не веду отдельную аналитику содержимого
-            ваших команд. Hub, токены, список серверов, история jobs и рабочие файлы находятся на вашей
-            машине или в вашей инфраструктуре.
+            Ваш hub, токены, подключённые серверы, задания и результаты команд хранятся в вашей
+            инфраструктуре. Мы не продаём пользовательские данные и не используем содержимое ваших
+            команд для рекламы или аналитики.
           </p>
         </Callout>
         <div className="mt-4 grid gap-3 sm:grid-cols-2">
           <div className="rounded-xl border border-border/60 bg-white/[0.02] p-4">
-            <p className="text-sm font-semibold text-foreground">Что происходит при FRP</p>
+            <p className="text-sm font-semibold text-foreground">Когда вы используете встроенный FRP</p>
             <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-              Если выбран встроенный FRP-туннель, ваш <code>frpc</code> устанавливает исходящее соединение
-              с relay GPTAdmin. Сейчас используются три точки: основной relay, резервный <code>vpn2</code>
-              и резервный <code>vusa</code>. Они публикуют ваш поддомен и пересылают запросы к локальному hub.
+              Ваш компьютер устанавливает исходящее зашифрованное соединение с relay GPTAdmin. Relay
+              публикует ваш персональный поддомен и передаёт запросы на ваш локальный hub. Для устойчивости
+              используются три независимые relay-точки.
             </p>
           </div>
           <div className="rounded-xl border border-border/60 bg-white/[0.02] p-4">
-            <p className="text-sm font-semibold text-foreground">Что видно relay</p>
+            <p className="text-sm font-semibold text-foreground">Какие технические данные видит relay</p>
             <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-              Как владелец relay-инфраструктуры я технически могу видеть публичный IP подключения,
-              время соединения, выбранный поддомен и стандартные сетевые/HTTP-метаданные. На relay могут
-              появляться обычные краткоживущие access/error logs, необходимые для диагностики и защиты.
+              Relay технически видит публичный IP, время соединения, ваш поддомен и стандартные сетевые
+              или HTTP-метаданные. Краткоживущие технические логи могут использоваться для диагностики,
+              предотвращения злоупотреблений и защиты сервиса.
             </p>
           </div>
           <div className="rounded-xl border border-border/60 bg-white/[0.02] p-4">
-            <p className="text-sm font-semibold text-foreground">Доступ к вашему GPTAdmin</p>
+            <p className="text-sm font-semibold text-foreground">Relay не открывает доступ к вашим серверам</p>
             <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-              Сам факт работы туннеля не даёт доступа к панели или MCP-инструментам. Для входа и вызова
-              команд всё равно нужны ваши <code>CTL_TOKEN</code>, OAuth/JWT или пароль администратора.
-              Не передавайте эти секреты и регулярно меняйте их при подозрении на утечку.
+              Для входа в панель и выполнения команд по-прежнему нужны ваши секреты: <code>CTL_TOKEN</code>,
+              OAuth/JWT или пароль администратора. Без них оператор relay не может авторизоваться в вашем
+              GPTAdmin и выполнять команды.
             </p>
           </div>
           <div className="rounded-xl border border-border/60 bg-white/[0.02] p-4">
-            <p className="text-sm font-semibold text-foreground">Полностью независимый режим</p>
+            <p className="text-sm font-semibold text-foreground">Вы можете не использовать наши relay</p>
             <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-              FRP необязателен. Можно указать собственный домен и reverse proxy, использовать свой FRP
-              или Cloudflare Tunnel. Тогда трафик не проходит через relay GPTAdmin.
+              Подключите собственный домен и reverse proxy, свой FRP-сервер или Cloudflare Tunnel. В этом
+              режиме трафик не проходит через relay GPTAdmin.
             </p>
           </div>
         </div>
-        <Callout tone="warn">
+        <Callout tone="info">
           <p>
-            Формулировка «ничего не хранится» не относится к данным на вашем собственном hub: audit log,
-            jobs, stdout/stderr и служебные файлы могут сохраняться локально в соответствии с настройками
-            GPTAdmin. Речь здесь о том, что публичный сервис не создаёт отдельное пользовательское хранилище.
+            Локальные audit logs, история jobs и результаты команд могут сохраняться на вашем hub согласно
+            его настройкам. Вы полностью контролируете эти файлы и сроки их хранения.
           </p>
         </Callout>
       </DocSection>
@@ -198,12 +197,12 @@ find /var/lib/gptadmin -maxdepth 4 -type f | sort | tail -100`}
         icon={ShieldAlert}
         title="ChatGPT, Custom GPT и Apps SDK"
         kicker="live setup"
-        lead="Ниже ровно те URL и поля, которые нужны для вашего live хаба `u-f1102930.t.gptadmin.bezrabotnyi.com`."
+        lead="Ниже ровно те URL и поля, которые нужны для вашего live хаба `your-subdomain.t.gptadmin.bezrabotnyi.com`."
       >
         <Callout tone="info">
           <p>
             Если открыть просто{" "}
-            <code>https://u-f1102930.t.gptadmin.bezrabotnyi.com/authorize</code>,
+            <code>https://your-subdomain.t.gptadmin.bezrabotnyi.com/authorize</code>,
             это не полноценный OAuth-запрос. Endpoint рабочий, но ему нужны OAuth
             параметры: <code>client_id</code>, <code>redirect_uri</code>,{" "}
             <code>resource</code>, <code>code_challenge</code> и{" "}
@@ -220,7 +219,7 @@ find /var/lib/gptadmin -maxdepth 4 -type f | sort | tail -100`}
             <DenseTable
               columns={["Поле", "Значение"]}
               rows={[
-                ["OpenAPI URL", "https://u-f1102930.t.gptadmin.bezrabotnyi.com/actions/openapi.yaml"],
+                ["OpenAPI URL", "https://your-subdomain.t.gptadmin.bezrabotnyi.com/actions/openapi.yaml"],
                 ["Auth type", "API key -> Bearer"],
                 ["Token", "ваш CTL_TOKEN"],
                 ["Official guide", "https://developers.openai.com/api/docs/actions/getting-started"],
@@ -238,10 +237,10 @@ find /var/lib/gptadmin -maxdepth 4 -type f | sort | tail -100`}
               columns={["Поле", "Значение"]}
               rows={[
                 ["Issue in admin", "/admin -> Security -> MCP bearer-токен"],
-                ["Issuer", "https://u-f1102930.t.gptadmin.bezrabotnyi.com"],
-                ["Audience", "https://u-f1102930.t.gptadmin.bezrabotnyi.com"],
+                ["Issuer", "https://your-subdomain.t.gptadmin.bezrabotnyi.com"],
+                ["Audience", "https://your-subdomain.t.gptadmin.bezrabotnyi.com"],
                 ["Scope", "gptadmin.read gptadmin.exec"],
-                ["Schema URL", "https://u-f1102930.t.gptadmin.bezrabotnyi.com/actions/openapi.yaml"],
+                ["Schema URL", "https://your-subdomain.t.gptadmin.bezrabotnyi.com/actions/openapi.yaml"],
               ]}
             />
           </div>
@@ -254,9 +253,9 @@ find /var/lib/gptadmin -maxdepth 4 -type f | sort | tail -100`}
             <DenseTable
               columns={["Поле", "Значение"]}
               rows={[
-                ["MCP server URL", "https://u-f1102930.t.gptadmin.bezrabotnyi.com/mcp"],
-                ["Authorization URL", "https://u-f1102930.t.gptadmin.bezrabotnyi.com/authorize"],
-                ["Token URL", "https://u-f1102930.t.gptadmin.bezrabotnyi.com/token"],
+                ["MCP server URL", "https://your-subdomain.t.gptadmin.bezrabotnyi.com/mcp"],
+                ["Authorization URL", "https://your-subdomain.t.gptadmin.bezrabotnyi.com/authorize"],
+                ["Token URL", "https://your-subdomain.t.gptadmin.bezrabotnyi.com/token"],
                 ["Scope", "gptadmin.read gptadmin.exec"],
                 ["Token exchange", "POST, token_endpoint_auth_method = none"],
                 ["OpenAI docs", "https://developers.openai.com/apps-sdk/deploy/connect-chatgpt"],
@@ -275,8 +274,8 @@ find /var/lib/gptadmin -maxdepth 4 -type f | sort | tail -100`}
             rows={[
               ["ID клиента", "<HIDDEN>"],
               ["Секрет клиента", "<HIDDEN>"],
-              ["URL-адрес авторизации", "https://u-f1102930.t.gptadmin.bezrabotnyi.com/authorize"],
-              ["URL-адрес токена", "https://u-f1102930.t.gptadmin.bezrabotnyi.com/token"],
+              ["URL-адрес авторизации", "https://your-subdomain.t.gptadmin.bezrabotnyi.com/authorize"],
+              ["URL-адрес токена", "https://your-subdomain.t.gptadmin.bezrabotnyi.com/token"],
               ["Область действия", "gptadmin.read gptadmin.exec"],
               ["Метод обмена токенов", "По умолчанию: POST"],
               ["Client auth", "Basic auth header только если ваш OAuth client этого требует; для /token hub secret клиента не требует"],
@@ -295,7 +294,7 @@ find /var/lib/gptadmin -maxdepth 4 -type f | sort | tail -100`}
           <CodeBlock label="Рабочий пример authorize URL" code={QUICK_SNIPPETS.oauthAuthorizeExample} />
           <CodeBlock
             label="Где взять schema"
-            code={`curl -fsS https://u-f1102930.t.gptadmin.bezrabotnyi.com/actions/openapi.yaml | head\ncurl -fsS https://u-f1102930.t.gptadmin.bezrabotnyi.com/.well-known/oauth-authorization-server | jq`}
+            code={`curl -fsS https://your-subdomain.t.gptadmin.bezrabotnyi.com/actions/openapi.yaml | head\ncurl -fsS https://your-subdomain.t.gptadmin.bezrabotnyi.com/.well-known/oauth-authorization-server | jq`}
           />
         </div>
         <div className="mt-4 rounded-2xl border border-border/60 bg-white/[0.02] p-4">
