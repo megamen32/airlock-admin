@@ -211,9 +211,9 @@ func TestAdminIssueMCPTokenUsesPublicOriginAndWorksForRelay(t *testing.T) {
 
 func TestGeneratedActionEndpointsAdvertiseOAuthWhenUnauthorized(t *testing.T) {
 	s := New(Config{
-		CtlToken:                 "<REDACTED-PASSWORD>",
-		AdminPassword:            "<REDACTED-PASSWORD>",
-		OAuthClientSecret:        "<REDACTED-PASSWORD>",
+		CtlToken:                 "test-secret-not-for-production",
+		AdminPassword:            "test-secret-not-for-production",
+		OAuthClientSecret:        "test-secret-not-for-production",
 		PublicOrigin:             "https://u-f1102930.t.gptadmin.bezrabotnyi.com",
 		MCPResource:              "https://u-f1102930.t.gptadmin.bezrabotnyi.com",
 		OAuthPermissiveRedirects: true,
@@ -330,9 +330,9 @@ func TestAdminPasswordLoginCookieProtectsStaticAndAPI(t *testing.T) {
 
 func TestAuthPagesExplainAdminPasswordAndBearerOptions(t *testing.T) {
 	s := New(Config{
-		CtlToken:                 "<REDACTED-PASSWORD>",
-		AdminPassword:            "<REDACTED-PASSWORD>",
-		OAuthClientSecret:        "<REDACTED-PASSWORD>",
+		CtlToken:                 "test-secret-not-for-production",
+		AdminPassword:            "test-secret-not-for-production",
+		OAuthClientSecret:        "test-secret-not-for-production",
 		PublicOrigin:             "https://u-f1102930.t.gptadmin.bezrabotnyi.com",
 		MCPResource:              "https://u-f1102930.t.gptadmin.bezrabotnyi.com",
 		OAuthPermissiveRedirects: true,

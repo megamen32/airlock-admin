@@ -1,0 +1,16 @@
+# refuse to publish if these survive sanitization
+regex:95\.[0-9]+\.[0-9]+\.[0-9]+
+regex:10\.[0-9]+\.[0-9]+\.[0-9]+
+regex:192\.168\.[0-9]+\.[0-9A-Za-z]+
+regex:172\.(1[6-9]|2[0-9]|3[01])\.[0-9]+\.[0-9]+
+regex:roomhacker-server-100|roomhacker-server-88|server-44|homeassistant|openwrt|vpn2|vusa|MGTS|Beeline
+regex:AKIA[0-9A-Z]{16}
+regex:(ghp|gho|ghu|ghs|ghr)_[A-Za-z0-9_]{20,}|github_pat_[A-Za-z0-9_]{20,}
+regex:sk-(proj-)?[A-Za-z0-9_-]{20,}
+regex:[0-9]{8,12}:[A-Za-z0-9_-]{30,}
+regex:-----BEGIN [A-Z ]*PRIVATE KEY-----
+# known private values that must never reach the public mirror
+<REDACTED-PASSWORD>
+aofhkLSD25i
+305630
+6516599
