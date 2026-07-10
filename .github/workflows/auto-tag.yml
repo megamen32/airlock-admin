@@ -1,9 +1,14 @@
 name: Auto-tag release
 
 # When VERSION is bumped on main (the "Release build N" commits), create and
-# push a v<VERSION> git tag if it does not already exist. Pushing that tag then
-# triggers .github/workflows/release.yml, which builds a GitHub Release with
-# auto-generated notes. Idempotent: a repeat push of the same VERSION is a no-op.
+# push a v<VERSION> git tag if it does not already exist, then dispatch
+# .github/workflows/release.yml on that tag to build the GitHub Release.
+#
+# We dispatch release.yml explicitly (rather than relying on its `on: push:
+# tags` trigger) because a tag pushed with the workflow's GITHUB_TOKEN does NOT
+# fire push events for other workflows — GitHub suppresses that to prevent
+# loops. An explicit workflow_dispatch is not subject to that suppression.
+# Idempotent: a repeat push of the same VERSION skips tagging and re-dispatch.
 
 on:
   push:
@@ -13,14 +18,19 @@ on:
 
 permissions:
   contents: write
+  actions: write
 
 jobs:
   tag:
     runs-on: ubuntu-latest
+    outputs:
+      created: ${{ steps.maybe_tag.outputs.created }}
+      tag: ${{ steps.maybe_tag.outputs.tag }}
     steps:
       - uses: actions/checkout@v4
 
-      - name: Create v<VERSION> tag if missing
+      - id: maybe_tag
+        name: Create v<VERSION> tag if missing
         run: |
           set -euo pipefail
           git config user.name "github-actions[bot]"
@@ -33,8 +43,26 @@ jobs:
           tag="v${v}"
           if git rev-parse -q --verify "refs/tags/${tag}" >/dev/null; then
             echo "Tag ${tag} already exists; nothing to do."
+            echo "created=false" >> "$GITHUB_OUTPUT"
+            echo "tag=${tag}" >> "$GITHUB_OUTPUT"
             exit 0
           fi
           echo "Creating and pushing tag ${tag}"
           git tag -a "${tag}" -m "Release ${tag}"
           git push origin "${tag}"
+          echo "created=true" >> "$GITHUB_OUTPUT"
+          echo "tag=${tag}" >> "$GITHUB_OUTPUT"
+
+  release:
+    needs: tag
+    if: needs.tag.outputs.created == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Dispatch Release workflow on the new tag
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          tag="${{ needs.tag.outputs.tag }}"
+          echo "Dispatching release.yml on ref ${tag}"
+          gh workflow run release.yml --ref "${tag}"
