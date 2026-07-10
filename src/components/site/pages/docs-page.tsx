@@ -4,6 +4,7 @@ import {
   Check,
   Copy,
   type LucideIcon,
+  Share2,
   ShieldAlert,
 } from "lucide-react";
 import { motion } from "framer-motion";
@@ -395,8 +396,126 @@ find /var/lib/gptadmin -maxdepth 4 -type f | sort | tail -100`}
       </DocSection>
 
       <DocSection
+        id="mcp-http-ingress"
+        icon={Share2}
+        title="MCP HTTP ingress и FileShare"
+        kicker="/_services"
+        lead="Любой MCP может поднять свой локальный HTTP-сервер и получить публичный маршрут через тот же туннель. Hub не знает содержимого — он только нейтрально проксирует HTTP на loopback."
+      >
+        <Callout tone="info">
+          <p>
+            Hub — это MCP-релей, а не файловый сервер. Когда MCP (например, FileShare) хочет отдавать
+            содержимое публично, он поднимает собственный HTTP-сервер на <code>127.0.0.1</code> и
+            объявляет endpoint в конфигурации. Hub пробрасывает к нему трафик по маршруту{" "}
+            <code>/_services/&lt;mcp-slug&gt;/&lt;endpoint&gt;/...</code>, и этот же маршрут работает
+            через публичный FRP-туннель и при failover.
+          </p>
+        </Callout>
+        <div className="mt-4 grid gap-3 sm:grid-cols-2">
+          <div className="rounded-xl border border-border/60 bg-white/[0.02] p-4">
+            <p className="text-sm font-semibold text-foreground">Маршрут ingress</p>
+            <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+              Публичный путь <code>/_services/&lt;slug&gt;/&lt;endpoint&gt;/...</code> отображается на
+              локальный URL, который MCP указал в <code>local_url</code>. При{" "}
+              <code>strip_prefix: true</code> префикс маршрута убирается до проксирования.
+            </p>
+          </div>
+          <div className="rounded-xl border border-border/60 bg-white/[0.02] p-4">
+            <p className="text-sm font-semibold text-foreground">Безопасность по умолчанию</p>
+            <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+              Upstream разрешён только на <code>127.0.0.1</code>, <code>localhost</code> или{" "}
+              <code>::1</code> — произвольные LAN/IP запрещены, чтобы ingress не стал open proxy/SSRF.
+              Кроме того, endpoint должен явно объявить{" "}
+              <code>visibility: public-capability</code>, иначе он остаётся скрытым.
+            </p>
+          </div>
+        </div>
+        <h3 className="mt-6 text-lg font-semibold tracking-tight">Как MCP объявляет свой endpoint</h3>
+        <p className="mt-1 text-sm leading-relaxed text-muted-foreground">
+          В конфигурации MCP (через generic stdio relay) укажите массив{" "}
+          <code>http_endpoints</code>. Каждый элемент задаёт имя маршрута, локальный URL и видимость:
+        </p>
+        <CodeBlock
+          label="Конфиг MCP: собственный публичный endpoint"
+          code={`{
+  "agent_id": "MyService",
+  "http_endpoints": [
+    {
+      "name": "files",
+      "local_url": "http://127.0.0.1:18082",
+      "strip_prefix": true,
+      "visibility": "public-capability"
+    }
+  ]
+}`}
+        />
+        <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
+          После регистрации появляется публичный маршрут{" "}
+          <code>https://your-subdomain.t.gptadmin.bezrabotnyi.com/_services/myservice/files/...</code>,
+          доступный через любой relay-edge и при failover. Hub поддерживает streaming-ответы,{" "}
+          <code>HEAD</code>, <code>Content-Disposition</code> и forwarded-заголовки.
+        </p>
+
+        <h3 className="mt-8 text-lg font-semibold tracking-tight">FileShare — пример такого MCP</h3>
+        <p className="mt-1 text-sm leading-relaxed text-muted-foreground">
+          FileShare умеет создавать публичные ссылки на локальные файлы и управлять их жизненным
+          циклом: время жизни, отзыв, просмотр и автоматическая очистка.
+        </p>
+        <div className="mt-4 grid gap-3 sm:grid-cols-2">
+          <div className="rounded-xl border border-border/60 bg-white/[0.02] p-4">
+            <p className="text-sm font-semibold text-foreground">Управление ссылками</p>
+            <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+              <code>create_public_file_link</code> копирует файл и возвращает публичный URL.{" "}
+              <code>ttl_days</code> задаёт срок жизни (по умолчанию 14 дней).{" "}
+              <code>revoke_public_file_link</code> удаляет ссылку и файл по токену или URL.{" "}
+              <code>list</code> показывает активные ссылки, <code>cleanup_expired</code> убирает
+              просроченные.
+            </p>
+          </div>
+          <div className="rounded-xl border border-border/60 bg-white/[0.02] p-4">
+            <p className="text-sm font-semibold text-foreground">Автоочистка по времени</p>
+            <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+              Фоновый поток периодически (через <code>GPTADMIN_FILESHARE_CLEANUP_INTERVAL</code>,
+              по умолчанию 3600 c) удаляет ссылки с истёкшим TTL, поэтому публичные URL реально
+              исчезают в срок, даже если никто не вызвал cleanup вручную. Просроченный файл отвечает{" "}
+              <code>410 Gone</code>, несуществующий — <code>404</code>.
+            </p>
+          </div>
+        </div>
+        <div className="mt-4 grid gap-4 lg:grid-cols-2">
+          <CodeBlock
+            label="Создать публичную ссылку (MCP tool)"
+            code={`{
+  "name": "create_public_file_link",
+  "arguments": {
+    "path": "/home/me/report.pdf",
+    "ttl_days": 7,
+    "name": "weekly-report.pdf"
+  }
+}`}
+          />
+          <CodeBlock
+            label="Отозвать по URL или токену"
+            code={`{
+  "name": "revoke_public_file_link",
+  "arguments": { "url": "https://your-subdomain.t.gptadmin.bezrabotnyi.com/_services/fileshare/files/<token>/weekly-report.pdf" }
+}`}
+          />
+        </div>
+        <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
+          Переменные окружения FileShare:{" "}
+          <code>GPTADMIN_FILESHARE_PUBLIC_ROOT</code> (каталог с файлами),{" "}
+          <code>GPTADMIN_FILESHARE_HTTP_PORT</code> (локальный HTTP, по умолчанию 18082),{" "}
+          <code>GPTADMIN_FILESHARE_CLEANUP_INTERVAL</code> (фоновая очистка,{" "}
+          <code>0</code> отключает),{" "}
+          <code>GPTADMIN_FILESHARE_BASE_URL</code> (публичный префикс ссылки).
+        </p>
+      </DocSection>
+
+      <DocSection
         id="hub-env"
         icon={ShieldAlert}
+        title="Переменные окружения hub"
         kicker="gptadmin_hub.py"
         lead="Полный список переменных окружения, которые читаются gptadmin_hub.py напрямую."
       >
