@@ -109,6 +109,10 @@ BIN_DIR = INSTALL_DIR / 'bin'
 ENV_FILE = ETC_DIR / 'gptadmin.env'
 INSTALLED_BUILD_FILE = INSTALL_DIR / 'gptadmin_installed_build.json'
 MCP_CONFIG_FILE = ETC_DIR / 'mcp.json'
+UPDATE_CHECK_CACHE = INSTALL_DIR / 'update_check.json'
+UPDATE_CHECK_COOLDOWN_S = 3600       # 1 hour after failed network attempt
+UPDATE_CHECK_FRESH_S = 86400         # 24 hours for successful check
+UPDATE_CHECK_TIMEOUT_S = 3           # manifest fetch timeout
 MCP_AGENTS_DIR = ETC_DIR / 'mcp-agents.d'
 MCP_TOKEN_FILE = ETC_DIR / 'mcp-relay.token'
 MCP_RUNTIME_DIR = INSTALL_DIR / 'agents' / 'generic_stdio_mcp_relay'
@@ -3195,6 +3199,30 @@ def _write_installed_build_marker(info: dict, package_url: str):
         print(f'WARNING: could not write installed build marker: {exc}', file=sys.stderr)
 
 
+def _read_update_cache():
+    """Return update check cache dict or None on any error (missing, corrupt, parse failure)."""
+    try:
+        raw = UPDATE_CHECK_CACHE.read_text(encoding='utf-8')
+        return json.loads(raw)
+    except Exception:
+        return None
+
+
+def _write_update_cache(data: dict):
+    """Atomically write update check cache (0600)."""
+    tmp = UPDATE_CHECK_CACHE.with_name(UPDATE_CHECK_CACHE.name + '.tmp')
+    try:
+        tmp.write_text(json.dumps(data, ensure_ascii=False), encoding='utf-8')
+        os.chmod(tmp, 0o600)
+        os.replace(tmp, UPDATE_CHECK_CACHE)
+    except Exception:
+        try:
+            if tmp.exists():
+                tmp.unlink()
+        except Exception:
+            pass
+
+
 def _installed_build_info(env: dict, install_hub: bool) -> dict:
     marker_info = _read_installed_build_marker()
     if marker_info:
@@ -3712,6 +3740,104 @@ def cmd_uninstall(args):
 
 # ===== Main =====
 
+def maybe_update_hint(args):
+    """Check for available update and print hint to stderr (best-effort).
+
+    Only runs when auto-update is disabled and a newer version may exist.
+    Uses local cache to avoid network requests on every CLI invocation.
+    """
+    # Skip when auto-update is enabled — no hint needed.
+    try:
+        from_env = env_read()
+        if auto_update_enabled(from_env):
+            return
+    except Exception:
+        return
+
+    # Skip for certain commands.
+    cmd = getattr(args, 'command', None)
+    if cmd in ('update', 'auto-update'):
+        return
+    if getattr(args, 'auto', False):
+        return
+
+    # Read cache.
+    cache = _read_update_cache()
+    now = int(time.time())
+
+    last_success = cache.get('last_success_ts', 0) if cache else 0
+    last_attempt = cache.get('last_attempt_ts', 0) if cache else 0
+    age_success = now - last_success
+    age_attempt = now - last_attempt
+
+    remote_version = None
+    remote_sha = ''
+
+    if cache and 0 <= age_success < UPDATE_CHECK_FRESH_S:
+        # Cache still fresh — use cached remote version.
+        remote_version = cache.get('remote_version')
+        remote_sha = cache.get('remote_sha256', '')
+    elif age_attempt < UPDATE_CHECK_COOLDOWN_S and age_success >= UPDATE_CHECK_FRESH_S:
+        # Recent failed attempt — cooldown active, skip network check.
+        return
+    else:
+        # Need network check.
+        try:
+            pkg_url = platform_pkg_url_default()
+            info = _remote_artifact_build_info(pkg_url)
+            if info:
+                remote_version = info.get('build_version')
+                if isinstance(remote_version, str):
+                    remote_version = int(remote_version)
+                remote_sha = info.get('sha256', '')
+            cache_data = {
+                'last_success_ts': now,
+                'last_attempt_ts': now,
+                'remote_version': remote_version,
+                'remote_sha256': remote_sha or '',
+            }
+            _write_update_cache(cache_data)
+        except Exception:
+            # Network error — record attempt for cooldown.
+            cache_data = {
+                'last_success_ts': last_success,
+                'last_attempt_ts': now,
+                'remote_version': remote_version,
+                'remote_sha256': remote_sha or '',
+            }
+            _write_update_cache(cache_data)
+            return
+
+    if remote_version is None:
+        return
+
+    # Compare with installed version.
+    try:
+        marker = _read_installed_build_marker()
+        if not marker:
+            return
+        installed_v = marker.get('build_version')
+        if isinstance(installed_v, str):
+            installed_v = int(installed_v)
+        if installed_v is None or installed_v == 0:
+            return
+        installed_v = int(installed_v)
+        remote_v = int(remote_version)
+    except (TypeError, ValueError, Exception):
+        return
+
+    if remote_v <= installed_v:
+        return  # already up to date
+
+    # Print hint to stderr.
+    print(
+        f'\nℹ {c_yellow("Доступно обновление")}: build {installed_v} → {remote_v}.',
+        f'  {c_dim("Обновить:")}          {c_green("gptadmin update")}',
+        f'  {c_dim("Включить авто:")}     {c_green("gptadmin auto-update enable")}',
+        sep='\n', file=sys.stderr,
+    )
+
+
 def main():
     # Backward-compatible command aliases, hidden from help.
     if len(sys.argv) > 1 and sys.argv[1] in ('config-shell', 'config-shellmcp'):
@@ -3918,6 +4044,11 @@ def main():
         ap.print_help(); return
     if args.cmd == 'mcp' and not getattr(args, 'mcp_cmd', None):
         ap_mcp.print_help(); return
+    # Best-effort update hint (silent on any error, auto-update off, new version available).
+    try:
+        maybe_update_hint(args)
+    except Exception:
+        pass
     args.func(args)
 
 if __name__ == '__main__':
