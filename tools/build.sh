@@ -533,7 +533,7 @@ smoke_linux() {
   step "Smoke test: shellmcp"
   : > "$SHELLMCP_RT_LOG"
   SHELLMCP_PORT="$(pick_port_plus1 25900)"
-  SHELLMCP_TOKEN=testtoken HUB_URL='' SHELLMCP_PORT="$SHELLMCP_PORT" "$SHELLMCP_DIST" >"$SHELLMCP_RT_LOG" 2>&1 &
+  SHELLMCP_TOKEN=testtoken HUB_URL='' PORT="$SHELLMCP_PORT" SHELL_PORT="$SHELLMCP_PORT" SHELLMCP_PORT="$SHELLMCP_PORT" "$SHELLMCP_DIST" >"$SHELLMCP_RT_LOG" 2>&1 &
   SHELLMCP_PID=$!
   wait_for_http "http://127.0.0.1:${SHELLMCP_PORT}/version" 25
   curl -sS -f "http://127.0.0.1:${SHELLMCP_PORT}/version" | grep -q build_version
