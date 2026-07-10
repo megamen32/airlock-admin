@@ -24,6 +24,7 @@ export function Footer() {
             <a href="#how" className="transition-colors hover:text-foreground">Как работает</a>
             <a href="#features" className="transition-colors hover:text-foreground">Функции</a>
             <a href="#faq" className="transition-colors hover:text-foreground">FAQ</a>
+            <a href="#/docs" className="transition-colors hover:text-foreground">Документация и Privacy</a>
             <a
               href="https://github.com/megamen32/gptadmin_opensource"
               target="_blank"

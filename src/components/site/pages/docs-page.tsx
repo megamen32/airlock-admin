@@ -48,6 +48,62 @@ export function DocsPage() {
       />
 
       <DocSection
+        id="privacy"
+        icon={ShieldAlert}
+        title="Privacy и FRP relay"
+        kicker="без сбора данных"
+        lead="GPTAdmin не требует облачного аккаунта и не создаёт централизованную базу ваших команд, файлов или токенов."
+      >
+        <Callout tone="info">
+          <p>
+            Я не собираю и не продаю пользовательские данные и не веду отдельную аналитику содержимого
+            ваших команд. Hub, токены, список серверов, история jobs и рабочие файлы находятся на вашей
+            машине или в вашей инфраструктуре.
+          </p>
+        </Callout>
+        <div className="mt-4 grid gap-3 sm:grid-cols-2">
+          <div className="rounded-xl border border-border/60 bg-white/[0.02] p-4">
+            <p className="text-sm font-semibold text-foreground">Что происходит при FRP</p>
+            <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+              Если выбран встроенный FRP-туннель, ваш <code>frpc</code> устанавливает исходящее соединение
+              с relay GPTAdmin. Сейчас используются три точки: основной relay, резервный <code>vpn2</code>
+              и резервный <code>vusa</code>. Они публикуют ваш поддомен и пересылают запросы к локальному hub.
+            </p>
+          </div>
+          <div className="rounded-xl border border-border/60 bg-white/[0.02] p-4">
+            <p className="text-sm font-semibold text-foreground">Что видно relay</p>
+            <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+              Как владелец relay-инфраструктуры я технически могу видеть публичный IP подключения,
+              время соединения, выбранный поддомен и стандартные сетевые/HTTP-метаданные. На relay могут
+              появляться обычные краткоживущие access/error logs, необходимые для диагностики и защиты.
+            </p>
+          </div>
+          <div className="rounded-xl border border-border/60 bg-white/[0.02] p-4">
+            <p className="text-sm font-semibold text-foreground">Доступ к вашему GPTAdmin</p>
+            <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+              Сам факт работы туннеля не даёт доступа к панели или MCP-инструментам. Для входа и вызова
+              команд всё равно нужны ваши <code>CTL_TOKEN</code>, OAuth/JWT или пароль администратора.
+              Не передавайте эти секреты и регулярно меняйте их при подозрении на утечку.
+            </p>
+          </div>
+          <div className="rounded-xl border border-border/60 bg-white/[0.02] p-4">
+            <p className="text-sm font-semibold text-foreground">Полностью независимый режим</p>
+            <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+              FRP необязателен. Можно указать собственный домен и reverse proxy, использовать свой FRP
+              или Cloudflare Tunnel. Тогда трафик не проходит через relay GPTAdmin.
+            </p>
+          </div>
+        </div>
+        <Callout tone="warn">
+          <p>
+            Формулировка «ничего не хранится» не относится к данным на вашем собственном hub: audit log,
+            jobs, stdout/stderr и служебные файлы могут сохраняться локально в соответствии с настройками
+            GPTAdmin. Речь здесь о том, что публичный сервис не создаёт отдельное пользовательское хранилище.
+          </p>
+        </Callout>
+      </DocSection>
+
+      <DocSection
         id="web-panel"
         icon={ShieldAlert}
         title="Веб‑панель после установки"
