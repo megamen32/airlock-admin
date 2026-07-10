@@ -1775,7 +1775,24 @@ def setup_interactive(args):
 
     env['INSTALL_HUB'] = 'true' if install_hub else 'false'
     env['INSTALL_SHELLMCP'] = 'true' if install_shellmcp else 'false'
-    env.setdefault('GPTADMIN_AUTO_UPDATE', 'true')
+
+    if not silent:
+        existing_in_file = env_read().get('GPTADMIN_AUTO_UPDATE', '')
+        if existing_in_file and existing_in_file.lower() in ('false', '0', 'no'):
+            default_choice = 'n'
+        else:
+            default_choice = 'y'
+        print()
+        print(c_bold('  Автообновление'))
+        ch = ask('Включить автообновление (проверка каждые 6ч, systemd timer / launchd)?', default_choice)
+        if ch.lower() in ('n', 'no', 'нет'):
+            env['GPTADMIN_AUTO_UPDATE'] = 'false'
+            print(f'  {c_dim("Автообновление выключено. Включить потом:")} {c_green("gptadmin auto-update enable")}')
+        else:
+            env['GPTADMIN_AUTO_UPDATE'] = 'true'
+    else:
+        env.setdefault('GPTADMIN_AUTO_UPDATE', 'true')
+
     env.setdefault('GPTADMIN_AUTO_UPDATE_INTERVAL_SEC', '21600')
     sync_oauth_origin_env(env)
     env_set_many(env)
