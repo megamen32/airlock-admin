@@ -186,31 +186,6 @@ build_cli() {
   echo "built: $ART_DIR/gptadmin-cli.tar.gz"
 }
 
-venv_ready=0
-ensure_venv() {
-  [[ "$venv_ready" == 1 ]] && return 0
-  step "Create/activate venv"
-  if [[ ! -d "$ART_DIR/venv" ]]; then
-    python3 -V
-    python3 -m venv "$ART_DIR/venv"
-  fi
-  # shellcheck disable=SC1091
-  source "$ART_DIR/venv/bin/activate"
-  step "pip versions"
-  python -V
-  pip --version || true
-  step "pip install project deps, pyinstaller"
-  pip install -vvv --upgrade pip
-  if [[ -f requirements.txt ]]; then
-    pip install -vvv -r requirements.txt pyinstaller
-  else
-    pip install -vvv . pyinstaller
-  fi
-  step "Tool versions"
-  pyinstaller --version || true
-  venv_ready=1
-}
-
 fingerprint() {
   local files=()
   for f in "$@"; do [[ -f "$f" ]] && files+=("$f"); done
@@ -224,86 +199,10 @@ changed() {
 }
 save_fp() { echo "$2" > "$1"; }
 
-prepare_pyinstaller_flags() {
-  ensure_venv
-  step "Generate --collect-all flags from requirements.txt"
-  COLLECT_FLAGS=()
-  if [[ -f requirements.txt ]]; then
-    MAP_PKGS=$(python - <<'PY'
-import re
-names=set()
-for raw in open('requirements.txt', encoding='utf-8'):
-    line=raw.strip()
-    if not line or line.startswith('#'): continue
-    line=line.split('#',1)[0].strip().split(';',1)[0].strip()
-    m=re.match(r'([A-Za-z0-9_.\-+]+)', line)
-    if not m: continue
-    name=m.group(1).split('[',1)[0]
-    if name in ('-e','.','src'): continue
-    if name.startswith(('git+','http://','https://','file:')): continue
-    names.add(name)
-for n in sorted(names): print(n)
-PY
-)
-    while IFS= read -r pkg; do [[ -n "$pkg" ]] && COLLECT_FLAGS+=( --collect-all "$pkg" ); done <<< "$MAP_PKGS"
-  else
-    COLLECT_FLAGS+=( --collect-all fastapi --collect-all starlette --collect-all pydantic --collect-all anyio --collect-all uvicorn )
-  fi
-  COLLECT_FLAGS+=( --collect-all psutil --collect-all cryptography )
-  printf 'collect-all flags: %q ' "${COLLECT_FLAGS[@]}"; echo
-
-  py_hidden_imports() {
-    python - "$@" <<'PY'
-import ast, sys, pathlib
-mods=set()
-for p in sys.argv[1:]:
-    path=pathlib.Path(p)
-    if not path.exists(): continue
-    tree=ast.parse(path.read_text(encoding='utf-8'), filename=p)
-    for n in ast.walk(tree):
-        if isinstance(n, ast.Import):
-            for a in n.names: mods.add(a.name.split('.')[0])
-        elif isinstance(n, ast.ImportFrom) and n.module:
-            mods.add(n.module.split('.')[0])
-mods |= {'platform','asyncio','typing','pathlib','logging','json','re','time','datetime','http','socket','subprocess','threading','concurrent','importlib','pkgutil','inspect','uvicorn','fastapi','starlette','pydantic','anyio','sniffio','typing_extensions','requests','httpx','psutil','cryptography'}
-print('\n'.join(sorted(mods)))
-PY
-  }
-  to_pyinstaller_flags() { awk '{print "--hidden-import="$0}' | xargs; }
-  SHELLMCP_IMPORTS=$(py_hidden_imports client/shellmcp.py client/shellmcp_pure.py client/gptadmin_build_info.py client/gptadmin_security.py)
-  SHELLMCP_HIDDEN_FLAGS=$(echo "$SHELLMCP_IMPORTS" | to_pyinstaller_flags)
-  [[ -f client/shellmcp_linux.py ]] && SHELLMCP_HIDDEN_FLAGS="$SHELLMCP_HIDDEN_FLAGS --hidden-import=shellmcp_linux"
-  [[ -f client/shellmcp_win.py ]] && SHELLMCP_HIDDEN_FLAGS="$SHELLMCP_HIDDEN_FLAGS --hidden-import=shellmcp_win"
-  [[ -f client/shellmcp_mac.py ]] && SHELLMCP_HIDDEN_FLAGS="$SHELLMCP_HIDDEN_FLAGS --hidden-import=shellmcp_mac"
-  echo "SHELLMCP hidden-imports flags: $SHELLMCP_HIDDEN_FLAGS"
-}
-
-SHELLMCP_DIST="$ART_DIR/shellmcp/dist/shellmcp"
+# ShellMCP is now Go-only (go-shellmcp). SHELLMCP_DIST points at the cross-built
+# linux/amd64 binary built by build_go_shellmcp_cross_platforms.
+SHELLMCP_DIST="$ART_DIR/go-shellmcp/linux_amd64/shellmcp-go"
 HUB_DIST="$ART_DIR/gptadmin_hub/dist/gptadmin_hub"
-py_flags_ready=0
-ensure_py_flags() { [[ "$py_flags_ready" == 1 ]] && return 0; prepare_pyinstaller_flags; py_flags_ready=1; }
-
-build_shellmcp_linux() {
-  ensure_py_flags
-  step "PyInstaller: build shellmcp Linux"
-  SHELLMCP_SRC=(client/shellmcp.py client/shellmcp_pure.py client/gptadmin_build_info.py client/gptadmin_security.py cli.py)
-  [[ -f client/shellmcp_linux.py ]] && SHELLMCP_SRC+=(client/shellmcp_linux.py)
-  [[ -f client/shellmcp_win.py ]] && SHELLMCP_SRC+=(client/shellmcp_win.py)
-  [[ -f client/shellmcp_mac.py ]] && SHELLMCP_SRC+=(client/shellmcp_mac.py)
-  [[ "$REBUILD_ON_REQ_CHANGE" == 1 && -f requirements.txt ]] && SHELLMCP_SRC+=(requirements.txt)
-  FP_SHELLMCP_NEW="$(fingerprint "${SHELLMCP_SRC[@]}")"
-  FP_SHELLMCP_FILE="$CACHE_DIR/.fp_shellmcp"
-  if [[ "$FORCE" == 1 || ! -x "$SHELLMCP_DIST" ]] || changed "$FP_SHELLMCP_FILE" "$FP_SHELLMCP_NEW"; then
-    : "${PYTHONPATH:=}"; export PYTHONPATH="client:$PYTHONPATH"
-    mkdir -p "$ART_DIR/shellmcp"
-    pyinstaller client/shellmcp.py --onefile --noconfirm --clean --log-level=DEBUG \
-      --specpath "$ART_DIR/shellmcp" "${COLLECT_FLAGS[@]}" $SHELLMCP_HIDDEN_FLAGS \
-      --distpath "$ART_DIR/shellmcp/dist" --workpath "$ART_DIR/shellmcp/build"
-    save_fp "$FP_SHELLMCP_FILE" "$FP_SHELLMCP_NEW"
-  else
-    echo "Skip PyInstaller shellmcp"
-  fi
-}
 
 build_hub_linux() {
   step "Go build: gptadmin_hub Linux"
@@ -370,8 +269,8 @@ pathlib.Path('$ART_DIR/gptadmin-shellmcp.json').write_text(json.dumps({
   'component': 'shellmcp', 'build_version': int('$BUILD_VERSION'), 'build_ts': '$BUILD_TS',
   'git_commit': '$GIT_COMMIT', 'platform': 'linux', 'arch': 'x86_64',
   'artifact_type': 'binary-runtime+source',
-  'runtime_payload': ['shellmcp/dist/shellmcp', 'cli', 'agents/generic_stdio_mcp_relay', 'client'],
-  'source_payload': ['client/shellmcp.py', 'client/shellmcp_pure.py', 'client/shellmcp_linux.py', 'client/gptadmin_security.py', 'client/gptadmin_build_info.py'],
+  'runtime_payload': ['go-shellmcp/linux_amd64/shellmcp-go', 'cli', 'agents/generic_stdio_mcp_relay', 'client'],
+  'source_payload': ['client/gptadmin_security.py', 'client/gptadmin_build_info.py'],
   'sha256': sha, 'url': '/gptadmin-shellmcp.tar.gz'
 }, ensure_ascii=False, indent=2) + '\n')
 PY
@@ -553,7 +452,6 @@ smoke_linux() {
 # Dependency expansion.
 if want all; then
   build_cli
-  build_shellmcp_linux
   build_hub_linux
   package_hub_platform_binaries
   copy_support_payloads
@@ -567,7 +465,7 @@ if want all; then
   smoke_linux
 else
   want cli && build_cli
-  if want shellmcp; then build_cli; build_shellmcp_linux; copy_support_payloads; archive_component_shellmcp; fi
+  if want shellmcp; then build_cli; copy_support_payloads; archive_component_shellmcp; fi
   if want hub; then build_cli; build_hub_linux; package_hub_platform_binaries; copy_support_payloads; archive_component_hub; fi
   if want platform; then build_cli; package_hub_platform_binaries; copy_support_payloads; archive_platforms; fi
   want windows && build_windows_shellmcp
