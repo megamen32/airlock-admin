@@ -501,6 +501,43 @@ def _install_shellmcp_binary_from_pkg(tdp: Path) -> None:
     die('shellmcp binary not found in package')
 
 
+def _cleanup_obsolete_runtime_files():
+    """Remove obsolete replaceable runtime files after an in-place upgrade.
+
+    User configuration, identities, tokens, logs, registry state and MCP config are
+    intentionally preserved. Only old executable aliases, interrupted .new files
+    and binary backup artifacts are removed.
+    """
+    obsolete = [
+        BIN_DIR / 'rootd-go',
+        BIN_DIR / 'rootd-go-canary',
+        BIN_DIR / 'shellmcp-go',
+        BIN_DIR / 'gptadmin_hub.py',
+        BIN_DIR / 'shellmcp.py',
+        CLI_PATH.with_name(CLI_PATH.name + '.new'),
+    ]
+    for path in obsolete:
+        try:
+            if path.is_dir():
+                shutil.rmtree(path)
+            else:
+                path.unlink()
+        except FileNotFoundError:
+            pass
+    for directory in (BIN_DIR, CLI_PATH.parent):
+        if not directory.exists():
+            continue
+        for pattern in ('*.bak.*', '*.old', '*.new'):
+            for path in directory.glob(pattern):
+                try:
+                    if path.is_dir():
+                        shutil.rmtree(path)
+                    else:
+                        path.unlink()
+                except FileNotFoundError:
+                    pass
+
+
 def install_component_from_pkg(pkg_tgz: Path, component: str):
     with tempfile.TemporaryDirectory() as td:
         tdp = Path(td)
@@ -3292,6 +3329,7 @@ def cmd_update(args):
             install_component_from_pkg(pkg, 'shellmcp')
 
     _write_installed_build_marker(remote_info, target_pkg)
+    _cleanup_obsolete_runtime_files()
 
     write_hub_unit(install_hub, install_shellmcp)
     write_shellmcp_unit(install_hub, install_shellmcp)
