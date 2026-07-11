@@ -3,10 +3,107 @@
 **Fixer**: FIX AGENT (Linux box, cross-compile + existing tests)
 **Fix date**: 2026-07-11
 **Critic review**: `mac-critic-review.md` (1 CRITICAL + 2 IMPORTANT + 1 minor)
+**Follow-up verifier**: REAL-MAC harness `tests/mac/launchd_verify.py` (8/8 pass on macOS 26.6 arm64)
 
-All four items addressed. Linux code path is untouched; cli.py remains single-file; both Go and Python test suites stay green; both darwin cross-compiles stay clean.
+All four critic-review items plus the follow-up improvements are addressed.
+Linux code path is untouched; cli.py remains single-file; both Go and Python
+test suites stay green; both darwin cross-compiles stay clean.
 
 ---
+
+## Follow-up #1 — IMPORTANT: `DefaultUpdateLauncher` honored `GPTADMIN_SERVICE_SUFFIX`
+
+**Status**: already shipped in commit `1e21859` (prior fixer). Re-verified here.
+
+`DefaultUpdateLauncher()` in `go-hub/internal/hub/update_launcher.go` reads
+`GPTADMIN_SERVICE_SUFFIX` from env, trims whitespace, validates against
+`[A-Za-z0-9_.-]+` (matching `cli.py`'s regex), fails-soft to empty on bad
+input, and splices the suffix into the launchd label so it matches
+`SVC_AUTO_UPDATE_LABEL` on the Python side. Three unit tests cover
+suffix-present, suffix-absent, and malformed-suffix-fallback paths:
+
+- `TestDefaultUpdateLauncherHonorsServiceSuffix` — `.e2e42`, `-staging`,
+  `_ci`, whitespace-stripping produce the expected labels.
+- `TestDefaultUpdateLauncherDropsMalformedSuffix` — `bad space`, `semi;colon`,
+  `slash/infix` fall back to the default label.
+- `TestDefaultUpdateLauncherSuffixMatchesPython` — explicit cross-check of
+  canonical inputs against the Python construction.
+
+Verified: `go test ./...` is green (1.19s).
+
+---
+
+## Follow-up #2 — IMPORTANT: tighten `AbandonProcessGroup` docstring
+
+**Status**: prior commit `1e21859` corrected the inverted claim. This follow-up
+tightens the wording further to make the bootout-resilience semantics explicit.
+
+Old (prior fix):
+
+> "`AbandonProcessGroup=true`: tells launchd to NOT send SIGTERM to the
+> job's process group when the wrapper exits. Any leftover children are left
+> running. ..."
+
+New (this commit, `b68b668`):
+
+> "`AbandonProcessGroup=true`: prevents launchd from sending SIGTERM to
+> the wrapper's process group on bootout. The job is therefore allowed to
+> complete even if the parent launchd job is unloaded mid-run. Children are
+> *abandoned*, not cleaned up. The wrapper `exec`s into the CLI without
+> forking, so we have no children to worry about; the flag is set for
+> bootout-resilience, not for cleanup."
+
+Verified: `python3 -c "import ast; ast.parse(open('cli.py').read())"` clean.
+
+---
+
+## Follow-up #3 — promote the REAL-MAC verification harness
+
+**Status**: shipped in commit `89b37f3`.
+
+The harness that verified the launchd logic on a real Mac (8/8 passing on
+macOS 26.6 arm64) previously lived at `/tmp/macverify_harness.py` and would
+have been lost. Promoted to `tests/mac/launchd_verify.py`.
+
+- Self-contained: imports `cli` from the repo root (added to `sys.path`),
+  sets isolated env vars, runs a shim CLI that only touches a marker file,
+  exercises `write_autoupdate_unit`, `timer_disable`, `timer_enable`,
+  manual `launchctl kickstart`, state-field parsing, and
+  `_launchctl_kickstart_cmd`, then cleans up.
+- Skip-on-Linux: prints a skip message and exits 0 when `sys.platform` is
+  not `darwin`. Uses `pytest.skip(allow_module_level=True)` when invoked
+  via pytest.
+- 8 checks (same as the proven `/tmp/macverify_harness.py`):
+  1. `write_autoupdate_unit` loads the job (`launchctl print` rc=0).
+  2. `write_autoupdate_unit` does NOT fire the shim at install (load-only).
+  3. `launchctl print` 'state' field is parseable (Go-side concern).
+  4. Manual `launchctl kickstart -k` runs the shim (unified trigger).
+  5. `timer_disable` does NOT fire the shim (CRITICAL fix).
+  6. Job stays loaded after `timer_disable` (manual kickstart preserved).
+  7. `timer_enable` DOES fire the shim (intentional first kick).
+  8. `_launchctl_kickstart_cmd` builds the right `gui/<uid>/<label>` target.
+- Invocation:
+  - `python3 tests/mac/launchd_verify.py` (ad-hoc on a real Mac).
+  - `GPTADMIN_MAC_VERIFY=1 pytest tests/mac/launchd_verify.py` (CI runner).
+- Isolation: `GPTADMIN_INSTALL_MODE=user`, `GPTADMIN_USER_HOME` and
+  `GPTADMIN_HOME` both point into a `tempfile.mkdtemp(prefix='gptadmin_macverify_')`,
+  `GPTADMIN_SERVICE_SUFFIX=.macverify`, shim CLI writes only to
+  `<isolated>/marker.log`. The harness's real `LaunchAgent` is the
+  suffixed `com.gptadmin.macverify.auto-update` — never the production label.
+- Cleanup: `svc_disable_stop` + `bootout` + plist removal in a `finally`
+  block; the temp dir is removed after the run.
+- `pyproject.toml` gains `[tool.pytest.ini_options] python_files = ["test_*.py", "*_test.py", "launchd_verify.py"]` so the explicitly-named file
+  is collected by pytest alongside the default patterns.
+- `tests/mac/README.md` (5 lines): explains "real-launchd harness, macOS only,
+  isolated via `GPTADMIN_SERVICE_SUFFIX`."
+
+Verified on Linux: harness exits 0 with the skip message; full pytest suite
+goes from 66 passed / 1 skipped to 66 passed / 2 skipped (the new harness is
+the additional skip; no regressions).
+
+---
+
+## Original fixes (commit `1e21859`, prior round)
 
 ## Fix 1 — CRITICAL: `timer_disable` no longer fires an immediate update
 
@@ -157,8 +254,23 @@ $ python3 cli.py version
 
 ## Files changed
 
-- `cli.py` — split svc_enable/svc_enable_start, wired timer_disable/write_autoupdate_unit, fixed AbandonProcessGroup docstring.
+### Round 1 (commit `1e21859`, prior fix)
+
+- `cli.py` — split svc_enable/svc_enable_start, wired timer_disable/write_autoupdate_unit, corrected AbandonProcessGroup docstring.
 - `go-hub/internal/hub/update_launcher.go` — suffix-aware label construction + validator.
 - `go-hub/internal/hub/update_launcher_test.go` — three new tests.
 - `tests/test_update_semantics.py` — updated assertion block.
-- `.superpowers/sdd/mac-fix-report.md` — this report.
+- `.superpowers/sdd/mac-fix-report.md` — original report.
+
+### Round 2 (this round, follow-ups)
+
+- `cli.py` — further tightened `AbandonProcessGroup` docstring to spell out the
+  bootout-resilience semantics.
+- `tests/mac/launchd_verify.py` (new) — promoted real-launchd verification
+  harness; skip-on-Linux with `pytest.skip(allow_module_level=True)`.
+- `tests/mac/README.md` (new) — 5-line note on the harness purpose.
+- `tests/mac/conftest.py` (new) — empty marker so the directory is part of
+  the test suite.
+- `pyproject.toml` — `[tool.pytest.ini_options] python_files` extended with
+  `launchd_verify.py` so the explicitly-named harness is collected.
+- `.superpowers/sdd/mac-fix-report.md` — this round's additions appended.
