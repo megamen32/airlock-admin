@@ -119,7 +119,7 @@ jobs:
               "$SRC"/build/*.tar.gz
           else
             gh release create "${TAG}" --repo megamen32/gptadmin_opensource \
-              --title "${TAG}" --generate-release-notes \
+              --title "${TAG}" --generate-notes \
               "$SRC"/build/*.tar.gz
           fi
           echo "=== Public release published: https://github.com/megamen32/gptadmin_opensource/releases/tag/${TAG} ==="
