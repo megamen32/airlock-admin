@@ -180,11 +180,12 @@ def _plist_oneshot(label: str, wrapper: Path, log_file: Path, interval: int | No
         and does NOT auto-restart. It must be triggered explicitly via
         `launchctl kickstart` (which is what we use for both periodic and
         manual update triggers).
-      - AbandonProcessGroup=true: tells launchd to NOT send SIGTERM to the
-        job's process group when the wrapper exits. Any leftover children
-        are left running. The wrapper itself `exec`s into the CLI without
-        forking, so we have no children to clean up — this key is set
-        defensively for clarity of intent, not because we need it.
+      - AbandonProcessGroup=true: prevents launchd from sending SIGTERM to
+        the wrapper's process group on bootout. The job is therefore allowed
+        to complete even if the parent launchd job is unloaded mid-run.
+        Children are *abandoned*, not cleaned up. The wrapper `exec`s into
+        the CLI without forking, so we have no children to worry about;
+        the flag is set for bootout-resilience, not for cleanup.
       - StartInterval (optional): if provided, launchd schedules the job to
         run every <interval> seconds. When omitted, the plist is a pure
         "service unit always present" that does nothing until kicked.
