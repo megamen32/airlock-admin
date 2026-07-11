@@ -161,7 +161,7 @@ else:
     FRPC_CONF = ETC_DIR / 'frpc.toml'
 
 # Package URLs can be overridden by env or args
-PKG_BASE_URL_DEFAULT = os.environ.get('PKG_BASE_URL', 'https://became.bezrabotnyi.com').rstrip('/')
+PKG_BASE_URL_DEFAULT = os.environ.get('PKG_BASE_URL', 'https://github.com/megamen32/gptadmin_opensource/releases/latest/download').rstrip('/')
 PKG_ALL_URL_DEFAULT   = os.environ.get('PKG_ALL_URL',   f'{PKG_BASE_URL_DEFAULT}/gptadmin.tar.gz')
 PKG_HUB_URL_DEFAULT   = os.environ.get('PKG_HUB_URL',   f'{PKG_BASE_URL_DEFAULT}/gptadmin-hub.tar.gz')
 PKG_SHELLMCP_URL_DEFAULT = os.environ.get('PKG_SHELLMCP_URL', f'{PKG_BASE_URL_DEFAULT}/gptadmin-shellmcp.tar.gz')

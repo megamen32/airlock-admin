@@ -13,7 +13,7 @@ set -euo pipefail
 #   SHELLMCP_PORT, SHELLMCP_AUTO_START, SHELLMCP_FOREGROUND, SHELLMCP_QUEUE_TIMEOUT_S
 #   SHELLMCP_ANDROID_PRIVILEGE=auto|none|shizuku|shizuku-all, SHELLMCP_SHIZUKU_RISH=/path/to/rish
 
-PACKAGE_URL=${PACKAGE_URL:-https://became.bezrabotnyi.com/gptadmin-android-arm64.tar.gz}
+PACKAGE_URL=${PACKAGE_URL:-https://github.com/megamen32/gptadmin_opensource/releases/latest/download/gptadmin-android-arm64.tar.gz}
 GPTADMIN_DIR=${GPTADMIN_DIR:-$HOME/.local/share/gptadmin}
 CONFIG_DIR=${GPTADMIN_CONFIG_DIR:-$HOME/.config/gptadmin}
 BIN_DIR=${BIN_DIR:-$PREFIX/bin}
