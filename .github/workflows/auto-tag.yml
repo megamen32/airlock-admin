@@ -61,6 +61,10 @@ jobs:
       - name: Dispatch Release workflow on the new tag
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # gh CLI infers the repo from the local git checkout; this job has
+          # none (no actions/checkout step), so it fails with
+          # "fatal: not a git repository". Pin the repo explicitly instead.
+          GH_REPO: ${{ github.repository }}
         run: |
           set -euo pipefail
           tag="${{ needs.tag.outputs.tag }}"
