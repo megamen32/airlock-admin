@@ -84,8 +84,12 @@ os.environ["GPTADMIN_SERVICE_SUFFIX"] = SERVICE_SUFFIX
 os.environ["GPTADMIN_CLI_PATH"] = str(SHIM_PATH)
 
 SHIM_PATH.parent.mkdir(parents=True, exist_ok=True)
+# Hardcode the absolute marker path: the wrapper runs under launchd whose
+# environment is sourced from ENV_FILE, not from this Python process, so
+# $GPTADMIN_HOME is NOT in the wrapper's env. A relative/env-dependent path
+# would write the marker where the harness can't read it.
 SHIM_PATH.write_text(
-    '#!/bin/sh\necho "RAN $(date +%s)" >> "$GPTADMIN_HOME/marker.log"\nexit 0\n'
+    f'#!/bin/sh\necho "RAN $(date +%s)" >> "{MARKER_PATH}"\nexit 0\n'
 )
 SHIM_PATH.chmod(0o755)
 MARKER_PATH.write_text("")
