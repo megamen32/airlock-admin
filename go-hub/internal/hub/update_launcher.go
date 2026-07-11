@@ -33,8 +33,9 @@ type UpdateLauncher struct {
 // The launchd label MUST match the SVC_AUTO_UPDATE_LABEL constant in
 // cli.py on the Mac side. Both default to "com.gptadmin.auto-update"
 // (SERVICE_PREFIX + ".auto-update" where SERVICE_PREFIX is "com.gptadmin"
-// in production; the Python side also honors GPTADMIN_SERVICE_SUFFIX for
-// parallel e2e installs — keep them aligned if you set that env var).
+// in production). The Python side also honors GPTADMIN_SERVICE_SUFFIX for
+// parallel e2e installs — we mirror that here so the hub's kickstart
+// targets the same loaded plist label as the CLI writes.
 func DefaultUpdateLauncher() *UpdateLauncher {
 	isUser := os.Getenv("GPTADMIN_INSTALL_MODE") == "user" ||
 		os.Getenv("GPTADMIN_INSTALL_SCOPE") == "user"
@@ -43,13 +44,50 @@ func DefaultUpdateLauncher() *UpdateLauncher {
 		home, _ := os.UserHomeDir()
 		installDir = home + "/.local/share/gptadmin"
 	}
+	// Mirror the Python side's SERVICE_PREFIX construction exactly:
+	//   SERVICE_SUFFIX = os.environ['GPTADMIN_SERVICE_SUFFIX'].strip()
+	//   SERVICE_PREFIX = f'com.gptadmin{SERVICE_SUFFIX}'
+	// The Python side validates the suffix as [A-Za-z0-9_.-]+ and dies on
+	// mismatch; if Go and Python disagree on the label the kickstart will
+	// hit "Could not find service". An invalid suffix from the env is
+	// treated as empty here (fail-soft) — the Python side will catch it on
+	// its next run and refuse to start.
+	suffix := strings.TrimSpace(os.Getenv("GPTADMIN_SERVICE_SUFFIX"))
+	if !validServiceSuffix(suffix) {
+		// Malformed suffix (would violate cli.py's regex). Fail-soft by
+		// dropping it — the Python side is the authoritative validator and
+		// will refuse to start, so we don't make things worse here.
+		suffix = ""
+	}
 	return &UpdateLauncher{
 		ServiceUnit:   "gptadmin-auto-update.service",
-		Label:         "com.gptadmin.auto-update",
+		Label:         "com.gptadmin" + suffix + ".auto-update",
 		WrapperPath:   installDir + "/bin/run_auto_update.sh",
 		LogPath:       installDir + "/auto-update.log",
 		IsUserInstall: isUser,
 	}
+}
+
+// validServiceSuffix returns true when s is empty or matches the
+// [A-Za-z0-9_.-]+ pattern that cli.py uses for GPTADMIN_SERVICE_SUFFIX.
+// We only use this to decide whether to splice the suffix into the launchd
+// label; the Python side is the authoritative validator and will refuse
+// to start on a malformed value.
+func validServiceSuffix(s string) bool {
+	if s == "" {
+		return true
+	}
+	for _, r := range s {
+		switch {
+		case r >= 'a' && r <= 'z':
+		case r >= 'A' && r <= 'Z':
+		case r >= '0' && r <= '9':
+		case r == '_' || r == '.' || r == '-':
+		default:
+			return false
+		}
+	}
+	return true
 }
 
 // LaunchUpdate starts the update as an external process that survives hub restart.

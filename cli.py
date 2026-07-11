@@ -180,9 +180,11 @@ def _plist_oneshot(label: str, wrapper: Path, log_file: Path, interval: int | No
         and does NOT auto-restart. It must be triggered explicitly via
         `launchctl kickstart` (which is what we use for both periodic and
         manual update triggers).
-      - AbandonProcessGroup=true: when the wrapper exits, launchd cleans up
-        any straggling children. Without this, a backgrounded update could
-        leak processes between runs.
+      - AbandonProcessGroup=true: tells launchd to NOT send SIGTERM to the
+        job's process group when the wrapper exits. Any leftover children
+        are left running. The wrapper itself `exec`s into the CLI without
+        forking, so we have no children to clean up — this key is set
+        defensively for clarity of intent, not because we need it.
       - StartInterval (optional): if provided, launchd schedules the job to
         run every <interval> seconds. When omitted, the plist is a pure
         "service unit always present" that does nothing until kicked.
@@ -657,11 +659,21 @@ if IS_MACOS:
     def svc_daemon_reload():
         pass  # launchd has no daemon-reload
 
-    def svc_enable_start(label: str, unit_path: Path):
-        # macOS launchctl load/unload is legacy and can silently fail to restore
-        # a LaunchAgent after bootout during in-place update. Prefer bootstrap into
-        # the explicit domain, then kickstart; keep load -w as fallback for older
-        # systems.
+    def svc_enable(label: str, unit_path: Path):
+        # Load the (possibly rewritten) plist into launchd WITHOUT starting
+        # the job. This is the right primitive for "I just changed the plist
+        # config — pick up the new file but do not run the job now." Used by:
+        #   * write_autoupdate_unit (install-time registration; we want the
+        #     job loaded so manual kickstart works, but we do NOT want a
+        #     surprise update to fire at install time).
+        #   * timer_disable (user said "stop periodic updates" — we rewrite
+        #     the plist without StartInterval; loading it must not run the
+        #     job because that would violate the user's intent).
+        #
+        # macOS launchctl load/unload is legacy and can silently fail to
+        # restore a LaunchAgent after bootout during in-place update. Prefer
+        # bootstrap into the explicit domain, then enable; keep load -w as
+        # fallback for older systems.
         domain = _launchd_domain()
         # A missing/unloaded launchd job is normal during update or first install.
         # `launchctl bootout` prints "Boot-out failed: 3: No such process" to
@@ -676,8 +688,21 @@ if IS_MACOS:
             time.sleep(0.2)
             bootstrap = _launchctl_capture(['launchctl', 'bootstrap', domain, str(unit_path)])
         _launchctl_capture(['launchctl', 'enable', _launchd_service_target(label)])
-        # kickstart can block for long-running LaunchAgents on some macOS versions.
-        # bootstrap already starts the job; keep kickstart as silent best-effort only.
+        if not _launchd_is_loaded(label):
+            run(['launchctl', 'load', '-w', str(unit_path)], check=False)
+        if not _launchd_is_loaded(label):
+            raise RuntimeError(f'launchd service did not load: {_launchd_service_target(label)}')
+
+    def svc_enable_start(label: str, unit_path: Path):
+        # Load the plist AND kickstart it. Used for long-running services
+        # (hub / shellmcp / frpc / cloudflared) where RunAtLoad + KeepAlive
+        # semantics mean "bootstrap should also start the job now." Do NOT
+        # use this for oneshot plists whose purpose is to be triggered only
+        # on explicit kickstart (e.g., auto-update) — calling it there
+        # would fire one unintended run per config reload.
+        svc_enable(label, unit_path)
+        # kickstart can block for long-running LaunchAgents on some macOS
+        # versions; keep kickstart as silent best-effort only.
         try:
             subprocess.run(
                 ['launchctl', 'kickstart', '-k', _launchd_service_target(label)],
@@ -686,10 +711,6 @@ if IS_MACOS:
             )
         except subprocess.TimeoutExpired:
             pass
-        if not _launchd_is_loaded(label):
-            run(['launchctl', 'load', '-w', str(unit_path)], check=False)
-        if not _launchd_is_loaded(label):
-            raise RuntimeError(f'launchd service did not load: {_launchd_service_target(label)}')
 
     def svc_restart(label: str, unit_path: Path):
         svc_disable_stop(label, unit_path)
@@ -849,6 +870,13 @@ if IS_MACOS:
         # manual `launchctl kickstart` invocations.
         UNIT_PATH_AUTO_UPDATE.write_text(
             _plist_oneshot(SVC_AUTO_UPDATE_LABEL, wrapper, LOG_DIR / 'auto-update.log'))
+        # Register the job with launchd so manual `launchctl kickstart` works
+        # on a fresh install. We use the LOAD-ONLY path (svc_enable, no
+        # kickstart) on purpose: a freshly installed auto-update must not
+        # fire on its own. The first kick only happens when the user clicks
+        # "update now" or when timer_enable rewrites the plist with a
+        # StartInterval and explicitly kicks once.
+        svc_enable(SVC_AUTO_UPDATE_LABEL, UNIT_PATH_AUTO_UPDATE)
 
     def svc_hub_name():  return SVC_HUB_LABEL
     def svc_shellmcp_name(): return SVC_SHELLMCP_LABEL
@@ -884,9 +912,12 @@ if IS_MACOS:
         UNIT_PATH_AUTO_UPDATE.write_text(
             _plist_oneshot(SVC_AUTO_UPDATE_LABEL, BIN_DIR / 'run_auto_update.sh',
                            LOG_DIR / 'auto-update.log'))
-        # Reload to pick up the StartInterval removal. The job is still
-        # loaded afterwards; only its schedule changed.
-        svc_enable_start(SVC_AUTO_UPDATE_LABEL, UNIT_PATH_AUTO_UPDATE)
+        # Reload to pick up the StartInterval removal. Use the LOAD-ONLY
+        # path (svc_enable, no kickstart) on purpose: the user just said
+        # "stop periodic updates" — booting the new plist must NOT fire an
+        # update. The job is still loaded afterwards; only its schedule
+        # changed.
+        svc_enable(SVC_AUTO_UPDATE_LABEL, UNIT_PATH_AUTO_UPDATE)
 
     def timer_status(timer_unit: str, timer_path: Path):
         if not _launchd_is_loaded(SVC_AUTO_UPDATE_LABEL):

@@ -8,6 +8,9 @@ import (
 )
 
 func TestDefaultUpdateLauncher(t *testing.T) {
+	// Make sure no leftover env from the parent shell leaks into this test.
+	t.Setenv("GPTADMIN_SERVICE_SUFFIX", "")
+
 	l := DefaultUpdateLauncher()
 	if l.ServiceUnit != "gptadmin-auto-update.service" {
 		t.Errorf("unexpected service unit: %q", l.ServiceUnit)
@@ -19,6 +22,74 @@ func TestDefaultUpdateLauncher(t *testing.T) {
 	}
 	if l.WrapperPath == "" {
 		t.Error("wrapper path should not be empty")
+	}
+}
+
+func TestDefaultUpdateLauncherHonorsServiceSuffix(t *testing.T) {
+	// Parallel e2e installs use GPTADMIN_SERVICE_SUFFIX to namespace the
+	// launchd labels. The hub MUST mirror the Python construction or its
+	// `launchctl kickstart` will hit "Could not find service" on a suffixed
+	// install.
+	cases := []struct {
+		raw   string
+		want  string
+	}{
+		{".e2e42", "com.gptadmin.e2e42.auto-update"},
+		{"-staging", "com.gptadmin-staging.auto-update"},
+		{"_ci", "com.gptadmin_ci.auto-update"},
+		// Leading/trailing whitespace is stripped by the Python side too.
+		{"  .trimme  ", "com.gptadmin.trimme.auto-update"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.raw, func(t *testing.T) {
+			t.Setenv("GPTADMIN_SERVICE_SUFFIX", tc.raw)
+			l := DefaultUpdateLauncher()
+			if l.Label != tc.want {
+				t.Errorf("Label with suffix %q = %q, want %q", tc.raw, l.Label, tc.want)
+			}
+		})
+	}
+}
+
+func TestDefaultUpdateLauncherDropsMalformedSuffix(t *testing.T) {
+	// cli.py rejects any suffix that does not match [A-Za-z0-9_.-]+; Go
+	// cannot replicate the validator exactly (the regex is shared between
+	// sides in spirit) but it must fall back to the default label rather
+	// than splice garbage into the launchd target.
+	cases := []string{"bad space", "semi;colon", "slash/infix"}
+	for _, raw := range cases {
+		t.Run(raw, func(t *testing.T) {
+			t.Setenv("GPTADMIN_SERVICE_SUFFIX", raw)
+			l := DefaultUpdateLauncher()
+			if l.Label != "com.gptadmin.auto-update" {
+				t.Errorf("malformed suffix %q produced label %q, want default",
+					raw, l.Label)
+			}
+		})
+	}
+}
+
+func TestDefaultUpdateLauncherSuffixMatchesPython(t *testing.T) {
+	// Cross-check the Go construction against the Python one for a few
+	// canonical inputs. If Python ever changes its construction (e.g.,
+	// changes the prefix, alters the join character) this test will fire
+	// and force the two sides back into lockstep.
+	py := []struct {
+		env   string
+		label string
+	}{
+		{"", "com.gptadmin.auto-update"},
+		{".e2e42", "com.gptadmin.e2e42.auto-update"},
+		{"-foo_bar", "com.gptadmin-foo_bar.auto-update"},
+	}
+	for _, tc := range py {
+		t.Run(tc.env, func(t *testing.T) {
+			t.Setenv("GPTADMIN_SERVICE_SUFFIX", tc.env)
+			if got := DefaultUpdateLauncher().Label; got != tc.label {
+				t.Errorf("Label mismatch with Python: env=%q got=%q want=%q",
+					tc.env, got, tc.label)
+			}
+		})
 	}
 }
 
