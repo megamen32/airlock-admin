@@ -2,12 +2,15 @@ name: Auto-tag release
 
 # When VERSION is bumped on main (the "Release build N" commits), create and
 # push a v<VERSION> git tag if it does not already exist, then dispatch
-# .github/workflows/release.yml on that tag to build the GitHub Release.
+# .github/workflows/build-and-sync.yml on that tag, which builds the binaries,
+# mirrors source into the public repo, and publishes the binaries as a GitHub
+# Release (assets) on megamen32/gptadmin_opensource.
 #
-# We dispatch release.yml explicitly (rather than relying on its `on: push:
-# tags` trigger) because a tag pushed with the workflow's GITHUB_TOKEN does NOT
-# fire push events for other workflows — GitHub suppresses that to prevent
-# loops. An explicit workflow_dispatch is not subject to that suppression.
+# We dispatch explicitly (rather than relying on build-and-sync.yml's
+# `on: push: tags` trigger) because a tag pushed with the workflow's
+# GITHUB_TOKEN does NOT fire push events for other workflows — GitHub
+# suppresses that to prevent loops. An explicit workflow_dispatch is not
+# subject to that suppression.
 # Idempotent: a repeat push of the same VERSION skips tagging and re-dispatch.
 
 on:
@@ -68,5 +71,5 @@ jobs:
         run: |
           set -euo pipefail
           tag="${{ needs.tag.outputs.tag }}"
-          echo "Dispatching release.yml on ref ${tag}"
-          gh workflow run release.yml --ref "${tag}"
+          echo "Dispatching build-and-sync.yml on ref ${tag}"
+          gh workflow run build-and-sync.yml --ref "${tag}"
