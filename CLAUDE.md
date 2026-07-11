@@ -34,8 +34,10 @@ bash tools/build.sh
 - `build-and-sync.yml` builds binaries (`tools/build.sh`) and **commits them into git** of the **public** mirror `megamen32/gptadmin_opensource/binaries/` (needs `OPENSOURCE_PAT`). **Known bad design** — binaries bloat git history; see TODO below.
 - macOS CI: `macos-build` job runs Go tests on `macos-latest` (darwin runtime).
 
-## How binaries actually reach users
-`became.bezrabotnyi.com/gptadmin*.tar.gz` (what `install.sh` and `cli.py` fetch) is served by `server_for_installer.py` running **on the server**, which reads from a **local `build/`** produced by running `bash tools/build.sh` there (not from the public repo, not from GitHub). So `gptadmin_opensource/binaries/` in git is currently unused dead weight.
+## How binaries reach users (canonical)
+`install.sh` and `cli.py` fetch packages from **GitHub Releases** on the public mirror:
+`https://github.com/megamen32/gptadmin_opensource/releases/latest/download/gptadmin-{platform}-{arch}.tar.gz`
+On a `v*` tag, `build-and-sync.yml` mirrors source into the public repo, pushes the tag, and uploads `build/*.tar.gz` as release **assets** (never into git history). The `gptadmin.py` bootstrap script and `FRPC_BASE_URL` still come from the legacy host `became.bezrabotnyi.com` (served by `server_for_installer.py`); binary packages no longer depend on it. Override the package base with `PKG_BASE_URL` / `RELEASES_URL` env.
 
 ## Build from source (for contributors / offline / reproducibility)
 ```bash
