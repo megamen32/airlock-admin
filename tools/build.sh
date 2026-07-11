@@ -214,6 +214,27 @@ build_hub_linux() {
   chmod 755 "$HUB_DIST"
 }
 
+# Cross-build gptadmin_hub for every platform we ship an install bundle for
+# (linux/{amd64,arm64}, darwin/{amd64,arm64}). CGO is disabled, so this is pure
+# Go and needs no C cross-toolchain on the amd64 build host. Mirrors
+# build_go_shellmcp_cross_platforms. Without this, the linux-arm64 (and the
+# darwin) platform archives were skipped because no hub binary existed for
+# those arches — so arm64 hosts (e.g. Orange Pi) fell back to the all-in-one
+# bundle shipping an amd64 hub that cannot run. See CLAUDE.md "Gotchas".
+build_hub_cross_platforms() {
+  step "Cross-build Go hub platform binaries"
+  pushd go-hub > /dev/null
+  export CGO_ENABLED=0
+  for pair in linux_amd64 linux_arm64 darwin_amd64 darwin_arm64; do
+    local goos="${pair%%_*}" goarch="${pair##*_}"
+    mkdir -p "../$ART_DIR/gptadmin_hub/$pair"
+    GOOS=$goos GOARCH=$goarch go build "${GO_HUB_LDFLAGS[@]}" \
+      -o "../$ART_DIR/gptadmin_hub/$pair/gptadmin_hub" ./cmd/gptadmin-hub
+    echo "hub cross-build: $pair/gptadmin_hub"
+  done
+  popd > /dev/null
+}
+
 normalize_arch() {
   case "${1,,}" in x86_64|amd64) echo amd64 ;; arm64|aarch64) echo arm64 ;; *) echo "${1,,}" ;; esac
 }
@@ -221,12 +242,26 @@ copy_hub_platform_binary() {
   local src="$1" tag="$2" exe_name="${3:-gptadmin_hub}"
   [[ -n "$src" && -x "$src" ]] || return 0
   mkdir -p "$ART_DIR/gptadmin_hub/$tag"
-  cp -f "$src" "$ART_DIR/gptadmin_hub/$tag/$exe_name"
-  chmod 755 "$ART_DIR/gptadmin_hub/$tag/$exe_name"
+  local dst="$ART_DIR/gptadmin_hub/$tag/$exe_name"
+  # Cross-build already places the binary in its destination; copying a file
+  # onto itself makes `cp` fail ("один и тот же файл") under errexit. Skip.
+  if [[ "$src" -ef "$dst" ]]; then
+    echo "hub platform binary: $tag/$exe_name (already in place)"
+    return 0
+  fi
+  cp -f "$src" "$dst"
+  chmod 755 "$dst"
   echo "hub platform binary: $tag/$exe_name <= $src"
 }
 package_hub_platform_binaries() {
   step "Package platform hub binaries"
+  # Prefer the cross-built binaries (always present after build_hub_cross_platforms).
+  local tag
+  for tag in linux_amd64 linux_arm64 darwin_amd64 darwin_arm64; do
+    copy_hub_platform_binary "$ART_DIR/gptadmin_hub/$tag/gptadmin_hub" "$tag" gptadmin_hub
+  done
+  # Legacy fallbacks (env vars / prebuilt dir) — honored only if the
+  # cross-build was skipped or a tag is still missing.
   [[ -x "$HUB_DIST" ]] && copy_hub_platform_binary "$HUB_DIST" "linux_$(normalize_arch "$(uname -m)")" "gptadmin_hub"
   copy_hub_platform_binary "${GPTADMIN_HUB_DARWIN_ARM64:-}" darwin_arm64 gptadmin_hub
   copy_hub_platform_binary "${GPTADMIN_HUB_DARWIN_AMD64:-}" darwin_amd64 gptadmin_hub
@@ -453,6 +488,7 @@ smoke_linux() {
 if want all; then
   build_cli
   build_hub_linux
+  build_hub_cross_platforms
   package_hub_platform_binaries
   copy_support_payloads
   archive_component_cli
@@ -466,8 +502,8 @@ if want all; then
 else
   want cli && build_cli
   if want shellmcp; then build_cli; copy_support_payloads; archive_component_shellmcp; fi
-  if want hub; then build_cli; build_hub_linux; package_hub_platform_binaries; copy_support_payloads; archive_component_hub; fi
-  if want platform; then build_cli; package_hub_platform_binaries; copy_support_payloads; archive_platforms; fi
+  if want hub; then build_cli; build_hub_linux; build_hub_cross_platforms; package_hub_platform_binaries; copy_support_payloads; archive_component_hub; fi
+  if want platform; then build_cli; build_hub_cross_platforms; package_hub_platform_binaries; copy_support_payloads; archive_platforms; fi
   want windows && build_windows_shellmcp
   want android && build_android_shellmcp
   want smoke && smoke_linux
