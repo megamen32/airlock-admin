@@ -9,7 +9,7 @@ Four ways to connect an AI client to your GPTAdmin hub.
 | 3 | [OAuth handshake](#3-oauth-handshake) | the auth flow that feeds #1 and #2 | PKCE S256 |
 | 4 | [Browser extension](#4-browser-extension) | DeepSeek / Qwen / Alice / any web chat | `Bridge Key` = `CTL_TOKEN` |
 
-All four reach the same hub and the same tools. See [ADAPTERS.md](./ADAPTERS.md) (older three-way overview) and [GPTADMIN_INSTRUCTIONS.md](./GPTADMIN_INSTRUCTIONS.md) (read-only reference for AI agents).
+All four reach the same hub and the same tools. See [ADAPTERS.md](./ADAPTERS.md) (older three-way overview) and [GPTADMIN_INSTRUCTIONS.md]() (read-only reference for AI agents).
 
 ---
 
@@ -247,7 +247,7 @@ To add a new site, append a `@match` line to `apps/chatgpt-admin-app/public/user
 ## Cross-adapter troubleshooting
 
 - **Where is `CTL_TOKEN`?** On the hub host: `grep ^CTL_TOKEN config/gptadmin.env`. Rotate by editing the file and `systemctl restart gptadmin-hub`.
-- **Hub isn't reachable from ChatGPT / Claude / my client** — must be public HTTPS. Localhost and LAN IPs work for manual testing but not for ChatGPT Actions or remote MCP clients. Use a Cloudflare Tunnel (see [TUNNELS.md](./TUNNELS.md)) or a reverse proxy with a real domain.
+- **Hub isn't reachable from ChatGPT / Claude / my client** — must be public HTTPS. Localhost and LAN IPs work for manual testing but not for ChatGPT Actions or remote MCP clients. Use a Cloudflare Tunnel (see [TUNNELS.md](./TUNNELS_DOCS.md)) or a reverse proxy with a real domain.
 - **MCP connects but every tool returns "unauthorized"** — open `https://<your-hub>/.well-known/oauth-authorization-server` in a browser; if it 404s the OAuth routes aren't enabled in your hub build. Re-check `apps/chatgpt-admin-app/` is deployed (or that the Go hub OAuth handlers are enabled).
 - **Custom GPT doesn't see the action** — verify the schema URL is public: `curl -I https://<your-hub>/actions/openapi.yaml` from outside your network. If 4xx/5xx, the tunnel / DNS isn't pointing at the hub.
 - **Browser extension doesn't inject** — userscript manager permissions: Tampermonkey Dashboard → "Allow user scripts" must be on; iOS Safari → Settings → Safari → Extensions → Userscripts → Allow; Android Firefox → add-on enabled for the current site.
