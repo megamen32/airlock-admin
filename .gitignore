@@ -18,6 +18,7 @@ build/
 # --- Runtime data & config ---
 config/
 logs/
+trash/
 logs_config.json
 *.log
 *.db

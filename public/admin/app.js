@@ -417,6 +417,10 @@ async function loadSecurityEnv(){
       return;
     }
     const lines=stdout.trim().split('\n').filter(l=>l.trim()&&!l.startsWith('#'));
+    const heartbeatLine=lines.find(line=>line.trim().startsWith('SHELLMCP_HEARTBEAT='));
+    const heartbeatValue=heartbeatLine?.split('=').slice(1).join('=').trim().toLowerCase();
+    const heartbeatInput=$('shellHeartbeatEnabled');
+    if(heartbeatInput)heartbeatInput.checked=['1','true','yes','on'].includes(heartbeatValue);
     const sensitive=['CTL_TOKEN','ADMIN_PASSWORD','OAUTH_CLIENT_SECRET','SHELLMCP_TOKEN','MCP_BRIDGE_KEY'];
     el.innerHTML=lines.map(line=>{
       const eq=line.indexOf('=');
@@ -458,6 +462,12 @@ async function setEnvVar(){
       alert('Ошибка: '+out);
     }
   }catch(e){alert('ERR '+e.message)}
+}
+
+function setShellHeartbeatFromPanel(enabled){
+  $('secEnvKey').value='SHELLMCP_HEARTBEAT';
+  $('secEnvVal').value=enabled?'1':'0';
+  setEnvVar();
 }
 
 async function rotateCtlToken(){
