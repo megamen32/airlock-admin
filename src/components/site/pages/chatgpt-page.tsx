@@ -6,39 +6,26 @@ import { Reveal, Stagger, StaggerItem } from "../reveal";
 import { InstallCommand } from "../install-command";
 import { InstallCastPlayer } from "../install-cast-player";
 import { useHashRoute } from "@/hooks/use-hash-route";
+import { useT } from "@/hooks/use-t";
 
-const BENEFITS = [
-  {
-    icon: InfinityIcon,
-    title: "Без лимитов Codex",
-    body: "Custom GPT выполняет команды через ваш hub — без почасовых и дневных квот на tool calls. Платный Codex не нужен.",
-  },
-  {
-    icon: Zap,
-    title: "Реальное выполнение",
-    body: "Не «вот команда, скопируйте», а сам запускает, читает логи, валидирует и отчитывается реальным выводом.",
-  },
-  {
-    icon: ShieldCheck,
-    title: "Под вашим контролем",
-    body: "Команды идут только через ваш hub и Bearer‑ключ. Свой домен не нужен — авто‑туннель через FRP.",
-  },
-];
+const BENEFIT_ICONS = [InfinityIcon, Zap, ShieldCheck];
 
 export function ChatGptPage() {
   const { navigate } = useHashRoute();
+  const { t, get } = useT();
+  const benefits = get<Array<{ title: string; body: string }>>("pageChatgpt.benefits") ?? [];
 
   return (
     <>
       <PageHero
-        eyebrow="Адаптер 1 · OpenAI Action"
+        eyebrow={t("pageChatgpt.eyebrow")}
         title={
           <>
-            Превратите ChatGPT в{" "}
-            <span className="text-gradient-violet">Codex без лимитов</span>
+            {t("pageChatgpt.titleLead")}{" "}
+            <span className="text-gradient-violet">{t("pageChatgpt.titleAccent")}</span>
           </>
         }
-        lead="Создайте Custom GPT с действием (action): импортируйте OpenAPI всего hub или одного MCP‑сервера, подставьте Hub URL и Bearer‑ключ — и ChatGPT вызывает только разрешённые tools. Без API‑лимитов и платного Codex."
+        lead={t("pageChatgpt.lead")}
       >
         <div className="w-full max-w-xl">
           <InstallCommand variant="compact" />
@@ -49,17 +36,20 @@ export function ChatGptPage() {
       <section className="relative py-20 sm:py-28">
         <div className="mx-auto max-w-7xl px-5 sm:px-8">
           <Stagger className="grid gap-5 lg:grid-cols-3" stagger={0.1}>
-            {BENEFITS.map((b) => (
-              <StaggerItem key={b.title}>
-                <div className="surface surface-hover flex h-full flex-col rounded-2xl p-6">
-                  <span className="inline-flex h-11 w-11 items-center justify-center rounded-xl border border-primary/20 bg-primary/[0.06]">
-                    <b.icon className="h-5 w-5 text-primary" />
-                  </span>
-                  <h3 className="mt-4 text-lg font-semibold tracking-tight">{b.title}</h3>
-                  <p className="mt-2 text-sm leading-relaxed text-muted-foreground">{b.body}</p>
-                </div>
-              </StaggerItem>
-            ))}
+            {benefits.map((b, i) => {
+              const Icon = BENEFIT_ICONS[i] ?? Zap;
+              return (
+                <StaggerItem key={`${b.title}-${i}`}>
+                  <div className="surface surface-hover flex h-full flex-col rounded-2xl p-6">
+                    <span className="inline-flex h-11 w-11 items-center justify-center rounded-xl border border-primary/20 bg-primary/[0.06]">
+                      <Icon className="h-5 w-5 text-primary" />
+                    </span>
+                    <h3 className="mt-4 text-lg font-semibold tracking-tight">{b.title}</h3>
+                    <p className="mt-2 text-sm leading-relaxed text-muted-foreground">{b.body}</p>
+                  </div>
+                </StaggerItem>
+              );
+            })}
           </Stagger>
         </div>
       </section>
@@ -69,14 +59,14 @@ export function ChatGptPage() {
         <div className="mx-auto max-w-3xl px-5 sm:px-8">
           <Reveal className="mb-12 text-center">
             <h2 className="display text-balance text-3xl font-semibold tracking-tight sm:text-4xl">
-              Подключение за{" "}
-              <span className="text-gradient-violet">5 шагов</span>
+              {t("pageChatgpt.connectInStepsTitleLead")}{" "}
+              <span className="text-gradient-violet">{t("pageChatgpt.connectInStepsTitleAccent")}</span>
             </h2>
           </Reveal>
 
           <Stagger className="flex flex-col gap-7" stagger={0.1}>
             <StaggerItem>
-              <Step n={1} title="Установите GPT‑Админ">
+              <Step n={1} title={t("pageChatgpt.step1Title")}>
                 Одна команда — ставит hub‑proxy и shellmcp. Установщик сам определит
                 режим (user/system). После установки вам выдадут{" "}
                 <code className="rounded border border-border/50 bg-[oklch(0.12_0.006_290)] px-1.5 py-0.5 font-mono text-[13px] text-[#c4a3f8]">Hub URL</code>{" "}
@@ -98,7 +88,7 @@ export function ChatGptPage() {
             </StaggerItem>
 
             <StaggerItem>
-              <Step n={2} title="Откройте редактор Custom GPT">
+              <Step n={2} title={t("pageChatgpt.step2Title")}>
                 Перейдите на{" "}
                 <a
                   href="https://chatgpt.com/gpts/editor"
@@ -113,7 +103,7 @@ export function ChatGptPage() {
             </StaggerItem>
 
             <StaggerItem>
-              <Step n={3} title="Создайте новое действие (Action)">
+              <Step n={3} title={t("pageChatgpt.step3Title")}>
                 В разделе «Configure» → «Actions» → «Create new action». Выберите
                 импорт по URL и вставьте OpenAPI endpoint всего hub или одного MCP‑сервера:
                 <div className="mt-3 flex items-center gap-2 rounded-xl border border-border/60 bg-[oklch(0.12_0.006_290)] px-3.5 py-2.5 font-mono text-[13px]">
@@ -127,7 +117,7 @@ export function ChatGptPage() {
             </StaggerItem>
 
             <StaggerItem>
-              <Step n={4} title="Настройте аутентификацию">
+              <Step n={4} title={t("pageChatgpt.step4Title")}>
                 В разделе «Authentication» выберите тип{" "}
                 <span className="font-medium text-foreground">API key</span>, scheme{" "}
                 <span className="font-medium text-foreground">Bearer</span> и вставьте ваш{" "}
@@ -136,7 +126,7 @@ export function ChatGptPage() {
             </StaggerItem>
 
             <StaggerItem>
-              <Step n={5} title="Готово — пишите простыми словами">
+              <Step n={5} title={t("pageChatgpt.step5Title")}>
                 «Поставь nginx», «почини сайт», «покажи память». ChatGPT сам вызывает
                 защищённый GPTAdmin gateway и получает ответ от выбранного MCP server — без раскрытия всего relay, если выбран per‑server Action.
               </Step>
@@ -150,8 +140,8 @@ export function ChatGptPage() {
         <div className="mx-auto max-w-3xl px-5 sm:px-8">
           <Reveal className="mb-10 text-center">
             <h2 className="display text-balance text-3xl font-semibold tracking-tight sm:text-4xl">
-              Ещё мощнее:{" "}
-              <span className="text-gradient-violet">OpenAI Apps SDK</span>
+              {t("pageChatgpt.appsSdkTitleLead")}{" "}
+              <span className="text-gradient-violet">{t("pageChatgpt.appsSdkTitleAccent")}</span>
             </h2>
           </Reveal>
 
@@ -162,7 +152,7 @@ export function ChatGptPage() {
                   <span className="inline-flex h-11 w-11 items-center justify-center rounded-xl border border-primary/20 bg-primary/[0.06]">
                     <MousePointerClick className="h-5 w-5 text-primary" />
                   </span>
-                  <h3 className="text-lg font-semibold tracking-tight">Widget прямо в чате</h3>
+                  <h3 className="text-lg font-semibold tracking-tight">{t("pageChatgpt.widgetTitle")}</h3>
                 </div>
                 <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
                   GPT‑Админ отдаёт{" "}
@@ -188,7 +178,7 @@ export function ChatGptPage() {
                   <span className="inline-flex h-11 w-11 items-center justify-center rounded-xl border border-primary/20 bg-primary/[0.06]">
                     <Eye className="h-5 w-5 text-primary" />
                   </span>
-                  <h3 className="text-lg font-semibold tracking-tight">Auto‑confirm extension</h3>
+                  <h3 className="text-lg font-semibold tracking-tight">{t("pageChatgpt.autoConfirmTitle")}</h3>
                 </div>
                 <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
                   По умолчанию ChatGPT спрашивает ваше одобрение перед каждой
@@ -229,10 +219,9 @@ export function ChatGptPage() {
             <div className="pointer-events-none absolute -right-16 -top-16 h-56 w-56 glow-violet blur-3xl opacity-50" aria-hidden />
             <div className="relative flex flex-col items-start gap-5 sm:flex-row sm:items-center sm:justify-between">
               <div>
-                <h3 className="text-xl font-semibold tracking-tight">Нужен MCP для Claude или бесплатных ИИ?</h3>
+                <h3 className="text-xl font-semibold tracking-tight">{t("pageChatgpt.ctaTitle")}</h3>
                 <p className="mt-2 max-w-xl text-sm leading-relaxed text-muted-foreground">
-                  GPT‑Админ работает ещё двумя способами: как MCP‑сервер для Claude/Codex/OpenCode
-                  и как браузерное расширение для бесплатных веб‑ИИ.
+                  {t("pageChatgpt.ctaBody")}
                 </p>
               </div>
               <div className="flex shrink-0 flex-wrap gap-2">
@@ -241,14 +230,14 @@ export function ChatGptPage() {
                   onClick={() => navigate("mcp-server")}
                   className="inline-flex items-center gap-2 rounded-full border border-border/80 bg-white/[0.02] px-4 py-2.5 text-sm font-medium transition-colors hover:border-primary/40"
                 >
-                  MCP сервер <ArrowRight className="h-4 w-4" />
+                  {t("pageChatgpt.ctaButtonMcp")} <ArrowRight className="h-4 w-4" />
                 </button>
                 <button
                   type="button"
                   onClick={() => navigate("mcp-extension")}
                   className="inline-flex items-center gap-2 rounded-full bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground transition-transform hover:scale-[1.02]"
                 >
-                  Расширение <ArrowRight className="h-4 w-4" />
+                  {t("pageChatgpt.ctaButtonExtension")} <ArrowRight className="h-4 w-4" />
                 </button>
               </div>
             </div>

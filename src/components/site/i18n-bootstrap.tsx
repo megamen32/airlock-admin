@@ -1,13 +1,16 @@
 "use client";
 
 import { useEffect } from "react";
-import { preloadT } from "@/hooks/use-t";
 
-/** Fire-and-forget preload of all locale bundles so the first locale
- *  switch doesn't have to wait for a network round-trip. */
+/**
+ * No-op now that bundles are imported statically. Kept as a small
+ * mount-side effect target in case future code wants to do per-locale
+ * setup (e.g. prefetching images referenced by copy). Kept as a
+ * separate component so it's easy to extend without touching page.tsx.
+ */
 export function I18nBootstrap() {
   useEffect(() => {
-    preloadT();
+    // intentional: bundles are statically imported, see useT.
   }, []);
   return null;
 }

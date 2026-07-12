@@ -88,5 +88,143 @@
         "cta": "Установить расширение"
       }
     ]
+  },
+  "footer": {
+    "brandLabel": "GPT‑Админ",
+    "ariaLabel": "Подвал",
+    "links": {
+      "docs": "Документация и Privacy",
+      "github": "GitHub",
+      "website": "bezrabotnyi.com",
+      "telegram": "@careviolan"
+    },
+    "copyright": "© 2025–2026 GPT‑Админ · в разработке с мая 2025",
+    "tagline": "Сделано для тех, кто устал копипастить команды",
+    "projects": "bezrabotnyi.com — все проекты"
+  },
+  "pageChatgpt": {
+    "eyebrow": "Адаптер 1 · OpenAI Action",
+    "titleLead": "Превратите ChatGPT в",
+    "titleAccent": "Codex без лимитов",
+    "lead": "Создайте Custom GPT с действием (action): импортируйте OpenAPI всего hub или одного MCP‑сервера, подставьте Hub URL и Bearer‑ключ — и ChatGPT вызывает только разрешённые tools. Без API‑лимитов и платного Codex.",
+    "connectInStepsTitleLead": "Подключение за",
+    "connectInStepsTitleAccent": "5 шагов",
+    "benefits": [
+      {
+        "title": "Без лимитов Codex",
+        "body": "Custom GPT выполняет команды через ваш hub — без почасовых и дневных квот на tool calls. Платный Codex не нужен."
+      },
+      {
+        "title": "Реальное выполнение",
+        "body": "Не «вот команда, скопируйте», а сам запускает, читает логи, валидирует и отчитывается реальным выводом."
+      },
+      {
+        "title": "Под вашим контролем",
+        "body": "Команды идут только через ваш hub и Bearer‑ключ. Свой домен не нужен — авто‑туннель через FRP."
+      }
+    ],
+    "step1Title": "Установите GPT‑Админ",
+    "step2Title": "Откройте редактор Custom GPT",
+    "step3Title": "Создайте новое действие (Action)",
+    "step4Title": "Настройте аутентификацию",
+    "step5Title": "Готово — пишите простыми словами",
+    "appsSdkTitleLead": "Ещё мощнее:",
+    "appsSdkTitleAccent": "OpenAI Apps SDK",
+    "widgetTitle": "Widget прямо в чате",
+    "autoConfirmTitle": "Auto‑confirm extension",
+    "ctaTitle": "Нужен MCP для Claude или бесплатных ИИ?",
+    "ctaBody": "GPT‑Админ работает ещё двумя способами: как MCP‑сервер для Claude/Codex/OpenCode и как браузерное расширение для бесплатных веб‑ИИ.",
+    "ctaButtonMcp": "MCP сервер",
+    "ctaButtonExtension": "Расширение"
+  },
+  "pageMcpServer": {
+    "eyebrow": "Адаптер 2 · MCP remote SSE",
+    "titleLead": "MCP‑сервер для",
+    "titleAccent": "Claude · Codex · OpenCode",
+    "lead": "GPT‑Админ — это MCP‑совместимый gateway. Подключайте весь hub или отдельный server URL вида /server/{slug}/mcp — и AI получает нативные tool calls через защищённый relay.",
+    "protocolBadge": "MCP remote SSE · Streamable HTTP",
+    "sectionTitleLead": "Один мост —",
+    "sectionTitleAccent": "все сервера",
+    "sectionBody": "Hub проксирует команды, shellmcp исполняет их локально. Любой MCP‑совместимый клиент получает доступ к Linux, macOS и Windows машинам или к одному выбранному MCP‑серверу, например OpenMemory.",
+    "sectionPoints": [
+      "Нативные tool calls — без copy‑paste",
+      "Любой MCP ставится один раз — доступен всем агентам",
+      "Команды выполняются локально, результат возвращается агенту"
+    ],
+    "openmemoryQuote": "Я лично установил openmemory — чтобы разные ИИ знали всё о моих проектах.",
+    "yourAi": "Ваш AI",
+    "yourServers": "Ваши серверы",
+    "connectInStepsTitleLead": "Подключение за",
+    "connectInStepsTitleAccent": "4 шага",
+    "step1Title": "Установите hub и shellmcp",
+    "step2Title": "Добавьте MCP‑сервер в клиент",
+    "step3Title": "Перезапустите клиент",
+    "step4Title": "Пишите простыми словами",
+    "ctaTitle": "Нет платного AI? Подойдёт расширение",
+    "ctaBody": "Браузерное расширение превращает бесплатные веб‑ИИ (Qwen, GigaChat, Алису) в GPT‑Админ — без API и подписок.",
+    "ctaButtonExtension": "Расширение",
+    "ctaButtonChatgpt": "Custom GPT"
+  },
+  "pageMcpExtension": {
+    "eyebrow": "Адаптер 3 · Браузерное расширение",
+    "titleLead": "Любой бесплатный ИИ —",
+    "titleAccent": "становится GPT‑Админом",
+    "lead": "Userscript для Tampermonkey/Firefox добавляет кнопки MCP прямо в интерфейсы ChatGPT, DeepSeek, Qwen, Алисы и Сбера. Не нужен платный API — только бесплатный веб‑чат.",
+    "installCta": "Установить MCP Bridge",
+    "freeLabel": "Бесплатно · open source ·",
+    "freeAisLabel": "Работает в интерфейсах",
+    "howItWorksTitle": "Как это работает",
+    "platformsTitle": "Установка на любой устройство",
+    "platformsBody": "Userscript работает везде, где есть менеджер скриптов.",
+    "stepsTitle": "Шаги",
+    "step1Title": "Поставьте менеджер скриптов",
+    "step2Title": "Установите MCP Bridge",
+    "step3Title": "Введите Bridge Key",
+    "step4Title": "Откройте любой чат и нажмите MCP All",
+    "supportedTitle": "Поддерживаемые сайты",
+    "supportedStatus": "Полная поддержка",
+    "ctaTitle": "Хотите нативные tool calls?",
+    "ctaBody": "Для Claude, Codex и OpenCode есть MCP‑сервер, а для ChatGPT — Custom GPT без лимитов Codex.",
+    "ctaButtonMcp": "MCP сервер",
+    "ctaButtonChatgpt": "Custom GPT",
+    "freeAis": [
+      { "name": "ChatGPT", "note": "free tier" },
+      { "name": "DeepSeek", "note": "бесплатно" },
+      { "name": "Qwen", "note": "бесплатно" },
+      { "name": "Алиса", "note": "Яндекс" },
+      { "name": "GigaChat", "note": "Сбер" },
+      { "name": "Claude", "note": "free tier" }
+    ],
+    "stepsHow": [
+      {
+        "title": "MCP All",
+        "body": "Вставляет в поле ввода компактное описание всех ваших MCP‑агентов и их инструментов. Промпт копируется в буфер — Alt+M."
+      },
+      {
+        "title": "MCP — точечный выбор",
+        "body": "Открывает панель выбора конкретного агента с подробным описанием каждого инструмента."
+      },
+      {
+        "title": "Авто‑выполнение",
+        "body": "Если ИИ отвечает блоком ```mcp с JSON‑командой — скрипт сам вызывает hub и вставляет результат обратно в чат."
+      }
+    ],
+    "platforms": [
+      {
+        "title": "macOS · Windows · Linux",
+        "sub": "Chrome + Tampermonkey",
+        "body": "Tampermonkey из Chrome Web Store, затем установите MCP Bridge."
+      },
+      {
+        "title": "iPhone",
+        "sub": "Safari + Userscripts",
+        "body": "Приложение Userscripts из App Store, включите в Расширениях Safari."
+      },
+      {
+        "title": "Android",
+        "sub": "Firefox + Tampermonkey",
+        "body": "Firefox из Google Play + Tampermonkey, затем MCP Bridge. Работает с телефона."
+      }
+    ]
   }
 }

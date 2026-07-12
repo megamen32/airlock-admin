@@ -5,10 +5,13 @@ import { motion } from "framer-motion";
 import { PageHero, Step } from "../page-hero";
 import { Reveal, Stagger, StaggerItem } from "../reveal";
 import { useHashRoute } from "@/hooks/use-hash-route";
+import { useT } from "@/hooks/use-t";
 
 const EASE = [0.16, 1, 0.3, 1] as const;
 
-const FREE_AIS = [
+const PLATFORM_ICONS = [Chrome, Apple, Smartphone];
+const STEP_ICONS = [Sparkles, MousePointerClick, Zap];
+const FALLBACK_FREE_AIS = [
   { name: "ChatGPT", note: "free tier" },
   { name: "DeepSeek", note: "бесплатно" },
   { name: "Qwen", note: "бесплатно" },
@@ -17,49 +20,49 @@ const FREE_AIS = [
   { name: "Claude", note: "free tier" },
 ];
 
-const STEPS_HOW = [
-  { icon: Sparkles, title: "MCP All", body: "Вставляет в поле ввода компактное описание всех ваших MCP‑агентов и их инструментов. Промпт копируется в буфер — Alt+M." },
-  { icon: MousePointerClick, title: "MCP — точечный выбор", body: "Открывает панель выбора конкретного агента с подробным описанием каждого инструмента." },
-  { icon: Zap, title: "Авто‑выполнение", body: "Если ИИ отвечает блоком ```mcp с JSON‑командой — скрипт сам вызывает hub и вставляет результат обратно в чат." },
+const FALLBACK_STEPS_HOW = [
+  { title: "MCP All", body: "Вставляет в поле ввода компактное описание всех ваших MCP‑агентов и их инструментов. Промпт копируется в буфер — Alt+M." },
+  { title: "MCP — точечный выбор", body: "Открывает панель выбора конкретного агента с подробным описанием каждого инструмента." },
+  { title: "Авто‑выполнение", body: "Если ИИ отвечает блоком ```mcp с JSON‑командой — скрипт сам вызывает hub и вставляет результат обратно в чат." },
 ];
 
-const PLATFORMS = [
-  { icon: Chrome, title: "macOS · Windows · Linux", sub: "Chrome + Tampermonkey", body: "Tampermonkey из Chrome Web Store, затем установите MCP Bridge." },
-  { icon: Apple, title: "iPhone", sub: "Safari + Userscripts", body: "Приложение Userscripts из App Store, включите в Расширениях Safari." },
-  { icon: Smartphone, title: "Android", sub: "Firefox + Tampermonkey", body: "Firefox из Google Play + Tampermonkey, затем MCP Bridge. Работает с телефона." },
+const FALLBACK_PLATFORMS = [
+  { title: "macOS · Windows · Linux", sub: "Chrome + Tampermonkey", body: "Tampermonkey из Chrome Web Store, затем установите MCP Bridge." },
+  { title: "iPhone", sub: "Safari + Userscripts", body: "Приложение Userscripts из App Store, включите в Расширениях Safari." },
+  { title: "Android", sub: "Firefox + Tampermonkey", body: "Firefox из Google Play + Tampermonkey, затем MCP Bridge. Работает с телефона." },
 ];
 
-const SUPPORTED = [
-  { site: "chatgpt.com", status: "Полная поддержка" },
-  { site: "chat.deepseek.com", status: "Полная поддержка" },
-  { site: "chat.qwen.ai", status: "Полная поддержка" },
-  { site: "ya.ru / chat.yandex.ru", status: "Полная поддержка" },
-];
+const SUPPORTED_SITES = ["chatgpt.com", "chat.deepseek.com", "chat.qwen.ai", "ya.ru / chat.yandex.ru"];
 
 export function McpExtensionPage() {
   const { navigate } = useHashRoute();
+  const { t, get } = useT();
+  const freeAis = get<Array<{ name: string; note: string }>>("pageMcpExtension.freeAis") ?? FALLBACK_FREE_AIS;
+  const stepsHow = get<Array<{ title: string; body: string }>>("pageMcpExtension.stepsHow") ?? FALLBACK_STEPS_HOW;
+  const platforms = get<Array<{ title: string; sub: string; body: string }>>("pageMcpExtension.platforms") ?? FALLBACK_PLATFORMS;
+  const supportedStatus = t("pageMcpExtension.supportedStatus");
 
   return (
     <>
       <PageHero
-        eyebrow="Адаптер 3 · Браузерное расширение"
+        eyebrow={t("pageMcpExtension.eyebrow")}
         title={
           <>
-            Любой бесплатный ИИ —{" "}
-            <span className="text-gradient-violet">становится GPT‑Админом</span>
+            {t("pageMcpExtension.titleLead")}{" "}
+            <span className="text-gradient-violet">{t("pageMcpExtension.titleAccent")}</span>
           </>
         }
-        lead="Userscript для Tampermonkey/Firefox добавляет кнопки MCP прямо в интерфейсы ChatGPT, DeepSeek, Qwen, Алисы и Сбера. Не нужен платный API — только бесплатный веб‑чат."
+        lead={t("pageMcpExtension.lead")}
       >
         <a
           href="https://became.bezrabotnyi.com/mcp-bridge.user.js"
           className="group inline-flex items-center gap-2 rounded-full bg-primary px-6 py-3 text-sm font-medium text-primary-foreground transition-transform hover:scale-[1.02]"
         >
           <KeyRound className="h-4 w-4" />
-          Установить MCP Bridge
+          {t("pageMcpExtension.installCta")}
         </a>
         <p className="text-xs text-muted-foreground">
-          Бесплатно · open source ·{" "}
+          {t("pageMcpExtension.freeLabel")}{" "}
           <kbd className="rounded border border-border/60 bg-white/[0.03] px-1.5 py-0.5 font-mono text-[10px]">Alt+M</kbd>{" "}
           и{" "}
           <kbd className="rounded border border-border/60 bg-white/[0.03] px-1.5 py-0.5 font-mono text-[10px]">Alt+K</kbd>
@@ -71,12 +74,12 @@ export function McpExtensionPage() {
         <div className="mx-auto max-w-7xl px-5 sm:px-8">
           <Reveal className="text-center">
             <p className="mb-5 text-xs font-medium uppercase tracking-[0.2em] text-muted-foreground/60">
-              Работает в интерфейсах
+              {t("pageMcpExtension.freeAisLabel")}
             </p>
             <div className="flex flex-wrap justify-center gap-2">
-              {FREE_AIS.map((ai, i) => (
+              {freeAis.map((ai, i) => (
                 <motion.span
-                  key={ai.name}
+                  key={`${ai.name}-${i}`}
                   initial={{ opacity: 0, y: 6 }}
                   whileInView={{ opacity: 1, y: 0 }}
                   viewport={{ once: true }}
@@ -93,7 +96,7 @@ export function McpExtensionPage() {
         </div>
       </section>
 
-      {/* Browser mock */}
+      {/* Browser mock — chrome mock stays as decorative; technical labels kept */}
       <section className="relative py-12 sm:py-16">
         <div className="mx-auto max-w-3xl px-5 sm:px-8">
           <Reveal>
@@ -158,21 +161,24 @@ export function McpExtensionPage() {
         <div className="mx-auto max-w-7xl px-5 sm:px-8">
           <Reveal className="mb-12 text-center">
             <h2 className="display text-balance text-3xl font-semibold tracking-tight sm:text-4xl">
-              Как это работает
+              {t("pageMcpExtension.howItWorksTitle")}
             </h2>
           </Reveal>
           <Stagger className="grid gap-5 lg:grid-cols-3" stagger={0.08}>
-            {STEPS_HOW.map((s) => (
-              <StaggerItem key={s.title}>
-                <div className="surface surface-hover flex h-full flex-col rounded-2xl p-6">
-                  <span className="inline-flex h-11 w-11 items-center justify-center rounded-xl border border-primary/20 bg-primary/[0.06]">
-                    <s.icon className="h-5 w-5 text-primary" />
-                  </span>
-                  <h3 className="mt-4 text-lg font-semibold tracking-tight">{s.title}</h3>
-                  <p className="mt-2 text-sm leading-relaxed text-muted-foreground">{s.body}</p>
-                </div>
-              </StaggerItem>
-            ))}
+            {stepsHow.map((s, i) => {
+              const Icon = STEP_ICONS[i] ?? Sparkles;
+              return (
+                <StaggerItem key={`${s.title}-${i}`}>
+                  <div className="surface surface-hover flex h-full flex-col rounded-2xl p-6">
+                    <span className="inline-flex h-11 w-11 items-center justify-center rounded-xl border border-primary/20 bg-primary/[0.06]">
+                      <Icon className="h-5 w-5 text-primary" />
+                    </span>
+                    <h3 className="mt-4 text-lg font-semibold tracking-tight">{s.title}</h3>
+                    <p className="mt-2 text-sm leading-relaxed text-muted-foreground">{s.body}</p>
+                  </div>
+                </StaggerItem>
+              );
+            })}
           </Stagger>
         </div>
       </section>
@@ -184,45 +190,48 @@ export function McpExtensionPage() {
             {/* Platforms */}
             <Reveal>
               <h2 className="display text-balance text-2xl font-semibold tracking-tight sm:text-3xl">
-                Установка на любой устройство
+                {t("pageMcpExtension.platformsTitle")}
               </h2>
               <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
-                Userscript работает везде, где есть менеджер скриптов.
+                {t("pageMcpExtension.platformsBody")}
               </p>
               <div className="mt-6 flex flex-col gap-2.5">
-                {PLATFORMS.map((p) => (
-                  <div key={p.title} className="surface surface-hover flex items-start gap-3 rounded-xl p-4">
-                    <span className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-border/60 bg-white/[0.02]">
-                      <p.icon className="h-4 w-4 text-primary" />
-                    </span>
-                    <div className="min-w-0">
-                      <div className="flex flex-wrap items-baseline gap-x-2">
-                        <p className="text-sm font-semibold tracking-tight text-foreground">{p.title}</p>
-                        <p className="font-mono text-[11px] text-primary/80">{p.sub}</p>
+                {platforms.map((p, i) => {
+                  const Icon = PLATFORM_ICONS[i] ?? Chrome;
+                  return (
+                    <div key={`${p.title}-${i}`} className="surface surface-hover flex items-start gap-3 rounded-xl p-4">
+                      <span className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-border/60 bg-white/[0.02]">
+                        <Icon className="h-4 w-4 text-primary" />
+                      </span>
+                      <div className="min-w-0">
+                        <div className="flex flex-wrap items-baseline gap-x-2">
+                          <p className="text-sm font-semibold tracking-tight text-foreground">{p.title}</p>
+                          <p className="font-mono text-[11px] text-primary/80">{p.sub}</p>
+                        </div>
+                        <p className="mt-1 text-xs leading-relaxed text-muted-foreground">{p.body}</p>
                       </div>
-                      <p className="mt-1 text-xs leading-relaxed text-muted-foreground">{p.body}</p>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </Reveal>
 
             {/* Steps */}
             <Reveal delay={0.1}>
               <h2 className="display text-balance text-2xl font-semibold tracking-tight sm:text-3xl">
-                Шаги
+                {t("pageMcpExtension.stepsTitle")}
               </h2>
               <div className="mt-6 flex flex-col gap-6">
-                <Step n={1} title="Поставьте менеджер скриптов">
+                <Step n={1} title={t("pageMcpExtension.step1Title")}>
                   Tampermonkey (Chrome), Userscripts (iPhone Safari) или Firefox + Tampermonkey (Android).
                 </Step>
-                <Step n={2} title="Установите MCP Bridge">
+                <Step n={2} title={t("pageMcpExtension.step2Title")}>
                   Нажмите кнопку установки — менеджер перехватит <code className="font-mono text-[#c4a3f8]">.user.js</code> и предложит установить.
                 </Step>
-                <Step n={3} title="Введите Bridge Key">
+                <Step n={3} title={t("pageMcpExtension.step3Title")}>
                   Нажмите <kbd className="rounded border border-border/60 bg-white/[0.03] px-1.5 py-0.5 font-mono text-[10px]">Alt+K</kbd> и вставьте ключ от вашего hub.
                 </Step>
-                <Step n={4} title="Откройте любой чат и нажмите MCP All">
+                <Step n={4} title={t("pageMcpExtension.step4Title")}>
                   <kbd className="rounded border border-border/60 bg-white/[0.03] px-1.5 py-0.5 font-mono text-[10px]">Alt+M</kbd> — промпт вставится в поле ввода. ИИ выполнит команды через ваш hub.
                 </Step>
               </div>
@@ -231,7 +240,7 @@ export function McpExtensionPage() {
                 className="group mt-7 inline-flex items-center gap-2 rounded-full bg-primary px-6 py-3 text-sm font-medium text-primary-foreground transition-transform hover:scale-[1.02]"
               >
                 <KeyRound className="h-4 w-4" />
-                Установить MCP Bridge
+                {t("pageMcpExtension.installCta")}
                 <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
               </a>
             </Reveal>
@@ -244,15 +253,15 @@ export function McpExtensionPage() {
         <div className="mx-auto max-w-3xl px-5 sm:px-8">
           <Reveal className="surface overflow-hidden rounded-2xl">
             <div className="border-b border-border/60 bg-white/[0.02] px-5 py-3">
-              <p className="text-sm font-semibold tracking-tight">Поддерживаемые сайты</p>
+              <p className="text-sm font-semibold tracking-tight">{t("pageMcpExtension.supportedTitle")}</p>
             </div>
             <div className="divide-y divide-border/40">
-              {SUPPORTED.map((s) => (
-                <div key={s.site} className="flex items-center justify-between px-5 py-3">
-                  <span className="font-mono text-sm text-foreground/85">{s.site}</span>
+              {SUPPORTED_SITES.map((s) => (
+                <div key={s} className="flex items-center justify-between px-5 py-3">
+                  <span className="font-mono text-sm text-foreground/85">{s}</span>
                   <span className="inline-flex items-center gap-1.5 text-xs text-primary">
                     <span className="h-1.5 w-1.5 rounded-full bg-primary" />
-                    {s.status}
+                    {supportedStatus}
                   </span>
                 </div>
               ))}
@@ -268,10 +277,9 @@ export function McpExtensionPage() {
             <div className="pointer-events-none absolute -right-16 -top-16 h-56 w-56 glow-violet blur-3xl opacity-50" aria-hidden />
             <div className="relative flex flex-col items-start gap-5 sm:flex-row sm:items-center sm:justify-between">
               <div>
-                <h3 className="text-xl font-semibold tracking-tight">Хотите нативные tool calls?</h3>
+                <h3 className="text-xl font-semibold tracking-tight">{t("pageMcpExtension.ctaTitle")}</h3>
                 <p className="mt-2 max-w-xl text-sm leading-relaxed text-muted-foreground">
-                  Для Claude, Codex и OpenCode есть MCP‑сервер, а для ChatGPT — Custom GPT
-                  без лимитов Codex.
+                  {t("pageMcpExtension.ctaBody")}
                 </p>
               </div>
               <div className="flex shrink-0 flex-wrap gap-2">
@@ -280,14 +288,14 @@ export function McpExtensionPage() {
                   onClick={() => navigate("mcp-server")}
                   className="inline-flex items-center gap-2 rounded-full bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground transition-transform hover:scale-[1.02]"
                 >
-                  MCP сервер <ArrowRight className="h-4 w-4" />
+                  {t("pageMcpExtension.ctaButtonMcp")} <ArrowRight className="h-4 w-4" />
                 </button>
                 <button
                   type="button"
                   onClick={() => navigate("chatgpt")}
                   className="inline-flex items-center gap-2 rounded-full border border-border/80 bg-white/[0.02] px-4 py-2.5 text-sm font-medium transition-colors hover:border-primary/40"
                 >
-                  Custom GPT <ArrowRight className="h-4 w-4" />
+                  {t("pageMcpExtension.ctaButtonChatgpt")} <ArrowRight className="h-4 w-4" />
                 </button>
               </div>
             </div>

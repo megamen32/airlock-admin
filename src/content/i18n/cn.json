@@ -83,10 +83,93 @@
       {
         "page": "mcp-extension",
         "kicker": "浏览器扩展",
-        "title": "DeepSeek · Qwen · 通义",
+        "title": "DeepSeek · 通义 · 通义千问",
         "body": "Tampermonkey / Firefox 的 userscript，给免费网页 AI 加上 MCP 按钮。不需要付费 API，只要免费网页聊天。",
         "cta": "安装扩展"
       }
+    ]
+  },
+  "footer": {
+    "brandLabel": "GPT‑管理",
+    "ariaLabel": "页脚",
+    "links": {
+      "docs": "文档与隐私",
+      "github": "GitHub",
+      "website": "bezrabotnyi.com",
+      "telegram": "@careviolan"
+    },
+    "copyright": "© 2025–2026 GPT‑管理 · 自 2025 年 5 月开发中",
+    "tagline": "为受够复制粘贴命令的人而做",
+    "projects": "bezrabotnyi.com — 全部项目"
+  },
+  "pageChatgpt": {
+    "eyebrow": "适配器 1 · OpenAI Action",
+    "titleLead": "把 ChatGPT 变成",
+    "titleAccent": "没有次数限制的 Codex",
+    "lead": "创建一个带 Action 的 Custom GPT：导入整个 hub 或单个 MCP server 的 OpenAPI，填入 Hub URL 和 Bearer key — ChatGPT 就只会调用你允许的 tool。没有 API 限额，无需付费 Codex。",
+    "connectInStepsTitleLead": "接入只需",
+    "connectInStepsTitleAccent": "5 步",
+    "step1Title": "安装 GPT‑管理",
+    "step2Title": "打开 Custom GPT 编辑器",
+    "step3Title": "新建 Action",
+    "step4Title": "配置鉴权",
+    "step5Title": "完成 — 用自然语言提问",
+    "appsSdkTitleLead": "更强大：",
+    "appsSdkTitleAccent": "OpenAI Apps SDK",
+    "widgetTitle": "聊天窗口内嵌 widget",
+    "autoConfirmTitle": "Auto-confirm extension",
+    "ctaTitle": "需要 Claude 或免费 AI 的 MCP？",
+    "ctaBody": "GPT‑管理 还有两种方式：作为 Claude/Codex/OpenCode 的 MCP server，以及作为免费网页 AI 的浏览器扩展。",
+    "ctaButtonMcp": "MCP server",
+    "ctaButtonExtension": "扩展"
+  },
+  "pageMcpServer": {
+    "eyebrow": "适配器 2 · MCP remote SSE",
+    "titleLead": "面向",
+    "titleAccent": "Claude · Codex · OpenCode 的 MCP server",
+    "lead": "GPT‑管理 是一个 MCP 兼容的网关。连接整个 hub 或单个 per-server URL（形如 /server/{slug}/mcp）— AI 通过安全中继拿到原生 tool calls。",
+    "protocolBadge": "MCP remote SSE · Streamable HTTP",
+    "sectionTitleLead": "一座桥 —",
+    "sectionTitleAccent": "通向所有服务器",
+    "connectInStepsTitleLead": "接入只需",
+    "connectInStepsTitleAccent": "4 步",
+    "step1Title": "安装 hub 和 shellmcp",
+    "step2Title": "把 MCP server 加到客户端",
+    "step3Title": "重启客户端",
+    "step4Title": "用自然语言提问",
+    "ctaTitle": "没有付费 AI？试试扩展",
+    "ctaBody": "浏览器扩展把免费网页 AI（Qwen、GigaChat、通义）变成 GPT‑管理 客户端 — 无需 API，无需订阅。",
+    "ctaButtonExtension": "扩展",
+    "ctaButtonChatgpt": "Custom GPT"
+  },
+  "pageMcpExtension": {
+    "eyebrow": "适配器 3 · 浏览器扩展",
+    "titleLead": "任何免费 AI —",
+    "titleAccent": "都成为 GPT‑管理",
+    "lead": "Tampermonkey / Firefox 的 userscript，直接在 ChatGPT、DeepSeek、通义、智谱、Sber 界面里加上 MCP 按钮。无需付费 API，免费网页聊天即可。",
+    "installCta": "安装 MCP Bridge",
+    "freeLabel": "免费 · 开源 ·",
+    "freeAisLabel": "支持这些界面",
+    "platformsTitle": "在任意设备上安装",
+    "platformsBody": "只要有脚本管理器，userscript 就能跑。",
+    "stepsTitle": "步骤",
+    "step1Title": "先装脚本管理器",
+    "step2Title": "安装 MCP Bridge",
+    "step3Title": "填入 Bridge Key",
+    "step4Title": "打开任意聊天，按 MCP All",
+    "supportedTitle": "支持站点",
+    "supportedStatus": "完全支持",
+    "ctaTitle": "想要原生 tool calls？",
+    "ctaBody": "Claude、Codex、OpenCode 用 MCP server；ChatGPT 用没有限额限制的 Custom GPT。",
+    "ctaButtonMcp": "MCP server",
+    "ctaButtonChatgpt": "Custom GPT",
+    "freeAis": [
+      { "name": "ChatGPT", "note": "免费版" },
+      { "name": "DeepSeek", "note": "免费" },
+      { "name": "通义", "note": "免费" },
+      { "name": "智谱清言", "note": "免费" },
+      { "name": "GigaChat", "note": "Сбер" },
+      { "name": "Claude", "note": "免费版" }
     ]
   }
 }

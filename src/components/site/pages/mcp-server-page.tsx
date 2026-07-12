@@ -6,6 +6,7 @@ import { Reveal, Stagger, StaggerItem } from "../reveal";
 import { InstallCommand } from "../install-command";
 import { useCopy } from "@/hooks/use-copy";
 import { useHashRoute } from "@/hooks/use-hash-route";
+import { useT } from "@/hooks/use-t";
 
 const CLIENTS = [
   { name: "Claude Desktop", icon: BrainCircuit },
@@ -25,25 +26,32 @@ const MCP_CONFIG = `{
 
 const CODEX_LOCAL_MCP_COMMAND = "curl -fsSL https://became.bezrabotnyi.com/codex-mcp-mac.sh | bash";
 const PER_SERVER_MCP = "https://your-hub.example/server/openmemory/mcp";
+const SECTION_POINTS_FALLBACK = [
+  "Native tool calls — no copy-paste",
+  "Install any MCP once — available to every agent",
+  "Commands run locally; results return to the agent",
+];
 
 export function McpServerPage() {
   const { navigate } = useHashRoute();
+  const { t, get } = useT();
+  const points = get<string[]>("pageMcpServer.sectionPoints") ?? SECTION_POINTS_FALLBACK;
 
   return (
     <>
       <PageHero
-        eyebrow="Адаптер 2 · MCP remote SSE"
+        eyebrow={t("pageMcpServer.eyebrow")}
         title={
           <>
-            MCP‑сервер для{" "}
-            <span className="text-gradient-violet">Claude · Codex · OpenCode</span>
+            {t("pageMcpServer.titleLead")}{" "}
+            <span className="text-gradient-violet">{t("pageMcpServer.titleAccent")}</span>
           </>
         }
-        lead="GPT‑Админ — это MCP‑совместимый gateway. Подключайте весь hub или отдельный server URL вида /server/{slug}/mcp — и AI получает нативные tool calls через защищённый relay."
+        lead={t("pageMcpServer.lead")}
       >
         <div className="inline-flex items-center gap-2 rounded-full border border-primary/25 bg-primary/[0.06] px-3 py-1.5 text-xs font-medium text-primary">
           <Radio className="h-3.5 w-3.5" />
-          MCP remote SSE · Streamable HTTP
+          {t("pageMcpServer.protocolBadge")}
         </div>
         <div className="w-full max-w-xl">
           <InstallCommand variant="compact" />
@@ -56,21 +64,16 @@ export function McpServerPage() {
           <div className="grid items-center gap-12 lg:grid-cols-2 lg:gap-16">
             <Reveal className="flex flex-col items-start">
               <h2 className="display text-balance text-3xl font-semibold tracking-tight sm:text-4xl">
-                Один мост —{" "}
-                <span className="text-gradient-violet">все сервера</span>
+                {t("pageMcpServer.sectionTitleLead")}{" "}
+                <span className="text-gradient-violet">{t("pageMcpServer.sectionTitleAccent")}</span>
               </h2>
               <p className="mt-5 max-w-md text-base leading-relaxed text-muted-foreground">
-                Hub проксирует команды, shellmcp исполняет их локально. Любой
-                MCP‑совместимый клиент получает доступ к Linux, macOS и Windows машинам или к одному выбранному MCP‑серверу, например OpenMemory.
+                {t("pageMcpServer.sectionBody")}
               </p>
 
               <Stagger className="mt-7 flex w-full flex-col gap-3" stagger={0.08}>
-                {[
-                  "Нативные tool calls — без copy‑paste",
-                  "Любой MCP ставится один раз — доступен всем агентам",
-                  "Команды выполняются локально, результат возвращается агенту",
-                ].map((p) => (
-                  <StaggerItem key={p}>
+                {points.map((p, i) => (
+                  <StaggerItem key={`${i}-${p}`}>
                     <div className="flex items-start gap-3 text-sm text-foreground/85">
                       <span className="mt-1.5 inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-primary/15">
                         <span className="h-1.5 w-1.5 rounded-full bg-primary" />
@@ -91,7 +94,7 @@ export function McpServerPage() {
                     </span>
                     <div>
                       <p className="text-sm leading-relaxed text-foreground/90">
-                        Я лично установил{" "}
+                        {t("pageMcpServer.openmemoryQuote")}{" "}
                         <a
                           href="https://github.com/CaviraOSS/OpenMemory"
                           target="_blank"
@@ -99,8 +102,7 @@ export function McpServerPage() {
                           className="font-mono text-primary underline decoration-primary/40 underline-offset-2 transition-colors hover:decoration-primary"
                         >
                           openmemory
-                        </a>{" "}
-                        — чтобы разные ИИ знали всё о моих проектах.
+                        </a>
                       </p>
                     </div>
                   </div>
@@ -113,7 +115,7 @@ export function McpServerPage() {
               <div className="surface relative mx-auto w-full max-w-md overflow-hidden rounded-3xl p-7 sm:p-9">
                 <div className="pointer-events-none absolute inset-x-0 top-0 h-40 glow-violet blur-3xl opacity-50" aria-hidden />
                 <p className="relative mb-3 text-center text-[11px] font-medium uppercase tracking-[0.2em] text-muted-foreground/70">
-                  Ваш AI
+                  {t("pageMcpServer.yourAi")}
                 </p>
                 <div className="relative grid grid-cols-3 gap-2.5">
                   {CLIENTS.map((c) => (
@@ -135,7 +137,7 @@ export function McpServerPage() {
                 </div>
                 <Connector />
                 <p className="relative mb-3 mt-1 text-center text-[11px] font-medium uppercase tracking-[0.2em] text-muted-foreground/70">
-                  Ваши серверы
+                  {t("pageMcpServer.yourServers")}
                 </p>
                 <div className="relative flex flex-col gap-2">
                   {["server-01", "vps-prod", "home-lab"].map((s) => (
@@ -157,14 +159,14 @@ export function McpServerPage() {
         <div className="mx-auto max-w-3xl px-5 sm:px-8">
           <Reveal className="mb-12 text-center">
             <h2 className="display text-balance text-3xl font-semibold tracking-tight sm:text-4xl">
-              Подключение за{" "}
-              <span className="text-gradient-violet">4 шага</span>
+              {t("pageMcpServer.connectInStepsTitleLead")}{" "}
+              <span className="text-gradient-violet">{t("pageMcpServer.connectInStepsTitleAccent")}</span>
             </h2>
           </Reveal>
 
           <Stagger className="flex flex-col gap-7" stagger={0.1}>
             <StaggerItem>
-              <Step n={1} title="Установите hub и shellmcp">
+              <Step n={1} title={t("pageMcpServer.step1Title")}>
                 Ставите hub‑proxy и shellmcp на главный ПК/VPS, только shellmcp — на
                 остальные машины. После установки выдадут Hub URL и CTL_TOKEN.
                 <div className="mt-3">
@@ -173,7 +175,7 @@ export function McpServerPage() {
               </Step>
             </StaggerItem>
             <StaggerItem>
-              <Step n={2} title="Добавьте MCP‑сервер в клиент">
+              <Step n={2} title={t("pageMcpServer.step2Title")}>
                 В настройках вашего клиента (Claude Desktop →{" "}
                 <code className="font-mono text-[#c4a3f8]">claude_desktop_config.json</code>,
                 Codex, OpenCode) добавьте GPT‑Админ как MCP remote SSE (Streamable HTTP):
@@ -200,13 +202,13 @@ export function McpServerPage() {
               </Step>
             </StaggerItem>
             <StaggerItem>
-              <Step n={3} title="Перезапустите клиент">
+              <Step n={3} title={t("pageMcpServer.step3Title")}>
                 Claude Desktop / Codex / OpenCode подхватит новый MCP‑сервер при
                 следующем запуске. Проверьте, что в списке tools появились команды.
               </Step>
             </StaggerItem>
             <StaggerItem>
-              <Step n={4} title="Пишите простыми словами">
+              <Step n={4} title={t("pageMcpServer.step4Title")}>
                 «Поставь WireGuard», «почини nginx». AI сам вызывает нужные tools,
                 выполняет команды через hub и возвращает отчёт.
               </Step>
@@ -222,10 +224,9 @@ export function McpServerPage() {
             <div className="pointer-events-none absolute -right-16 -top-16 h-56 w-56 glow-violet blur-3xl opacity-50" aria-hidden />
             <div className="relative flex flex-col items-start gap-5 sm:flex-row sm:items-center sm:justify-between">
               <div>
-                <h3 className="text-xl font-semibold tracking-tight">Нет платного AI? Подойдёт расширение</h3>
+                <h3 className="text-xl font-semibold tracking-tight">{t("pageMcpServer.ctaTitle")}</h3>
                 <p className="mt-2 max-w-xl text-sm leading-relaxed text-muted-foreground">
-                  Браузерное расширение превращает бесплатные веб‑ИИ (Qwen, GigaChat,
-                  Алису) в GPT‑Админ — без API и подписок.
+                  {t("pageMcpServer.ctaBody")}
                 </p>
               </div>
               <div className="flex shrink-0 flex-wrap gap-2">
@@ -234,14 +235,14 @@ export function McpServerPage() {
                   onClick={() => navigate("mcp-extension")}
                   className="inline-flex items-center gap-2 rounded-full bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground transition-transform hover:scale-[1.02]"
                 >
-                  Расширение <ArrowRight className="h-4 w-4" />
+                  {t("pageMcpServer.ctaButtonExtension")} <ArrowRight className="h-4 w-4" />
                 </button>
                 <button
                   type="button"
                   onClick={() => navigate("chatgpt")}
                   className="inline-flex items-center gap-2 rounded-full border border-border/80 bg-white/[0.02] px-4 py-2.5 text-sm font-medium transition-colors hover:border-primary/40"
                 >
-                  Custom GPT <ArrowRight className="h-4 w-4" />
+                  {t("pageMcpServer.ctaButtonChatgpt")} <ArrowRight className="h-4 w-4" />
                 </button>
               </div>
             </div>
@@ -275,7 +276,7 @@ function CommandBlock({ label, command }: { label: string; command: string }) {
           {copied ? "скопировано" : "копировать"}
         </button>
       </div>
-      <pre className="nice-scroll max-h-[28rem] overflow-x-auto px-3.5 py-3 font-mono text-[12px] leading-relaxed text-foreground/85">
+      <pre className="nice-scroll overflow-x-auto px-3.5 py-3 font-mono text-[12px] leading-relaxed text-foreground/85">
 {command}
       </pre>
     </div>

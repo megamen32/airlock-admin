@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono, Instrument_Serif } from "next/font/google";
 import "./globals.css";
 import { Toaster } from "@/components/ui/toaster";
+import { LOCALE_BOOTSTRAP_SCRIPT } from "@/hooks/use-locale";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -81,6 +82,16 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="ru" className="dark" suppressHydrationWarning>
+      <head>
+        {/*
+          Run before React hydration so the first paint already reflects the
+          user's preferred language (localStorage → navigator.language → ru).
+          Without this, an English visitor sees a flash of Russian chrome on
+          first visit because the server has no way to know the browser locale.
+          Inline so we don't pay a network round-trip before paint.
+        */}
+        <script dangerouslySetInnerHTML={{ __html: LOCALE_BOOTSTRAP_SCRIPT }} />
+      </head>
       <body
         className={`${geistSans.variable} ${geistMono.variable} ${instrumentSerif.variable} antialiased bg-background text-foreground grain`}
       >

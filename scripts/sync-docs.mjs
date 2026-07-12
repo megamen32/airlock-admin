@@ -23,6 +23,7 @@ const ROOT = resolve(process.cwd());
 const SOURCES = [
   { src: join(ROOT, "src/content/docs"), dest: join(ROOT, "public/docs"), ext: ".md" },
   { src: join(ROOT, "src/content/i18n"), dest: join(ROOT, "public/i18n"), ext: ".json" },
+  { src: join(ROOT, "src/i18n"), dest: join(ROOT, "public/i18n"), ext: ".json" },
 ];
 
 function log(level, msg) {

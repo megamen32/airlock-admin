@@ -88,5 +88,88 @@
         "cta": "Install extension"
       }
     ]
+  },
+  "footer": {
+    "brandLabel": "GPT‑Admin",
+    "ariaLabel": "Footer",
+    "links": {
+      "docs": "Documentation & Privacy",
+      "github": "GitHub",
+      "website": "bezrabotnyi.com",
+      "telegram": "@careviolan"
+    },
+    "copyright": "© 2025–2026 GPT‑Admin · in development since May 2025",
+    "tagline": "Built for those tired of copy-pasting commands",
+    "projects": "bezrabotnyi.com — all projects"
+  },
+  "pageChatgpt": {
+    "eyebrow": "Adapter 1 · OpenAI Action",
+    "titleLead": "Turn ChatGPT into",
+    "titleAccent": "Codex without limits",
+    "lead": "Create a Custom GPT with an action: import the OpenAPI of the whole hub or of a single MCP server, plug in the Hub URL and Bearer key — and ChatGPT only calls the tools you allow. No API limits, no paid Codex.",
+    "connectInStepsTitleLead": "Connect in",
+    "connectInStepsTitleAccent": "5 steps",
+    "step1Title": "Install GPT‑Admin",
+    "step2Title": "Open the Custom GPT editor",
+    "step3Title": "Create a new Action",
+    "step4Title": "Configure authentication",
+    "step5Title": "Done — write in plain words",
+    "appsSdkTitleLead": "Even more powerful:",
+    "appsSdkTitleAccent": "OpenAI Apps SDK",
+    "widgetTitle": "Widget right in the chat",
+    "autoConfirmTitle": "Auto-confirm extension",
+    "ctaTitle": "Need MCP for Claude or free AIs?",
+    "ctaBody": "GPT‑Admin works two more ways: as an MCP server for Claude/Codex/OpenCode and as a browser extension for free web AIs.",
+    "ctaButtonMcp": "MCP server",
+    "ctaButtonExtension": "Extension"
+  },
+  "pageMcpServer": {
+    "eyebrow": "Adapter 2 · MCP remote SSE",
+    "titleLead": "MCP server for",
+    "titleAccent": "Claude · Codex · OpenCode",
+    "lead": "GPT‑Admin is an MCP-compatible gateway. Plug in the whole hub or a single per-server URL like /server/{slug}/mcp — and the AI gets native tool calls through a secure relay.",
+    "protocolBadge": "MCP remote SSE · Streamable HTTP",
+    "sectionTitleLead": "One bridge —",
+    "sectionTitleAccent": "every server",
+    "connectInStepsTitleLead": "Connect in",
+    "connectInStepsTitleAccent": "4 steps",
+    "step1Title": "Install the hub and shellmcp",
+    "step2Title": "Add the MCP server to your client",
+    "step3Title": "Restart your client",
+    "step4Title": "Write in plain words",
+    "ctaTitle": "No paid AI? Try the extension",
+    "ctaBody": "The browser extension turns free web AIs (Qwen, GigaChat, Alice) into a GPT‑Admin client — no API, no subscriptions.",
+    "ctaButtonExtension": "Extension",
+    "ctaButtonChatgpt": "Custom GPT"
+  },
+  "pageMcpExtension": {
+    "eyebrow": "Adapter 3 · Browser extension",
+    "titleLead": "Any free AI —",
+    "titleAccent": "becomes GPT‑Admin",
+    "lead": "A userscript for Tampermonkey/Firefox adds MCP buttons right into the ChatGPT, DeepSeek, Qwen, Alice and Sber interfaces. No paid API needed — just a free web chat.",
+    "installCta": "Install MCP Bridge",
+    "freeLabel": "Free · open source ·",
+    "freeAisLabel": "Works in these interfaces",
+    "platformsTitle": "Install on any device",
+    "platformsBody": "A userscript works anywhere there's a script manager.",
+    "stepsTitle": "Steps",
+    "step1Title": "Install a script manager",
+    "step2Title": "Install the MCP Bridge",
+    "step3Title": "Enter your Bridge Key",
+    "step4Title": "Open any chat and press MCP All",
+    "supportedTitle": "Supported sites",
+    "supportedStatus": "Full support",
+    "ctaTitle": "Want native tool calls?",
+    "ctaBody": "For Claude, Codex and OpenCode there's the MCP server; for ChatGPT there's the no-limits Custom GPT.",
+    "ctaButtonMcp": "MCP server",
+    "ctaButtonChatgpt": "Custom GPT",
+    "freeAis": [
+      { "name": "ChatGPT", "note": "free tier" },
+      { "name": "DeepSeek", "note": "free" },
+      { "name": "Qwen", "note": "free" },
+      { "name": "Alice", "note": "Yandex" },
+      { "name": "GigaChat", "note": "Sber" },
+      { "name": "Claude", "note": "free tier" }
+    ]
   }
 }
