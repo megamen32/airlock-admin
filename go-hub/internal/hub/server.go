@@ -1556,8 +1556,17 @@ func (s *Server) callHubTool(name string, args map[string]any) (map[string]any, 
 	}
 }
 
+func canonicalShellQueueName(name string) string {
+	switch strings.ToLower(strings.TrimSpace(name)) {
+	case "homeassistant", "home-assistant":
+		return "haos"
+	default:
+		return strings.TrimSpace(name)
+	}
+}
+
 func (s *Server) callShellTool(target, toolName string, args map[string]any, background bool, timeout time.Duration) map[string]any {
-	server := strings.TrimPrefix(target, "shell:")
+	server := canonicalShellQueueName(strings.TrimPrefix(target, "shell:"))
 	if toolName == "" {
 		return map[string]any{"server_id": target, "status": "failed", "error": "missing tool name"}
 	}

@@ -1084,3 +1084,11 @@ func TestShellToolsAdvertiseChildMCPDiscoveryAndCall(t *testing.T) {
 		}
 	}
 }
+
+func TestCanonicalShellQueueNameHomeAssistantAlias(t *testing.T) {
+	for _, alias := range []string{"homeassistant", "home-assistant", "haos"} {
+		if got := canonicalShellQueueName(alias); got != "haos" {
+			t.Fatalf("%s => %s", alias, got)
+		}
+	}
+}
