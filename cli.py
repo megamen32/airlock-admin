@@ -114,6 +114,7 @@ UPDATE_CHECK_COOLDOWN_S = 3600       # 1 hour after failed network attempt
 UPDATE_CHECK_FRESH_S = 86400         # 24 hours for successful check
 UPDATE_CHECK_TIMEOUT_S = 3           # manifest fetch timeout
 MCP_AGENTS_DIR = ETC_DIR / 'mcp-agents.d'
+MCP_SUPERVISOR_CONFIG = ETC_DIR / 'mcp-supervisor.json'
 MCP_TOKEN_FILE = ETC_DIR / 'mcp-relay.token'
 MCP_RUNTIME_DIR = INSTALL_DIR / 'agents' / 'generic_stdio_mcp_relay'
 MCP_MANAGER = MCP_RUNTIME_DIR / 'mcp_agent_manager.py'
@@ -1480,7 +1481,8 @@ def configure_shellmcp_transport(env: dict, install_hub: bool, install_shellmcp:
     if ch == '2':
         env['SHELLMCP_TRANSPORT'] = 'webhook'
         env['SHELLMCP_QUEUE'] = '0'
-        env['SHELLMCP_HEARTBEAT'] = '1'
+        heartbeat = ask('Включить heartbeat? Обычно не нужен: webhook уже обновляет active (y/N)', 'n')
+        env['SHELLMCP_HEARTBEAT'] = '1' if heartbeat.lower() in {'y', 'yes', 'д', 'да'} else '0'
         env['HB_INTERVAL_S'] = '3600'
         env.pop('QUEUE_URL', None)
         shellmcp_url_default = env.get('SHELLMCP_URL') or f"http://{first_ip()}:{env.get('SHELLMCP_PORT', '25900')}"
@@ -1488,7 +1490,7 @@ def configure_shellmcp_transport(env: dict, install_hub: bool, install_shellmcp:
     elif ch == '3':
         env['SHELLMCP_TRANSPORT'] = 'websocket'
         env['SHELLMCP_QUEUE'] = '0'
-        env['SHELLMCP_HEARTBEAT'] = '1'
+        env['SHELLMCP_HEARTBEAT'] = '0'
         env['HB_INTERVAL_S'] = '3600'
         env.pop('QUEUE_URL', None)
         env['WS_URL'] = hub.replace('https://', 'wss://').replace('http://', 'ws://') + '/ws/shellmcp'
@@ -1504,7 +1506,7 @@ def configure_shellmcp_transport(env: dict, install_hub: bool, install_shellmcp:
 
 
 
-def configure_shellmcp_transport_noninteractive(env: dict, transport: str | None = None) -> None:
+def configure_shellmcp_transport_noninteractive(env: dict, transport: str | None = None, heartbeat: bool = False) -> None:
     transport = (transport or env.get('SHELLMCP_TRANSPORT') or 'polling').strip().lower()
     if transport in {'long_poll', 'long-poll'}:
         transport = 'polling'
@@ -1514,14 +1516,14 @@ def configure_shellmcp_transport_noninteractive(env: dict, transport: str | None
     if transport == 'webhook':
         env['SHELLMCP_TRANSPORT'] = 'webhook'
         env['SHELLMCP_QUEUE'] = '0'
-        env['SHELLMCP_HEARTBEAT'] = '1'
+        env['SHELLMCP_HEARTBEAT'] = '1' if heartbeat else '0'
         env['HB_INTERVAL_S'] = '3600'
         env.pop('QUEUE_URL', None)
         env.setdefault('SHELLMCP_URL', f"http://{first_ip()}:{env.get('SHELLMCP_PORT', '25900')}")
     elif transport == 'websocket':
         env['SHELLMCP_TRANSPORT'] = 'websocket'
         env['SHELLMCP_QUEUE'] = '0'
-        env['SHELLMCP_HEARTBEAT'] = '1'
+        env['SHELLMCP_HEARTBEAT'] = '1' if heartbeat else '0'
         env['HB_INTERVAL_S'] = '3600'
         env.pop('QUEUE_URL', None)
         env['WS_URL'] = hub.replace('https://', 'wss://').replace('http://', 'ws://') + '/ws/shellmcp'
@@ -1796,6 +1798,11 @@ def setup_interactive(args):
     env.setdefault('SHELLMCP_TOKEN', gen_hex())
     env.setdefault('ADMIN_PASSWORD', gen_hex())
     env.setdefault('OAUTH_CLIENT_SECRET', gen_hex(32))
+    if install_hub:
+        # Remote MCP relays authenticate independently from administrator
+        # clients.  A ShellMCP-only installation must receive this exact token
+        # from the Hub it connects to, never a freshly generated local CTL key.
+        env.setdefault('MCP_RELAY_AGENT_TOKEN', gen_hex())
     if install_shellmcp:
         env.setdefault('SHELLMCP_AUTO_UPDATE', '1')
         ensure_shellmcp_identity_env(env)
@@ -1810,6 +1817,7 @@ def setup_interactive(args):
 
     env.setdefault('GPTADMIN_HOME', str(INSTALL_DIR))
     env.setdefault('GPTADMIN_CONFIG_DIR', str(ETC_DIR))
+    env.setdefault('SHELLMCP_MCP_CONFIG', str(MCP_SUPERVISOR_CONFIG))
     env.setdefault('GPTADMIN_AUDIT_LOG', str((globals().get('LOG_DIR', Path('/var/log/gptadmin'))) / 'audit.log'))
     env['HUB_BIND'] = '127.0.0.1'
     env['HUB_PORT'] = str(getattr(args, 'hub_port', None) or env.get('HUB_PORT') or '9001')
@@ -1876,10 +1884,21 @@ def setup_interactive(args):
         ensure_https(url)
         env['FRP_ENABLE'] = 'false'
         env['HUB_URL'] = url
+        relay_token = getattr(args, 'mcp_relay_token', None) or os.environ.get('GPTADMIN_MCP_RELAY_TOKEN')
+        if relay_token:
+            env['MCP_RELAY_AGENT_TOKEN'] = relay_token.strip()
+        elif not silent:
+            relay_token = ask('Введите MCP_RELAY_AGENT_TOKEN этого Hub (нужен для MCP relay; Enter — настроить позже)')
+            if relay_token:
+                env['MCP_RELAY_AGENT_TOKEN'] = relay_token
 
     if install_shellmcp:
         if silent:
-            configure_shellmcp_transport_noninteractive(env, getattr(args, 'shell_transport', None) or 'polling')
+            configure_shellmcp_transport_noninteractive(
+                env,
+                getattr(args, 'shell_transport', None) or 'polling',
+                getattr(args, 'shell_heartbeat', False),
+            )
         elif not (install_hub and env.get('TUNNEL_MODE') == 'cloudflare'):
             configure_shellmcp_transport(env, install_hub, install_shellmcp)
     if install_shellmcp:
@@ -2080,6 +2099,20 @@ def _mcp_save(cfg: dict):
     _json_write(MCP_CONFIG_FILE, cfg)
 
 
+def _mcp_go_supervisor_enabled() -> bool:
+    """Return whether the installed ShellMCP service owns MCP relay children."""
+    env = env_read()
+    config = (
+        os.environ.get('SHELLMCP_MCP_CONFIG')
+        or env.get('SHELLMCP_MCP_CONFIG')
+        or os.environ.get('GPTADMIN_MCP_CONFIG')
+        or env.get('GPTADMIN_MCP_CONFIG')
+        or os.environ.get('GPTADMIN_MCP_AGENTS_DIR')
+        or env.get('GPTADMIN_MCP_AGENTS_DIR')
+    )
+    return bool(config and config.strip())
+
+
 def _mcp_slug(name: str) -> str:
     return re.sub(r'[^A-Za-z0-9_.-]+', '-', name.strip()).strip('-._') or 'mcp'
 
@@ -2091,12 +2124,20 @@ def _mcp_agent_id(name: str, server: dict) -> str:
 
 
 def _mcp_ensure_token_file():
-    if MCP_TOKEN_FILE.exists():
-        return
     env = env_read()
-    token = env.get('CTL_TOKEN') or os.environ.get('GPTADMIN_MCP_RELAY_TOKEN') or gen_hex()
+    token = env.get('MCP_RELAY_AGENT_TOKEN') or os.environ.get('GPTADMIN_MCP_RELAY_TOKEN')
+    if MCP_TOKEN_FILE.exists() and not token:
+        return
+    if not token:
+        die(
+            'MCP relay token is not configured. Re-run setup with --mcp-relay-token TOKEN '
+            'or set MCP_RELAY_AGENT_TOKEN in gptadmin.env; this must be the token of the target Hub.'
+        )
+    token = token.strip()
+    if MCP_TOKEN_FILE.exists() and MCP_TOKEN_FILE.read_text(encoding='utf-8').strip() == token:
+        return
     MCP_TOKEN_FILE.parent.mkdir(parents=True, exist_ok=True)
-    MCP_TOKEN_FILE.write_text(token.strip() + '\n', encoding='utf-8')
+    MCP_TOKEN_FILE.write_text(token + '\n', encoding='utf-8')
     os.chmod(MCP_TOKEN_FILE, 0o640)
 
 
@@ -2135,6 +2176,33 @@ def _mcp_write_agent_config(name: str, cfg: dict) -> Path:
     _json_write(path, _mcp_agent_config(name, cfg))
     _mcp_fix_access_for_agent_config(path, cfg, name)
     return path
+
+
+def _mcp_sync_go_supervisor_config(cfg: dict) -> None:
+    """Make Go ShellMCP own MCP relay children in one aggregate registry."""
+    agents = []
+    relay = INSTALL_DIR / 'agents' / 'generic_stdio_mcp_relay' / 'generic_stdio_mcp_relay.py'
+    python = sys.executable or 'python3'
+    for name, server in sorted((cfg.get('mcpServers') or {}).items()):
+        if not server.get('enabled', True):
+            continue
+        agent_path = MCP_AGENTS_DIR / f'{_mcp_slug(name)}.json'
+        agents.append({
+            'ref': _mcp_agent_id(name, server),
+            'name': str(server.get('name') or name),
+            'command': python,
+            'args': [str(relay), '--agent-config', str(agent_path)],
+            'cwd': str(server.get('cwd') or '/'),
+            'enabled': True,
+        })
+    _json_write(MCP_SUPERVISOR_CONFIG, agents)
+
+
+def _mcp_refresh_generated_configs(cfg: dict) -> None:
+    """Regenerate relay inputs and the aggregate ShellMCP supervisor registry."""
+    for name in sorted((cfg.get('mcpServers') or {}).keys()):
+        _mcp_write_agent_config(name, cfg)
+    _mcp_sync_go_supervisor_config(cfg)
 
 
 
@@ -2232,6 +2300,11 @@ def _mcp_extract_tail_options(args):
     if getattr(args, 'command', None):
         tail.append(args.command)
     tail.extend(getattr(args, 'args', None) or [])
+    # argparse.REMAINDER preserves the conventional command separator.  It is
+    # syntax, not the executable; accepting it keeps `mcp add NAME -- npx ...`
+    # consistent with the documented examples and mcp-add helper.
+    if tail and tail[0] == '--':
+        tail.pop(0)
     if not tail:
         return
     cleaned = []
@@ -2264,6 +2337,14 @@ def _mcp_extract_tail_options(args):
             args.force = True
             i += 1
             continue
+        if item == '--install':
+            args.install = True
+            i += 1
+            continue
+        if item == '--status':
+            args.status = True
+            i += 1
+            continue
         cleaned.append(item)
         i += 1
     args.command = cleaned[0] if cleaned else None
@@ -2289,6 +2370,12 @@ def cmd_mcp_add(args):
     else:
         if not args.command:
             die('provide --url URL or COMMAND [ARGS...]')
+        if args.command.startswith('-'):
+            die(
+                f'invalid MCP command {args.command!r}: the first token after NAME must be an executable. '
+                f'For Chrome DevTools use: gptadmin mcp add chrome-devtools npx -y '
+                f'chrome-devtools-mcp@latest --browser-url=http://127.0.0.1:9223'
+            )
         command = args.command
         cmd_args = args.args or []
         stdio = args.stdio_format or 'auto'
@@ -2308,9 +2395,21 @@ def cmd_mcp_add(args):
         cfg.setdefault('gptadmin', {})['hub_url'] = args.hub_url.rstrip('/')
     _mcp_save(cfg)
     agent_config = _mcp_write_agent_config(args.name, cfg)
+    _mcp_sync_go_supervisor_config(cfg)
     print(f'Added MCP server {args.name}')
     print(f'Config: {MCP_CONFIG_FILE}')
     print(f'Agent config: {agent_config}')
+    if getattr(args, 'install', False):
+        if args.disabled:
+            print(f'Skip disabled MCP server: {args.name}')
+        elif _mcp_go_supervisor_enabled():
+            print(f'ShellMCP supervisor will manage MCP server {args.name}')
+        else:
+            print(f'Installing MCP server {args.name}: {agent_config}')
+            run(_mcp_manager_cmd('install', agent_config))
+    if getattr(args, 'status', False):
+        print(f'### {args.name}')
+        run(_mcp_manager_cmd('status', agent_config), check=False)
 
 def cmd_mcp_remove(args):
     need_root()
@@ -2324,6 +2423,7 @@ def cmd_mcp_remove(args):
             run(_mcp_manager_cmd('uninstall', agent_config, args.backend), check=False)
     servers.pop(args.name)
     _mcp_save(cfg)
+    _mcp_sync_go_supervisor_config(cfg)
     try:
         (MCP_AGENTS_DIR / f'{_mcp_slug(args.name)}.json').unlink(missing_ok=True)
     except Exception:
@@ -2337,10 +2437,10 @@ def cmd_mcp_edit(args):
     _mcp_save(cfg)
     editor = os.environ.get('EDITOR') or ('nano' if have('nano') else 'vi')
     run([editor, str(MCP_CONFIG_FILE)])
-    # Regenerate per-agent configs after edit.
+    # The editor can change enabled state and definitions, so refresh both
+    # generated representations from the final file rather than just mcp.json.
     cfg = _mcp_config()
-    for name in sorted((cfg.get('mcpServers') or {}).keys()):
-        _mcp_write_agent_config(name, cfg)
+    _mcp_refresh_generated_configs(cfg)
     print(f'Updated {MCP_CONFIG_FILE}')
 
 
@@ -2358,6 +2458,10 @@ def cmd_mcp_install(args):
     names = _mcp_names_from_arg(args, cfg)
     if not names:
         die('no MCP servers configured')
+    if _mcp_go_supervisor_enabled():
+        _mcp_refresh_generated_configs(cfg)
+        print('ShellMCP supervisor manages MCP relay services; standalone install skipped')
+        return
     for name in names:
         if not (cfg.get('mcpServers') or {}).get(name, {}).get('enabled', True):
             print(f'Skip disabled MCP server: {name}')
@@ -2565,8 +2669,7 @@ def cmd_mcp_import(args):
     cfg = _mcp_config()
     n = _mcp_merge_servers(cfg, ext.get('mcpServers') or {}, overwrite=getattr(args, 'force', False))
     _mcp_save(cfg)
-    for name in sorted((cfg.get('mcpServers') or {}).keys()):
-        _mcp_write_agent_config(name, cfg)
+    _mcp_refresh_generated_configs(cfg)
     print(f'Imported {n} MCP server(s) from {args.format}: {path}')
     print(f'GPTAdmin config: {MCP_CONFIG_FILE}')
 
@@ -2751,13 +2854,13 @@ def cmd_config_shellmcp(args):
             env.setdefault('SHELLMCP_BIND', '127.0.0.1')
         elif transport == 'webhook':
             env['SHELLMCP_QUEUE'] = '0'
-            env['SHELLMCP_HEARTBEAT'] = '1'
+            env['SHELLMCP_HEARTBEAT'] = '1' if args.heartbeat else '0'
             env['HB_INTERVAL_S'] = '3600'
             env.pop('QUEUE_URL', None)
             env['SHELLMCP_URL'] = args.shellmcp_url or env.get('SHELLMCP_URL') or f"http://{first_ip()}:{env.get('SHELLMCP_PORT', '25900')}"
         elif transport == 'websocket':
             env['SHELLMCP_QUEUE'] = '0'
-            env['SHELLMCP_HEARTBEAT'] = '1'
+            env['SHELLMCP_HEARTBEAT'] = '1' if args.heartbeat else '0'
             env['HB_INTERVAL_S'] = '3600'
             env.pop('QUEUE_URL', None)
             env['WS_URL'] = hub.replace('https://', 'wss://').replace('http://', 'ws://') + '/ws/shellmcp'
@@ -3805,6 +3908,14 @@ def safe_rm(p: Path):
 def cmd_uninstall(args):
     need_root()
     failures = []
+    # MCP stdio relays are separate launchd/systemd jobs.  Leaving them behind
+    # makes a claimed full reinstall retain old processes and credentials.
+    if _mcp_manager_exists():
+        for agent_config in MCP_AGENTS_DIR.glob('*.json'):
+            try:
+                run(_mcp_manager_cmd('uninstall', agent_config), check=False)
+            except Exception as e:
+                failures.append(f'не удалось удалить MCP relay {agent_config.name}: {e}')
     try:
         svc_autoupdate_disable_stop()
     except Exception as e:
@@ -3974,8 +4085,10 @@ def main():
     ap_setup.add_argument('--no-shellmcp', '--no-shell', dest='no_shellmcp', action='store_true', help='Do not install ShellMCP/rootd component')
     ap_setup.add_argument('--tunnel', choices=['frp', 'manual', 'cloudflare', 'none'], help='Public hub tunnel mode; --silent defaults to frp')
     ap_setup.add_argument('--hub-url', help='Existing public hub URL for manual tunnel or shell-only install')
+    ap_setup.add_argument('--mcp-relay-token', help='MCP_RELAY_AGENT_TOKEN of an existing Hub for shell-only installs')
     ap_setup.add_argument('--hub-port', help='Local hub port; default 9001')
     ap_setup.add_argument('--shell-transport', choices=['polling', 'webhook', 'websocket'], default='polling', help='Internal hub↔ShellMCP transport; default polling')
+    ap_setup.add_argument('--shell-heartbeat', action='store_true', help='Enable optional ShellMCP heartbeat (disabled by default)')
     ap_setup.add_argument('--pair', help='Reserved one-time pairing token for GPTAdmin Cloud installs')
     ap_setup.add_argument('--user', action='store_true', help='Use per-user install paths/services')
     ap_setup.add_argument('--system', action='store_true', help='Use system install paths/services')
@@ -4008,6 +4121,7 @@ def main():
     ap_conf.add_argument('--transport', choices=['polling', 'webhook', 'websocket'])
     ap_conf.add_argument('--hub-url')
     ap_conf.add_argument('--shellmcp-url', '--shell-url', dest='shellmcp_url', help='URL ShellMCP agent для webhook режима')
+    ap_conf.add_argument('--heartbeat', action='store_true', help='Enable optional ShellMCP heartbeat (disabled by default)')
     ap_conf.set_defaults(func=cmd_config_shellmcp)
 
     ap_urls = sub.add_parser('urls', help='Показать текущие публичные URL хаба, MCP и Actions')
@@ -4101,6 +4215,8 @@ def main():
     ap_mcp_add.add_argument('--hub-url')
     ap_mcp_add.add_argument('--disabled', action='store_true')
     ap_mcp_add.add_argument('--force', action='store_true')
+    ap_mcp_add.add_argument('--install', action='store_true', help='Сразу установить и запустить relay service')
+    ap_mcp_add.add_argument('--status', action='store_true', help='После добавления показать статус relay service')
     ap_mcp_add.set_defaults(func=cmd_mcp_add)
 
     ap_mcp_rm = mcp_sub.add_parser('remove', aliases=['rm'], help='Удалить MCP-сервер из конфига')
