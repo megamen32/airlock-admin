@@ -372,3 +372,19 @@ func TestChildMCPToolsAndCallThroughPublicTools(t *testing.T) {
 		t.Fatalf("called=%#v err=%v", called, err)
 	}
 }
+
+func TestPollingListenAndServeStopsOnContextCancellation(t *testing.T) {
+	s := New(Config{QueueEnabled: true, PollInterval: time.Hour})
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan error, 1)
+	go func() { done <- s.ListenAndServeContext(ctx) }()
+	cancel()
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatalf("ListenAndServeContext: %v", err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("polling server did not stop after context cancellation")
+	}
+}

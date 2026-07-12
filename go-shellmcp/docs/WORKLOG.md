@@ -40,3 +40,7 @@
   Production long-poll smoke test passed end-to-end: `mcp_manage` persisted a
   stdio child, `mcp_tools` discovered `echo`, and `mcp_call` returned
   `echo:production-ok`; the temporary child and definition were then removed.
+- 2026-07-12: Completion audit added regression coverage for polling shutdown
+  on context cancellation and terminal deletion of Hub-404 stale outbox
+  entries. Added standalone installation/configuration documentation for local
+  stdio and remote Streamable HTTP/SSE child MCPs.
