@@ -113,3 +113,18 @@ func TestShellNameForAndroidFallsBackToSystemShell(t *testing.T) {
 		t.Fatalf("bad android shell fallback: %q", got)
 	}
 }
+
+func TestRunRemovesCaptureFilesWhenOutputDidNotSpill(t *testing.T) {
+	dir := t.TempDir()
+	res := Run(context.Background(), Request{Cmd: "printf small", SpillDir: dir}, 1024)
+	if res.Spilled {
+		t.Fatalf("unexpected spill: %+v", res)
+	}
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 0 {
+		t.Fatalf("non-spilled capture files remain: %#v", entries)
+	}
+}

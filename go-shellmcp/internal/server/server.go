@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -17,10 +18,12 @@ import (
 	"github.com/megamen32/gptadmin/go-shellmcp/internal/audit"
 	"github.com/megamen32/gptadmin/go-shellmcp/internal/hub"
 	"github.com/megamen32/gptadmin/go-shellmcp/internal/job"
+	"github.com/megamen32/gptadmin/go-shellmcp/internal/mcpclient"
 	"github.com/megamen32/gptadmin/go-shellmcp/internal/output"
 	"github.com/megamen32/gptadmin/go-shellmcp/internal/security"
 	"github.com/megamen32/gptadmin/go-shellmcp/internal/shell"
 	"github.com/megamen32/gptadmin/go-shellmcp/internal/sshexec"
+	"github.com/megamen32/gptadmin/go-shellmcp/internal/storagebudget"
 	"github.com/megamen32/gptadmin/go-shellmcp/internal/supervisor"
 	"github.com/megamen32/gptadmin/go-shellmcp/internal/system"
 )
@@ -29,37 +32,37 @@ var BuildVersion = "3"
 var GitCommit = "go-shellmcp"
 
 type Config struct {
-	Addr                 string
-	Token                string
-	LogLimit             int64
-	ExecTimeout          int
-	SpillDir             string
-	Name                 string
-	BaseURL              string
-	HubURL               string
-	IdentityDir          string
-	HeartbeatEnabled     bool
-	HeartbeatInterval    time.Duration
-	QueueEnabled         bool
-	QueueTimeout         int
-	Mode                 string
-	OutboxDir            string
-	DefaultUser          string
-	DefaultHome          string
-	DefaultCwd           string
-	HubPublicKeyFile     string
-	HubPublicKey         string
-	AuditLog             string
-	NonceTTL             time.Duration
-	PreserveFileMetadata bool
+	Addr                     string
+	Token                    string
+	LogLimit                 int64
+	ExecTimeout              int
+	SpillDir                 string
+	Name                     string
+	BaseURL                  string
+	HubURL                   string
+	IdentityDir              string
+	HeartbeatEnabled         bool
+	HeartbeatInterval        time.Duration
+	QueueEnabled             bool
+	QueueTimeout             int
+	Mode                     string
+	OutboxDir                string
+	DefaultUser              string
+	DefaultHome              string
+	DefaultCwd               string
+	HubPublicKeyFile         string
+	HubPublicKey             string
+	AuditLog                 string
+	NonceTTL                 time.Duration
+	PreserveFileMetadata     bool
 	PreserveMetadataMaxFiles int
-	MCPConfig            string
-	PollInterval         time.Duration
-	SSHHost              string
-	SSHPort              int
-	SSHUser              string
-	SSHPassword          string
-	SSHKeyPath           string
+	MCPConfig                string
+	PollInterval             time.Duration
+	SSHHost                  string
+	SSHPort                  int
+	SSHUser                  string
+	SSHPassword              string
+	SSHKeyPath               string
 }
 
 func FromEnv() Config {
@@ -174,16 +177,17 @@ func firstToken(s string) string {
 }
 
 type Server struct {
-	cfg         Config
-	jobs        *job.Manager
-	identity    *security.Identity
-	hub         *hub.Client
-	auditLog    *audit.Logger
-	nonces      *security.NonceCache
-	supervisor  *supervisor.Manager
+	cfg          Config
+	jobs         *job.Manager
+	identity     *security.Identity
+	hub          *hub.Client
+	auditLog     *audit.Logger
+	nonces       *security.NonceCache
+	supervisor   *supervisor.Manager
 	preserveMeta bool
 	preserveMax  int
-	sshClient   *sshexec.Client
+	sshClient    *sshexec.Client
+	childMCP     *mcpclient.Client
 }
 
 func New(cfg Config) *Server {
@@ -222,7 +226,7 @@ func New(cfg Config) *Server {
 			log.Printf("supervisor: load agents failed: %v", loadErr)
 		}
 	}
-	mgr := supervisor.New(agents)
+	mgr := supervisor.NewPersistent(agents, cfg.MCPConfig)
 
 	maxFiles := cfg.PreserveMetadataMaxFiles
 	if maxFiles <= 0 {
@@ -262,6 +266,7 @@ func New(cfg Config) *Server {
 		preserveMeta: cfg.PreserveFileMetadata,
 		preserveMax:  maxFiles,
 		sshClient:    sshClient,
+		childMCP:     mcpclient.New(),
 	}
 }
 
@@ -270,6 +275,9 @@ func New(cfg Config) *Server {
 func (s *Server) Close() error {
 	if s.auditLog != nil {
 		_ = s.auditLog.Close()
+	}
+	if s.childMCP != nil {
+		s.childMCP.CloseAll()
 	}
 	if s.supervisor != nil {
 		_ = s.supervisor.KillAll()
@@ -298,20 +306,44 @@ func (s *Server) Handler() http.Handler {
 	return mux
 }
 
-func (s *Server) ListenAndServe() error {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+func (s *Server) ListenAndServe() error { return s.ListenAndServeContext(context.Background()) }
+
+func (s *Server) ListenAndServeContext(ctx context.Context) error {
 	if s.cfg.HeartbeatEnabled {
 		go s.heartbeatLoop(ctx)
 	}
-	if s.cfg.QueueEnabled {
+	if !s.needsLocalListener() {
 		go s.queueLoop(ctx)
 	}
 	s.startUpdateLoop(ctx)
 	s.startAutoStartAgents()
+	if s.cfg.QueueEnabled {
+		log.Printf("shellmcp-go polling mode name=%s heartbeat=%v queue=%v (no local listener)", s.cfg.Name, s.cfg.HeartbeatEnabled, s.cfg.QueueEnabled)
+		<-ctx.Done()
+		return nil
+	}
 	srv := &http.Server{Addr: s.cfg.Addr, Handler: s.Handler(), ReadHeaderTimeout: 5 * time.Second}
+	errCh := make(chan error, 1)
+	go func() { errCh <- srv.ListenAndServe() }()
 	log.Printf("shellmcp-go listening addr=%s name=%s heartbeat=%v queue=%v", s.cfg.Addr, s.cfg.Name, s.cfg.HeartbeatEnabled, s.cfg.QueueEnabled)
-	return srv.ListenAndServe()
+	select {
+	case <-ctx.Done():
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		_ = srv.Shutdown(shutdownCtx)
+		return nil
+	case err := <-errCh:
+		if errors.Is(err, http.ErrServerClosed) {
+			return nil
+		}
+		return err
+	}
+}
+
+// needsLocalListener reports whether this transport accepts inbound HTTP.
+// Queue agents operate through outbound Hub polling only.
+func (s *Server) needsLocalListener() bool {
+	return !s.cfg.QueueEnabled
 }
 
 func (s *Server) authed(next http.HandlerFunc) http.HandlerFunc {
@@ -374,17 +406,17 @@ func (s *Server) health(w http.ResponseWriter, _ *http.Request) {
 }
 func (s *Server) capabilities(w http.ResponseWriter, _ *http.Request) {
 	writeJSON(w, 200, map[string]any{
-		"shell":           true,
-		"system":          true,
-		"tasks":           true,
-		"logs":            true,
-		"file_backup":     true,
-		"go_shellmcp":     true,
-		"real_mcp":        true,
-		"mcp_transports":  []string{"stdio", "streamable-http-poll"},
-		"build_version":   parseBuildVersion(BuildVersion),
-		"git_commit":      GitCommit,
-		"mcp_agents":      s.mcpAgentsForCapabilities(),
+		"shell":          true,
+		"system":         true,
+		"tasks":          true,
+		"logs":           true,
+		"file_backup":    true,
+		"go_shellmcp":    true,
+		"real_mcp":       true,
+		"mcp_transports": []string{"stdio", "streamable-http-poll"},
+		"build_version":  parseBuildVersion(BuildVersion),
+		"git_commit":     GitCommit,
+		"mcp_agents":     s.mcpAgentsForCapabilities(),
 	})
 }
 
@@ -590,10 +622,10 @@ func (s *Server) execLive(w http.ResponseWriter, r *http.Request) {
 	}
 	cmdField := firstToken(req.Cmd)
 	s.auditLog.Event(audit.ExecStart, map[string]any{
-		"cmd":             cmdField,
-		"user":            req.RunAsUser,
-		"background":      req.Background,
-		"transport":       "ndjson",
+		"cmd":        cmdField,
+		"user":       req.RunAsUser,
+		"background": req.Background,
+		"transport":  "ndjson",
 	})
 	w.Header().Set("Content-Type", "application/x-ndjson")
 	w.Header().Set("Cache-Control", "no-store")
@@ -612,12 +644,12 @@ func (s *Server) execLive(w http.ResponseWriter, r *http.Request) {
 	res := s.runShellStream(r.Context(), req, emit)
 	elapsedMS := time.Since(startTime).Milliseconds()
 	endFields := map[string]any{
-		"cmd":             cmdField,
-		"user":            req.RunAsUser,
-		"background":      req.Background,
-		"return_code":     res.ReturnCode,
-		"elapsed_ms":      elapsedMS,
-		"transport":       "ndjson",
+		"cmd":         cmdField,
+		"user":        req.RunAsUser,
+		"background":  req.Background,
+		"return_code": res.ReturnCode,
+		"elapsed_ms":  elapsedMS,
+		"transport":   "ndjson",
 	}
 	if res.Error != "" {
 		endFields["error"] = res.Error
@@ -715,12 +747,32 @@ func (s *Server) queueLoop(ctx context.Context) {
 			continue
 		}
 		if ok {
-			req := shell.Request{Cmd: q.Cmd, Cwd: q.Cwd, Timeout: q.Timeout, Env: q.Env, SpillDir: s.cfg.SpillDir}
-			s.applyDefaults(&req)
-			go s.runCallbackJob(q.ID, req)
+			if q.ToolName != "" && q.ToolName != "shell_exec" {
+				go s.runCallbackTool(q.ID, q.ToolName, q.Arguments)
+			} else {
+				req := shell.Request{Cmd: q.Cmd, Cwd: q.Cwd, Timeout: q.Timeout, Env: q.Env, SpillDir: s.cfg.SpillDir}
+				s.applyDefaults(&req)
+				go s.runCallbackJob(q.ID, req)
+			}
 		}
 	}
 }
+
+func (s *Server) runCallbackTool(jobID, name string, args map[string]any) {
+	result, err := s.callMCPTool(context.Background(), name, args)
+	payload := hub.TaskResult{ID: jobID, Result: result}
+	if err != nil {
+		payload.Result = map[string]any{"error": err.Error()}
+	}
+	if s.hub == nil {
+		return
+	}
+	if postErr := s.hub.PostResult(context.Background(), s.cfg.Name, payload); postErr != nil {
+		log.Printf("callback tool result failed job=%s tool=%s err=%v", jobID, name, postErr)
+		s.spoolOutbox(jobID, payload, postErr)
+	}
+}
+
 func (s *Server) runCallbackJob(jobID string, req shell.Request) {
 	res := s.runShell(context.Background(), req)
 	if s.hub == nil {
@@ -757,6 +809,7 @@ func (s *Server) spoolOutbox(jobID string, payload hub.TaskResult, cause error) 
 	}
 	b, _ := json.Marshal(entry)
 	_ = os.WriteFile(path, b, 0o600)
+	_, _ = storagebudget.Enforce(s.cfg.SpillDir, map[string]bool{path: true})
 }
 
 // computeOutboxBackoff returns the wait time for the given attempt number
@@ -797,10 +850,10 @@ func (s *Server) flushOutbox(ctx context.Context) {
 			continue
 		}
 		var entry struct {
-			JobID          string      `json:"job_id"`
-			Payload        hub.TaskResult `json:"payload"`
-			Attempts       int         `json:"attempts"`
-			NextAttemptAt  int64       `json:"next_attempt_at"`
+			JobID         string         `json:"job_id"`
+			Payload       hub.TaskResult `json:"payload"`
+			Attempts      int            `json:"attempts"`
+			NextAttemptAt int64          `json:"next_attempt_at"`
 		}
 		if json.Unmarshal(b, &entry) != nil || entry.Payload.ID == "" {
 			continue
@@ -814,6 +867,12 @@ func (s *Server) flushOutbox(ctx context.Context) {
 		}
 		postErr := s.hub.PostResult(ctx, s.cfg.Name, entry.Payload)
 		if postErr == nil {
+			_ = os.Remove(path)
+			continue
+		}
+		var httpErr *hub.HTTPError
+		if errors.As(postErr, &httpErr) && httpErr.StatusCode == http.StatusNotFound {
+			log.Printf("outbox dropping stale result file=%s err=%v", path, postErr)
 			_ = os.Remove(path)
 			continue
 		}

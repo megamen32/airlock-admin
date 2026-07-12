@@ -141,7 +141,9 @@ type relayJob struct {
 type shellJob struct {
 	ID        string         `json:"id"`
 	Server    string         `json:"server,omitempty"`
-	Cmd       string         `json:"cmd"`
+	ToolName  string         `json:"tool_name,omitempty"`
+	Arguments map[string]any `json:"arguments,omitempty"`
+	Cmd       string         `json:"cmd,omitempty"`
 	Cwd       string         `json:"cwd,omitempty"`
 	Timeout   int            `json:"timeout,omitempty"`
 	Env       map[string]any `json:"env,omitempty"`
@@ -1556,14 +1558,19 @@ func (s *Server) callHubTool(name string, args map[string]any) (map[string]any, 
 
 func (s *Server) callShellTool(target, toolName string, args map[string]any, background bool, timeout time.Duration) map[string]any {
 	server := strings.TrimPrefix(target, "shell:")
-	if toolName != "shell_exec" {
-		return map[string]any{"server_id": target, "status": "failed", "error": "unsupported shell tool: " + toolName}
+	if toolName == "" {
+		return map[string]any{"server_id": target, "status": "failed", "error": "missing tool name"}
 	}
-	cmd := firstString(args, "cmd", "command")
-	if cmd == "" {
-		return map[string]any{"server_id": target, "status": "failed", "error": "missing cmd"}
+	job := &shellJob{ID: newID(), Server: server, ToolName: toolName, Arguments: cloneMap(args), CreatedAt: nowFloat(), Status: "queued"}
+	if toolName == "shell_exec" {
+		job.Cmd = firstString(args, "cmd", "command")
+		if job.Cmd == "" {
+			return map[string]any{"server_id": target, "status": "failed", "error": "missing cmd"}
+		}
+		job.Cwd = firstString(args, "cwd")
+		job.Timeout = intFromAny(args["timeout"])
+		job.Env = mapValue(args["env"])
 	}
-	job := &shellJob{ID: newID(), Server: server, Cmd: cmd, Cwd: firstString(args, "cwd"), Timeout: intFromAny(args["timeout"]), Env: mapValue(args["env"]), CreatedAt: nowFloat(), Status: "queued"}
 	s.mu.Lock()
 	s.shellJobs[job.ID] = job
 	s.shellQueues[server] = append(s.shellQueues[server], job.ID)
@@ -1598,7 +1605,12 @@ func hubTools() []map[string]any {
 }
 
 func shellTools() []map[string]any {
-	return []map[string]any{{"name": "shell_exec", "description": "Execute a shell command through a polling shellmcp agent", "inputSchema": map[string]any{"type": "object", "properties": map[string]any{"cmd": map[string]any{"type": "string"}, "cwd": map[string]any{"type": []string{"string", "null"}}, "timeout": map[string]any{"type": []string{"integer", "null"}}}, "required": []string{"cmd"}}}}
+	return []map[string]any{
+		{"name": "shell_exec", "description": "Execute a shell command through a polling shellmcp agent", "inputSchema": map[string]any{"type": "object", "properties": map[string]any{"cmd": map[string]any{"type": "string"}, "cwd": map[string]any{"type": []string{"string", "null"}}, "timeout": map[string]any{"type": []string{"integer", "null"}}}, "required": []string{"cmd"}}},
+		{"name": "mcp_manage", "description": "Persist and manage child MCP definitions on this ShellMCP", "inputSchema": map[string]any{"type": "object", "properties": map[string]any{"action": map[string]any{"type": "string", "enum": []string{"list", "upsert", "remove", "enable", "disable", "restart", "status", "config"}}, "ref": map[string]any{"type": []string{"string", "null"}}, "config": map[string]any{"type": []string{"object", "null"}, "additionalProperties": true}}, "required": []string{"action"}, "additionalProperties": false}},
+		{"name": "mcp_tools", "description": "List tools exposed by an enabled child MCP configured on this ShellMCP", "inputSchema": map[string]any{"type": "object", "properties": map[string]any{"ref": map[string]any{"type": "string"}}, "required": []string{"ref"}, "additionalProperties": false}},
+		{"name": "mcp_call", "description": "Call a tool on an enabled child MCP configured on this ShellMCP", "inputSchema": map[string]any{"type": "object", "properties": map[string]any{"ref": map[string]any{"type": "string"}, "name": map[string]any{"type": "string"}, "arguments": map[string]any{"type": []string{"object", "null"}, "additionalProperties": true}}, "required": []string{"ref", "name"}, "additionalProperties": false}},
+	}
 }
 
 func (s *Server) tasksEndpoint(w http.ResponseWriter, r *http.Request) {

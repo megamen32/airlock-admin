@@ -1044,3 +1044,43 @@ func TestHTTPServiceEndpointRejectsPrivateCapability(t *testing.T) {
 		t.Fatalf("private endpoint should be hidden, got status=%d body=%s", w.Code, w.Body.String())
 	}
 }
+
+func TestPollingShellQueueCarriesGenericMCPToolCall(t *testing.T) {
+	s := New(Config{DefaultTimeout: time.Second, PollMaxTimeout: time.Second})
+	queued := s.callShellTool("shell:demo", "mcp_tools", map[string]any{"ref": "docs"}, true, time.Second)
+	if queued["status"] != "running" {
+		t.Fatalf("queue result=%#v", queued)
+	}
+	req := httptest.NewRequest(http.MethodGet, "/queue/demo?timeout=0", nil)
+	rec := httptest.NewRecorder()
+	s.Handler().ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	var job map[string]any
+	if err := json.Unmarshal(rec.Body.Bytes(), &job); err != nil {
+		t.Fatal(err)
+	}
+	if job["tool_name"] != "mcp_tools" {
+		t.Fatalf("job=%#v", job)
+	}
+	args, _ := job["arguments"].(map[string]any)
+	if args["ref"] != "docs" {
+		t.Fatalf("args=%#v", args)
+	}
+}
+
+func TestShellToolsAdvertiseChildMCPDiscoveryAndCall(t *testing.T) {
+	tools := shellTools()
+	seen := map[string]bool{}
+	for _, tool := range tools {
+		if name, _ := tool["name"].(string); name != "" {
+			seen[name] = true
+		}
+	}
+	for _, name := range []string{"shell_exec", "mcp_manage", "mcp_tools", "mcp_call"} {
+		if !seen[name] {
+			t.Fatalf("missing %s in %#v", name, tools)
+		}
+	}
+}

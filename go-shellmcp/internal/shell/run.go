@@ -14,6 +14,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/megamen32/gptadmin/go-shellmcp/internal/storagebudget"
 )
 
 const DefaultLimitBytes int64 = 8192
@@ -149,18 +151,33 @@ func runInternal(ctx context.Context, req Request, limitBytes int64, emit func(E
 		cwd = abs
 	}
 	res := Result{ReturnCode: rc, Stdout: stdout.Tail(), Stderr: stderr.Tail(), DurationMS: time.Since(started).Milliseconds(), Cwd: cwd, RunAsUser: runAsUser}
+	stdoutSpilled := stdout.Spilled()
+	stderrSpilled := stderr.Spilled()
+	_ = stdout.Close()
+	_ = stderr.Close()
+	if !stdoutSpilled {
+		_ = os.Remove(stdout.Path())
+	}
+	if !stderrSpilled {
+		_ = os.Remove(stderr.Path())
+	}
 	files := make([]string, 0, 2)
-	if stdout.Spilled() {
+	if stdoutSpilled {
 		res.Spilled = true
 		res.StdoutPath = stdout.Path()
 		files = append(files, stdout.Path())
 	}
-	if stderr.Spilled() {
+	if stderrSpilled {
 		res.Spilled = true
 		res.StderrPath = stderr.Path()
 		files = append(files, stderr.Path())
 	}
 	res.Files = files
+	protected := make(map[string]bool, len(files))
+	for _, path := range files {
+		protected[path] = true
+	}
+	_, _ = storagebudget.Enforce(spillDir, protected)
 	if ctx.Err() == context.DeadlineExceeded {
 		res.Error = "timeout"
 		res.TimedOut = true
