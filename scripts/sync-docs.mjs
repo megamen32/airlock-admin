@@ -1,40 +1,46 @@
 #!/usr/bin/env node
 /**
- * Mirror src/content/docs/{en,ru,cn}/*.md → public/docs/{en,ru,cn}/*.md.
+ * Mirror two content trees into public/ so the Next.js static server
+ * can serve them without App-Router rewrite:
  *
- * Why: the docs browser fetches /docs/<locale>/<slug>.md at runtime, which
- * Next.js serves from `public/`. We keep the editable source-of-truth in
- * `src/content/docs/` (alongside other site content) and sync to `public/`
- * before every build so the static asset paths stay simple — no App Router
- * refactor needed.
+ *   1. src/content/docs/{en,ru,cn}/*.md  → public/docs/{en,ru,cn}/*.md
+ *   2. src/content/i18n/{en,ru,cn}.json  → public/i18n/{en,ru,cn}.json
  *
- * Idempotent. Safe to run repeatedly. Exits non-zero if any source file is
- * missing in a destination (i.e. a doc was deleted without removing it from
- * the public copy).
+ * Why: the docs browser fetches /docs/<locale>/<slug>.md at runtime, and
+ * the i18n hook fetches /i18n/<locale>.json for chrome / home-page copy.
+ * Both are static lookups — keeping the editable source-of-truth under
+ * src/content/ and mirroring to public/ at prebuild keeps the runtime
+ * code path trivial (a single fetch() per locale).
+ *
+ * Idempotent. Safe to run repeatedly.
  */
 import { copyFileSync, mkdirSync, readdirSync, rmSync } from "node:fs";
-import { dirname, join, resolve } from "node:path";
+import { join, resolve } from "node:path";
 
 const LOCALES = ["en", "ru", "cn"];
 const ROOT = resolve(process.cwd());
-const SRC = join(ROOT, "src/content/docs");
-const DEST = join(ROOT, "public/docs");
+
+const SOURCES = [
+  { src: join(ROOT, "src/content/docs"), dest: join(ROOT, "public/docs"), ext: ".md" },
+  { src: join(ROOT, "src/content/i18n"), dest: join(ROOT, "public/i18n"), ext: ".json" },
+];
 
 function log(level, msg) {
   const tag = { info: "·", warn: "!", err: "✗" }[level] ?? "·";
   console.log(`[sync-docs] ${tag} ${msg}`);
 }
 
-function syncLocale(locale) {
-  const srcDir = join(SRC, locale);
-  const destDir = join(DEST, locale);
+function syncLocaleTree(src, dest, ext, locale) {
+  // Tree layout A: src/<locale>/*.ext  →  dest/<locale>/*.ext   (docs)
+  const srcDir = join(src, locale);
+  const destDir = join(dest, locale);
   let srcFiles;
   try {
-    srcFiles = readdirSync(srcDir).filter((f) => f.endsWith(".md"));
+    srcFiles = readdirSync(srcDir).filter((f) => f.endsWith(ext));
   } catch (err) {
     if (err.code === "ENOENT") {
-      log("warn", `source dir missing: ${srcDir}`);
-      return { locale, copied: 0, removed: 0, missing: 0 };
+      log("warn", `${srcDir} missing`);
+      return { copied: 0, removed: 0 };
     }
     throw err;
   }
@@ -42,16 +48,14 @@ function syncLocale(locale) {
   mkdirSync(destDir, { recursive: true });
 
   const srcSet = new Set(srcFiles);
-  const destFiles = readdirSync(destDir).filter((f) => f.endsWith(".md"));
+  const destFiles = readdirSync(destDir).filter((f) => f.endsWith(ext));
 
-  // Copy/replace each source file.
   let copied = 0;
   for (const f of srcFiles) {
     copyFileSync(join(srcDir, f), join(destDir, f));
     copied++;
   }
 
-  // Remove destination files that no longer have a source.
   let removed = 0;
   for (const f of destFiles) {
     if (!srcSet.has(f)) {
@@ -60,27 +64,52 @@ function syncLocale(locale) {
     }
   }
 
-  return { locale, copied, removed, missing: 0 };
+  return { copied, removed };
+}
+
+function syncFlatTree(src, dest, ext, locale) {
+  // Tree layout B: src/<locale>.ext  →  dest/<locale>.ext   (i18n JSON)
+  const srcFile = join(src, `${locale}${ext}`);
+  const destFile = join(dest, `${locale}${ext}`);
+  try {
+    copyFileSync(srcFile, destFile);
+    return { copied: 1, removed: 0 };
+  } catch (err) {
+    if (err.code === "ENOENT") {
+      log("warn", `${srcFile} missing`);
+      return { copied: 0, removed: 0 };
+    }
+    throw err;
+  }
 }
 
 function main() {
   const t0 = Date.now();
-  log("info", `syncing ${SRC} → ${DEST}`);
-  const results = LOCALES.map(syncLocale);
   let totalCopied = 0;
   let totalRemoved = 0;
-  for (const r of results) {
-    log(
-      "info",
-      `${r.locale}: copied=${r.copied} removed=${r.removed}`
-    );
-    totalCopied += r.copied;
-    totalRemoved += r.removed;
+
+  for (const { src, dest, ext } of SOURCES) {
+    log("info", `syncing ${src} (${ext}) → ${dest}`);
+    mkdirSync(dest, { recursive: true });
+    for (const locale of LOCALES) {
+      // Detect layout by existence of the locale-named directory.
+      const isTree = (() => {
+        try {
+          return readdirSync(join(src, locale)).some((f) => f.endsWith(ext));
+        } catch {
+          return false;
+        }
+      })();
+      const r = isTree
+        ? syncLocaleTree(src, dest, ext, locale)
+        : syncFlatTree(src, dest, ext, locale);
+      log("info", `  ${locale}: copied=${r.copied} removed=${r.removed}`);
+      totalCopied += r.copied;
+      totalRemoved += r.removed;
+    }
   }
-  log(
-    "info",
-    `done in ${Date.now() - t0}ms (copied=${totalCopied}, pruned=${totalRemoved})`
-  );
+
+  log("info", `done in ${Date.now() - t0}ms (copied=${totalCopied}, pruned=${totalRemoved})`);
 }
 
 main();

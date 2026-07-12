@@ -3,11 +3,13 @@
 import { motion } from "framer-motion";
 import { Send, Heart } from "lucide-react";
 import { Reveal } from "./reveal";
+import { useT } from "@/hooks/use-t";
 
 const EASE = [0.16, 1, 0.3, 1] as const;
 
 /** Personal note from the author — "I'm a real person, not a corporation." */
 export function AuthorNote() {
+  const { t } = useT();
   return (
     <section className="relative py-16 sm:py-20">
       <div className="mx-auto max-w-3xl px-5 sm:px-8">
@@ -27,20 +29,11 @@ export function AuthorNote() {
               </span>
               <div className="min-w-0">
                 <p className="text-[11px] font-medium uppercase tracking-[0.2em] text-muted-foreground/60">
-                  От автора
+                  {t("author.eyebrow")}
                 </p>
                 <div className="mt-2 space-y-3 text-sm leading-relaxed text-foreground/90">
-                  <p>
-                    Ребята, я не корпорация. Я живой человек, делаю это один —
-                    ради фана и для себя. Сам юзаю проект больше года, удобнее
-                    чем Codex/Claude для инфраструктуры.
-                  </p>
-                  <p className="text-muted-foreground">
-                    Это не полная замена, а дополнение — штука для серверов и
-                    админки. У меня 8 млрд токенов в Codex и 2 млрд в Claude,
-                    но для своих машин мне так быстрее. Возможны баги —
-                    пишите, чиню.
-                  </p>
+                  <p>{t("author.body1")}</p>
+                  <p className="text-muted-foreground">{t("author.body2")}</p>
                 </div>
                 <a
                   href="https://t.me/careviolan"

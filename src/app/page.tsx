@@ -2,10 +2,12 @@ import { Header } from "@/components/site/header";
 import { ScrollProgress } from "@/components/site/scroll-progress";
 import { Footer } from "@/components/site/footer";
 import { Router } from "@/components/site/router";
+import { I18nBootstrap } from "@/components/site/i18n-bootstrap";
 
 export default function Home() {
   return (
     <div className="relative flex min-h-screen flex-col">
+      <I18nBootstrap />
       <ScrollProgress />
       <Header />
 

@@ -1,7 +1,7 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { ArrowRight, Bot, BrainCircuit, Github, Puzzle, Rocket, ShieldCheck, Sparkles, Star, Terminal } from "lucide-react";
+import { ArrowRight, Bot, BrainCircuit, Github, Rocket, ShieldCheck, Sparkles, Terminal } from "lucide-react";
 import { Reveal, Stagger, StaggerItem } from "../reveal";
 import { Eyebrow } from "../section-heading";
 import { InstallCommand } from "../install-command";
@@ -9,45 +9,29 @@ import { ArchitectureDiagram } from "../architecture-diagram";
 import { UseCases } from "../use-cases";
 import { AuthorNote } from "../author-note";
 import { useHashRoute, type PageId } from "@/hooks/use-hash-route";
+import { useT } from "@/hooks/use-t";
 
 const EASE = [0.16, 1, 0.3, 1] as const;
 
-const ADAPTERS: {
+const ADAPTER_ICONS: Record<string, React.ElementType> = {
+  chatgpt: Terminal,
+  "mcp-server": BrainCircuit,
+  "mcp-extension": Bot,
+};
+
+type Adapter = {
   page: PageId;
-  icon: React.ElementType;
   kicker: string;
   title: string;
   body: string;
   cta: string;
-}[] = [
-  {
-    page: "chatgpt",
-    icon: Terminal,
-    kicker: "OpenAI Action",
-    title: "ChatGPT · Open WebUI",
-    body: "Custom GPT, Open WebUI или Apps SDK widget прямо в чате. ChatGPT сам понимает когда выполнить команду. Без лимитов платного Codex.",
-    cta: "Как подключить",
-  },
-  {
-    page: "mcp-server",
-    icon: BrainCircuit,
-    kicker: "MCP-клиент",
-    title: "Claude · Codex · OpenCode",
-    body: "GPT‑Админ работает как MCP remote SSE. Подключите его в настройках клиента — и AI получает нативные tool calls ко всей инфраструктуре.",
-    cta: "Инструкция",
-  },
-  {
-    page: "mcp-extension",
-    icon: Bot,
-    kicker: "Браузерное расширение",
-    title: "DeepSeek · Qwen · Алиса",
-    body: "Userscript для Tampermonkey/Firefox добавляет кнопки MCP в бесплатные веб‑ИИ. Не нужен платный API — только бесплатный веб‑чат.",
-    cta: "Установить расширение",
-  },
-];
+};
 
 export function HomePage() {
   const { navigate } = useHashRoute();
+  const { t, get } = useT();
+
+  const adapters = (get<Adapter[]>("adapters.items") ?? []);
 
   return (
     <>
@@ -71,7 +55,7 @@ export function HomePage() {
                 className="flex flex-wrap items-center gap-2"
               >
                 <span className="inline-flex items-center gap-1.5 rounded-full border border-primary/25 bg-primary/[0.06] px-3 py-1.5 text-xs font-medium text-primary">
-                  <Sparkles className="h-3 w-3" /> Open Source · AGPL‑3.0
+                  <Sparkles className="h-3 w-3" /> {t("hero.kicker")}
                 </span>
                 <a
                   href="https://github.com/megamen32/gptadmin_opensource"
@@ -89,8 +73,8 @@ export function HomePage() {
                 transition={{ duration: 0.8, delay: 0.06, ease: EASE }}
                 className="display mt-5 max-w-xl text-balance text-[2rem] font-semibold leading-[1.05] tracking-tight sm:text-5xl lg:text-[3.4rem]"
               >
-                Один хаб — любой AI управляет{" "}
-                <span className="text-gradient-violet">любой инфраструктурой</span>
+                {t("hero.titleLead")}{" "}
+                <span className="text-gradient-violet">{t("hero.titleAccent")}</span>
               </motion.h1>
 
               <motion.p
@@ -99,10 +83,7 @@ export function HomePage() {
                 transition={{ duration: 0.8, delay: 0.14, ease: EASE }}
                 className="mt-6 max-w-xl text-pretty text-base leading-relaxed text-muted-foreground sm:text-lg"
               >
-                GPT‑Админ — это MCP‑хаб. Подключайте к нему сервера и любые MCP
-                (chrome‑devtools, openmemory), а ваш любимый AI цепляется к хабу
-                одним из трёх способов. Управляйте всем — от поиска в интернете
-                до запуска сабагентов.
+                {t("hero.body")}
               </motion.p>
 
               <motion.div
@@ -117,7 +98,7 @@ export function HomePage() {
                   className="group inline-flex items-center gap-2 rounded-full bg-primary px-5 py-3 text-sm font-medium text-primary-foreground transition-transform hover:scale-[1.02]"
                 >
                   <Rocket className="h-4 w-4" />
-                  Как подключить AI
+                  {t("hero.ctaPrimary")}
                   <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
                 </button>
               </motion.div>
@@ -138,13 +119,13 @@ export function HomePage() {
                 className="mt-5 flex flex-wrap items-center gap-x-5 gap-y-2 text-xs text-muted-foreground"
               >
                 <span className="inline-flex items-center gap-1.5">
-                  <ShieldCheck className="h-3.5 w-3.5 text-primary" /> Без sudo по умолчанию
+                  <ShieldCheck className="h-3.5 w-3.5 text-primary" /> {t("hero.trustNoSudo")}
                 </span>
                 <span className="inline-flex items-center gap-1.5">
-                  <span className="h-1 w-1 rounded-full bg-primary/70" /> Linux · macOS · Windows
+                  <span className="h-1 w-1 rounded-full bg-primary/70" /> {t("hero.trustPlatforms")}
                 </span>
                 <span className="inline-flex items-center gap-1.5">
-                  <span className="h-1 w-1 rounded-full bg-primary/70" /> Свой домен не нужен
+                  <span className="h-1 w-1 rounded-full bg-primary/70" /> {t("hero.trustNoDomain")}
                 </span>
               </motion.div>
             </div>
@@ -173,42 +154,44 @@ export function HomePage() {
       <section className="relative py-20 sm:py-28">
         <div className="mx-auto max-w-7xl px-5 sm:px-8">
           <Reveal className="flex flex-col items-center gap-4 text-center">
-            <Eyebrow>Три адаптера к хабу</Eyebrow>
+            <Eyebrow>{t("adapters.eyebrow")}</Eyebrow>
             <h2 className="display max-w-2xl text-balance text-3xl font-semibold tracking-tight sm:text-4xl md:text-5xl">
-              Один хаб —{" "}
-              <span className="text-gradient-violet">три способа подключить AI</span>
+              {t("adapters.titleLead")}{" "}
+              <span className="text-gradient-violet">{t("adapters.titleAccent")}</span>
             </h2>
             <p className="max-w-xl text-base leading-relaxed text-muted-foreground sm:text-lg">
-              Это не три разных продукта, а три адаптера к одному хабу. Выбирайте
-              под свой AI — возможности одинаковы.
+              {t("adapters.body")}
             </p>
           </Reveal>
 
           <Stagger className="mt-14 grid gap-5 lg:grid-cols-3" stagger={0.1}>
-            {ADAPTERS.map((w) => (
-              <StaggerItem key={w.page}>
-                <button
-                  type="button"
-                  onClick={() => navigate(w.page)}
-                  className="surface surface-hover ring-conic group relative flex h-full w-full flex-col items-start rounded-2xl p-7 text-left"
-                >
-                  <div className="flex w-full items-center justify-between">
-                    <span className="inline-flex h-12 w-12 items-center justify-center rounded-xl border border-primary/20 bg-primary/[0.06] transition-colors group-hover:border-primary/40">
-                      <w.icon className="h-5 w-5 text-primary" />
+            {adapters.map((w) => {
+              const Icon = ADAPTER_ICONS[w.page] ?? Terminal;
+              return (
+                <StaggerItem key={w.page}>
+                  <button
+                    type="button"
+                    onClick={() => navigate(w.page)}
+                    className="surface surface-hover ring-conic group relative flex h-full w-full flex-col items-start rounded-2xl p-7 text-left"
+                  >
+                    <div className="flex w-full items-center justify-between">
+                      <span className="inline-flex h-12 w-12 items-center justify-center rounded-xl border border-primary/20 bg-primary/[0.06] transition-colors group-hover:border-primary/40">
+                        <Icon className="h-5 w-5 text-primary" />
+                      </span>
+                      <span className="text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground/70">
+                        {w.kicker}
+                      </span>
+                    </div>
+                    <h3 className="mt-5 text-xl font-semibold tracking-tight">{w.title}</h3>
+                    <p className="mt-3 text-sm leading-relaxed text-muted-foreground">{w.body}</p>
+                    <span className="mt-6 inline-flex items-center gap-2 text-sm font-medium text-primary transition-colors group-hover:text-primary/80">
+                      {w.cta}
+                      <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
                     </span>
-                    <span className="text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground/70">
-                      {w.kicker}
-                    </span>
-                  </div>
-                  <h3 className="mt-5 text-xl font-semibold tracking-tight">{w.title}</h3>
-                  <p className="mt-3 text-sm leading-relaxed text-muted-foreground">{w.body}</p>
-                  <span className="mt-6 inline-flex items-center gap-2 text-sm font-medium text-primary transition-colors group-hover:text-primary/80">
-                    {w.cta}
-                    <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
-                  </span>
-                </button>
-              </StaggerItem>
-            ))}
+                  </button>
+                </StaggerItem>
+              );
+            })}
           </Stagger>
         </div>
       </section>

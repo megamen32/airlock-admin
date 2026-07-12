@@ -1,0 +1,92 @@
+{
+  "brand": "GPT‑管理",
+  "header": {
+    "tabChatgpt": "ChatGPT 插件",
+    "tabMcpServer": "MCP server",
+    "tabMcpExtension": "MCP 扩展",
+    "tabDocs": "文档",
+    "navLabel": "导航",
+    "mobileMenuLabel": "移动菜单",
+    "mobileHome": "首页",
+    "openMenu": "打开菜单",
+    "closeMenu": "关闭菜单",
+    "brandHome": "GPT‑管理 — 返回首页",
+    "brandGitHub": "GPT‑管理 在 GitHub — 开源"
+  },
+  "hero": {
+    "kicker": "开源 · AGPL‑3.0",
+    "titleLead": "一个中心 — 任何 AI 掌控",
+    "titleAccent": "你的基础设施",
+    "body": "GPT‑管理 是一个 MCP 中心。把你的服务器和任意 MCP（chrome‑devtools、openmemory）接进来，你喜欢的 AI 通过三种方式之一连上中心。从网页搜索到启动 subagent，全都由你掌控。",
+    "ctaPrimary": "如何接入 AI",
+    "trustNoSudo": "默认无需 sudo",
+    "trustPlatforms": "Linux · macOS · Windows",
+    "trustNoDomain": "不需要自有域名"
+  },
+  "author": {
+    "eyebrow": "作者的话",
+    "body1": "嘿，我不是公司。我是一个人单干 — 凭兴趣，也为了自己。这个项目我已经用了一年多，比 Codex 和 Claude 处理基础设施更顺手。",
+    "body2": "它不是替代品，是补充 — 专门给服务器和运维用的工具。我在 Codex 里有 80 亿 token，在 Claude 里有 20 亿，但跑自己的机器时用这个更快。难免有 bug — 写给我，我来修。"
+  },
+  "useCases": {
+    "eyebrow": "通过中心能做什么",
+    "titleLead": "任意 AI —",
+    "titleAccent": "任意方式",
+    "body": "能力来自中心本身，而不是某个适配器。不管你接入的是 Claude、DeepSeek 还是 ChatGPT，它都能拿到这一切能力。",
+    "items": [
+      {
+        "title": "服务器管理",
+        "body": "重启 systemd、firewall、nginx、fail2ban、sshd。装软件、改配置、开放端口 — 并验证结果。"
+      },
+      {
+        "title": "编写和运行代码",
+        "body": "改代码、跑检查，能派出 subagent — \"让 codex 修这个 bug\"，你可以先去做别的。"
+      },
+      {
+        "title": "修并清理 PR",
+        "body": "从记忆里找到 fork，保留一个 feature commit，跑 type-check/lint/build，然后通过 SSH force-push。"
+      },
+      {
+        "title": "日志检查",
+        "body": "解析 journalctl、nginx、postgres 日志，找异常，建议修复方案，确认后再应用。"
+      },
+      {
+        "title": "网页搜索",
+        "body": "通过 chrome-devtools MCP — agent 自己开页面、读文档、搜解决方案，不离开聊天窗口。"
+      },
+      {
+        "title": "故障诊断",
+        "body": "自己找到挂掉的服务，读日志，理解原因（ECONNREFUSED、503、OOM）并修复 — 附带报告和验证。"
+      }
+    ]
+  },
+  "adapters": {
+    "eyebrow": "三种适配器",
+    "titleLead": "一个中心 —",
+    "titleAccent": "三种接入 AI 的方式",
+    "body": "这不是三个独立产品，而是同一个中心的三种适配器。根据你的 AI 选一种 — 能力相同。",
+    "items": [
+      {
+        "page": "chatgpt",
+        "kicker": "OpenAI Action",
+        "title": "ChatGPT · Open WebUI",
+        "body": "Custom GPT、Open WebUI 或 Apps SDK widget 直接嵌在聊天里。ChatGPT 自行判断什么时候执行命令，没有付费 Codex 的调用次数限制。",
+        "cta": "如何接入"
+      },
+      {
+        "page": "mcp-server",
+        "kicker": "MCP 客户端",
+        "title": "Claude · Codex · OpenCode",
+        "body": "GPT‑管理 以 MCP remote SSE 形式工作。在客户端设置中接入 — AI 就能拿到对整套基础设施的原生 tool calls。",
+        "cta": "接入说明"
+      },
+      {
+        "page": "mcp-extension",
+        "kicker": "浏览器扩展",
+        "title": "DeepSeek · Qwen · 通义",
+        "body": "Tampermonkey / Firefox 的 userscript，给免费网页 AI 加上 MCP 按钮。不需要付费 API，只要免费网页聊天。",
+        "cta": "安装扩展"
+      }
+    ]
+  }
+}

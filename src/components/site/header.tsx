@@ -6,16 +6,26 @@ import { Github, Menu, Star, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useHashRoute, pageHref, type PageId } from "@/hooks/use-hash-route";
 import { LocaleSwitcher } from "./locale-switcher";
+import { useLocale } from "@/hooks/use-locale";
+import { useT } from "@/hooks/use-t";
+import { BRAND } from "@/lib/brand";
 
-const PAGE_TABS: { id: PageId; label: string }[] = [
-  { id: "chatgpt", label: "ChatGPT плагин" },
-  { id: "mcp-server", label: "MCP сервер" },
-  { id: "mcp-extension", label: "MCP расширение" },
-  { id: "docs", label: "Документация" },
-];
+/** Split the brand string on the en-dash so we can render
+ *  "GPT" + "‑" + suffix with the dash greyed-out like the original. */
+function splitBrand(brand: string): { head: string; sep: string; tail: string } {
+  const idx = brand.indexOf("‑");
+  if (idx === -1) return { head: brand, sep: "", tail: "" };
+  return {
+    head: brand.slice(0, idx),
+    sep: "‑",
+    tail: brand.slice(idx + 1),
+  };
+}
 
 export function Header() {
   const { page, navigate } = useHashRoute();
+  const { t } = useT();
+  const { locale } = useLocale();
   const [scrolled, setScrolled] = useState(false);
   const [open, setOpen] = useState(false);
 
@@ -32,6 +42,15 @@ export function Header() {
       document.body.style.overflow = "";
     };
   }, [open]);
+
+  const tabs: { id: PageId; label: string }[] = [
+    { id: "chatgpt", label: t("header.tabChatgpt") },
+    { id: "mcp-server", label: t("header.tabMcpServer") },
+    { id: "mcp-extension", label: t("header.tabMcpExtension") },
+    { id: "docs", label: t("header.tabDocs") },
+  ];
+
+  const { head, sep, tail } = splitBrand(BRAND[locale]);
 
   return (
     <header
@@ -51,17 +70,19 @@ export function Header() {
             navigate("home");
           }}
           className="group flex items-center gap-2.5"
-          aria-label="GPT‑Админ — на главную"
+          aria-label={t("header.brandHome")}
         >
           <Logo />
           <span className="text-[15px] font-semibold tracking-tight">
-            GPT<span className="text-muted-foreground">‑</span>Админ
+            {head}
+            {sep && <span className="text-muted-foreground">{sep}</span>}
+            {tail}
           </span>
         </a>
 
         {/* Page tabs — desktop */}
-        <nav className="hidden items-center gap-1 lg:flex" aria-label="Разделы">
-          {PAGE_TABS.map((tab) => {
+        <nav className="hidden items-center gap-1 lg:flex" aria-label={t("header.navLabel")}>
+          {tabs.map((tab) => {
             const active = page === tab.id;
             return (
               <a
@@ -85,13 +106,13 @@ export function Header() {
 
         <div className="flex items-center gap-2">
           <LocaleSwitcher />
-          <GitHubButton />
+          <GitHubButton brandLabel={t("header.brandGitHub")} />
 
           <button
             type="button"
             onClick={() => setOpen((v) => !v)}
             className="inline-flex h-10 w-10 items-center justify-center rounded-lg border border-border/70 text-foreground lg:hidden"
-            aria-label={open ? "Закрыть меню" : "Открыть меню"}
+            aria-label={open ? t("header.closeMenu") : t("header.openMenu")}
             aria-expanded={open}
           >
             {open ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
@@ -108,7 +129,7 @@ export function Header() {
             exit={{ opacity: 0, height: 0 }}
             transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
             className="overflow-hidden border-b border-border/60 bg-background/95 backdrop-blur-xl lg:hidden"
-            aria-label="Мобильное меню"
+            aria-label={t("header.mobileMenuLabel")}
           >
             <div className="mx-auto flex max-w-7xl flex-col gap-1 px-5 py-4">
               <a
@@ -123,9 +144,9 @@ export function Header() {
                   page === "home" ? "bg-primary/10 text-primary" : "text-muted-foreground"
                 )}
               >
-                Главная
+                {t("header.mobileHome")}
               </a>
-              {PAGE_TABS.map((tab) => (
+              {tabs.map((tab) => (
                 <a
                   key={tab.id}
                   href={pageHref(tab.id)}
@@ -150,7 +171,7 @@ export function Header() {
   );
 }
 
-function GitHubButton() {
+function GitHubButton({ brandLabel }: { brandLabel: string }) {
   const [stars, setStars] = useState<number | null>(null);
   useEffect(() => {
     fetch("https://api.github.com/repos/megamen32/gptadmin_opensource")
@@ -164,7 +185,7 @@ function GitHubButton() {
       target="_blank"
       rel="noopener"
       className="group inline-flex items-center gap-2 rounded-full border border-border/70 bg-white/[0.02] px-3.5 py-2 text-sm font-medium text-foreground transition-all hover:border-primary/40 hover:bg-white/[0.04]"
-      aria-label="GPT‑Админ на GitHub — opensource"
+      aria-label={brandLabel}
     >
       <Github className="h-4 w-4 text-primary" />
       <span className="hidden sm:inline">GitHub</span>

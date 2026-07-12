@@ -1,0 +1,92 @@
+{
+  "brand": "GPT‑Admin",
+  "header": {
+    "tabChatgpt": "ChatGPT plugin",
+    "tabMcpServer": "MCP server",
+    "tabMcpExtension": "MCP extension",
+    "tabDocs": "Documentation",
+    "navLabel": "Sections",
+    "mobileMenuLabel": "Mobile menu",
+    "mobileHome": "Home",
+    "openMenu": "Open menu",
+    "closeMenu": "Close menu",
+    "brandHome": "GPT‑Admin — back to home",
+    "brandGitHub": "GPT‑Admin on GitHub — opensource"
+  },
+  "hero": {
+    "kicker": "Open Source · AGPL‑3.0",
+    "titleLead": "One hub — any AI runs",
+    "titleAccent": "your infrastructure",
+    "body": "GPT‑Admin is an MCP hub. Plug your servers and any MCP (chrome‑devtools, openmemory) into it, and your favourite AI connects to the hub in one of three ways. Manage everything from web search to spinning up subagents.",
+    "ctaPrimary": "How to connect AI",
+    "trustNoSudo": "No sudo by default",
+    "trustPlatforms": "Linux · macOS · Windows",
+    "trustNoDomain": "No own domain needed"
+  },
+  "author": {
+    "eyebrow": "From the author",
+    "body1": "Hey, I'm not a corporation. I'm a real person doing this solo — for fun and for myself. I've been using the project for over a year; it's more convenient than Codex or Claude for infrastructure work.",
+    "body2": "It's not a full replacement, it's a complement — a tool for servers and admin work. I have 8B tokens in Codex and 2B in Claude, but for my own machines this is faster. Bugs are possible — write me, I'll fix it."
+  },
+  "useCases": {
+    "eyebrow": "What the hub can do",
+    "titleLead": "Any AI —",
+    "titleAccent": "in any way",
+    "body": "The capabilities come from the hub itself, not from a specific adapter. Whatever AI you connect — Claude, DeepSeek or ChatGPT — it gets access to all of it.",
+    "items": [
+      {
+        "title": "Server administration",
+        "body": "Restart systemd, firewall, nginx, fail2ban, sshd. Install software, edit configs, open ports — and verify the result."
+      },
+      {
+        "title": "Writing and running code",
+        "body": "Edits code, runs checks, can spawn a subagent — \"run codex to fix this bug\" while you do something else."
+      },
+      {
+        "title": "Fix and clean up PRs",
+        "body": "Finds the fork in memory, keeps a single feature commit, runs type-check/lint/build and force-pushes over SSH."
+      },
+      {
+        "title": "Log inspection",
+        "body": "Parses journalctl, nginx, postgres logs, finds anomalies, suggests fixes and applies them after confirmation."
+      },
+      {
+        "title": "Web search",
+        "body": "Through the chrome-devtools MCP — the agent itself opens pages, reads docs and searches for a solution, without leaving the chat."
+      },
+      {
+        "title": "Incident diagnostics",
+        "body": "Finds the failed service itself, reads logs, understands the cause (ECONNREFUSED, 503, OOM) and fixes it — with a report and checks."
+      }
+    ]
+  },
+  "adapters": {
+    "eyebrow": "Three adapters to the hub",
+    "titleLead": "One hub —",
+    "titleAccent": "three ways to connect AI",
+    "body": "These aren't three separate products, they are three adapters to the same hub. Pick the one that fits your AI — capabilities are the same.",
+    "items": [
+      {
+        "page": "chatgpt",
+        "kicker": "OpenAI Action",
+        "title": "ChatGPT · Open WebUI",
+        "body": "Custom GPT, Open WebUI or Apps SDK widget right in chat. ChatGPT itself figures out when to run a command. No paid Codex limits.",
+        "cta": "How to connect"
+      },
+      {
+        "page": "mcp-server",
+        "kicker": "MCP client",
+        "title": "Claude · Codex · OpenCode",
+        "body": "GPT‑Admin works as MCP remote SSE. Connect it in your client settings — and the AI gets native tool calls across your entire infrastructure.",
+        "cta": "Instructions"
+      },
+      {
+        "page": "mcp-extension",
+        "kicker": "Browser extension",
+        "title": "DeepSeek · Qwen · Alice",
+        "body": "A userscript for Tampermonkey / Firefox adds MCP buttons to free web AIs. No paid API needed — just a free web chat.",
+        "cta": "Install extension"
+      }
+    ]
+  }
+}
