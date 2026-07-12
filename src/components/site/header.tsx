@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Github, Menu, Star, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useHashRoute, pageHref, type PageId } from "@/hooks/use-hash-route";
+import { LocaleSwitcher } from "./locale-switcher";
 
 const PAGE_TABS: { id: PageId; label: string }[] = [
   { id: "chatgpt", label: "ChatGPT плагин" },
@@ -83,6 +84,7 @@ export function Header() {
         </nav>
 
         <div className="flex items-center gap-2">
+          <LocaleSwitcher />
           <GitHubButton />
 
           <button

@@ -19,7 +19,7 @@ iwr -UseBasicParsing https://became.bezrabotnyi.com/install_win.ps1 | iex
 The installer prints your **Hub URL** and **CTL_TOKEN** — save them.
 
 > No domain needed: choose the auto-tunnel option (FRP or Cloudflare) and you
-> get a public URL. See [Tunnels](./TUNNELS.md).
+> get a public URL. See [Tunnels](./TUNNELS_DOCS.md).
 
 ## 2. Install an agent on a target machine
 
@@ -51,11 +51,26 @@ Ask your AI in plain language:
 The AI calls the hub, the hub routes to the agent, the agent runs the command
 and returns real output. The AI reads it and reports back.
 
+## Show connection URLs
+
+After setup, print the current public hub URL, tunnel mode, MCP endpoints and Custom GPT Action schemas:
+
+```bash
+sudo gptadmin urls
+```
+
+Useful variants:
+
+```bash
+sudo gptadmin urls --all   # include every registered MCP server
+sudo gptadmin urls --json  # machine-readable output
+```
+
 ## Next steps
 
 - [Architecture](./ARCHITECTURE.md) — understand how it fits together
 - [Configuration](./CONFIGURATION.md) — tune env vars, auth, OAuth
-- [Security](./SECURITY.md) — production hardening
+- [Security](./SECURITY_DOCS.md) — production hardening
 - [Web panel](./HUB.md#web-panel-admin) — manage from the browser
 
 ## Troubleshooting

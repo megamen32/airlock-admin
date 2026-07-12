@@ -1,838 +1,544 @@
 "use client";
 
-import {
-  Check,
-  Copy,
-  type LucideIcon,
-  Share2,
-  ShieldAlert,
-} from "lucide-react";
-import { motion } from "framer-motion";
-import { PageHero } from "../page-hero";
+import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
+import { ArrowLeft, ArrowRight, BookOpen, FileText } from "lucide-react";
+import ReactMarkdown, { type Components } from "react-markdown";
+import remarkGfm from "remark-gfm";
+import rehypeRaw from "rehype-raw";
+import { motion, AnimatePresence } from "framer-motion";
+
+import { cn } from "@/lib/utils";
+import { useHashRoute, pageHref } from "@/hooks/use-hash-route";
+import { useLocale, LOCALE_META, type Locale } from "@/hooks/use-locale";
 import { Eyebrow } from "../section-heading";
 import { Reveal } from "../reveal";
-import { useCopy } from "@/hooks/use-copy";
-import {
-  AUTH_VARIABLES,
-  ENDPOINT_ROWS,
-  HUB_ENV_GROUPS,
-  HUB_DETAIL_ROWS,
-  HUB_FUNCTION_ROWS,
-  HUB_PATH_ROWS,
-  QUICK_SNIPPETS,
-  RELAY_DETAIL_ROWS,
-  RELAY_FLOW_ROWS,
-  SHELL_ENV_GROUPS,
-  SHELL_DETAIL_ROWS,
-  SHELL_FUNCTION_ROWS,
-  SHELL_PATH_ROWS,
-  TUNNEL_BACKENDS,
-  TUNNEL_DETAIL_ROWS,
-  type DetailRow,
-  type EnvGroup,
-} from "../docs-reference";
+import { LocaleSwitcher } from "../locale-switcher";
 
 const EASE = [0.16, 1, 0.3, 1] as const;
 
-export function DocsPage() {
-  return (
-    <>
-      <PageHero
-        eyebrow="Документация"
-        title={
-          <>
-            Auth, endpoint и{" "}
-            <span className="text-gradient-violet">переменные окружения</span>
-          </>
-        }
-        lead="Актуальный справочник: как подключиться к hub (Bearer / JWT / OAuth), какие эндпоинты доступны и какие переменные окружения настраивают gptadmin_hub.py и go-shellmcp."
-      />
+/** Slugs we ship. The order here is the sidebar order. */
+const SLUGS = [
+  "Home",
+  "GETTING_STARTED",
+  "ARCHITECTURE",
+  "ADAPTERS",
+  "HUB",
+  "SHELLMCP",
+  "INSTALL_PATHS",
+  "CONFIGURATION",
+  "API_REFERENCE",
+  "MCP_PROXY_RELAY",
+  "INTEGRATIONS",
+  "TUNNELS_DOCS",
+  "FAILOVER",
+  "SECURITY_DOCS",
+  "FILE_BACKUPS",
+  "ROADMAP",
+  "FAQ",
+] as const;
 
-      <DocSection
-        id="privacy"
-        icon={ShieldAlert}
-        title="Конфиденциальность"
-        kicker="ваши данные остаются у вас"
-        lead="GPTAdmin работает на вашем компьютере или сервере. Мы не создаём облачную копию ваших команд, файлов, токенов или истории работы."
-      >
-        <Callout tone="info">
-          <p>
-            Ваш hub, токены, подключённые серверы, задания и результаты команд хранятся в вашей
-            инфраструктуре. Мы не продаём пользовательские данные и не используем содержимое ваших
-            команд для рекламы или аналитики.
-          </p>
-        </Callout>
-        <div className="mt-4 grid gap-3 sm:grid-cols-2">
-          <div className="rounded-xl border border-border/60 bg-white/[0.02] p-4">
-            <p className="text-sm font-semibold text-foreground">Когда вы используете встроенный FRP</p>
-            <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-              Ваш компьютер устанавливает исходящее зашифрованное соединение с relay GPTAdmin. Relay
-              публикует ваш персональный поддомен и передаёт запросы на ваш локальный hub. Для устойчивости
-              используются три независимые relay-точки.
-            </p>
-          </div>
-          <div className="rounded-xl border border-border/60 bg-white/[0.02] p-4">
-            <p className="text-sm font-semibold text-foreground">Какие технические данные видит relay</p>
-            <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-              Relay технически видит публичный IP, время соединения, ваш поддомен и стандартные сетевые
-              или HTTP-метаданные. Краткоживущие технические логи могут использоваться для диагностики,
-              предотвращения злоупотреблений и защиты сервиса.
-            </p>
-          </div>
-          <div className="rounded-xl border border-border/60 bg-white/[0.02] p-4">
-            <p className="text-sm font-semibold text-foreground">Relay не открывает доступ к вашим серверам</p>
-            <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-              Для входа в панель и выполнения команд по-прежнему нужны ваши секреты: <code>CTL_TOKEN</code>,
-              OAuth/JWT или пароль администратора. Без них оператор relay не может авторизоваться в вашем
-              GPTAdmin и выполнять команды.
-            </p>
-          </div>
-          <div className="rounded-xl border border-border/60 bg-white/[0.02] p-4">
-            <p className="text-sm font-semibold text-foreground">Вы можете не использовать наши relay</p>
-            <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-              Подключите собственный домен и reverse proxy, свой FRP-сервер или Cloudflare Tunnel. В этом
-              режиме трафик не проходит через relay GPTAdmin.
-            </p>
-          </div>
-        </div>
-        <Callout tone="info">
-          <p>
-            Локальные audit logs, история jobs и результаты команд могут сохраняться на вашем hub согласно
-            его настройкам. Вы полностью контролируете эти файлы и сроки их хранения.
-          </p>
-        </Callout>
-      </DocSection>
+type Slug = (typeof SLUGS)[number];
 
-      <DocSection
-        id="web-panel"
-        icon={ShieldAlert}
-        title="Веб‑панель после установки"
-        kicker="/admin"
-        lead="Откройте браузер — управляйте хабом без терминала."
-      >
-        <p className="text-sm leading-relaxed text-muted-foreground">
-          После установки откройте{" "}
-          <code className="rounded border border-primary/30 bg-primary/[0.06] px-1.5 py-0.5 font-mono text-[13px] text-primary">
-            https://your-hub.bezrabotnyi.com/admin
-          </code>{" "}
-          в браузере. Введите <code>CTL_TOKEN</code> — и вы увидите:
-        </p>
-        <div className="mt-4 grid gap-3 sm:grid-cols-2">
-          <div className="rounded-xl border border-border/60 bg-white/[0.02] p-4">
-            <p className="text-sm font-semibold text-foreground">Обзор</p>
-            <p className="mt-1 text-xs text-muted-foreground">Агенты online/offline/stale, клиенты, очереди, фоновые jobs — одной страницей.</p>
-          </div>
-          <div className="rounded-xl border border-border/60 bg-white/[0.02] p-4">
-            <p className="text-sm font-semibold text-foreground">Jobs и очереди</p>
-            <p className="mt-1 text-xs text-muted-foreground">Каждая команда с подсветкой JSON. Кнопка «отменить» для running/queued.</p>
-          </div>
-          <div className="rounded-xl border border-border/60 bg-white/[0.02] p-4">
-            <p className="text-sm font-semibold text-foreground">MCP tools tester</p>
-            <p className="mt-1 text-xs text-muted-foreground">Вызовите любой tool прямо из браузера, без AI. С фоновым режимом.</p>
-          </div>
-          <div className="rounded-xl border border-border/60 bg-white/[0.02] p-4">
-            <p className="text-sm font-semibold text-foreground">Audit log</p>
-            <p className="mt-1 text-xs text-muted-foreground">Каждый вызов: кто, откуда, что запускал, результат — с подсветкой.</p>
-          </div>
-        </div>
-      </DocSection>
-
-
-
-      <DocSection
-        id="failover"
-        icon={ShieldAlert}
-        title="Failover и degraded recovery"
-        kicker="fallback"
-        lead="Когда один сервер умер, GPTAdmin должен остаться достаточно живым, чтобы показать что случилось и помочь восстановить primary."
-      >
-        <Callout tone="info">
-          <p>
-            Failover в GPTAdmin — это не обещание, что ничего не потеряется. Это режим
-            <strong> alive and degraded</strong>: control plane остаётся доступным, часть свежего
-            in-memory состояния может быть неполной, но recovery trail сохраняется на диске.
-          </p>
-        </Callout>
-        <div className="mt-4 grid gap-3 sm:grid-cols-2">
-          <div className="rounded-xl border border-border/60 bg-white/[0.02] p-4">
-            <p className="text-sm font-semibold text-foreground">Primary умер</p>
-            <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-              Fallback watchdog видит падение public health, ждёт threshold, подтверждает сбой
-              и поднимает локальный hub/proxy через тот же публичный ingress.
-            </p>
-          </div>
-          <div className="rounded-xl border border-border/60 bg-white/[0.02] p-4">
-            <p className="text-sm font-semibold text-foreground">Сервис живёт урезанно</p>
-            <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-              Можно открыть admin UI, проверить живые shell/MCP servers, читать логи и запускать
-              восстановительные команды на доступных машинах.
-            </p>
-          </div>
-          <div className="rounded-xl border border-border/60 bg-white/[0.02] p-4">
-            <p className="text-sm font-semibold text-foreground">Информация не исчезает навсегда</p>
-            <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-              Jobs, большие stdout/stderr, spool files, outbox responses, registry snapshots и
-              failover logs пишутся на диск. Running process на мёртвом узле может пропасть, но
-              его последние артефакты обычно остаются.
-            </p>
-          </div>
-          <div className="rounded-xl border border-border/60 bg-white/[0.02] p-4">
-            <p className="text-sm font-semibold text-foreground">Primary вернулся</p>
-            <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-              Primary отправляет signed reclaim/demote на активный fallback. Fallback перестаёт
-              быть главным и возвращается в standby/client роль.
-            </p>
-          </div>
-        </div>
-        <CodeBlock
-          label="Операторский минимум"
-          code={`gptadmin urls
-systemctl status gptadmin-hub gptadmin-tunnel-frpc --no-pager
-journalctl -u gptadmin-hub -n 120 --no-pager
-find /var/lib/gptadmin -maxdepth 4 -type f | sort | tail -100`}
-        />
-      </DocSection>
-
-      <DocSection
-        id="chatgpt-connect"
-        icon={ShieldAlert}
-        title="ChatGPT, Custom GPT и Apps SDK"
-        kicker="live setup"
-        lead="Ниже ровно те URL и поля, которые нужны для вашего live хаба `your-subdomain.t.gptadmin.bezrabotnyi.com`."
-      >
-        <Callout tone="info">
-          <p>
-            Если открыть просто{" "}
-            <code>https://your-subdomain.t.gptadmin.bezrabotnyi.com/authorize</code>,
-            это не полноценный OAuth-запрос. Endpoint рабочий, но ему нужны OAuth
-            параметры: <code>client_id</code>, <code>redirect_uri</code>,{" "}
-            <code>resource</code>, <code>code_challenge</code> и{" "}
-            <code>code_challenge_method=S256</code>.
-          </p>
-        </Callout>
-        <div className="mt-4 grid gap-4 xl:grid-cols-3">
-          <div className="rounded-2xl border border-border/60 bg-[oklch(0.12_0.006_290)] p-4">
-            <h3 className="text-lg font-semibold tracking-tight">1. Bearer CTL для Custom GPT Action</h3>
-            <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
-              Самый быстрый способ для generated schema / Custom GPT. Импортируйте live OpenAPI
-              и в auth выберите Bearer API key.
-            </p>
-            <DenseTable
-              columns={["Поле", "Значение"]}
-              rows={[
-                ["OpenAPI URL", "https://your-subdomain.t.gptadmin.bezrabotnyi.com/actions/openapi.yaml"],
-                ["Auth type", "API key -> Bearer"],
-                ["Token", "ваш CTL_TOKEN"],
-                ["Official guide", "https://developers.openai.com/api/docs/actions/getting-started"],
-                ["Auth docs", "https://developers.openai.com/api/docs/actions/authentication"],
-              ]}
-            />
-          </div>
-          <div className="rounded-2xl border border-border/60 bg-[oklch(0.12_0.006_290)] p-4">
-            <h3 className="text-lg font-semibold tracking-tight">2. Bearer JWT для generated schema</h3>
-            <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
-              Если нужен JWT вместо CTL, выпускайте его из admin UI. Для generated Action schema
-              подходят и CTL, и корректно подписанный JWT, но у JWT должны совпадать live issuer и audience.
-            </p>
-            <DenseTable
-              columns={["Поле", "Значение"]}
-              rows={[
-                ["Issue in admin", "/admin -> Security -> MCP bearer-токен"],
-                ["Issuer", "https://your-subdomain.t.gptadmin.bezrabotnyi.com"],
-                ["Audience", "https://your-subdomain.t.gptadmin.bezrabotnyi.com"],
-                ["Scope", "gptadmin.read gptadmin.exec"],
-                ["Schema URL", "https://your-subdomain.t.gptadmin.bezrabotnyi.com/actions/openapi.yaml"],
-              ]}
-            />
-          </div>
-          <div className="rounded-2xl border border-border/60 bg-[oklch(0.12_0.006_290)] p-4">
-            <h3 className="text-lg font-semibold tracking-tight">3. ChatGPT app / Apps SDK OAuth2</h3>
-            <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
-              Для developer-mode app в ChatGPT подключайте не OpenAPI, а MCP endpoint{" "}
-              <code>/mcp</code>. ChatGPT сам пройдет OAuth 2.1 + PKCE flow к вашему hub.
-            </p>
-            <DenseTable
-              columns={["Поле", "Значение"]}
-              rows={[
-                ["MCP server URL", "https://your-subdomain.t.gptadmin.bezrabotnyi.com/mcp"],
-                ["Authorization URL", "https://your-subdomain.t.gptadmin.bezrabotnyi.com/authorize"],
-                ["Token URL", "https://your-subdomain.t.gptadmin.bezrabotnyi.com/token"],
-                ["Scope", "gptadmin.read gptadmin.exec"],
-                ["Token exchange", "POST, token_endpoint_auth_method = none"],
-                ["OpenAI docs", "https://developers.openai.com/apps-sdk/deploy/connect-chatgpt"],
-              ]}
-            />
-          </div>
-        </div>
-        <div className="mt-4">
-          <h3 className="text-lg font-semibold tracking-tight">Какие поля заполнять в OpenAI OAuth форме</h3>
-          <p className="mt-1 text-sm leading-relaxed text-muted-foreground">
-            В ChatGPT Actions UI обычно просят client id, client secret, authorization URL, token URL,
-            scope и способ обмена токена. Для вашего hub URL и scope такие:
-          </p>
-          <DenseTable
-            columns={["Поле в OpenAI", "Что ставить"]}
-            rows={[
-              ["ID клиента", "<HIDDEN>"],
-              ["Секрет клиента", "<HIDDEN>"],
-              ["URL-адрес авторизации", "https://your-subdomain.t.gptadmin.bezrabotnyi.com/authorize"],
-              ["URL-адрес токена", "https://your-subdomain.t.gptadmin.bezrabotnyi.com/token"],
-              ["Область действия", "gptadmin.read gptadmin.exec"],
-              ["Метод обмена токенов", "По умолчанию: POST"],
-              ["Client auth", "Basic auth header только если ваш OAuth client этого требует; для /token hub secret клиента не требует"],
-            ]}
-          />
-          <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
-            Redirect URI должен быть разрешён у вас в allow-list. Для ChatGPT смотрите официальную
-            инструкцию OpenAI по auth и redirect URL:
-            {" "}
-            <a className="text-primary underline-offset-4 hover:underline" href="https://developers.openai.com/api/docs/actions/authentication" target="_blank" rel="noreferrer">
-              GPT Action authentication
-            </a>.
-          </p>
-        </div>
-        <div className="mt-4 grid gap-4 xl:grid-cols-2">
-          <CodeBlock label="Рабочий пример authorize URL" code={QUICK_SNIPPETS.oauthAuthorizeExample} />
-          <CodeBlock
-            label="Где взять schema"
-            code={`curl -fsS https://your-subdomain.t.gptadmin.bezrabotnyi.com/actions/openapi.yaml | head\ncurl -fsS https://your-subdomain.t.gptadmin.bezrabotnyi.com/.well-known/oauth-authorization-server | jq`}
-          />
-        </div>
-        <div className="mt-4 rounded-2xl border border-border/60 bg-white/[0.02] p-4">
-          <h3 className="text-lg font-semibold tracking-tight">Официальные ссылки OpenAI</h3>
-          <ul className="mt-2 list-disc space-y-2 pl-5 text-sm leading-relaxed text-muted-foreground">
-            <li><a className="text-primary underline-offset-4 hover:underline" href="https://developers.openai.com/api/docs/actions/getting-started" target="_blank" rel="noreferrer">GPT Actions: getting started</a></li>
-            <li><a className="text-primary underline-offset-4 hover:underline" href="https://developers.openai.com/api/docs/actions/authentication" target="_blank" rel="noreferrer">GPT Actions: authentication</a></li>
-            <li><a className="text-primary underline-offset-4 hover:underline" href="https://developers.openai.com/apps-sdk/build/auth" target="_blank" rel="noreferrer">Apps SDK: authentication</a></li>
-            <li><a className="text-primary underline-offset-4 hover:underline" href="https://developers.openai.com/apps-sdk/deploy/connect-chatgpt" target="_blank" rel="noreferrer">Apps SDK: connect from ChatGPT</a></li>
-            <li><a className="text-primary underline-offset-4 hover:underline" href="https://developers.openai.com/api/docs/mcp" target="_blank" rel="noreferrer">Remote MCP in ChatGPT / API</a></li>
-          </ul>
-        </div>
-      </DocSection>
-
-      <DocSection
-        id="truth"
-        icon={ShieldAlert}
-        title="Аутентификация: что и где используется"
-        kicker="важно"
-        lead="CTL_TOKEN и OAuth — это разные механизмы. Ниже правильная схема."
-      >
-        <Callout tone="warn">
-          <p>
-            <code>/mcp</code> не принимает прямой <code>CTL_TOKEN</code>. Этот endpoint
-            требует OAuth bearer token, который hub подписывает через{" "}
-            <code>OAUTH_CLIENT_SECRET</code>.
-          </p>
-          <p className="mt-2">
-            <code>CTL_TOKEN</code> нужен для <code>/admin</code>,{" "}
-            <code>/admin/api/*</code>, <code>/mcp-relay/*</code>, <code>/servers</code>,
-            <code>/tasks/*</code> и artifact endpoints.
-          </p>
-          <p className="mt-2">
-            <code>ADMIN_PASSWORD</code> нужен только для HTML-формы на{" "}
-            <code>/authorize</code> внутри OAuth flow.
-          </p>
-        </Callout>
-      </DocSection>
-
-      <DocSection
-        id="auth-split"
-        icon={ShieldAlert}
-        title="Разделение токенов"
-        kicker="auth"
-        lead="Человеческий смысл каждой переменной и где она реально участвует."
-      >
-        <DenseTable
-          columns={["ENV", "Человеческое имя", "Кто использует", "Куда применяется", "Комментарий"]}
-          rows={AUTH_VARIABLES.map((row) => [
-            row.env,
-            row.label,
-            row.usedBy,
-            row.appliesTo,
-            row.notes,
-          ])}
-        />
-        <CodeBlock
-          label="Простой продовый набор"
-          code={QUICK_SNIPPETS.envExample}
-        />
-        <p className="mt-4 text-sm leading-relaxed text-muted-foreground">
-          Если нужен максимально быстрый onboarding без лишних объяснений, можно дать
-          одинаковое значение в <code>CTL_TOKEN</code> и <code>ADMIN_PASSWORD</code>.
-          Это две разные роли, но для маленькой установки так проще.
-        </p>
-      </DocSection>
-
-      <DocSection
-        id="endpoints"
-        icon={ShieldAlert}
-        title="Endpoint и auth-матрица"
-        kicker="routes"
-        lead="Что чем защищается. Это основной справочный блок, если надо понять почему запрос получает 401."
-      >
-        <DenseTable
-          columns={["Path", "Auth", "Назначение", "Комментарий"]}
-          rows={ENDPOINT_ROWS.map((row) => [row.path, row.auth, row.usedFor, row.notes])}
-        />
-      </DocSection>
-
-      <DocSection
-        id="quick-use"
-        icon={ShieldAlert}
-        title="Быстрые примеры"
-        kicker="snippets"
-        lead="Минимальные рабочие примеры для admin API, relay API и remote MCP."
-      >
-        <div className="grid gap-4 lg:grid-cols-3">
-          <CodeBlock label="Admin API через CTL_TOKEN" code={QUICK_SNIPPETS.adminCurl} />
-          <CodeBlock label="Relay API через CTL_TOKEN" code={QUICK_SNIPPETS.relayCurl} />
-          <CodeBlock label="MCP клиент на /mcp" code={QUICK_SNIPPETS.mcpConfig} />
-        </div>
-        <p className="mt-4 text-sm leading-relaxed text-muted-foreground">
-          В конфиге MCP клиента на <code>/mcp</code> не надо вручную писать{" "}
-          <code>Authorization: Bearer CTL_TOKEN</code>. Клиент должен пройти OAuth flow
-          и получить bearer token через <code>/authorize</code> + <code>/token</code>.
-        </p>
-      </DocSection>
-
-      <DocSection
-        id="mcp-http-ingress"
-        icon={Share2}
-        title="MCP HTTP ingress и FileShare"
-        kicker="/_services"
-        lead="Любой MCP может поднять свой локальный HTTP-сервер и получить публичный маршрут через тот же туннель. Hub не знает содержимого — он только нейтрально проксирует HTTP на loopback."
-      >
-        <Callout tone="info">
-          <p>
-            Hub — это MCP-релей, а не файловый сервер. Когда MCP (например, FileShare) хочет отдавать
-            содержимое публично, он поднимает собственный HTTP-сервер на <code>127.0.0.1</code> и
-            объявляет endpoint в конфигурации. Hub пробрасывает к нему трафик по маршруту{" "}
-            <code>/_services/&lt;mcp-slug&gt;/&lt;endpoint&gt;/...</code>, и этот же маршрут работает
-            через публичный FRP-туннель и при failover.
-          </p>
-        </Callout>
-        <div className="mt-4 grid gap-3 sm:grid-cols-2">
-          <div className="rounded-xl border border-border/60 bg-white/[0.02] p-4">
-            <p className="text-sm font-semibold text-foreground">Маршрут ingress</p>
-            <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-              Публичный путь <code>/_services/&lt;slug&gt;/&lt;endpoint&gt;/...</code> отображается на
-              локальный URL, который MCP указал в <code>local_url</code>. При{" "}
-              <code>strip_prefix: true</code> префикс маршрута убирается до проксирования.
-            </p>
-          </div>
-          <div className="rounded-xl border border-border/60 bg-white/[0.02] p-4">
-            <p className="text-sm font-semibold text-foreground">Безопасность по умолчанию</p>
-            <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-              Upstream разрешён только на <code>127.0.0.1</code>, <code>localhost</code> или{" "}
-              <code>::1</code> — произвольные LAN/IP запрещены, чтобы ingress не стал open proxy/SSRF.
-              Кроме того, endpoint должен явно объявить{" "}
-              <code>visibility: public-capability</code>, иначе он остаётся скрытым.
-            </p>
-          </div>
-        </div>
-        <h3 className="mt-6 text-lg font-semibold tracking-tight">Как MCP объявляет свой endpoint</h3>
-        <p className="mt-1 text-sm leading-relaxed text-muted-foreground">
-          В конфигурации MCP (через generic stdio relay) укажите массив{" "}
-          <code>http_endpoints</code>. Каждый элемент задаёт имя маршрута, локальный URL и видимость:
-        </p>
-        <CodeBlock
-          label="Конфиг MCP: собственный публичный endpoint"
-          code={`{
-  "agent_id": "MyService",
-  "http_endpoints": [
-    {
-      "name": "files",
-      "local_url": "http://127.0.0.1:18082",
-      "strip_prefix": true,
-      "visibility": "public-capability"
-    }
-  ]
-}`}
-        />
-        <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
-          После регистрации появляется публичный маршрут{" "}
-          <code>https://your-subdomain.t.gptadmin.bezrabotnyi.com/_services/myservice/files/...</code>,
-          доступный через любой relay-edge и при failover. Hub поддерживает streaming-ответы,{" "}
-          <code>HEAD</code>, <code>Content-Disposition</code> и forwarded-заголовки.
-        </p>
-
-        <h3 className="mt-8 text-lg font-semibold tracking-tight">FileShare — пример такого MCP</h3>
-        <p className="mt-1 text-sm leading-relaxed text-muted-foreground">
-          FileShare умеет создавать публичные ссылки на локальные файлы и управлять их жизненным
-          циклом: время жизни, отзыв, просмотр и автоматическая очистка.
-        </p>
-        <div className="mt-4 grid gap-3 sm:grid-cols-2">
-          <div className="rounded-xl border border-border/60 bg-white/[0.02] p-4">
-            <p className="text-sm font-semibold text-foreground">Управление ссылками</p>
-            <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-              <code>create_public_file_link</code> копирует файл и возвращает публичный URL.{" "}
-              <code>ttl_days</code> задаёт срок жизни (по умолчанию 14 дней).{" "}
-              <code>revoke_public_file_link</code> удаляет ссылку и файл по токену или URL.{" "}
-              <code>list</code> показывает активные ссылки, <code>cleanup_expired</code> убирает
-              просроченные.
-            </p>
-          </div>
-          <div className="rounded-xl border border-border/60 bg-white/[0.02] p-4">
-            <p className="text-sm font-semibold text-foreground">Автоочистка по времени</p>
-            <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-              Фоновый поток периодически (через <code>GPTADMIN_FILESHARE_CLEANUP_INTERVAL</code>,
-              по умолчанию 3600 c) удаляет ссылки с истёкшим TTL, поэтому публичные URL реально
-              исчезают в срок, даже если никто не вызвал cleanup вручную. Просроченный файл отвечает{" "}
-              <code>410 Gone</code>, несуществующий — <code>404</code>.
-            </p>
-          </div>
-        </div>
-        <div className="mt-4 grid gap-4 lg:grid-cols-2">
-          <CodeBlock
-            label="Создать публичную ссылку (MCP tool)"
-            code={`{
-  "name": "create_public_file_link",
-  "arguments": {
-    "path": "/home/me/report.pdf",
-    "ttl_days": 7,
-    "name": "weekly-report.pdf"
-  }
-}`}
-          />
-          <CodeBlock
-            label="Отозвать по URL или токену"
-            code={`{
-  "name": "revoke_public_file_link",
-  "arguments": { "url": "https://your-subdomain.t.gptadmin.bezrabotnyi.com/_services/fileshare/files/<token>/weekly-report.pdf" }
-}`}
-          />
-        </div>
-        <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
-          Переменные окружения FileShare:{" "}
-          <code>GPTADMIN_FILESHARE_PUBLIC_ROOT</code> (каталог с файлами),{" "}
-          <code>GPTADMIN_FILESHARE_HTTP_PORT</code> (локальный HTTP, по умолчанию 18082),{" "}
-          <code>GPTADMIN_FILESHARE_CLEANUP_INTERVAL</code> (фоновая очистка,{" "}
-          <code>0</code> отключает),{" "}
-          <code>GPTADMIN_FILESHARE_BASE_URL</code> (публичный префикс ссылки).
-        </p>
-      </DocSection>
-
-      <DocSection
-        id="hub-env"
-        icon={ShieldAlert}
-        title="Переменные окружения hub"
-        kicker="gptadmin_hub.py"
-        lead="Полный список переменных окружения, которые читаются gptadmin_hub.py напрямую."
-      >
-        <SubSection
-          title="Hub: что это такое"
-          lead="Кратко про роль, код, основные пути и функции hub."
-        >
-          <DetailTable rows={HUB_DETAIL_ROWS} />
-        </SubSection>
-        <SubSection
-          title="Hub: функции"
-          lead="Какие обязанности на hub, а какие не на нём."
-        >
-          <DetailTable rows={HUB_FUNCTION_ROWS} />
-        </SubSection>
-        <SubSection
-          title="Hub: пути и runtime файлы"
-          lead="Что лежит где по умолчанию."
-        >
-          <DetailTable rows={HUB_PATH_ROWS} />
-        </SubSection>
-        {HUB_ENV_GROUPS.map((group) => (
-          <EnvGroupCard key={group.title} group={group} />
-        ))}
-      </DocSection>
-
-      <DocSection
-        id="shell-env"
-        icon={ShieldAlert}
-        title="Все ENV для shellmcp"
-        kicker="go-shellmcp"
-        lead="Переменные из go-shellmcp/internal/server/server.go. Здесь перечислены обе формы: новые SHELL_* и совместимые SHELLMCP_*."
-      >
-        <SubSection
-          title="ShellMCP: что это такое"
-          lead="Роль агента на хосте и его главные endpoint'ы."
-        >
-          <DetailTable rows={SHELL_DETAIL_ROWS} />
-        </SubSection>
-        <SubSection
-          title="ShellMCP: функции"
-          lead="Что именно делает transport layer на машине."
-        >
-          <DetailTable rows={SHELL_FUNCTION_ROWS} />
-        </SubSection>
-        <SubSection
-          title="ShellMCP: пути"
-          lead="Где identity, spool и outbox."
-        >
-          <DetailTable rows={SHELL_PATH_ROWS} />
-        </SubSection>
-        {SHELL_ENV_GROUPS.map((group) => (
-          <EnvGroupCard key={group.title} group={group} />
-        ))}
-      </DocSection>
-
-      <DocSection
-        id="tunnel"
-        icon={ShieldAlert}
-        title="Туннель: Cloudflare и FRP"
-        kicker="ingress"
-        lead="Tunnel нужен только чтобы открыть hub наружу. Он не заменяет hub и не заменяет shellmcp."
-      >
-        <SubSection
-          title="Tunnel: роль"
-          lead="Что делает tunnel layer."
-        >
-          <DetailTable rows={TUNNEL_DETAIL_ROWS} />
-        </SubSection>
-        <SubSection
-          title="Tunnel backends"
-          lead="Краткая сводка по backend'ам из текущих доков."
-        >
-          <DenseTable
-            columns={["Backend", "Для чего", "ENV", "URL", "Комментарий"]}
-            rows={TUNNEL_BACKENDS.map((row) => [
-              row.backend,
-              row.purpose,
-              row.env,
-              row.urlShape,
-              row.notes,
-            ])}
-          />
-        </SubSection>
-        <CodeBlock
-          label="Cloudflare quick tunnel"
-          code={"TUNNEL_TYPE=cloudflare uv run python -m gptadmin.hub"}
-        />
-        <CodeBlock
-          label="FRP"
-          code={`TUNNEL_TYPE=frp \\
-FRP_SERVER_ADDR=frp.example.com \\
-FRP_SERVER_PORT=7000 \\
-FRP_TOKEN=your-secret-token \\
-FRP_SUBDOMAIN=myhub \\
-FRP_DOMAIN=example.com \\
-uv run python -m gptadmin.hub`}
-        />
-      </DocSection>
-
-      <DocSection
-        id="relay-transport"
-        icon={ShieldAlert}
-        title="MCP relay и transport"
-        kicker="mcp-relay"
-        lead="Как admin API, virtual agents и real relay agents связаны между собой."
-      >
-        <SubSection
-          title="Relay: что это такое"
-          lead="Не путать с /mcp remote endpoint."
-        >
-          <DetailTable rows={RELAY_DETAIL_ROWS} />
-        </SubSection>
-        <SubSection
-          title="Relay transport flow"
-          lead="Последовательность прохождения вызова через relay."
-        >
-          <DetailTable rows={RELAY_FLOW_ROWS} />
-        </SubSection>
-      </DocSection>
-
-      <DocSection
-        id="naming"
-        icon={ShieldAlert}
-        title="Про название CTL_TOKEN"
-        kicker="naming"
-        lead="Название историческое и действительно неочевидное."
-      >
-        <Callout tone="info">
-          <p>
-            <code>CTL_TOKEN</code> по смыслу это <strong>hub admin bearer</strong> или{" "}
-            <strong>control-plane API token</strong>.
-          </p>
-          <p className="mt-2">
-            Пока переменная в коде называется <code>CTL_TOKEN</code>, потому что на неё
-            уже завязаны панель, тесты, install scripts и runtime. В документации я везде
-            подписал её человеческим именем, чтобы не путать с OAuth password.
-          </p>
-        </Callout>
-      </DocSection>
-    </>
-  );
+function slugFromHash(): Slug {
+  if (typeof window === "undefined") return "Home";
+  const m = window.location.hash.match(/^#\/docs\/([A-Za-z0-9_-]+)/);
+  if (m && (SLUGS as readonly string[]).includes(m[1])) return m[1] as Slug;
+  return "Home";
 }
 
-function DocSection({
-  id,
-  icon: Icon,
-  title,
-  kicker,
-  lead,
-  children,
-}: {
-  id: string;
-  icon: LucideIcon;
-  title: string;
-  kicker: string;
-  lead: string;
-  children: React.ReactNode;
-}) {
+function subscribeHash(cb: () => void) {
+  if (typeof window === "undefined") return () => {};
+  window.addEventListener("hashchange", cb);
+  return () => window.removeEventListener("hashchange", cb);
+}
+
+const getHashSnapshot = (): Slug => slugFromHash();
+const getServerHashSnapshot = (): Slug => "Home";
+
+/** Sidebar title for each slug (kept client-facing, English is canonical). */
+const SIDEBAR_TITLE: Record<Slug, string> = {
+  Home: "Overview",
+  GETTING_STARTED: "Getting Started",
+  ARCHITECTURE: "Architecture",
+  ADAPTERS: "Adapters",
+  HUB: "Hub",
+  SHELLMCP: "ShellMCP",
+  INSTALL_PATHS: "Install Paths",
+  CONFIGURATION: "Configuration",
+  API_REFERENCE: "API Reference",
+  MCP_PROXY_RELAY: "MCP Proxy Relay",
+  INTEGRATIONS: "Integrations",
+  TUNNELS_DOCS: "Tunnels",
+  FAILOVER: "Failover",
+  SECURITY_DOCS: "Security",
+  FILE_BACKUPS: "File Backups",
+  ROADMAP: "Roadmap",
+  FAQ: "FAQ",
+};
+
+/** Per-locale hero copy. */
+const HERO: Record<Locale, { eyebrow: string; title: React.ReactNode; lead: string }> = {
+  en: {
+    eyebrow: "Documentation",
+    title: (
+      <>
+        Everything you need to{" "}
+        <span className="text-gradient-violet">run GPT‑Админ</span>
+      </>
+    ),
+    lead: "Pick a topic on the left. All docs are translated automatically; switch language at the top right.",
+  },
+  ru: {
+    eyebrow: "Документация",
+    title: (
+      <>
+        Всё, что нужно для работы с{" "}
+        <span className="text-gradient-violet">GPT‑Админ</span>
+      </>
+    ),
+    lead: "Выберите раздел слева. Все документы переведены автоматически; переключайте язык справа сверху.",
+  },
+  cn: {
+    eyebrow: "文档",
+    title: (
+      <>
+        使用{" "}
+        <span className="text-gradient-violet">GPT‑Админ</span> 所需的全部资料
+      </>
+    ),
+    lead: "从左侧选择主题。所有文档均已自动翻译；可使用右上角的语言切换器切换。",
+  },
+};
+
+export function DocsPage() {
+  const { navigate } = useHashRoute();
+  const { locale } = useLocale();
+  const slug = useExternalSlug();
+  const [markdown, setMarkdown] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    setMarkdown(null);
+    fetch(`/docs/${locale}/${slug}.md`, { cache: "no-store" })
+      .then((r) => {
+        if (!r.ok) throw new Error(`Failed to load doc: ${r.status}`);
+        return r.text();
+      })
+      .then((text) => {
+        if (!cancelled) {
+          setMarkdown(text);
+          setLoading(false);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setMarkdown(
+            locale === "en"
+              ? `## Could not load this page\n\nTry refreshing or pick another topic on the left.`
+              : locale === "cn"
+              ? `## 无法加载此页面\n\n请尝试刷新，或从左侧选择其他主题。`
+              : `## Не удалось загрузить страницу\n\nПопробуйте обновить или выберите другой раздел слева.`
+          );
+          setLoading(false);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [slug, locale]);
+
+  const index = SLUGS.indexOf(slug);
+  const prev = index > 0 ? SLUGS[index - 1] : null;
+  const next = index < SLUGS.length - 1 ? SLUGS[index + 1] : null;
+
   return (
-    <section id={id} className="relative scroll-mt-24 py-14 sm:py-16">
-      <div className="mx-auto max-w-6xl px-5 sm:px-8">
-        <Reveal className="flex flex-col gap-3">
-          <div className="flex items-center gap-3">
-            <span className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-primary/20 bg-primary/[0.06]">
-              <Icon className="h-5 w-5 text-primary" />
-            </span>
-            <div>
-              <Eyebrow>{kicker}</Eyebrow>
-              <h2 className="display text-2xl font-semibold tracking-tight sm:text-3xl">{title}</h2>
-            </div>
-          </div>
-          <p className="max-w-4xl text-sm leading-relaxed text-muted-foreground sm:text-base">{lead}</p>
+    <>
+      <PageHeader locale={locale} />
+
+      <section className="relative pb-24 pt-6 sm:pt-10">
+        <div className="mx-auto grid max-w-7xl gap-10 px-5 sm:px-8 lg:grid-cols-[260px_1fr]">
+          <Sidebar active={slug} />
+          <article className="min-w-0">
+            <AnimatePresence mode="wait">
+              <motion.div
+                key={`${slug}-${locale}`}
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -8 }}
+                transition={{ duration: 0.25, ease: EASE }}
+                className="prose-doc"
+              >
+                {loading || markdown === null ? (
+                  <DocSkeleton />
+                ) : (
+                  <DocBody markdown={markdown} />
+                )}
+              </motion.div>
+            </AnimatePresence>
+
+            {/* Prev / Next */}
+            <nav
+              aria-label="Pagination"
+              className="mt-16 flex flex-col gap-3 border-t border-border/60 pt-6 sm:flex-row sm:justify-between"
+            >
+              <DocNavButton
+                direction="prev"
+                slug={prev}
+                onClick={() => prev && goToSlug(prev)}
+              />
+              <DocNavButton
+                direction="next"
+                slug={next}
+                onClick={() => next && goToSlug(next)}
+              />
+            </nav>
+          </article>
+        </div>
+      </section>
+    </>
+  );
+
+  function goToSlug(next: Slug) {
+    history.replaceState(null, "", `#/docs/${next}`);
+    window.dispatchEvent(new HashChangeEvent("hashchange"));
+    window.scrollTo({ top: 0, behavior: "auto" });
+  }
+}
+
+function useExternalSlug(): Slug {
+  return useSyncExternalStore(subscribeHash, getHashSnapshot, getServerHashSnapshot);
+}
+
+function PageHeader({ locale }: { locale: Locale }) {
+  const copy = HERO[locale];
+  return (
+    <section className="relative overflow-hidden pt-28 sm:pt-32">
+      <div className="pointer-events-none absolute inset-0 -z-10" aria-hidden>
+        <div className="absolute left-1/2 top-[-10%] h-[420px] w-[720px] -translate-x-1/2 glow-violet blur-3xl animate-aurora" />
+      </div>
+      <div className="mx-auto flex max-w-7xl items-end justify-between gap-6 px-5 sm:px-8">
+        <Reveal className="max-w-2xl">
+          <button
+            type="button"
+            onClick={() => {
+              history.replaceState(null, "", "#/");
+              window.dispatchEvent(new HashChangeEvent("hashchange"));
+              window.scrollTo({ top: 0, behavior: "auto" });
+            }}
+            className="mb-3 inline-flex items-center gap-1.5 text-xs text-muted-foreground transition-colors hover:text-primary"
+          >
+            <ArrowLeft className="h-3.5 w-3.5" />
+            {locale === "en" ? "Back to home" : locale === "cn" ? "返回首页" : "На главную"}
+          </button>
+          <Eyebrow>{copy.eyebrow}</Eyebrow>
+          <h1 className="display mt-3 text-balance text-3xl font-semibold tracking-tight sm:text-4xl">
+            {copy.title}
+          </h1>
+          <p className="mt-3 text-sm leading-relaxed text-muted-foreground sm:text-base">
+            {copy.lead}
+          </p>
         </Reveal>
-        <Reveal delay={0.08} className="mt-6">
-          {children}
-        </Reveal>
+        <div className="hidden sm:block">
+          <LocaleSwitcher />
+        </div>
       </div>
     </section>
   );
 }
 
-function Callout({
-  children,
-  tone,
-}: {
-  children: React.ReactNode;
-  tone: "warn" | "info";
-}) {
-  const classes =
-    tone === "warn"
-      ? "border-amber-500/30 bg-amber-500/[0.08] text-amber-100"
-      : "border-primary/25 bg-primary/[0.06] text-foreground/90";
+function Sidebar({ active }: { active: Slug }) {
+  const { locale } = useLocale();
+  const sidebarTitle =
+    locale === "en" ? "Browse docs" : locale === "cn" ? "文档目录" : "Содержание";
 
   return (
-    <div className={`rounded-2xl border p-4 text-sm leading-relaxed ${classes}`}>
-      {children}
-    </div>
-  );
-}
-
-function DenseTable({
-  columns,
-  rows,
-}: {
-  columns: string[];
-  rows: string[][];
-}) {
-  return (
-    <div className="overflow-x-auto rounded-2xl border border-border/60 bg-[oklch(0.12_0.006_290)]">
-      <table className="min-w-full text-left text-sm">
-        <thead className="border-b border-white/[0.08] bg-white/[0.03]">
-          <tr>
-            {columns.map((column) => (
-              <th key={column} className="px-3 py-2.5 font-mono text-[11px] uppercase tracking-wide text-muted-foreground">
-                {column}
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((row, rowIndex) => (
-            <tr key={rowIndex} className="border-b border-white/[0.05] last:border-b-0">
-              {row.map((cell, cellIndex) => (
-                <td
-                  key={`${rowIndex}-${cellIndex}`}
-                  className={`px-3 py-2.5 align-top leading-relaxed text-foreground/88 ${
-                    cellIndex === 0 ? "font-mono text-[12px] text-primary" : ""
-                  }`}
-                >
-                  {cell}
-                </td>
-              ))}
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  );
-}
-
-function DetailTable({ rows }: { rows: DetailRow[] }) {
-  return (
-    <DenseTable
-      columns={["Элемент", "Значение", "Комментарий"]}
-      rows={rows.map((row) => [row.name, row.value, row.notes])}
-    />
-  );
-}
-
-function SubSection({
-  title,
-  lead,
-  children,
-}: {
-  title: string;
-  lead: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <div className="mb-6">
-      <div className="mb-3">
-        <h3 className="text-lg font-semibold tracking-tight">{title}</h3>
-        <p className="mt-1 text-sm leading-relaxed text-muted-foreground">{lead}</p>
-      </div>
-      {children}
-    </div>
-  );
-}
-
-function EnvGroupCard({ group }: { group: EnvGroup }) {
-  const Icon = group.icon;
-
-  return (
-    <motion.div
-      initial={{ opacity: 0, y: 12 }}
-      whileInView={{ opacity: 1, y: 0 }}
-      viewport={{ once: true }}
-      transition={{ duration: 0.45, ease: EASE }}
-      className="mb-5 rounded-2xl border border-border/60 bg-[oklch(0.12_0.006_290)]"
-    >
-      <div className="flex items-center gap-3 border-b border-white/[0.08] px-4 py-3">
-        <span className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-primary/20 bg-primary/[0.06]">
-          <Icon className="h-4 w-4 text-primary" />
-        </span>
-        <div>
-          <div className="text-sm font-semibold tracking-tight">{group.title}</div>
-          <div className="text-xs text-muted-foreground">{group.scope}</div>
+    <aside className="lg:sticky lg:top-24 lg:self-start">
+      <div className="rounded-2xl border border-border/60 bg-[oklch(0.12_0.006_290)] p-4">
+        <div className="flex items-center gap-2 px-2 pb-2">
+          <BookOpen className="h-4 w-4 text-primary" />
+          <span className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">
+            {sidebarTitle}
+          </span>
         </div>
+        <ul className="mt-2 flex flex-col gap-0.5">
+          {SLUGS.map((s) => {
+            const isActive = s === active;
+            return (
+              <li key={s}>
+                <a
+                  href={`#/docs/${s}`}
+                  className={cn(
+                    "flex items-center gap-2 rounded-lg px-3 py-2 text-sm transition-colors",
+                    isActive
+                      ? "bg-primary/10 text-primary"
+                      : "text-muted-foreground hover:bg-white/[0.04] hover:text-foreground"
+                  )}
+                  aria-current={isActive ? "page" : undefined}
+                >
+                  <FileText className="h-3.5 w-3.5 shrink-0 opacity-60" />
+                  <span className="truncate">{SIDEBAR_TITLE[s]}</span>
+                </a>
+              </li>
+            );
+          })}
+        </ul>
       </div>
-      <DenseTable
-        columns={["ENV", "Default", "Назначение"]}
-        rows={group.rows.map((row) => [row.env, row.defaultValue, row.purpose])}
-      />
-    </motion.div>
+    </aside>
   );
 }
 
-function CodeBlock({ label, code }: { label: string; code: string }) {
-  const { copied, copy } = useCopy();
+function DocBody({ markdown }: { markdown: string }) {
+  return (
+    <ReactMarkdown
+      remarkPlugins={[remarkGfm]}
+      rehypePlugins={[rehypeRaw]}
+      components={markdownComponents()}
+    >
+      {markdown}
+    </ReactMarkdown>
+  );
+}
+
+/**
+ * Override react-markdown renderers so:
+ *   - Relative doc links (`./FOO.md`, `../en/FOO.md`, `FOO.md`) become in-app anchors.
+ *   - Headings get stable ids for deep linking.
+ *   - Tables, code, blockquotes inherit site styling.
+ */
+function markdownComponents(): Components {
+  const slugify = (s: string) =>
+    s
+      .toLowerCase()
+      .trim()
+      .replace(/[^\p{Letter}\p{Number}\s-]+/gu, "")
+      .replace(/\s+/g, "-")
+      .replace(/-+/g, "-");
+
+  const toInternalDocHref = (href: string): string | null => {
+    // Already a fragment.
+    if (href.startsWith("#")) return null;
+    // Absolute URLs are left alone.
+    if (/^https?:\/\//i.test(href)) return null;
+    // Mail links.
+    if (href.startsWith("mailto:")) return null;
+    // Strip path prefix `../en/`, `./`, etc. to grab filename.
+    const noQuery = href.split("#")[0];
+    const base = noQuery.split("/").pop() ?? "";
+    const name = base.replace(/\.md$/i, "").replace(/\.(ru|en|cn|zh-CN|uk|ja|ko)$/i, "");
+    if (!name) return null;
+    if (!(SLUGS as readonly string[]).includes(name)) return null;
+    const frag = href.includes("#") ? `#${href.split("#").slice(1).join("#")}` : "";
+    return `#/docs/${name}${frag}`;
+  };
+
+  return {
+    h1: ({ children, id, ...rest }) => (
+      <h1
+        id={id ?? (typeof children === "string" ? slugify(children) : undefined)}
+        className="display mt-2 mb-6 text-3xl font-semibold tracking-tight sm:text-4xl"
+        {...rest}
+      >
+        {children}
+      </h1>
+    ),
+    h2: ({ children, id, ...rest }) => (
+      <h2
+        id={id ?? (typeof children === "string" ? slugify(children) : undefined)}
+        className="display mt-10 mb-4 text-2xl font-semibold tracking-tight sm:text-3xl"
+        {...rest}
+      >
+        {children}
+      </h2>
+    ),
+    h3: ({ children, id, ...rest }) => (
+      <h3
+        id={id ?? (typeof children === "string" ? slugify(children) : undefined)}
+        className="mt-8 mb-3 text-xl font-semibold tracking-tight"
+        {...rest}
+      >
+        {children}
+      </h3>
+    ),
+    h4: ({ children, id, ...rest }) => (
+      <h4
+        id={id ?? (typeof children === "string" ? slugify(children) : undefined)}
+        className="mt-6 mb-2 text-lg font-semibold tracking-tight"
+        {...rest}
+      >
+        {children}
+      </h4>
+    ),
+    p: ({ children, ...rest }) => (
+      <p className="my-4 text-base leading-relaxed text-foreground/90" {...rest}>
+        {children}
+      </p>
+    ),
+    ul: ({ children, ...rest }) => (
+      <ul className="my-4 list-disc space-y-2 pl-6 text-base leading-relaxed text-foreground/90" {...rest}>
+        {children}
+      </ul>
+    ),
+    ol: ({ children, ...rest }) => (
+      <ol className="my-4 list-decimal space-y-2 pl-6 text-base leading-relaxed text-foreground/90" {...rest}>
+        {children}
+      </ol>
+    ),
+    li: ({ children, ...rest }) => (
+      <li className="leading-relaxed" {...rest}>
+        {children}
+      </li>
+    ),
+    a: ({ href, children, ...rest }) => {
+      const internal = typeof href === "string" ? toInternalDocHref(href) : null;
+      const finalHref = internal ?? href ?? "#";
+      const isExternal = typeof href === "string" && /^https?:\/\//i.test(href);
+      return (
+        <a
+          href={finalHref}
+          className="text-primary underline-offset-4 transition-colors hover:underline"
+          target={isExternal ? "_blank" : undefined}
+          rel={isExternal ? "noreferrer" : undefined}
+          {...rest}
+        >
+          {children}
+        </a>
+      );
+    },
+    code: ({ className, children, ...rest }) => {
+      const isBlock = (className ?? "").includes("language-");
+      if (isBlock) {
+        return (
+          <code
+            className={cn("font-mono text-[13px] text-foreground/95", className)}
+            {...rest}
+          >
+            {children}
+          </code>
+        );
+      }
+      return (
+        <code
+          className="rounded border border-primary/30 bg-primary/[0.08] px-1.5 py-0.5 font-mono text-[0.85em] text-primary"
+          {...rest}
+        >
+          {children}
+        </code>
+      );
+    },
+    pre: ({ children, ...rest }) => (
+      <pre
+        className="nice-scroll my-5 overflow-x-auto rounded-2xl border border-border/60 bg-[oklch(0.12_0.006_290)] px-4 py-3 font-mono text-[13px] leading-relaxed text-foreground/95"
+        {...rest}
+      >
+        {children}
+      </pre>
+    ),
+    blockquote: ({ children, ...rest }) => (
+      <blockquote
+        className="my-5 rounded-2xl border-l-2 border-primary/40 bg-primary/[0.06] px-4 py-3 text-sm leading-relaxed text-foreground/90"
+        {...rest}
+      >
+        {children}
+      </blockquote>
+    ),
+    table: ({ children, ...rest }) => (
+      <div className="my-5 overflow-x-auto rounded-2xl border border-border/60 bg-[oklch(0.12_0.006_290)]">
+        <table className="min-w-full text-left text-sm" {...rest}>
+          {children}
+        </table>
+      </div>
+    ),
+    thead: ({ children, ...rest }) => (
+      <thead className="border-b border-white/[0.08] bg-white/[0.03]" {...rest}>
+        {children}
+      </thead>
+    ),
+    th: ({ children, ...rest }) => (
+      <th
+        className="px-3 py-2.5 font-mono text-[11px] uppercase tracking-wide text-muted-foreground"
+        {...rest}
+      >
+        {children}
+      </th>
+    ),
+    td: ({ children, ...rest }) => (
+      <td
+        className="border-b border-white/[0.05] px-3 py-2.5 align-top leading-relaxed text-foreground/90"
+        {...rest}
+      >
+        {children}
+      </td>
+    ),
+    hr: () => <hr className="my-8 border-border/60" />,
+    img: ({ src, alt, ...rest }) => (
+      <img
+        src={src}
+        alt={alt ?? ""}
+        className="my-4 max-w-full rounded-xl border border-border/40"
+        {...rest}
+      />
+    ),
+  };
+}
+
+function DocSkeleton() {
+  return (
+    <div className="space-y-3" aria-hidden>
+      <div className="h-7 w-2/3 animate-pulse rounded-md bg-white/[0.05]" />
+      <div className="h-4 w-full animate-pulse rounded-md bg-white/[0.04]" />
+      <div className="h-4 w-11/12 animate-pulse rounded-md bg-white/[0.04]" />
+      <div className="h-4 w-10/12 animate-pulse rounded-md bg-white/[0.04]" />
+      <div className="mt-8 h-6 w-1/3 animate-pulse rounded-md bg-white/[0.05]" />
+      <div className="h-4 w-full animate-pulse rounded-md bg-white/[0.04]" />
+      <div className="h-4 w-9/12 animate-pulse rounded-md bg-white/[0.04]" />
+    </div>
+  );
+}
+
+function DocNavButton({
+  direction,
+  slug,
+  onClick,
+}: {
+  direction: "prev" | "next";
+  slug: Slug | null;
+  onClick: () => void;
+}) {
+  const { locale } = useLocale();
+  if (!slug) return <span aria-hidden className="hidden sm:block" />;
+
+  const label =
+    direction === "prev"
+      ? locale === "en"
+        ? "Previous"
+        : locale === "cn"
+        ? "上一篇"
+        : "Назад"
+      : locale === "en"
+      ? "Next"
+      : locale === "cn"
+      ? "下一篇"
+      : "Вперёд";
+
+  const Icon = direction === "prev" ? ArrowLeft : ArrowRight;
 
   return (
-    <div className="overflow-hidden rounded-2xl border border-border/60 bg-[oklch(0.12_0.006_290)]">
-      <div className="flex items-center justify-between border-b border-white/[0.08] px-3.5 py-2">
-        <span className="font-mono text-[11px] text-muted-foreground">{label}</span>
-        <button
-          type="button"
-          onClick={() => copy(code)}
-          className="inline-flex items-center gap-1 text-[11px] text-muted-foreground transition-colors hover:text-primary"
-        >
-          {copied ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
-          {copied ? "скопировано" : "копировать"}
-        </button>
-      </div>
-      <pre className="nice-scroll overflow-x-auto px-3.5 py-3 font-mono text-[12px] leading-relaxed text-foreground/88">
-{code}
-      </pre>
-    </div>
+    <button
+      type="button"
+      onClick={onClick}
+      className={cn(
+        "group inline-flex items-center gap-2 rounded-xl border border-border/60 bg-white/[0.02] px-4 py-2.5 text-sm transition-colors hover:border-primary/40 hover:bg-white/[0.05]",
+        direction === "next" && "sm:ml-auto"
+      )}
+    >
+      {direction === "prev" && <Icon className="h-4 w-4 text-primary" />}
+      <span className="flex flex-col items-start">
+        <span className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground">{label}</span>
+        <span className="font-medium text-foreground">{SIDEBAR_TITLE[slug]}</span>
+      </span>
+      {direction === "next" && <Icon className="h-4 w-4 text-primary" />}
+    </button>
   );
 }

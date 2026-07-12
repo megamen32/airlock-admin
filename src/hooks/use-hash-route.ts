@@ -11,6 +11,8 @@ function parseHash(): PageId {
   if (typeof window === "undefined") return "home";
   const h = window.location.hash.replace(/^#\/?/, "").trim();
   if (PAGES.includes(h as PageId)) return h as PageId;
+  // Doc sub-routes like `#/docs/GETTING_STARTED` belong to the "docs" tab.
+  if (h.startsWith("docs/")) return "docs";
   return "home";
 }
 

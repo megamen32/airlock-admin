@@ -6,7 +6,7 @@ What's built, what's coming, and the open-core split.
 
 ### ✅ Built and working
 
-- **Hub** (`hub_proxy.py`) — MCP remote SSE, admin API, OAuth, web panel
+- **Hub** (`go-hub/`) — MCP remote SSE, admin API, OAuth, web panel
 - **ShellMCP** (Go + Python) — agent for Linux/macOS/Windows
 - **Three adapters**:
   - MCP client (Claude Desktop, Codex, OpenCode)
@@ -24,7 +24,7 @@ What's built, what's coming, and the open-core split.
 ### 🚧 Coming soon
 
 - **Advanced web panel** — teams, RBAC, alerting, audit log export
-- **Hosted cloud** — don't want to self-host? We'll host it for you
+- **Hosted cloud** — don't want to self-host? A managed cloud option is planned
 - **Enterprise SSO** — SAML, OIDC, SCIM provisioning
 - **MCP marketplace** — browse and install MCPs (openmemory, chrome-devtools,
   custom) from the panel
@@ -56,7 +56,7 @@ functionality.
 
 ## Versioning
 
-We follow [SemVer](https://semver.org/). See [CHANGELOG.md](../CHANGELOG.md)
+GPT‑Админ follows [SemVer](https://semver.org/). See [CHANGELOG.md](../CHANGELOG.md)
 for release history.
 
 - `0.x` — pre-1.0, breaking changes possible between minor versions
@@ -65,7 +65,7 @@ for release history.
 
 ## Contributing
 
-PRs welcome — see [CONTRIBUTING.md](../CONTRIBUTING.md). Areas that need love:
+PRs are welcome — see [CONTRIBUTING.md](../CONTRIBUTING.md). Good places to contribute:
 
 - More test coverage (tunnels, MCP-SSE, CLI)
 - Documentation improvements
@@ -74,6 +74,5 @@ PRs welcome — see [CONTRIBUTING.md](../CONTRIBUTING.md). Areas that need love:
 
 ## See also
 
-- [Open-Core Plan](./OPEN_CORE_PLAN.md) — the internal launch plan
 - [Architecture](./ARCHITECTURE.md) — how it's built
 - [CHANGELOG.md](../CHANGELOG.md) — what changed

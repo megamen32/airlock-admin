@@ -44,15 +44,26 @@ human confirmation before executing. Enable per-agent in `/admin` → Security.
 openssl rand -hex 32
 
 # Update the hub env, restart
-sudo systemctl restart hub_proxy  # or: systemctl --user restart hub_proxy
+sudo systemctl restart gptadmin_hub  # or: systemctl --user restart gptadmin_hub
 
 # Update each agent's HUB_URL/TOKEN if you changed SHELLMCP_TOKEN
 # Update Custom GPT / MCP client configs with the new CTL_TOKEN
 ```
 
-Rotate immediately if a token leaks. The repo's history-scrubbing
-(see [Open-Core Plan](./OPEN_CORE_PLAN.md) Stage 0) is a one-time measure —
-rotate to be safe.
+Rotate immediately if a token leaks. Scrubbing a leaked value from
+historical commits is only a one-time measure — rotation is the safe path.
+
+
+## Gateway mode for MCP servers
+
+When GPTAdmin is used as a secure proxy/relay, external clients should connect to GPTAdmin, not directly to private stdio or LAN-only MCP servers. Prefer per-server URLs when the client only needs one capability:
+
+```text
+/server/{slug}/mcp
+/server/{slug}/actions/openapi.yaml
+```
+
+This keeps the upstream MCP server private while GPTAdmin applies HTTPS, bearer/OAuth auth, audit logging, routing and queue handling. Use the full `/server/hub/mcp` surface only for trusted clients that need cross-server relay/admin capabilities.
 
 ## Production hardening checklist
 

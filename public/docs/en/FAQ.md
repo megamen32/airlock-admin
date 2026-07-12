@@ -4,7 +4,7 @@
 
 Yes. The core (hub, shellmcp, all three adapters, basic web panel) is free
 forever under AGPL-3.0. Future paid offerings (hosted cloud, enterprise SSO,
-advanced panel) will be additive — we won't paywall existing functionality.
+advanced panel) will be additive — existing functionality stays free.
 See [Roadmap](./ROADMAP.md).
 
 ## Do I need a paid AI subscription?
@@ -24,7 +24,7 @@ GPT‑Админ is designed for this. Key safety features:
 - **Secrets masked** in logs
 - **Managed backups** before file edits
 
-See [Security](./SECURITY.md).
+See [Security](./SECURITY_DOCS.md).
 
 ## Will the AI run commands without my knowledge?
 
@@ -45,7 +45,7 @@ See [Adapters](./ADAPTERS.md).
 ## Why is it called CTL_TOKEN?
 
 Historical naming. `CTL_TOKEN` is the admin bearer token for the hub API +
-web panel. It's confusing — we may rename it in 1.0 (with a migration path).
+web panel. The naming may change before 1.0 (with a migration path).
 See [Configuration → naming](./CONFIGURATION.md).
 
 ## `/mcp` returns 401 — why?
@@ -59,7 +59,7 @@ the OAuth flow. For local dev, the hub relaxes auth on localhost. See
 
 No. The installer offers an auto-tunnel via FRP — you get a public URL on
 `frp.bezrabotnyi.com` with no DNS setup. For your own domain, use Cloudflare
-Tunnel or nginx + Certbot. See [Tunnels](./TUNNELS.md).
+Tunnel or nginx + Certbot. See [Tunnels](./TUNNELS_DOCS.md).
 
 ## Does it work on Windows?
 
@@ -92,13 +92,13 @@ connected AI. See [Architecture](./ARCHITECTURE.md).
 
 ## How do I rotate tokens?
 
-See [Security → Token rotation](./SECURITY.md#token-rotation). Short version:
+See [Security → Token rotation](./SECURITY_DOCS.md#token-rotation). Short version:
 generate new values with `openssl rand -hex 32`, update the hub env, restart,
 update clients.
 
 ## Something broke. Where are the logs?
 
-- Hub: `journalctl -u hub_proxy -n 100` (or `--user` for user-mode)
+- Hub: `journalctl -u gptadmin_hub -n 100` (or `--user` for user-mode)
 - Agent: `journalctl -u shellmcp -n 100` (or `--user`)
 - Or read them in the web panel: `/admin` → Logs
 
