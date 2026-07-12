@@ -20,21 +20,46 @@ import {
 } from "lucide-react";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
+import { useT } from "@/hooks/use-t";
+import { useLocale } from "@/hooks/use-locale";
+import { BRAND } from "@/lib/brand";
 
 const EASE = [0.16, 1, 0.3, 1] as const;
 
+type AiNode = { iconKey: string; label: string; sub: string; detail: string; href: string };
+type ServerNode = { iconKey: string; label: string; sub: string; detail: string };
+type McpPill = { iconKey: string; label: string };
 type Column = {
-  ai: { icon: LucideIcon; label: string; sub: string; detail: string; href: string };
+  ai: AiNode;
   tunnel: { label: string; sub: string };
   transport: { label: string; sub: string };
-  server: { icon: LucideIcon; label: string; sub: string; detail: string };
-  mcps: { icon: LucideIcon; label: string }[];
+  server: ServerNode;
+  mcps: McpPill[];
 };
 
-const COLUMNS: Column[] = [
+const ICON_REGISTRY: Record<string, LucideIcon> = {
+  brain: BrainCircuit,
+  bot: Bot,
+  terminal: Terminal,
+  router: Router,
+  server: Server,
+  shield: Shield,
+  wifi: Wifi,
+  radio: Radio,
+  gamepad: Gamepad2,
+  git: GitBranch,
+  database: Database,
+  boxes: Boxes,
+};
+
+function pickIcon(key: string): LucideIcon {
+  return ICON_REGISTRY[key] ?? Server;
+}
+
+const FALLBACK_COLUMNS: Column[] = [
   {
     ai: {
-      icon: BrainCircuit,
+      iconKey: "brain",
       label: "Claude · Codex",
       sub: "MCP-клиент",
       detail: "Подключается как MCP Streamable HTTP. Нативные tool calls — агент вызывает команды напрямую.",
@@ -43,20 +68,20 @@ const COLUMNS: Column[] = [
     tunnel: { label: "Streamable HTTP", sub: "через туннель" },
     transport: { label: "long-poll", sub: "пробивает любой NAT" },
     server: {
-      icon: Router,
+      iconKey: "router",
       label: "OpenWRT",
       sub: "router",
       detail: "Роутер на краю сети: firewall, VPN, маршруты и пробросы без ручного SSH-квеста.",
     },
     mcps: [
-      { icon: Shield, label: "firewall" },
-      { icon: Wifi, label: "wifi" },
-      { icon: Radio, label: "vpn" },
+      { iconKey: "shield", label: "firewall" },
+      { iconKey: "wifi", label: "wifi" },
+      { iconKey: "radio", label: "vpn" },
     ],
   },
   {
     ai: {
-      icon: Bot,
+      iconKey: "bot",
       label: "DeepSeek · Qwen",
       sub: "расширение",
       detail: "Userscript для Tampermonkey/Firefox. Любой бесплатный веб‑чат получает MCP‑доступ.",
@@ -65,20 +90,20 @@ const COLUMNS: Column[] = [
     tunnel: { label: "HTTPS", sub: "через туннель" },
     transport: { label: "webhook", sub: "нулевая задержка" },
     server: {
-      icon: Server,
+      iconKey: "server",
       label: "server-02",
       sub: "Windows",
       detail: "Windows-сервер для игровых и desktop-задач: Minecraft, RCON, файлы и автоматизация.",
     },
     mcps: [
-      { icon: Gamepad2, label: "minecraft" },
-      { icon: Terminal, label: "powershell" },
-      { icon: Radio, label: "rcon" },
+      { iconKey: "gamepad", label: "minecraft" },
+      { iconKey: "terminal", label: "powershell" },
+      { iconKey: "radio", label: "rcon" },
     ],
   },
   {
     ai: {
-      icon: Terminal,
+      iconKey: "terminal",
       label: "ChatGPT · OpenUI",
       sub: "OpenAI Action",
       detail: "Custom GPT, OpenAPI endpoint или Apps SDK widget. ChatGPT сам понимает когда выполнить команду. Auto-confirm extension для автопилота.",
@@ -87,67 +112,76 @@ const COLUMNS: Column[] = [
     tunnel: { label: "REST", sub: "через туннель" },
     transport: { label: "queue", sub: "надёжная доставка" },
     server: {
-      icon: Server,
+      iconKey: "server",
       label: "server-03",
       sub: "Windows",
       detail: "Git-операции. Чистка PR, ребейз, force-push — агент работает с репозиториями напрямую.",
     },
     mcps: [
-      { icon: GitBranch, label: "git" },
-      { icon: Database, label: "postgres" },
-      { icon: Boxes, label: "openmemory" },
+      { iconKey: "git", label: "git" },
+      { iconKey: "database", label: "postgres" },
+      { iconKey: "boxes", label: "openmemory" },
     ],
   },
 ];
 
 export function ArchitectureDiagram({ className }: { className?: string }) {
+  const { t, get } = useT();
+  const { locale } = useLocale();
+
+  // Load per-locale columns. Falls back to ru, then to hardcoded Russian
+  // baseline so SSR + first paint always have data.
+  const activeColumns = get<Column[]>("architecture.columns");
+  const columns = (Array.isArray(activeColumns) && activeColumns.length > 0)
+    ? activeColumns
+    : FALLBACK_COLUMNS;
+
+  const yourAi = t("architecture.yourAi");
+  const yourServers = t("architecture.yourServers");
+  const learnMore = t("architecture.learnMore");
+  const caption = t("architecture.caption");
+  const hubLabel = BRAND[locale];
+  const hubSub = t("architecture.hubSub");
+
   return (
     <div className={className}>
       <div className="surface relative overflow-hidden rounded-3xl p-4 sm:p-7">
         <div className="pointer-events-none absolute inset-x-0 top-0 h-40 glow-violet blur-3xl opacity-40" aria-hidden />
 
         <div className="relative">
-          {/* LAYER 1 — label */}
-          <LayerLabel>ваш AI</LayerLabel>
+          <LayerLabel>{yourAi}</LayerLabel>
 
-          {/* LAYER 2 — 3 AI nodes (top row) */}
           <div className="grid grid-cols-3 gap-1.5 sm:gap-3">
-            {COLUMNS.map((col, i) => (
-              <FlowNode key={`ai-${i}`} node={col.ai} index={i} variant="ai" />
+            {columns.map((col, i) => (
+              <FlowNode key={`ai-${i}`} node={col.ai} index={i} variant="ai" learnMoreLabel={learnMore} />
             ))}
           </div>
 
-          {/* LAYER 3 — fork: AI → hub ( converge \|/ — lines meet at center bottom) */}
           <ForkLayer
-            columns={COLUMNS.map(c => ({ label: c.tunnel.label, sub: c.tunnel.sub }))}
+            columns={columns.map(c => ({ label: c.tunnel.label, sub: c.tunnel.sub }))}
             shape="converge"
             delay={0.3}
           />
 
-          {/* LAYER 4 — Hub (center) */}
           <div className="flex justify-center py-1">
-            <HubNode />
+            <HubNode label={hubLabel} sub={hubSub} />
           </div>
 
-          {/* LAYER 5 — fork: hub → servers ( diverge /|\ — lines split from center top) */}
           <ForkLayer
-            columns={COLUMNS.map(c => ({ label: c.transport.label, sub: c.transport.sub }))}
+            columns={columns.map(c => ({ label: c.transport.label, sub: c.transport.sub }))}
             shape="diverge"
             delay={0.6}
             icon={Lock}
           />
 
-          {/* LAYER 6 — label */}
-          <LayerLabel>ваши серверы</LayerLabel>
+          <LayerLabel>{yourServers}</LayerLabel>
 
-          {/* LAYER 7 — 3 server nodes with MCP agents underneath */}
           <div className="grid grid-cols-3 gap-1.5 sm:gap-3">
-            {COLUMNS.map((col, i) => (
+            {columns.map((col, i) => (
               <ServerWithMcps key={`srv-${i}`} col={col} index={i} />
             ))}
           </div>
 
-          {/* caption */}
           <motion.div
             initial={{ opacity: 0 }}
             whileInView={{ opacity: 1 }}
@@ -156,15 +190,13 @@ export function ArchitectureDiagram({ className }: { className?: string }) {
             className="mt-3 flex items-center justify-center gap-1.5 text-[11px] text-muted-foreground/70"
           >
             <Radio className="h-3 w-3 text-primary/60" />
-            shellmcp поднимает MCP и передаёт в хаб
+            {caption}
           </motion.div>
         </div>
       </div>
     </div>
   );
 }
-
-/* ---------- components ---------- */
 
 function LayerLabel({ children }: { children: React.ReactNode }) {
   return (
@@ -178,13 +210,15 @@ function FlowNode({
   node,
   index,
   variant,
+  learnMoreLabel,
 }: {
-  node: { icon: LucideIcon; label: string; sub: string; detail: string; href: string };
+  node: AiNode;
   index: number;
   variant: "ai" | "server";
+  learnMoreLabel: string;
 }) {
   const [hover, setHover] = useState(false);
-  const Icon = node.icon;
+  const Icon = pickIcon(node.iconKey);
   const isAi = variant === "ai";
 
   return (
@@ -224,7 +258,7 @@ function FlowNode({
           className="absolute left-1/2 top-full z-20 mt-2 w-52 -translate-x-1/2 rounded-xl border border-border/60 bg-[oklch(0.16_0.006_290)] p-3 shadow-xl shadow-black/40"
         >
           <p className="text-[11px] leading-relaxed text-muted-foreground">{node.detail}</p>
-          <span className="mt-2 inline-block text-[11px] font-medium text-primary">подробнее →</span>
+          <span className="mt-2 inline-block text-[11px] font-medium text-primary">{learnMoreLabel}</span>
         </motion.div>
       )}
     </motion.div>
@@ -233,7 +267,7 @@ function FlowNode({
 
 function ServerWithMcps({ col, index }: { col: Column; index: number }) {
   const [hover, setHover] = useState(false);
-  const Icon = col.server.icon;
+  const Icon = pickIcon(col.server.iconKey);
 
   return (
     <motion.div
@@ -245,7 +279,6 @@ function ServerWithMcps({ col, index }: { col: Column; index: number }) {
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}
     >
-      {/* server node */}
       <div
         className={cn(
           "flex flex-col items-center gap-1 rounded-xl border px-1 py-2 text-center transition-all sm:px-2.5",
@@ -259,13 +292,12 @@ function ServerWithMcps({ col, index }: { col: Column; index: number }) {
         <p className="hidden truncate text-[10px] leading-tight text-muted-foreground/70 sm:block">{col.server.sub}</p>
       </div>
 
-      {/* MCP agents underneath — small pills */}
       <div className="flex flex-col items-center gap-1">
         {col.mcps.map((mcp, mi) => {
-          const McpIcon = mcp.icon;
+          const McpIcon = pickIcon(mcp.iconKey);
           return (
             <motion.span
-              key={mcp.label}
+              key={`${mcp.label}-${mi}`}
               initial={{ opacity: 0, scale: 0.8 }}
               whileInView={{ opacity: 1, scale: 1 }}
               viewport={{ once: true }}
@@ -293,7 +325,7 @@ function ServerWithMcps({ col, index }: { col: Column; index: number }) {
   );
 }
 
-function HubNode() {
+function HubNode({ label, sub }: { label: string; sub: string }) {
   return (
     <motion.div
       initial={{ opacity: 0, scale: 0.9 }}
@@ -308,18 +340,14 @@ function HubNode() {
           <Sparkles className="h-4 w-4 text-primary sm:h-5 sm:w-5" />
         </span>
         <div className="text-left">
-          <p className="text-sm font-semibold tracking-tight">GPT‑Админ</p>
-          <p className="font-mono text-[10px] text-muted-foreground">MCP hub</p>
+          <p className="text-sm font-semibold tracking-tight">{label}</p>
+          <p className="font-mono text-[10px] text-muted-foreground">{sub}</p>
         </div>
       </div>
     </motion.div>
   );
 }
 
-/**
- * Static fork layer SVG.
- * No moving packets: just quiet, layered curves with a soft center glow.
- */
 function ForkLayer({
   columns,
   shape,
@@ -351,7 +379,6 @@ function ForkLayer({
       transition={{ duration: 0.5, delay }}
       className="flex flex-col items-center"
     >
-      {/* labels row (desktop only) */}
       <div className="hidden w-full grid-cols-3 gap-1 sm:grid">
         {columns.map((c, i) => (
           <div key={i} className="flex flex-col items-center">
@@ -363,7 +390,6 @@ function ForkLayer({
         ))}
       </div>
 
-      {/* Static, soft connection lines */}
       <svg
         viewBox="0 0 300 80"
         className="h-12 w-full sm:h-16"
@@ -405,7 +431,6 @@ function ForkLayer({
 
       </svg>
 
-      {/* sub-labels (desktop only) */}
       <div className="hidden w-full grid-cols-3 gap-1 sm:grid">
         {columns.map((c, i) => (
           <p key={i} className="text-center text-[9px] leading-tight text-muted-foreground/50">{c.sub}</p>
@@ -414,4 +439,3 @@ function ForkLayer({
     </motion.div>
   );
 }
-

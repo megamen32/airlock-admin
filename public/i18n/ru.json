@@ -226,5 +226,80 @@
         "body": "Firefox из Google Play + Tampermonkey, затем MCP Bridge. Работает с телефона."
       }
     ]
+  },
+  "architecture": {
+    "yourAi": "ваш AI",
+    "yourServers": "ваши серверы",
+    "learnMore": "узнать больше →",
+    "caption": "shellmcp поднимает MCP и передаёт в хаб",
+    "hubSub": "MCP hub",
+    "columns": [
+      {
+        "ai": {
+          "iconKey": "brain",
+          "label": "Claude · Codex",
+          "sub": "MCP-клиент",
+          "detail": "Подключается как MCP Streamable HTTP. Нативные tool calls — агент вызывает команды напрямую.",
+          "href": "#/mcp-server"
+        },
+        "tunnel": { "label": "Streamable HTTP", "sub": "через туннель" },
+        "transport": { "label": "long-poll", "sub": "пробивает любой NAT" },
+        "server": {
+          "iconKey": "router",
+          "label": "OpenWRT",
+          "sub": "router",
+          "detail": "Роутер на краю сети: firewall, VPN, маршруты и пробросы без ручного SSH-квеста."
+        },
+        "mcps": [
+          { "iconKey": "shield", "label": "firewall" },
+          { "iconKey": "wifi", "label": "wifi" },
+          { "iconKey": "radio", "label": "vpn" }
+        ]
+      },
+      {
+        "ai": {
+          "iconKey": "bot",
+          "label": "DeepSeek · Qwen",
+          "sub": "расширение",
+          "detail": "Userscript для Tampermonkey/Firefox. Любой бесплатный веб‑чат получает MCP‑доступ.",
+          "href": "#/mcp-extension"
+        },
+        "tunnel": { "label": "HTTPS", "sub": "через туннель" },
+        "transport": { "label": "webhook", "sub": "нулевая задержка" },
+        "server": {
+          "iconKey": "server",
+          "label": "server-02",
+          "sub": "Windows",
+          "detail": "Windows-сервер для игровых и desktop-задач: Minecraft, RCON, файлы и автоматизация."
+        },
+        "mcps": [
+          { "iconKey": "gamepad", "label": "minecraft" },
+          { "iconKey": "terminal", "label": "powershell" },
+          { "iconKey": "radio", "label": "rcon" }
+        ]
+      },
+      {
+        "ai": {
+          "iconKey": "terminal",
+          "label": "ChatGPT · OpenUI",
+          "sub": "OpenAI Action",
+          "detail": "Custom GPT, OpenAPI endpoint или Apps SDK widget. ChatGPT сам понимает когда выполнить команду. Auto-confirm extension для автопилота.",
+          "href": "#/chatgpt"
+        },
+        "tunnel": { "label": "REST", "sub": "через туннель" },
+        "transport": { "label": "queue", "sub": "надёжная доставка" },
+        "server": {
+          "iconKey": "server",
+          "label": "server-03",
+          "sub": "Windows",
+          "detail": "Git-операции. Чистка PR, ребейз, force-push — агент работает с репозиториями напрямую."
+        },
+        "mcps": [
+          { "iconKey": "git", "label": "git" },
+          { "iconKey": "database", "label": "postgres" },
+          { "iconKey": "boxes", "label": "openmemory" }
+        ]
+      }
+    ]
   }
 }

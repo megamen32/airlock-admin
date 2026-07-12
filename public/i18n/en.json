@@ -171,5 +171,80 @@
       { "name": "GigaChat", "note": "Sber" },
       { "name": "Claude", "note": "free tier" }
     ]
+  },
+  "architecture": {
+    "yourAi": "Your AI",
+    "yourServers": "Your servers",
+    "learnMore": "Learn more →",
+    "caption": "shellmcp brings up MCP and forwards it to the hub",
+    "hubSub": "MCP hub",
+    "columns": [
+      {
+        "ai": {
+          "iconKey": "brain",
+          "label": "Claude · Codex",
+          "sub": "MCP client",
+          "detail": "Connects as MCP Streamable HTTP. Native tool calls — the agent runs commands directly.",
+          "href": "#/mcp-server"
+        },
+        "tunnel": { "label": "Streamable HTTP", "sub": "via tunnel" },
+        "transport": { "label": "long-poll", "sub": "punches through any NAT" },
+        "server": {
+          "iconKey": "router",
+          "label": "OpenWRT",
+          "sub": "router",
+          "detail": "Edge router: firewall, VPN, routes and forwards without manual SSH drills."
+        },
+        "mcps": [
+          { "iconKey": "shield", "label": "firewall" },
+          { "iconKey": "wifi", "label": "wifi" },
+          { "iconKey": "radio", "label": "vpn" }
+        ]
+      },
+      {
+        "ai": {
+          "iconKey": "bot",
+          "label": "DeepSeek · Qwen",
+          "sub": "extension",
+          "detail": "A userscript for Tampermonkey / Firefox. Any free web chat gets MCP access.",
+          "href": "#/mcp-extension"
+        },
+        "tunnel": { "label": "HTTPS", "sub": "via tunnel" },
+        "transport": { "label": "webhook", "sub": "zero latency" },
+        "server": {
+          "iconKey": "server",
+          "label": "server-02",
+          "sub": "Windows",
+          "detail": "Windows server for gaming and desktop tasks: Minecraft, RCON, files and automation."
+        },
+        "mcps": [
+          { "iconKey": "gamepad", "label": "minecraft" },
+          { "iconKey": "terminal", "label": "powershell" },
+          { "iconKey": "radio", "label": "rcon" }
+        ]
+      },
+      {
+        "ai": {
+          "iconKey": "terminal",
+          "label": "ChatGPT · Open WebUI",
+          "sub": "OpenAI Action",
+          "detail": "Custom GPT, OpenAPI endpoint or Apps SDK widget. ChatGPT itself figures out when to run a command. Auto-confirm extension for autopilot.",
+          "href": "#/chatgpt"
+        },
+        "tunnel": { "label": "REST", "sub": "via tunnel" },
+        "transport": { "label": "queue", "sub": "reliable delivery" },
+        "server": {
+          "iconKey": "server",
+          "label": "server-03",
+          "sub": "Windows",
+          "detail": "Git operations. Clean PRs, rebase, force-push — the agent works with repos directly."
+        },
+        "mcps": [
+          { "iconKey": "git", "label": "git" },
+          { "iconKey": "database", "label": "postgres" },
+          { "iconKey": "boxes", "label": "openmemory" }
+        ]
+      }
+    ]
   }
 }

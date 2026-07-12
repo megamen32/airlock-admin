@@ -171,5 +171,80 @@
       { "name": "GigaChat", "note": "Сбер" },
       { "name": "Claude", "note": "免费版" }
     ]
+  },
+  "architecture": {
+    "yourAi": "你的 AI",
+    "yourServers": "你的服务器",
+    "learnMore": "了解更多 →",
+    "caption": "shellmcp 启动 MCP 并转发给 hub",
+    "hubSub": "MCP 中心",
+    "columns": [
+      {
+        "ai": {
+          "iconKey": "brain",
+          "label": "Claude · Codex",
+          "sub": "MCP 客户端",
+          "detail": "作为 MCP Streamable HTTP 连接。原生 tool calls — agent 直接执行命令。",
+          "href": "#/mcp-server"
+        },
+        "tunnel": { "label": "Streamable HTTP", "sub": "通过隧道" },
+        "transport": { "label": "long-poll", "sub": "穿透任何 NAT" },
+        "server": {
+          "iconKey": "router",
+          "label": "OpenWRT",
+          "sub": "路由器",
+          "detail": "边缘路由器：防火墙、VPN、路由与端口转发，无需手动 SSH 调试。"
+        },
+        "mcps": [
+          { "iconKey": "shield", "label": "防火墙" },
+          { "iconKey": "wifi", "label": "wifi" },
+          { "iconKey": "radio", "label": "vpn" }
+        ]
+      },
+      {
+        "ai": {
+          "iconKey": "bot",
+          "label": "DeepSeek · 通义",
+          "sub": "扩展",
+          "detail": "Tampermonkey / Firefox userscript。任何免费网页聊天都能获得 MCP 访问能力。",
+          "href": "#/mcp-extension"
+        },
+        "tunnel": { "label": "HTTPS", "sub": "通过隧道" },
+        "transport": { "label": "webhook", "sub": "零延迟" },
+        "server": {
+          "iconKey": "server",
+          "label": "server-02",
+          "sub": "Windows",
+          "detail": "Windows 服务器用于游戏和桌面任务：Minecraft、RCON、文件与自动化。"
+        },
+        "mcps": [
+          { "iconKey": "gamepad", "label": "minecraft" },
+          { "iconKey": "terminal", "label": "powershell" },
+          { "iconKey": "radio", "label": "rcon" }
+        ]
+      },
+      {
+        "ai": {
+          "iconKey": "terminal",
+          "label": "ChatGPT · Open WebUI",
+          "sub": "OpenAI Action",
+          "detail": "Custom GPT、OpenAPI 端点或 Apps SDK widget。ChatGPT 自行判断何时执行命令，Auto-confirm extension 实现自动放行。",
+          "href": "#/chatgpt"
+        },
+        "tunnel": { "label": "REST", "sub": "通过隧道" },
+        "transport": { "label": "queue", "sub": "可靠投递" },
+        "server": {
+          "iconKey": "server",
+          "label": "server-03",
+          "sub": "Windows",
+          "detail": "Git 操作：清理 PR、rebase、force-push — agent 直接操作仓库。"
+        },
+        "mcps": [
+          { "iconKey": "git", "label": "git" },
+          { "iconKey": "database", "label": "postgres" },
+          { "iconKey": "boxes", "label": "openmemory" }
+        ]
+      }
+    ]
   }
 }
