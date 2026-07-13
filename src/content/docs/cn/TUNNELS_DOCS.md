@@ -86,6 +86,6 @@ location / {
 
 ## 另见
 
-- [Getting Started](./GETTING_STARTED.md)
+- [入门](./GETTING_STARTED.md)
 - [Configuration](./CONFIGURATION.md) —— `PUBLIC_ORIGIN` 等
 - [Hub](./HUB.md)

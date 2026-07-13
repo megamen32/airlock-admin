@@ -109,15 +109,38 @@
     "lead": "Create a Custom GPT with an action: import the OpenAPI of the whole hub or of a single MCP server, plug in the Hub URL and Bearer key — and ChatGPT only calls the tools you allow. No API limits, no paid Codex.",
     "connectInStepsTitleLead": "Connect in",
     "connectInStepsTitleAccent": "5 steps",
+    "benefits": [
+      {
+        "title": "No Codex limits",
+        "body": "The Custom GPT runs commands through your hub — no hourly or daily tool-call quotas. No paid Codex required."
+      },
+      {
+        "title": "Real execution",
+        "body": "Not \"here's the command, copy-paste it\" — ChatGPT itself runs the command, reads logs, validates and reports real output."
+      },
+      {
+        "title": "Under your control",
+        "body": "Commands only flow through your hub and your Bearer key. No own domain needed — auto-tunnel via FRP."
+      }
+    ],
     "step1Title": "Install GPT‑Admin",
+    "step1Body": "One command installs the hub-proxy and shellmcp. The installer picks the mode (user/system) automatically. After install, you'll get the Hub URL and CTL_TOKEN (Bearer) — save them.",
+    "step1CastCaption": "Below: a real recording of a full install — old state is removed, then hub, ShellMCP and FRP are set up.",
     "step2Title": "Open the Custom GPT editor",
+    "step2Body": "Go to chatgpt.com/gpts/editor and create a new GPT (or open an existing one).",
     "step3Title": "Create a new Action",
+    "step3Body": "In \"Configure\" → \"Actions\" → \"Create new action\". Choose Import by URL and paste the OpenAPI endpoint of the whole hub or a single MCP server:",
+    "step3Hint": "For the whole GPTAdmin, use the common /actions/openapi.yaml. For a single MCP, use /server/{slug}/actions/openapi.yaml — e.g. OpenMemory.",
     "step4Title": "Configure authentication",
+    "step4Body": "In \"Authentication\", pick type API key, scheme Bearer, and paste your CTL_TOKEN.",
     "step5Title": "Done — write in plain words",
+    "step5Body": "\"Install nginx\", \"fix the site\", \"show memory\". ChatGPT itself calls the secure GPTAdmin gateway and gets a response from the chosen MCP server — without exposing the whole relay if you picked a per-server Action.",
     "appsSdkTitleLead": "Even more powerful:",
     "appsSdkTitleAccent": "OpenAI Apps SDK",
     "widgetTitle": "Widget right in the chat",
+    "widgetBody": "GPT‑Admin exposes an Apps SDK widget — right inside any ChatGPT chat. ChatGPT itself figures out when to read your code, run a command, or check the logs. The widget shows input, result, and background-job polling — in real time, inside the conversation.",
     "autoConfirmTitle": "Auto-confirm extension",
+    "autoConfirmBody": "By default, ChatGPT asks for your approval before every command. Want autopilot? Install auto-confirm-extension — a browser extension that automatically approves tool calls. Fully reversible: turn it off and ChatGPT will start asking again.",
     "ctaTitle": "Need MCP for Claude or free AIs?",
     "ctaBody": "GPT‑Admin works two more ways: as an MCP server for Claude/Codex/OpenCode and as a browser extension for free web AIs.",
     "ctaButtonMcp": "MCP server",
@@ -131,12 +154,26 @@
     "protocolBadge": "MCP remote SSE · Streamable HTTP",
     "sectionTitleLead": "One bridge —",
     "sectionTitleAccent": "every server",
+    "sectionBody": "The hub proxies commands, shellmcp runs them locally. Any MCP-compatible client gets access to Linux, macOS, and Windows machines — or to a single picked MCP server, e.g. OpenMemory.",
+    "sectionPoints": [
+      "Native tool calls — no copy-paste",
+      "Install any MCP once — available to every agent",
+      "Commands run locally; results return to the agent"
+    ],
+    "openmemoryQuote": "I personally installed openmemory so that different AIs know everything about my projects.",
     "connectInStepsTitleLead": "Connect in",
     "connectInStepsTitleAccent": "4 steps",
     "step1Title": "Install the hub and shellmcp",
+    "step1Body": "Install the hub-proxy and shellmcp on your main PC/VPS, and shellmcp alone on every other machine. After install you get the Hub URL and CTL_TOKEN.",
     "step2Title": "Add the MCP server to your client",
+    "step2Body": "In your client's settings (Claude Desktop → claude_desktop_config.json, Codex, OpenCode) add GPT‑Admin as MCP remote SSE (Streamable HTTP):",
+    "step2Note": "This endpoint goes through the OAuth flow. Don't plug CTL_TOKEN in here as a bearer for /mcp. See the #/docs section for details.",
+    "codexLocalTitle": "Codex on macOS: add a local MCP without reinstalling",
+    "codexLocalBody": "If GPT‑Admin is already installed and the hub is running on http://127.0.0.1:9001/mcp, run the command below. The script pulls a Codex token from the local gptadmin.env, adds bearer_token_env_var, and replaces the old no-auth MCP entry.",
     "step3Title": "Restart your client",
+    "step3Body": "Claude Desktop / Codex / OpenCode picks up the new MCP server on next launch. Verify that commands appear in the tools list.",
     "step4Title": "Write in plain words",
+    "step4Body": "\"Install WireGuard\", \"fix nginx\". The AI itself calls the right tools, runs commands through the hub, and returns a report.",
     "ctaTitle": "No paid AI? Try the extension",
     "ctaBody": "The browser extension turns free web AIs (Qwen, GigaChat, Alice) into a GPT‑Admin client — no API, no subscriptions.",
     "ctaButtonExtension": "Extension",
@@ -154,9 +191,13 @@
     "platformsBody": "A userscript works anywhere there's a script manager.",
     "stepsTitle": "Steps",
     "step1Title": "Install a script manager",
+    "step1Body": "Tampermonkey (Chrome), Userscripts (iPhone Safari), or Firefox + Tampermonkey (Android).",
     "step2Title": "Install the MCP Bridge",
+    "step2Body": "Click the install button — the manager picks up the .user.js and offers to install it.",
     "step3Title": "Enter your Bridge Key",
+    "step3Body": "Press Alt+K and paste the key from your hub.",
     "step4Title": "Open any chat and press MCP All",
+    "step4Body": "Alt+M inserts the prompt into the input box. The AI runs commands through your hub.",
     "supportedTitle": "Supported sites",
     "supportedStatus": "Full support",
     "ctaTitle": "Want native tool calls?",
@@ -170,6 +211,37 @@
       { "name": "Alice", "note": "Yandex" },
       { "name": "GigaChat", "note": "Sber" },
       { "name": "Claude", "note": "free tier" }
+    ],
+    "stepsHow": [
+      {
+        "title": "MCP All",
+        "body": "Inserts a compact description of every MCP agent and its tools into the chat input. The prompt is also copied to clipboard — Alt+M."
+      },
+      {
+        "title": "MCP — pick one",
+        "body": "Opens a panel to pick a specific agent with detailed descriptions of each tool."
+      },
+      {
+        "title": "Auto-run",
+        "body": "If the AI replies with a ```mcp-fenced JSON block — the script POSTs it to the hub and pastes the result back into the chat."
+      }
+    ],
+    "platforms": [
+      {
+        "title": "macOS · Windows · Linux",
+        "sub": "Chrome + Tampermonkey",
+        "body": "Tampermonkey from the Chrome Web Store, then install MCP Bridge."
+      },
+      {
+        "title": "iPhone",
+        "sub": "Safari + Userscripts",
+        "body": "The Userscripts app from the App Store, enabled in Safari extensions."
+      },
+      {
+        "title": "Android",
+        "sub": "Firefox + Tampermonkey",
+        "body": "Firefox from Google Play + Tampermonkey, then MCP Bridge. Works from the phone."
+      }
     ]
   },
   "architecture": {

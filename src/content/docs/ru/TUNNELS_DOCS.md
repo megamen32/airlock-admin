@@ -86,6 +86,6 @@ location / {
 
 ## Смотрите также
 
-- [Getting Started](./GETTING_STARTED.md)
+- [Начало работы](./GETTING_STARTED.md)
 - [Configuration](./CONFIGURATION.md) — `PUBLIC_ORIGIN` и др.
 - [Hub](./HUB.md)

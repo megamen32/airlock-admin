@@ -67,16 +67,13 @@ export function ChatGptPage() {
           <Stagger className="flex flex-col gap-7" stagger={0.1}>
             <StaggerItem>
               <Step n={1} title={t("pageChatgpt.step1Title")}>
-                Одна команда — ставит hub‑proxy и shellmcp. Установщик сам определит
-                режим (user/system). После установки вам выдадут{" "}
-                <code className="rounded border border-border/50 bg-[oklch(0.12_0.006_290)] px-1.5 py-0.5 font-mono text-[13px] text-[#c4a3f8]">Hub URL</code>{" "}
-                и <code className="rounded border border-border/50 bg-[oklch(0.12_0.006_290)] px-1.5 py-0.5 font-mono text-[13px] text-[#c4a3f8]">CTL_TOKEN</code> (Bearer) — запомните их.
+                {t("pageChatgpt.step1Body")}
                 <div className="mt-3">
                   <InstallCommand variant="compact" />
                 </div>
                 <div className="mt-4 overflow-hidden rounded-2xl border border-border/80 bg-card/60 p-4">
                   <p className="mb-3 text-xs text-muted-foreground">
-                    Ниже — реальная запись полной установки: старое состояние удаляется, затем ставятся hub, ShellMCP и FRP.
+                    {t("pageChatgpt.step1CastCaption")}
                   </p>
                   <InstallCastPlayer
                     src="/examples/mac-gptadmin-install-demo-short.cast"
@@ -89,46 +86,32 @@ export function ChatGptPage() {
 
             <StaggerItem>
               <Step n={2} title={t("pageChatgpt.step2Title")}>
-                Перейдите на{" "}
-                <a
-                  href="https://chatgpt.com/gpts/editor"
-                  target="_blank"
-                  rel="noopener"
-                  className="font-mono text-primary underline decoration-primary/40 underline-offset-2 transition-colors hover:decoration-primary"
-                >
-                  chatgpt.com/gpts/editor
-                </a>{" "}
-                и создайте новый GPT (или откройте существующий).
+                {t("pageChatgpt.step2Body")}
               </Step>
             </StaggerItem>
 
             <StaggerItem>
               <Step n={3} title={t("pageChatgpt.step3Title")}>
-                В разделе «Configure» → «Actions» → «Create new action». Выберите
-                импорт по URL и вставьте OpenAPI endpoint всего hub или одного MCP‑сервера:
+                {t("pageChatgpt.step3Body")}
                 <div className="mt-3 flex items-center gap-2 rounded-xl border border-border/60 bg-[oklch(0.12_0.006_290)] px-3.5 py-2.5 font-mono text-[13px]">
                   <FileJson className="h-4 w-4 shrink-0 text-primary/70" />
                   <span className="truncate text-foreground/90">your-hub/server/openmemory/actions/openapi.yaml</span>
                 </div>
                 <p className="mt-2 text-xs text-muted-foreground">
-                  Для полного GPTAdmin используйте общий <code className="font-mono text-[#c4a3f8]">/actions/openapi.yaml</code>. Для одного MCP — <code className="font-mono text-[#c4a3f8]">/server/{"{slug}"}/actions/openapi.yaml</code>, например OpenMemory.
+                  {t("pageChatgpt.step3Hint")}
                 </p>
               </Step>
             </StaggerItem>
 
             <StaggerItem>
               <Step n={4} title={t("pageChatgpt.step4Title")}>
-                В разделе «Authentication» выберите тип{" "}
-                <span className="font-medium text-foreground">API key</span>, scheme{" "}
-                <span className="font-medium text-foreground">Bearer</span> и вставьте ваш{" "}
-                <code className="rounded border border-border/50 bg-[oklch(0.12_0.006_290)] px-1.5 py-0.5 font-mono text-[13px] text-[#c4a3f8]">CTL_TOKEN</code>.
+                {t("pageChatgpt.step4Body")}
               </Step>
             </StaggerItem>
 
             <StaggerItem>
               <Step n={5} title={t("pageChatgpt.step5Title")}>
-                «Поставь nginx», «почини сайт», «покажи память». ChatGPT сам вызывает
-                защищённый GPTAdmin gateway и получает ответ от выбранного MCP server — без раскрытия всего relay, если выбран per‑server Action.
+                {t("pageChatgpt.step5Body")}
               </Step>
             </StaggerItem>
           </Stagger>
@@ -155,19 +138,7 @@ export function ChatGptPage() {
                   <h3 className="text-lg font-semibold tracking-tight">{t("pageChatgpt.widgetTitle")}</h3>
                 </div>
                 <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
-                  GPT‑Админ отдаёт{" "}
-                  <a
-                    href="https://developers.openai.com/docs/apps"
-                    target="_blank"
-                    rel="noopener"
-                    className="text-primary underline decoration-primary/40 underline-offset-2"
-                  >
-                    Apps SDK widget
-                  </a>{" "}
-                  — прямо в любом чате ChatGPT. ChatGPT сам понимает, когда
-                  нужно прочитать ваш код, выполнить команду или проверить
-                  логи. Виджет показывает input, result и background job
-                  polling — в реальном времени, внутри диалога.
+                  {t("pageChatgpt.widgetBody")}
                 </p>
               </div>
             </StaggerItem>
@@ -181,19 +152,7 @@ export function ChatGptPage() {
                   <h3 className="text-lg font-semibold tracking-tight">{t("pageChatgpt.autoConfirmTitle")}</h3>
                 </div>
                 <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
-                  По умолчанию ChatGPT спрашивает ваше одобрение перед каждой
-                  командой. Хотите автопилот? Установите{" "}
-                  <a
-                    href="https://github.com/megamen32/auto-confirm-extension"
-                    target="_blank"
-                    rel="noopener"
-                    className="text-primary underline decoration-primary/40 underline-offset-2"
-                  >
-                    auto-confirm-extension
-                  </a>{" "}
-                  — расширение для браузера, которое автоматически одобряет
-                  tool calls. Полностью отключаемо: если выключить — ChatGPT
-                  снова будет спрашивать подтверждение на каждую команду.
+                  {t("pageChatgpt.autoConfirmBody")}
                 </p>
                 <div className="mt-4 flex flex-wrap gap-3">
                   <a

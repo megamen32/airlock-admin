@@ -97,6 +97,10 @@ const WHITELIST_SUBSTRINGS = [
   // Common product / protocol labels that stay English in any locale
   "minecraft", "vpn", "VPN", "CLI", "cpu", "RAM", "GUI", "IDE", "RAM",
   "png", "svg", "gzip", "html", "css",
+  // URL fragments / paths
+  "chatgpt.com", "gpts", "editor", "CONTRIBUTING.md",
+  // File extensions / tech terms
+  ".user.js", "agent", "agents",
 ];
 
 const WHITELIST_PATTERNS = [

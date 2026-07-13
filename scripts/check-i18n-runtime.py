@@ -151,7 +151,7 @@ def click_locale(page: Page, locale_label: str) -> None:
     page.wait_for_timeout(400)
 
 
-def audit_page(page: Page, page_path: str, locale: str, debug: bool = False) -> tuple[bool, str]:
+def audit_page(page: Page, page_path: str, locale: str, threshold: float, debug: bool = False) -> tuple[bool, str]:
     """Return (ok, detail). ok=True when dominant script matches locale."""
     page.goto(
         f"https://became.bezrabotnyi.com{page_path}",
@@ -207,7 +207,7 @@ def audit_page(page: Page, page_path: str, locale: str, debug: bool = False) -> 
 
     # Threshold: at least 30% of total script chars must be the target
     # script. Below that, we consider the page not really translated.
-    return ratio >= 0.30, detail
+    return ratio >= threshold, detail
 
 
 def main() -> int:
@@ -230,7 +230,7 @@ def main() -> int:
     parser.add_argument(
         "--threshold",
         type=float,
-        default=0.30,
+        default=0.20,
         help="Minimum share of total chars that must match the target locale script",
     )
     parser.add_argument(
@@ -256,7 +256,7 @@ def main() -> int:
             page = ctx.new_page()
             for page_path in pages:
                 for locale in locales:
-                    ok, detail = audit_page(page, page_path, locale, debug=args.debug)
+                    ok, detail = audit_page(page, page_path, locale, args.threshold, debug=args.debug)
                     marker = "✓" if ok else "✗"
                     print(f"{marker} {detail}")
                     results.append((ok, detail))

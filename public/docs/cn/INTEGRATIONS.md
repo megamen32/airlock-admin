@@ -139,7 +139,7 @@ curl -sS https://<your-hub>/.well-known/oauth-authorization-server
 
 **授权类型。** `authorization_code` 配合 PKCE。**仅支持 `S256`** —— 提交明文 verifier 会被拒绝。
 
-**Scopes。**
+**授权范围。**
 
 - `gptadmin.read` —— 列出 server / 工具、读取资源、读取任务。
 - `gptadmin.exec` —— 调用工具（`call_mcp_tool`）、把任务排进队列。

@@ -43,10 +43,10 @@ Pick one adapter (you can use all three with the same hub):
 
 Ask your AI in plain language:
 
-- «покажи статус nginx на server-01»
-- «поставь docker на vps-prod»
-- «почему openchamber отдаёт 503? посмотри логи»
-- «запусти codex чтобы пофиксить баг в этом репо»
+- "show nginx status on server-01"
+- "install docker on vps-prod"
+- "why is openchamber returning 503? check the logs"
+- "run codex to fix a bug in this repo"
 
 The AI calls the hub, the hub routes to the agent, the agent runs the command
 and returns real output. The AI reads it and reports back.

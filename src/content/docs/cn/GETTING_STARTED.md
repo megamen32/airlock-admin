@@ -42,10 +42,10 @@ curl -s https://became.bezrabotnyi.com/install.sh | bash
 
 用自然语言询问您的 AI：
 
-- «покажи статус nginx на server-01»
-- «поставь docker на vps-prod»
-- «почему openchamber отдаёт 503? посмотри логи»
-- «запусти codex чтобы пофиксить баг в этом репо»
+- "查看 server-01 上 nginx 的状态"
+- "在 vps-prod 上安装 docker"
+- "为什么 openchamber 返回 503？查看日志"
+- "让 codex 修复这个仓库里的 bug"
 
 AI 调用中心节点，中心节点路由到代理，代理执行命令并返回实际输出。AI 读取这些输出并报告给您。
 

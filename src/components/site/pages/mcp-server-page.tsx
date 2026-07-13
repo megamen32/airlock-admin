@@ -167,8 +167,7 @@ export function McpServerPage() {
           <Stagger className="flex flex-col gap-7" stagger={0.1}>
             <StaggerItem>
               <Step n={1} title={t("pageMcpServer.step1Title")}>
-                Ставите hub‑proxy и shellmcp на главный ПК/VPS, только shellmcp — на
-                остальные машины. После установки выдадут Hub URL и CTL_TOKEN.
+                {t("pageMcpServer.step1Body")}
                 <div className="mt-3">
                   <InstallCommand variant="compact" />
                 </div>
@@ -176,25 +175,18 @@ export function McpServerPage() {
             </StaggerItem>
             <StaggerItem>
               <Step n={2} title={t("pageMcpServer.step2Title")}>
-                В настройках вашего клиента (Claude Desktop →{" "}
-                <code className="font-mono text-[#c4a3f8]">claude_desktop_config.json</code>,
-                Codex, OpenCode) добавьте GPT‑Админ как MCP remote SSE (Streamable HTTP):
+                {t("pageMcpServer.step2Body")}
                 <ConfigBlock />
                 <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
-                  Этот endpoint проходит через OAuth flow. Не подставляйте сюда{" "}
-                  <code>CTL_TOKEN</code> вручную как bearer для <code>/mcp</code>.
-                  Для подробностей смотрите раздел <code>#/docs</code>.
+                  {t("pageMcpServer.step2Note")}
                 </p>
                 <div className="mt-5 rounded-2xl border border-primary/20 bg-primary/[0.04] p-4">
                   <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
                     <Terminal className="h-4 w-4 text-primary" />
-                    Codex на macOS: добавить локальный MCP без переустановки
+                    {t("pageMcpServer.codexLocalTitle")}
                   </div>
                   <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
-                    Если GPT‑Админ уже установлен и hub работает на{" "}
-                    <code>http://127.0.0.1:9001/mcp</code>, выполните одну команду ниже.
-                    Скрипт выпускает Codex‑токен из локального <code>gptadmin.env</code>, прописывает{" "}
-                    <code>bearer_token_env_var</code> и заменяет старый no‑auth MCP entry.
+                    {t("pageMcpServer.codexLocalBody")}
                   </p>
                   <CommandBlock label="macOS · Codex CLI/Desktop" command={CODEX_LOCAL_MCP_COMMAND} />
                   <CommandBlock label="Per-server MCP endpoint" command={PER_SERVER_MCP} />
@@ -203,14 +195,12 @@ export function McpServerPage() {
             </StaggerItem>
             <StaggerItem>
               <Step n={3} title={t("pageMcpServer.step3Title")}>
-                Claude Desktop / Codex / OpenCode подхватит новый MCP‑сервер при
-                следующем запуске. Проверьте, что в списке tools появились команды.
+                {t("pageMcpServer.step3Body")}
               </Step>
             </StaggerItem>
             <StaggerItem>
               <Step n={4} title={t("pageMcpServer.step4Title")}>
-                «Поставь WireGuard», «почини nginx». AI сам вызывает нужные tools,
-                выполняет команды через hub и возвращает отчёт.
+                {t("pageMcpServer.step4Body")}
               </Step>
             </StaggerItem>
           </Stagger>

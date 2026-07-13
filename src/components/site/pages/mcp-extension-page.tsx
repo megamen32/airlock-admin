@@ -223,16 +223,16 @@ export function McpExtensionPage() {
               </h2>
               <div className="mt-6 flex flex-col gap-6">
                 <Step n={1} title={t("pageMcpExtension.step1Title")}>
-                  Tampermonkey (Chrome), Userscripts (iPhone Safari) или Firefox + Tampermonkey (Android).
+                  {t("pageMcpExtension.step1Body")}
                 </Step>
                 <Step n={2} title={t("pageMcpExtension.step2Title")}>
-                  Нажмите кнопку установки — менеджер перехватит <code className="font-mono text-[#c4a3f8]">.user.js</code> и предложит установить.
+                  {t("pageMcpExtension.step2Body")}
                 </Step>
                 <Step n={3} title={t("pageMcpExtension.step3Title")}>
-                  Нажмите <kbd className="rounded border border-border/60 bg-white/[0.03] px-1.5 py-0.5 font-mono text-[10px]">Alt+K</kbd> и вставьте ключ от вашего hub.
+                  {t("pageMcpExtension.step3Body")}
                 </Step>
                 <Step n={4} title={t("pageMcpExtension.step4Title")}>
-                  <kbd className="rounded border border-border/60 bg-white/[0.03] px-1.5 py-0.5 font-mono text-[10px]">Alt+M</kbd> — промпт вставится в поле ввода. ИИ выполнит команды через ваш hub.
+                  {t("pageMcpExtension.step4Body")}
                 </Step>
               </div>
               <a
