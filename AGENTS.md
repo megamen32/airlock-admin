@@ -69,6 +69,10 @@ python3 cli.py auto-update status
 - **Мака в локальном dev нет.** Darwin launchd/systemd-код кросс-компилируется на Linux; реальное поведение launchd проверяется `tests/mac/launchd_verify.py` (skip на Linux, исполняется на Mac).
 - `cli.py` намеренно однофайльный — не разбивать на модули.
 - Auto-update service-unit **всегда установлен**; timer включается/выключается по preference пользователя. На macOS триггер унифицирован через `launchctl kickstart` (не nohup).
+- Read-only MCP clients не получают raw shell. Они используют типизированный
+  `system_inspect`; корни чтения ограничены `SHELLMCP_INSPECT_ROOTS`, а
+  распознаваемые credentials скрываются до MCP-ответа. См.
+  `docs/READONLY_MODE.md`.
 - `AGENTS.md` и `CLAUDE.md` несут один контекст (первый — для не-Claude агентов как Codex, второй — для Claude). При изменении архитектуры — держать синхронно.
 
 ## Стиль кода

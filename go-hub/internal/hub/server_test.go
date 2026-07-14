@@ -234,6 +234,13 @@ func TestAdminManagedMCPTokenCanBeListedAndRotated(t *testing.T) {
 	if tokenID == "" || oldToken == "" {
 		t.Fatalf("managed token response missing id or token: %v", issuedBody)
 	}
+	adminWithClientToken := httptest.NewRequest(http.MethodGet, "/admin/api/clients", nil)
+	adminWithClientToken.Header.Set("Authorization", "Bearer "+oldToken)
+	adminWithClientTokenRec := httptest.NewRecorder()
+	h.ServeHTTP(adminWithClientTokenRec, adminWithClientToken)
+	if adminWithClientTokenRec.Code != http.StatusForbidden {
+		t.Fatalf("MCP client token reached admin API: status=%d body=%s", adminWithClientTokenRec.Code, adminWithClientTokenRec.Body.String())
+	}
 
 	list := httptest.NewRequest(http.MethodGet, "/admin/api/clients", nil)
 	list.Header.Set("Authorization", "Bearer ctl")
@@ -263,6 +270,137 @@ func TestAdminManagedMCPTokenCanBeListedAndRotated(t *testing.T) {
 	}
 	if _, err := s.verifyJWT(newToken); err != nil {
 		t.Fatalf("replacement token invalid: %v", err)
+	}
+}
+
+func TestReadonlyManagedTokenCannotCallShellExec(t *testing.T) {
+	s := New(Config{
+		CtlToken: "ctl", AdminPassword: "pw", OAuthClientSecret: "oauth-secret",
+		PublicOrigin: "https://hub.example", MCPResource: "https://hub.example",
+		ConfigDir: t.TempDir(), DefaultTimeout: 20 * time.Millisecond, PollMaxTimeout: 20 * time.Millisecond,
+	})
+	h := s.Handler()
+	register := httptest.NewRequest(http.MethodPost, "/mcp-relay/register", bytes.NewBufferString(`{"agent_id":"shell:test","name":"Test shell","kind":"virtual_shell","transport":"long_poll","capabilities":["shell"]}`))
+	register.Header.Set("Authorization", "Bearer "+s.cfg.RelayAgentToken)
+	register.Header.Set("Content-Type", "application/json")
+	registered := httptest.NewRecorder()
+	h.ServeHTTP(registered, register)
+	if registered.Code != http.StatusOK {
+		t.Fatalf("register status=%d body=%s", registered.Code, registered.Body.String())
+	}
+
+	issue := httptest.NewRequest(http.MethodPost, "/admin/api/mcp/issue-token", bytes.NewBufferString(`{"client_id":"chatgpt-readonly","ttl_days":7,"access_mode":"readonly"}`))
+	issue.Header.Set("Authorization", "Bearer ctl")
+	issue.Header.Set("Content-Type", "application/json")
+	issued := httptest.NewRecorder()
+	h.ServeHTTP(issued, issue)
+	var issuedBody map[string]any
+	if issued.Code != http.StatusOK || json.Unmarshal(issued.Body.Bytes(), &issuedBody) != nil {
+		t.Fatalf("issue status=%d body=%s", issued.Code, issued.Body.String())
+	}
+	token, _ := issuedBody["access_token"].(string)
+	tokenID, _ := issuedBody["token_id"].(string)
+	if issuedBody["access_mode"] != "readonly" || token == "" || tokenID == "" {
+		t.Fatalf("readonly token response incomplete: %v", issuedBody)
+	}
+
+	adminCall := httptest.NewRequest(http.MethodGet, "/admin/api/clients", nil)
+	adminCall.Header.Set("Authorization", "Bearer "+token)
+	adminCalled := httptest.NewRecorder()
+	h.ServeHTTP(adminCalled, adminCall)
+	if adminCalled.Code != http.StatusForbidden || !strings.Contains(adminCalled.Body.String(), "read-only") {
+		t.Fatalf("readonly token reached admin API: status=%d body=%s", adminCalled.Code, adminCalled.Body.String())
+	}
+
+	tools := httptest.NewRequest(http.MethodPost, "/mcp-relay/tools", bytes.NewBufferString(`{"target":"shell:test"}`))
+	tools.Header.Set("Authorization", "Bearer "+token)
+	tools.Header.Set("Content-Type", "application/json")
+	listed := httptest.NewRecorder()
+	h.ServeHTTP(listed, tools)
+	if listed.Code != http.StatusOK || !strings.Contains(listed.Body.String(), "system_inspect") || strings.Contains(listed.Body.String(), "shell_exec") {
+		t.Fatalf("readonly tool list is unsafe: status=%d body=%s", listed.Code, listed.Body.String())
+	}
+
+	call := httptest.NewRequest(http.MethodPost, "/mcp-relay/call", bytes.NewBufferString(`{"target":"shell:test","tool_name":"shell_exec","arguments":{"cmd":"whoami"}}`))
+	call.Header.Set("Authorization", "Bearer "+token)
+	call.Header.Set("Content-Type", "application/json")
+	called := httptest.NewRecorder()
+	h.ServeHTTP(called, call)
+	if called.Code != http.StatusForbidden || !strings.Contains(called.Body.String(), "read-only") {
+		t.Fatalf("readonly shell_exec was not denied: status=%d body=%s", called.Code, called.Body.String())
+	}
+
+	globalList := httptest.NewRequest(http.MethodPost, "/mcp", bytes.NewBufferString(`{"jsonrpc":"2.0","id":0,"method":"tools/list","params":{}}`))
+	globalList.Header.Set("Authorization", "Bearer "+token)
+	globalList.Header.Set("Content-Type", "application/json")
+	globalListed := httptest.NewRecorder()
+	h.ServeHTTP(globalListed, globalList)
+	if globalListed.Code != http.StatusOK || !strings.Contains(globalListed.Body.String(), "inspect_system") || strings.Contains(globalListed.Body.String(), `"name":"call_mcp_tool"`) {
+		t.Fatalf("global readonly tool list is unsafe: status=%d body=%s", globalListed.Code, globalListed.Body.String())
+	}
+
+	inspectCall := httptest.NewRequest(http.MethodPost, "/mcp", bytes.NewBufferString(`{"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"inspect_system","arguments":{"target":"shell:test","action":"list_directory","path":"/tmp"}}}`))
+	inspectCall.Header.Set("Authorization", "Bearer "+token)
+	inspectCall.Header.Set("Content-Type", "application/json")
+	inspectCalled := httptest.NewRecorder()
+	h.ServeHTTP(inspectCalled, inspectCall)
+	if inspectCalled.Code != http.StatusOK || strings.Contains(inspectCalled.Body.String(), "read-only client cannot") {
+		t.Fatalf("readonly inspection was denied: status=%d body=%s", inspectCalled.Code, inspectCalled.Body.String())
+	}
+	s.mu.Lock()
+	inspectQueued := false
+	for _, job := range s.shellJobs {
+		if job.ToolName == "system_inspect" {
+			inspectQueued = true
+		}
+	}
+	s.mu.Unlock()
+	if !inspectQueued {
+		t.Fatal("readonly inspection did not queue system_inspect")
+	}
+
+	facade := httptest.NewRequest(http.MethodPost, "/mcp", bytes.NewBufferString(`{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"call_mcp_tool","arguments":{"target":"shell:test","tool_name":"shell_exec","arguments":{"cmd":"whoami"}}}}`))
+	facade.Header.Set("Authorization", "Bearer "+token)
+	facade.Header.Set("Content-Type", "application/json")
+	facadeRec := httptest.NewRecorder()
+	h.ServeHTTP(facadeRec, facade)
+	if facadeRec.Code != http.StatusOK || !strings.Contains(facadeRec.Body.String(), "read-only") {
+		t.Fatalf("readonly facade shell_exec was not denied: status=%d body=%s", facadeRec.Code, facadeRec.Body.String())
+	}
+
+	pinnedList := httptest.NewRequest(http.MethodPost, "/server/shell-test/mcp", bytes.NewBufferString(`{"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}}`))
+	pinnedList.Header.Set("Authorization", "Bearer "+token)
+	pinnedList.Header.Set("Content-Type", "application/json")
+	pinnedListed := httptest.NewRecorder()
+	h.ServeHTTP(pinnedListed, pinnedList)
+	if pinnedListed.Code != http.StatusOK || !strings.Contains(pinnedListed.Body.String(), "system_inspect") || strings.Contains(pinnedListed.Body.String(), "shell_exec") {
+		t.Fatalf("pinned readonly tool list is unsafe: status=%d body=%s", pinnedListed.Code, pinnedListed.Body.String())
+	}
+
+	pinnedCall := httptest.NewRequest(http.MethodPost, "/server/shell-test/mcp", bytes.NewBufferString(`{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"shell_exec","arguments":{"cmd":"whoami"}}}`))
+	pinnedCall.Header.Set("Authorization", "Bearer "+token)
+	pinnedCall.Header.Set("Content-Type", "application/json")
+	pinnedCalled := httptest.NewRecorder()
+	h.ServeHTTP(pinnedCalled, pinnedCall)
+	if pinnedCalled.Code != http.StatusOK || !strings.Contains(pinnedCalled.Body.String(), "read-only") {
+		t.Fatalf("pinned readonly shell_exec was not denied: status=%d body=%s", pinnedCalled.Code, pinnedCalled.Body.String())
+	}
+
+	actionCall := httptest.NewRequest(http.MethodPost, "/server/shell-test/actions/tools/shell_exec", bytes.NewBufferString(`{"cmd":"whoami"}`))
+	actionCall.Header.Set("Authorization", "Bearer "+token)
+	actionCall.Header.Set("Content-Type", "application/json")
+	actionCalled := httptest.NewRecorder()
+	h.ServeHTTP(actionCalled, actionCall)
+	if actionCalled.Code != http.StatusForbidden || !strings.Contains(actionCalled.Body.String(), "read-only") {
+		t.Fatalf("generated Action readonly shell_exec was not denied: status=%d body=%s", actionCalled.Code, actionCalled.Body.String())
+	}
+
+	rotate := httptest.NewRequest(http.MethodPost, "/admin/api/mcp/tokens/"+tokenID+"/rotate", nil)
+	rotate.Header.Set("Authorization", "Bearer ctl")
+	rotated := httptest.NewRecorder()
+	h.ServeHTTP(rotated, rotate)
+	if rotated.Code != http.StatusOK || !strings.Contains(rotated.Body.String(), `"access_mode":"readonly"`) {
+		t.Fatalf("rotation lost readonly mode: status=%d body=%s", rotated.Code, rotated.Body.String())
 	}
 }
 
@@ -1059,8 +1197,8 @@ func TestAppsSDKMetadataAndWidget(t *testing.T) {
 			}
 		}
 	}
-	if len(tools) != 5 {
-		t.Fatalf("got %d Apps SDK tools, want 5", len(tools))
+	if len(tools) != 6 {
+		t.Fatalf("got %d Apps SDK tools, want 6", len(tools))
 	}
 	if renderTools != 1 {
 		t.Fatalf("got %d render tools, want 1", renderTools)

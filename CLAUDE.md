@@ -85,6 +85,10 @@ No C toolchain needed (CGO disabled). Cross-builds run on a plain Linux box.
 - **ARM64 hub**: hub is cross-compiled for linux/arm64 + darwin/* by `build_hub_cross_platforms` in `tools/build.sh`. Do NOT regress to building hub for linux/amd64 only — that ships an amd64 binary to arm64 hosts (Orange Pi etc.).
 - `cli.py` is intentionally single-file — don't split into modules.
 - Auto-update service unit is **always installed**; the timer is toggled by user preference. macOS uses `launchctl kickstart` (unified trigger), not nohup.
+- Read-only MCP clients never receive raw shell access. They use typed
+  `system_inspect`; `SHELLMCP_INSPECT_ROOTS` bounds readable paths and
+  recognizable credentials are redacted before the MCP response. See
+  `docs/READONLY_MODE.md`.
 - `AGENTS.md` carries the same context for non-Claude agents (Codex, etc.) — keep it in sync when architecture changes.
 
 ## Style

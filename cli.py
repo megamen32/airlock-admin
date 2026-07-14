@@ -3700,7 +3700,7 @@ def _b64url_json(obj: dict) -> str:
     return _b64url_bytes(json.dumps(obj, separators=(',', ':')).encode())
 
 
-def make_mcp_bearer_token(env: dict, client_id: str, ttl_days: int = 365) -> str:
+def make_mcp_bearer_token(env: dict, client_id: str, ttl_days: int = 365, access_mode: str = 'full') -> str:
     secret = env.get('OAUTH_CLIENT_SECRET') or ''
     if not secret:
         raise RuntimeError('OAUTH_CLIENT_SECRET is missing')
@@ -3710,10 +3710,15 @@ def make_mcp_bearer_token(env: dict, client_id: str, ttl_days: int = 365) -> str
         raise RuntimeError('PUBLIC_ORIGIN/MCP_RESOURCE is missing')
     now = int(time.time())
     ttl_days = max(1, int(ttl_days or 365))
+    access_mode = str(access_mode or 'full').strip().lower()
+    if access_mode not in {'full', 'readonly'}:
+        raise ValueError('access_mode must be full or readonly')
+    scope = 'gptadmin.read gptadmin.exec' if access_mode == 'full' else 'gptadmin.read gptadmin.inspect'
     header = {'alg': 'HS256', 'typ': 'JWT'}
     body = {
         'sub': 'admin',
-        'scope': 'gptadmin.read gptadmin.exec',
+        'scope': scope,
+        'access_mode': access_mode,
         'client_id': client_id,
         'iss': origin,
         'aud': resource,
@@ -3739,14 +3744,14 @@ def _client_token_env_key(client_id: str) -> str:
     return f'GPTADMIN_{safe}_MCP_BEARER'
 
 
-def issue_mcp_bearer(env: dict, client_id: str, ttl_days: int = 365) -> tuple[str, str, str]:
+def issue_mcp_bearer(env: dict, client_id: str, ttl_days: int = 365, access_mode: str = 'full') -> tuple[str, str, str]:
     env = dict(env)
     if not (env.get('HUB_URL') or env.get('HUB_PUBLIC_URL') or env.get('PUBLIC_ORIGIN')):
         env['HUB_URL'] = f"http://127.0.0.1:{env.get('HUB_PORT', '9001')}"
     sync_oauth_origin_env(env)
     env.setdefault('OAUTH_CLIENT_SECRET', gen_hex(32))
     env.setdefault('ADMIN_PASSWORD', gen_hex())
-    token = make_mcp_bearer_token(env, client_id, ttl_days=ttl_days)
+    token = make_mcp_bearer_token(env, client_id, ttl_days=ttl_days, access_mode=access_mode)
     return token, _mcp_client_url(env), _client_token_env_key(client_id)
 
 
@@ -3760,7 +3765,8 @@ def cmd_mcp_token(args):
     if not client_id:
         client_id = ask('MCP token name / client_id', 'custom-mcp-client').strip() or 'custom-mcp-client'
     ttl_days = int(getattr(args, 'ttl_days', 365) or 365)
-    token, url, default_key = issue_mcp_bearer(env, client_id, ttl_days=ttl_days)
+    access_mode = 'readonly' if bool(getattr(args, 'readonly', False)) else 'full'
+    token, url, default_key = issue_mcp_bearer(env, client_id, ttl_days=ttl_days, access_mode=access_mode)
     env_key = str(getattr(args, 'env_key', '') or default_key).strip()
     save = not bool(getattr(args, 'no_save', False))
     update = {
@@ -3779,6 +3785,7 @@ def cmd_mcp_token(args):
     print(f'URL: {url}')
     print(f'Env: {env_key}' + ('' if save else '  # not saved'))
     print(f'Expires in: {ttl_days} days')
+    print(f'Access: {"read-only inspection" if access_mode == "readonly" else "full"}')
     print(f'Authorization: Bearer {token}')
 
 
@@ -4204,6 +4211,7 @@ def main():
     ap_mcp_token_top.add_argument('--ttl-days', type=int, default=365)
     ap_mcp_token_top.add_argument('--env-key', help='Имя переменной для сохранения в gptadmin.env')
     ap_mcp_token_top.add_argument('--no-save', action='store_true', help='Только напечатать token, не сохранять в gptadmin.env')
+    ap_mcp_token_top.add_argument('--readonly', action='store_true', help='Только просмотр без shell-команд; найденные секреты скрываются')
     ap_mcp_token_top.set_defaults(func=cmd_mcp_token)
 
     ap_mcp_connect_top = sub.add_parser('connect-mcp', aliases=['mcp-connect'], help='Подключить GPTAdmin как MCP в локальных AI-клиентах')
@@ -4235,6 +4243,7 @@ def main():
     ap_mcp_token.add_argument('--ttl-days', type=int, default=365)
     ap_mcp_token.add_argument('--env-key')
     ap_mcp_token.add_argument('--no-save', action='store_true')
+    ap_mcp_token.add_argument('--readonly', action='store_true', help='Только просмотр без shell-команд; найденные секреты скрываются')
     ap_mcp_token.set_defaults(func=cmd_mcp_token)
 
     ap_mcp_connect = mcp_sub.add_parser('connect', aliases=['self-install', 'install-self'], help='Подключить GPTAdmin как MCP в локальных AI-клиентах')

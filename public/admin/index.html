@@ -143,8 +143,8 @@
           <p class="muted small">Long-poll и webhook сами обновляют active. Включайте heartbeat только при отдельной диагностической необходимости.</p>
         </div>
         <div style="margin-top:16px"><h2 style="font-size:13px">JWT для клиента без OAuth</h2>
-          <div class="row"><input id="secMcpTokenName" placeholder="client_id" style="min-width:200px"><button onclick="issueMcpTokenFromPanel()">Выпустить</button></div>
-          <p class="muted small">Большинство клиентов подключаются сами через OAuth. Если клиент OAuth не умеет, выпустите JWT здесь: URL и токен покажутся один раз, а затем появятся в списке клиентов для отзыва или ротации.</p>
+          <div class="row"><input id="secMcpTokenName" placeholder="client_id" style="min-width:200px"><select id="secMcpAccessMode"><option value="readonly" selected>Только просмотр (рекомендуется для ChatGPT)</option><option value="full">Полный доступ</option></select><button onclick="issueMcpTokenFromPanel()">Выпустить</button></div>
+          <p class="muted small">Большинство клиентов подключаются сами через OAuth. Для ChatGPT безопаснее начать с «Только просмотр»: команды и изменения недоступны, а найденные токены автоматически скрываются. Полный доступ используйте для Codex и других клиентов, которым действительно нужны изменения.</p>
           <pre id="secMcpTokenResult" style="min-height:60px">—</pre>
         </div>
         <div style="margin-top:16px"><h2 style="font-size:13px">Перезапуск</h2>

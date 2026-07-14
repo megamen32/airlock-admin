@@ -92,3 +92,14 @@ Every new capability must define:
 - compatibility scope and removal conditions;
 - runtime or black-box acceptance evidence.
 
+## Models use capabilities without receiving secrets
+
+Read-only is a real execution profile, not a prompt or a list of supposedly
+safe shell commands. A read-only MCP client receives typed inspection tools and
+no arbitrary command interpreter. The operating-system path and process
+boundaries enforce the promise across Bash, PowerShell and CMD environments.
+
+Diagnostic output hides recognizable credentials before it reaches model
+context. Where an action eventually needs a managed secret, the preferred
+design is an opaque Hub handle that can be used by an authorized tool without
+revealing the underlying value to the model.

@@ -173,7 +173,7 @@ func TestMCPHTTPEndpointToolsAndShellExec(t *testing.T) {
 		name := tool["name"].(string)
 		names[name] = true
 	}
-	if !names["shell_exec"] || !names["file_backup"] || !names["tasks"] || !names["system_info"] || !names["mcp_manage"] {
+	if !names["shell_exec"] || !names["system_inspect"] || !names["file_backup"] || !names["tasks"] || !names["system_info"] || !names["mcp_manage"] {
 		t.Fatalf("tools/list missing expected tools: names=%v body=%s", names, toolsRec.Body.String())
 	}
 	for _, raw := range result["tools"].([]any) {
@@ -224,6 +224,24 @@ func TestMCPHTTPEndpointToolsAndShellExec(t *testing.T) {
 	payload := structured["result"].(map[string]any)
 	if payload["stdout"] != "real_mcp_ok" {
 		t.Fatalf("bad mcp shell_exec payload: %s", callRec.Body.String())
+	}
+}
+
+func TestMCPSystemInspectRedactsFileSecrets(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "service.env")
+	jwt := "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJhZG1pbiJ9.c2lnbmF0dXJl"
+	if err := os.WriteFile(path, []byte("STATUS=healthy\nTOKEN="+jwt+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	s := New(Config{Token: "t", Name: "unit-host", LogLimit: 8192, ExecTimeout: 5, SpillDir: t.TempDir(), InspectRoots: []string{dir}})
+	body := fmt.Sprintf(`{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"system_inspect","arguments":{"action":"read_file","path":%q}}}`, path)
+	req := httptest.NewRequest(http.MethodPost, "/mcp", bytes.NewBufferString(body))
+	req.Header.Set("Authorization", "Bearer t")
+	rec := httptest.NewRecorder()
+	s.Handler().ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), "STATUS=healthy") || strings.Contains(rec.Body.String(), jwt) {
+		t.Fatalf("system_inspect did not redact output: status=%d body=%s", rec.Code, rec.Body.String())
 	}
 }
 

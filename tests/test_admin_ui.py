@@ -29,3 +29,7 @@ def test_admin_page_offers_simple_jwt_issue_and_rotation_for_non_oauth_clients()
     assert "JWT для клиента без OAuth" in html
     assert "rotateClient" in script
     assert "/admin/api/mcp/tokens/" in script
+    assert 'secMcpAccessMode' in html
+    assert 'value="readonly" selected' in html
+    assert 'access_mode:accessMode' in script
+    assert "r.access_mode === 'readonly'" in script

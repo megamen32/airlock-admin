@@ -48,6 +48,30 @@ plan is [`PROJECT_PLAN.md`](./PROJECT_PLAN.md).
 
 ## Entries
 
+## 2026-07-14 - Cross-platform read-only client profile - completed
+
+- Milestone: `S2.3`
+- Owner: Codex
+- Scope: Hub-issued read-only JWT profile, typed AirShell inspection and
+  mandatory model-output secret redaction across Linux, macOS, Windows and
+  Android contracts.
+- Baseline / red evidence: `gptadmin.read` is advertised but MCP authorization
+  does not enforce tool-call scopes; AirShell exposes arbitrary `shell_exec`
+  and has no model-output secret redaction boundary.
+- Change: Added managed and CLI `readonly` JWTs, profile-aware Hub MCP tool
+  lists and fail-closed enforcement across relay, global MCP, pinned MCP,
+  generated Actions and admin APIs. Added typed AirShell `system_inspect` with
+  allowed roots, symlink containment, credential-directory denial, bounds and
+  mandatory credential redaction. Admin issuance defaults visibly to read-only.
+- Verification: Red tests showed missing inspector/redactor, ignored
+  `access_mode`, shell execution through every MCP route and MCP JWT access to
+  admin APIs. Green: both `go test ./...`; both `go vet ./...`; Python `94
+  passed, 2 skipped`; admin JavaScript syntax; Hub darwin amd64/arm64 builds;
+  AirShell Windows and Android builds plus Windows inspector test compilation.
+- Delivery: Pending.
+- Next: Add the separate `ask-before-write` profile with approval-bound job
+  ownership; do not expand read-only into filtered raw shell.
+
 ## 2026-07-14 - Low-context product philosophy - completed
 
 - Milestone: `S0.5`, `S2.1`

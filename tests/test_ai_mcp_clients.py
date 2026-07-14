@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import base64
 import json
 from types import SimpleNamespace
 
@@ -23,6 +24,17 @@ def _client_env() -> dict[str, str]:
 def test_mcp_clients_use_the_canonical_public_hub_url() -> None:
     """Desktop clients must not receive the Hub's loopback-only service URL."""
     assert cli._mcp_client_url(_client_env()) == "https://hub.example.test/mcp"
+
+
+def test_readonly_cli_token_has_inspection_scope_without_exec() -> None:
+    """The CLI fallback can issue a token that cannot request command execution."""
+    token = cli.make_mcp_bearer_token(_client_env(), "chatgpt", access_mode="readonly")
+    payload_segment = token.split(".")[1]
+    payload = json.loads(base64.urlsafe_b64decode(payload_segment + "=" * (-len(payload_segment) % 4)))
+
+    assert payload["access_mode"] == "readonly"
+    assert payload["scope"] == "gptadmin.read gptadmin.inspect"
+    assert "gptadmin.exec" not in payload["scope"]
 
 
 def test_configure_all_supported_clients_registers_vscode(monkeypatch: pytest.MonkeyPatch) -> None:

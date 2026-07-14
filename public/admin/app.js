@@ -229,8 +229,9 @@ function renderClientCard(r) {
     '<div class="entryCard">' +
       '<div class="entryHead"><div class="entryMain">' +
         '<div class="entryTitle">' +
-          '<span class="mono">' + esc(r.token_id) + '</span> ' +
+          '<span class="mono">' + esc(r.token_id || r.id || r.key || 'client') + '</span> ' +
           (r.token_kind ? '<span class="pill">' + esc(r.token_kind) + '</span>' : '') +
+          (r.access_mode ? '<span class="pill">' + esc(r.access_mode === 'readonly' ? 'только просмотр' : 'полный доступ') + '</span>' : '') +
           (r.client_id ? ' <span class="muted small">' + esc(r.client_id) + '</span>' : '') +
         '</div>' +
         '<div class="row" style="margin-top:6px">' +
@@ -490,10 +491,11 @@ async function rotateOAuth(){
 async function issueMcpTokenFromPanel(){
   const name=$('secMcpTokenName').value.trim();
   if(!name){alert('Введите client_id');return}
+  const accessMode=$('secMcpAccessMode').value||'readonly';
   const el=$('secMcpTokenResult');
   el.textContent='Выпускаю…';
   try{
-    const j=await api('/admin/api/mcp/issue-token',{method:'POST',body:JSON.stringify({client_id:name,ttl_days:365})});
+    const j=await api('/admin/api/mcp/issue-token',{method:'POST',body:JSON.stringify({client_id:name,ttl_days:365,access_mode:accessMode})});
     el.textContent=JSON.stringify(j,null,2);
   }catch(e){el.textContent='ERR '+e.message}
 }

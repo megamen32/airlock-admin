@@ -52,7 +52,7 @@ paths:
     post:
       operationId: callMcpTool
       summary: Call one tool on one MCP server target
-      description: Calls one tool on one selected target. Do not use this as bulk API; call it once per target when several servers must be used.
+      description: Calls one tool on one selected target. Do not use this as bulk API; call it once per target when several servers must be used. A read-only JWT may call only system_inspect on shell targets; raw shell and mutating tools return 403.
       requestBody:
         required: true
         content:
@@ -66,6 +66,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/McpToolResponse"
+        "403":
+          description: The JWT is read-only and the selected tool can modify state or execute commands.
   /mcp-relay/job/{job_id}:
     get:
       operationId: getMcpJob

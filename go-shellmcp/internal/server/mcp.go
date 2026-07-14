@@ -15,6 +15,7 @@ import (
 	"strings"
 	"time"
 
+	inspecthost "github.com/megamen32/gptadmin/go-shellmcp/internal/inspect"
 	"github.com/megamen32/gptadmin/go-shellmcp/internal/shell"
 	"github.com/megamen32/gptadmin/go-shellmcp/internal/supervisor"
 	"github.com/megamen32/gptadmin/go-shellmcp/internal/system"
@@ -297,6 +298,19 @@ func (s *Server) mcpTools() []map[string]any {
 			},
 		},
 		{
+			"name":        "system_inspect",
+			"description": "Read bounded, automatically redacted host diagnostics without executing a command. Supports read_file and list_directory on Linux, macOS, Windows and Android.",
+			"inputSchema": map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"action":    map[string]any{"type": "string", "enum": []string{"read_file", "list_directory"}},
+					"path":      map[string]any{"type": "string"},
+					"max_bytes": map[string]any{"type": []string{"integer", "null"}, "minimum": 1, "maximum": 1048576},
+				},
+				"required": []string{"action", "path"}, "additionalProperties": false,
+			},
+		},
+		{
 			"name":        "shell_exec",
 			"description": "Execute a shell command on this ShellMCP host; use background=true for local async jobs.",
 			"inputSchema": map[string]any{
@@ -361,6 +375,8 @@ func (s *Server) callMCPTool(ctx context.Context, name string, args map[string]a
 		return s.mcpChildCall(ctx, args)
 	case "shell_exec":
 		return s.mcpShellExec(ctx, args)
+	case "system_inspect":
+		return s.mcpSystemInspect(args)
 	case "file_backup":
 		return s.mcpFileBackup(args)
 	case "tasks":
@@ -375,6 +391,23 @@ func (s *Server) callMCPTool(ctx context.Context, name string, args map[string]a
 	default:
 		return nil, fmt.Errorf("unknown tool %s", name)
 	}
+}
+
+func (s *Server) mcpSystemInspect(args map[string]any) (map[string]any, error) {
+	var req inspecthost.Request
+	b, err := json.Marshal(args)
+	if err != nil {
+		return nil, err
+	}
+	if err := json.Unmarshal(b, &req); err != nil {
+		return nil, err
+	}
+	req.AllowedRoots = append([]string(nil), s.cfg.InspectRoots...)
+	result, err := inspecthost.Run(req)
+	if err != nil {
+		return nil, err
+	}
+	return mcpText("Read-only system inspection completed.", map[string]any{"server": s.cfg.Name, "inspection": result}), nil
 }
 
 func (s *Server) mcpManage(args map[string]any) (map[string]any, error) {

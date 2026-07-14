@@ -112,6 +112,12 @@ through an explicit admin-approved flow. It must show audience, scopes and
 expiry before issuance, and store the credential only where the client needs
 it. Raw JWT display is an advanced, deliberate export action.
 
+Connections have a plain-language access mode. **Read only** is recommended
+for ChatGPT-style inspection: it exposes typed, bounded AirShell inspection,
+automatically hides recognizable credentials and cannot invoke a command
+interpreter or admin API. **Full access** is explicit and intended for clients
+such as Codex that must make changes. See [`READONLY_MODE.md`](./READONLY_MODE.md).
+
 ### Connect an AirShell agent
 
 An agent joins through a short-lived pairing code or a Hub-initiated local
