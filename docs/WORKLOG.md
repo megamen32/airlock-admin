@@ -64,7 +64,8 @@ plan is [`PROJECT_PLAN.md`](./PROJECT_PLAN.md).
 - Verification: Proposer and independent critic completed; `git diff --check`
   passed; `python3 -m pytest tests/test_site_docs.py tests/test_admin_ui.py -q`
   passed (`6 passed`).
-- Delivery: Commit, push and documentation CI pending.
+- Delivery: Commit `bf35b42`; Build, Sync, Release run `29351644583` passed,
+  including macOS, Windows, Android artifact and Docker failover jobs.
 - Next: Implement V1 `connection_id` and notice-ledger tests as a separate TDD
   runtime slice.
 
