@@ -48,16 +48,16 @@ plan is [`PROJECT_PLAN.md`](./PROJECT_PLAN.md).
 
 ## Entries
 
-## 2026-07-14 - OAuth rotation and readonly boundary - active
+## 2026-07-14 - OAuth rotation and readonly boundary - completed
 
 - Milestone: `S2.1`, `S2.3`
 - Owner: Codex
 - Scope: Replace browser-side OAuth secret generation with an authenticated Hub endpoint, preserve secrets out of responses, and close the remaining readonly/redaction boundary with tests.
 - Baseline / red evidence: `rotateOAuth()` only filled an HTML field; the screenshot showed secret-looking values in a client confirmation preview; ShellMCP service still runs as root for supervisor duties.
-- Change: TDD implementation in progress.
-- Verification: Focused OAuth rotation test is green; full verification and live rollout pending.
-- Delivery: Not deployed.
-- Next: Complete the boundary tests, deploy, restart the Hub, and verify rotation without exposing a secret.
+- Change: Added an authenticated Hub endpoint that atomically replaces `OAUTH_CLIENT_SECRET`, updates the current process, and never returns the secret. The admin UI now calls the endpoint instead of generating a secret in browser JavaScript.
+- Verification: Go Hub/ShellMCP tests and vet passed; Python `95 passed, 2 skipped`; admin JavaScript syntax and diff checks passed; live `/version` reports build `126` at commit `19fe2b4`; live OAuth metadata exposes `gptadmin.inspect`; unauthenticated rotation is rejected with `401`.
+- Delivery: Commit `19fe2b4` pushed to `main`; `/opt/gptadmin/bin/gptadmin_hub` rebuilt and `gptadmin-hub.service` restarted; Build, Sync, Release run `29358756754` is still running.
+- Next: Implement the OS-enforced ShellMCP read-only worker and secret-handle boundary; do not rotate the production OAuth secret until the operator explicitly confirms invalidating current OAuth sessions.
 
 ## 2026-07-14 - Live auth transition and read-only verification - completed
 
