@@ -48,6 +48,24 @@ plan is [`PROJECT_PLAN.md`](./PROJECT_PLAN.md).
 
 ## Entries
 
+## 2026-07-14 - Zero-to-working setup principle - completed
+
+- Milestone: `S1.1`, `S1.3`, `S1.6`
+- Owner: Codex
+- Scope: Product default for install, Tunnel, Hub URL and progressive security.
+- Baseline / red evidence: Earlier planning put exposure choice and MFA before
+  the first useful connection, reproducing the configuration burden users
+  dislike in self-hosted agent products.
+- Change: Superseded the upfront exposure questionnaire with automatic Hub +
+  HTTPS Tunnel setup, one canonical Hub URL, client connection automation and
+  optional security presets after first value.
+- Verification: Decision reviewed against current repository installer/token
+  inventory and recorded as a future runtime acceptance contract.
+- Delivery: Delivered in the accompanying documentation commit; runtime setup
+  still needs TDD implementation.
+- Next: Add a failing clean-host installer test that requires an externally
+  verified Hub URL without a manual Tunnel/token prompt.
+
 ## 2026-07-14 - Exposure profiles and admin MFA contract - completed
 
 - Milestone: `S1.5`, `S2.1a`

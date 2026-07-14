@@ -47,34 +47,54 @@ It asks only for `AdminPassword` when needed, shows a Hub URL and finishes with
 a health check. Platform detection, service management, package architecture
 and tunnel implementation remain internal.
 
-The installer must ask one concrete product question, not "how secure do you
-want this to be?": **Where should you open the Hub?**
+The installer must not begin with a threat-model questionnaire. Its default is
+**install and connect**:
 
-| Choice | Product label | Network behavior | Authentication requirement |
-| --- | --- | --- | --- |
-| Recommended | This computer only | Hub and admin UI bind to loopback; Tunnel is off | Local OS account + AdminPassword |
-| Private access | My private network | Hub stays private; an approved private-network access path is configured | AdminPassword; MFA strongly recommended |
-| Public access | Internet through Tunnel | Hub remains behind the Tunnel; no direct public Hub port | HTTPS, rate limiting, explicit allowlist where possible, and mandatory MFA for admin sessions |
+1. Detect platform and existing installation.
+2. Start the Hub locally, create the HTTPS Tunnel and verify it externally.
+3. Create hidden internal credentials and safe service configuration.
+4. Print one stable **Hub URL** and open the connection page.
+5. Offer to connect locally detected MCP clients; show one copyable connection
+   action for clients that cannot be configured automatically.
 
-"This computer only" means loopback, not the whole home or office LAN. LAN is
-an explicit private-network choice because every device on a shared Wi-Fi is a
-different trust boundary. The installer shows a short consequence for each
-choice and keeps **This computer only** when the user presses Enter.
+The operator answers only questions that cannot be inferred: `AdminPassword`
+and, when several local clients are detected, which ones to connect. The same
+idempotent command installs a new Hub or updates an existing Hub.
+
+There is one canonical public identity: the **Hub URL**. It is the only URL an
+operator needs to remember or share. Client-specific protocol endpoints, OAuth
+redirects and generated schemas are derived by GPTAdmin or shown on the Hub
+connection page; a user never constructs them from paths or transport names.
+
+The initial public path uses HTTPS, password login, hidden internal credentials
+and rate limiting, while the Hub process itself stays behind the Tunnel with no
+direct public service port. This is a convenient working default, not a claim
+that every deployment is maximally hardened.
+
+After the Hub works, the connection page offers optional **Security** presets:
+
+| Preset | What changes | When it is useful |
+| --- | --- | --- |
+| Working default | Public Hub URL through Tunnel, AdminPassword, generated credentials | Personal use and first connection |
+| Private access | Restrict admin access to the operator's private network or identity-aware proxy | Home lab and small team |
+| Locked down | MFA, allowlists, approval-before-write and tighter client/agent scopes | Production and sensitive infrastructure |
+
+Security settings are progressive: they improve a working Hub rather than
+forcing a newcomer to understand network topology before their first MCP call.
 
 ### Admin MFA
 
 MFA protects remote human administration. It does not replace device pairing,
 agent policy or JWT validation.
 
-- Local-only mode does not require MFA by default: local OS login is the first
-  boundary, and forcing a second prompt would harm the primary single-machine
-  flow without protecting a compromised host.
-- Private-network mode offers MFA during setup and recommends it before any
-  write-capable MCP client or agent is connected.
-- Public-Tunnel mode requires MFA before it can be enabled. Prefer WebAuthn
-  passkeys/security keys; support TOTP authenticator apps as a portable
-  fallback; generate one-time recovery codes and require fresh password plus
-  MFA before changing exposure, MFA or recovery settings.
+- The working default does not block setup on MFA. It offers enrollment after
+  the first successful connection, when the user can see why it matters.
+- The Private access preset recommends MFA before any write-capable MCP client
+  or agent is connected.
+- The Locked down preset requires MFA. Prefer WebAuthn passkeys/security keys;
+  support TOTP authenticator apps as a portable fallback; generate one-time
+  recovery codes and require fresh password plus MFA before changing exposure,
+  MFA or recovery settings.
 - Organization deployments may delegate human login to an identity-aware OIDC
   proxy. GPTAdmin still verifies the proxy identity, maps it to local roles and
   records it in the audit trail.
@@ -82,9 +102,10 @@ agent policy or JWT validation.
 ### Connect an MCP client
 
 The operator chooses **Connect Codex**, **Connect Claude** or **Connect custom
-client** from the Hub. GPTAdmin drives OAuth Authorization Code + PKCE or a
-short-lived one-time connection code. The operator approves requested scopes;
-they do not copy a bearer token into a terminal or web form.
+client** from the Hub. GPTAdmin detects and configures local clients where it
+can, then drives OAuth Authorization Code + PKCE or a short-lived one-time
+connection code. The operator approves requested scopes; they do not copy a
+bearer token into a terminal or web form.
 
 For non-interactive automation, the Hub issues a named, scoped, expiring JWT
 through an explicit admin-approved flow. It must show audience, scopes and
@@ -139,15 +160,17 @@ first vocabulary shown to an operator.
   audience at every protected endpoint.
 - Add policy decisions for admin, MCP client and agent identities; deny by
   default when scope is absent.
-- Add WebAuthn, TOTP fallback and recovery-code enrollment. Public-Tunnel mode
-  must fail closed until an MFA method is enrolled.
+- Add WebAuthn, TOTP fallback and recovery-code enrollment. The Locked down
+  preset must fail closed until an MFA method is enrolled.
 
 ### Phase C - Connection UX
 
 - Replace manual token commands and form fields with named connections,
   approval pages and pairing codes.
-- Make installer/update idempotent and present only Hub, Tunnel, health and
-  next client connection.
+- Make installer/update idempotent, automatically create and verify the
+  Tunnel, and present only Hub URL, health and next client connection.
+- Make the Hub connection page the canonical client onboarding surface;
+  protocol-specific paths stay generated implementation details.
 - Replace product-facing FRP terminology while retaining an advanced tunnel
   diagnostic view.
 
@@ -172,9 +195,11 @@ first vocabulary shown to an operator.
 - `gptadmin doctor` uses plain language and reports Hub, MCP clients and Tunnel
   states; advanced diagnostics can reveal implementation detail only to an
   authenticated administrator.
-- Public-Tunnel setup cannot complete without HTTPS, enrolled MFA and a
-  successful authenticated external access check. Local-only setup exposes no
-  listening admin port beyond loopback.
+- Default setup creates and verifies HTTPS Tunnel access without exposing a
+  direct public service port, then outputs one Hub URL and a working client
+  connection action.
+- Security presets can restrict a working Hub later; the Locked down preset
+  cannot complete without MFA and a successful authenticated external check.
 - Upgrade from a legacy installation retains service availability, migrates
   client connections deliberately and removes the deprecated secret only after
   confirmation.
