@@ -171,6 +171,22 @@ type oauthCode struct {
 	State       string
 }
 
+// managedMCPToken stores revocation metadata only. The bearer value is never
+// persisted, so an operator can revoke or rotate a client without creating a
+// second secret database.
+type managedMCPToken struct {
+	ID        string `json:"id"`
+	ClientID  string `json:"client_id"`
+	Scope     string `json:"scope"`
+	IssuedAt  int64  `json:"issued_at"`
+	ExpiresAt int64  `json:"expires_at"`
+	RevokedAt int64  `json:"revoked_at,omitempty"`
+}
+
+type managedMCPTokenState struct {
+	Tokens map[string]managedMCPToken `json:"tokens"`
+}
+
 type Server struct {
 	cfg Config
 
@@ -182,6 +198,7 @@ type Server struct {
 	shellQueues map[string][]string
 	shellJobs   map[string]*shellJob
 	oauthCodes  map[string]oauthCode
+	managedMCP  map[string]managedMCPToken
 	audit       []auditEvent
 	failover    FailoverConfig
 
@@ -199,11 +216,15 @@ func New(cfg Config) *Server {
 		shellQueues: map[string][]string{},
 		shellJobs:   map[string]*shellJob{},
 		oauthCodes:  map[string]oauthCode{},
+		managedMCP:  map[string]managedMCPToken{},
 		audit:       []auditEvent{},
 	}
 	s.cond = sync.NewCond(&s.mu)
 	if err := s.loadRegistryState(); err != nil {
 		log.Printf("registry state load failed path=%s err=%v", s.registryStatePath(), err)
+	}
+	if err := s.loadManagedMCPState(); err != nil {
+		log.Printf("MCP token state load failed path=%s err=%v", s.managedMCPStatePath(), err)
 	}
 	s.failover = s.loadFailoverConfig()
 	home := os.Getenv("GPTADMIN_HOME")
@@ -215,6 +236,54 @@ func New(cfg Config) *Server {
 	s.updateLockPath = home + "/update.lock"
 	s.updateLauncher = DefaultUpdateLauncher()
 	return s
+}
+
+func (s *Server) managedMCPStatePath() string {
+	if s.cfg.ConfigDir == "" {
+		return ""
+	}
+	return filepath.Join(s.cfg.ConfigDir, "mcp_tokens_state.json")
+}
+
+func (s *Server) loadManagedMCPState() error {
+	path := s.managedMCPStatePath()
+	if path == "" {
+		return nil
+	}
+	b, err := os.ReadFile(path)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	var state managedMCPTokenState
+	if err := json.Unmarshal(b, &state); err != nil {
+		return err
+	}
+	if state.Tokens != nil {
+		s.managedMCP = state.Tokens
+	}
+	return nil
+}
+
+func (s *Server) saveManagedMCPStateLocked() error {
+	path := s.managedMCPStatePath()
+	if path == "" {
+		return nil
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0o750); err != nil {
+		return err
+	}
+	b, err := json.MarshalIndent(managedMCPTokenState{Tokens: s.managedMCP}, "", "  ")
+	if err != nil {
+		return err
+	}
+	tmp := path + ".tmp"
+	if err := os.WriteFile(tmp, append(b, '\n'), 0o600); err != nil {
+		return err
+	}
+	return os.Rename(tmp, path)
 }
 
 func (s *Server) registryStatePath() string {
@@ -360,6 +429,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/mcp-prompt/call", s.mcpPromptCall)
 	mux.HandleFunc("/admin/api/mcp/manage", s.requireCtl(s.adminMCPManage))
 	mux.HandleFunc("/admin/api/mcp/issue-token", s.requireCtl(s.adminMCPIssueToken))
+	mux.HandleFunc("/admin/api/mcp/tokens/", s.requireCtl(s.adminMCPTokenAction))
 	mux.HandleFunc("/admin/api/mcp/resources/list", s.requireCtl(s.adminMCPResourcesList))
 	mux.HandleFunc("/admin/api/mcp/resources/read", s.requireCtl(s.adminMCPResourceRead))
 	mux.HandleFunc("/admin/api/clients/revoke-all", s.requireCtl(s.adminClientsRevokeAll))
@@ -1790,7 +1860,22 @@ func (s *Server) adminClientsRevokeAll(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusMethodNotAllowed, map[string]any{"detail": "method not allowed"})
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "revoked_count": 0, "oauth_secret_rotated": false, "note": "go hub keeps OAuth codes/tokens in memory"})
+	s.mu.Lock()
+	revoked := 0
+	for id, record := range s.managedMCP {
+		if record.RevokedAt == 0 {
+			record.RevokedAt = time.Now().Unix()
+			s.managedMCP[id] = record
+			revoked++
+		}
+	}
+	err := s.saveManagedMCPStateLocked()
+	s.mu.Unlock()
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]any{"detail": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "revoked_count": revoked})
 }
 
 func (s *Server) adminClientDelete(w http.ResponseWriter, r *http.Request) {
@@ -1798,7 +1883,28 @@ func (s *Server) adminClientDelete(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusMethodNotAllowed, map[string]any{"detail": "method not allowed"})
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "removed": false})
+	id, err := url.PathUnescape(strings.TrimPrefix(r.URL.Path, "/admin/api/clients/"))
+	if err != nil || id == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"detail": "invalid token id"})
+		return
+	}
+	s.mu.Lock()
+	record, ok := s.managedMCP[id]
+	if ok && record.RevokedAt == 0 {
+		record.RevokedAt = time.Now().Unix()
+		s.managedMCP[id] = record
+		err = s.saveManagedMCPStateLocked()
+	}
+	s.mu.Unlock()
+	if !ok {
+		writeJSON(w, http.StatusNotFound, map[string]any{"detail": "MCP token not found"})
+		return
+	}
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]any{"detail": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "revoked": true, "token_id": id})
 }
 
 func (s *Server) adminMCPResourcesList(w http.ResponseWriter, r *http.Request) {
@@ -1853,6 +1959,7 @@ func (s *Server) adminOverview(w http.ResponseWriter, r *http.Request) {
 	servers := s.publicServersLocked(r)
 	jobs := s.adminJobsDataLocked()
 	audit := append([]auditEvent(nil), s.audit...)
+	clients := s.managedMCPClientsLocked()
 	s.mu.Unlock()
 	hubPublicURL := firstNonEmpty(os.Getenv("HUB_PUBLIC_URL"), s.cfg.PublicOrigin, s.origin(r))
 	tunnel := map[string]any{
@@ -1917,7 +2024,7 @@ func (s *Server) adminOverview(w http.ResponseWriter, r *http.Request) {
 			updateState["last_result"] = st.LastResult
 		}
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "build": map[string]any{"name": "gptadmin-go-hub", "build_version": BuildVersion, "git_commit": GitCommit}, "now": time.Now().Unix(), "now_fmt": time.Now().Format("2006-01-02 15:04:05 MST"), "hub_public_url": hubPublicURL, "public_origin": s.cfg.PublicOrigin, "mcp_resource": s.resource(r), "tunnel": tunnel, "servers": servers, "server_counts": serverStatusCounts(servers), "shell_builds": shellBuilds, "update": updateState, "clients": []any{}, "client_count": 0, "clients_with_multiple_ips": []any{}, "jobs": jobs, "audit": audit, "state_files": map[string]any{"mode": "go-persistent", "registry_state": s.registryStatePath(), "failover_config": s.failoverConfigPath(), "failover_state": s.failoverStatePath()}, "failover_config": s.failover})
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "build": map[string]any{"name": "gptadmin-go-hub", "build_version": BuildVersion, "git_commit": GitCommit}, "now": time.Now().Unix(), "now_fmt": time.Now().Format("2006-01-02 15:04:05 MST"), "hub_public_url": hubPublicURL, "public_origin": s.cfg.PublicOrigin, "mcp_resource": s.resource(r), "tunnel": tunnel, "servers": servers, "server_counts": serverStatusCounts(servers), "shell_builds": shellBuilds, "update": updateState, "clients": clients, "client_count": len(clients), "clients_with_multiple_ips": []any{}, "jobs": jobs, "audit": audit, "state_files": map[string]any{"mode": "go-persistent", "registry_state": s.registryStatePath(), "mcp_token_state": s.managedMCPStatePath(), "failover_config": s.failoverConfigPath(), "failover_state": s.failoverStatePath()}, "failover_config": s.failover})
 }
 
 func (s *Server) adminTriggerUpdate(w http.ResponseWriter, r *http.Request) {
@@ -2009,16 +2116,7 @@ func (s *Server) adminMCPIssueToken(w http.ResponseWriter, r *http.Request) {
 	}
 	origin := s.origin(r)
 	resource := s.resource(r)
-	token, err := s.signJWT(map[string]any{
-		"sub":       "admin",
-		"scope":     "gptadmin.read gptadmin.exec",
-		"client_id": clientID,
-		"iss":       origin,
-		"aud":       resource,
-		"resource":  resource,
-		"exp":       time.Now().Add(time.Duration(ttlDays) * 24 * time.Hour).Unix(),
-		"iat":       time.Now().Unix(),
-	})
+	token, record, err := s.issueManagedMCPToken(clientID, ttlDays, origin, resource)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]any{"detail": err.Error()})
 		return
@@ -2026,6 +2124,7 @@ func (s *Server) adminMCPIssueToken(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{
 		"ok":           true,
 		"client_id":    clientID,
+		"token_id":     record.ID,
 		"access_token": token,
 		"token_type":   "Bearer",
 		"expires_in":   ttlDays * 24 * 3600,
@@ -2033,6 +2132,62 @@ func (s *Server) adminMCPIssueToken(w http.ResponseWriter, r *http.Request) {
 		"audience":     resource,
 		"mcp_url":      origin + "/mcp",
 	})
+}
+
+func (s *Server) issueManagedMCPToken(clientID string, ttlDays int, origin, resource string) (string, managedMCPToken, error) {
+	now := time.Now().Unix()
+	record := managedMCPToken{ID: newID(), ClientID: clientID, Scope: "gptadmin.read gptadmin.exec", IssuedAt: now, ExpiresAt: now + int64(ttlDays)*24*3600}
+	token, err := s.signJWT(map[string]any{
+		"sub": "admin", "scope": record.Scope, "client_id": clientID, "jti": record.ID,
+		"iss": origin, "aud": resource, "resource": resource, "exp": record.ExpiresAt, "iat": now,
+	})
+	if err != nil {
+		return "", managedMCPToken{}, err
+	}
+	s.mu.Lock()
+	s.managedMCP[record.ID] = record
+	err = s.saveManagedMCPStateLocked()
+	s.mu.Unlock()
+	return token, record, err
+}
+
+func (s *Server) adminMCPTokenAction(w http.ResponseWriter, r *http.Request) {
+	parts := strings.Split(strings.Trim(strings.TrimPrefix(r.URL.Path, "/admin/api/mcp/tokens/"), "/"), "/")
+	if len(parts) != 2 || parts[0] == "" || parts[1] != "rotate" || r.Method != http.MethodPost {
+		writeJSON(w, http.StatusNotFound, map[string]any{"detail": "not found"})
+		return
+	}
+	id, err := url.PathUnescape(parts[0])
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"detail": "invalid token id"})
+		return
+	}
+	s.mu.Lock()
+	record, ok := s.managedMCP[id]
+	if ok && record.RevokedAt == 0 {
+		record.RevokedAt = time.Now().Unix()
+		s.managedMCP[id] = record
+		err = s.saveManagedMCPStateLocked()
+	}
+	s.mu.Unlock()
+	if !ok {
+		writeJSON(w, http.StatusNotFound, map[string]any{"detail": "MCP token not found"})
+		return
+	}
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]any{"detail": err.Error()})
+		return
+	}
+	remainingDays := int((record.ExpiresAt - time.Now().Unix()) / 86400)
+	if remainingDays < 1 {
+		remainingDays = 1
+	}
+	token, replacement, err := s.issueManagedMCPToken(record.ClientID, remainingDays, s.origin(r), s.resource(r))
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]any{"detail": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "replaced_token_id": id, "token_id": replacement.ID, "client_id": replacement.ClientID, "access_token": token, "token_type": "Bearer", "mcp_url": s.origin(r) + "/mcp"})
 }
 
 func (s *Server) adminJobs(w http.ResponseWriter, r *http.Request) {
@@ -2050,7 +2205,18 @@ func (s *Server) adminAudit(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) adminClients(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, map[string]any{"clients": []any{}, "client_count": 0})
+	s.mu.Lock()
+	clients := s.managedMCPClientsLocked()
+	s.mu.Unlock()
+	writeJSON(w, http.StatusOK, map[string]any{"clients": clients, "client_count": len(clients)})
+}
+
+func (s *Server) managedMCPClientsLocked() []managedMCPToken {
+	clients := make([]managedMCPToken, 0, len(s.managedMCP))
+	for _, record := range s.managedMCP {
+		clients = append(clients, record)
+	}
+	return clients
 }
 
 func (s *Server) adminJobsDataLocked() map[string]any {
@@ -3752,6 +3918,14 @@ func (s *Server) verifyJWT(token string) (map[string]any, error) {
 	}
 	if exp := intFromAny(claims["exp"]); exp > 0 && time.Now().Unix() > int64(exp) {
 		return nil, errors.New("token expired")
+	}
+	if jti, _ := claims["jti"].(string); jti != "" {
+		s.mu.Lock()
+		record, known := s.managedMCP[jti]
+		s.mu.Unlock()
+		if known && record.RevokedAt != 0 {
+			return nil, errors.New("token revoked")
+		}
 	}
 	return claims, nil
 }

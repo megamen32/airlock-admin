@@ -4199,7 +4199,7 @@ def main():
     ap_tok.add_argument('--show-shellmcp', action='store_true', help='Показать SHELLMCP_TOKEN (опасно!)')
     ap_tok.set_defaults(func=cmd_tokens)
 
-    ap_mcp_token_top = sub.add_parser('issue-token', aliases=['token'], help='Выпустить Bearer-токен для MCP-клиента')
+    ap_mcp_token_top = sub.add_parser('issue-token', aliases=['token'], help='Выпустить JWT для MCP-клиента без OAuth')
     ap_mcp_token_top.add_argument('name', nargs='?', help='client_id / имя токена, например codex-work')
     ap_mcp_token_top.add_argument('--ttl-days', type=int, default=365)
     ap_mcp_token_top.add_argument('--env-key', help='Имя переменной для сохранения в gptadmin.env')
@@ -4230,7 +4230,7 @@ def main():
     ap_mcp_list.add_argument('--json', action='store_true')
     ap_mcp_list.set_defaults(func=cmd_mcp_list)
 
-    ap_mcp_token = mcp_sub.add_parser('token', help='Выпустить Bearer-токен для MCP-клиента')
+    ap_mcp_token = mcp_sub.add_parser('token', help='Выпустить JWT для MCP-клиента без OAuth')
     ap_mcp_token.add_argument('name', nargs='?', help='client_id / имя токена')
     ap_mcp_token.add_argument('--ttl-days', type=int, default=365)
     ap_mcp_token.add_argument('--env-key')

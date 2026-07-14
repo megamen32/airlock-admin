@@ -234,7 +234,8 @@ function renderClientCard(r) {
           (r.client_id ? ' <span class="muted small">' + esc(r.client_id) + '</span>' : '') +
         '</div>' +
         '<div class="row" style="margin-top:6px">' +
-        '<button class="bad" onclick="revokeClient(\'' + esc(r.key || r.token_id) + '\')">отозвать</button>' +
+        '<button onclick="rotateClient(\'' + esc(r.id || r.key || r.token_id) + '\')">ротировать</button>' +
+        '<button class="bad" onclick="revokeClient(\'' + esc(r.id || r.key || r.token_id) + '\')">отозвать</button>' +
         '</div>' +
         '<div class="entrySub muted small">' +
           'last seen <b>' + esc(r.last_seen_fmt || '') + '</b>' +
@@ -521,12 +522,22 @@ async function revokeClient(key){
     refreshAll();
   }catch(e){alert('ERR '+e.message)}
 }
+async function rotateClient(key){
+  if(!confirm('Выпустить замену для этого JWT? Старый сразу перестанет работать.'))return;
+  try{
+    const j=await api('/admin/api/mcp/tokens/'+encodeURIComponent(key)+'/rotate',{method:'POST'});
+    const el=$('secMcpTokenResult');
+    if(el)el.textContent=JSON.stringify(j,null,2);
+    showView('security');
+    refreshAll();
+  }catch(e){alert('ERR '+e.message)}
+}
 async function revokeAllClients(){
-  if(!confirm('Отозвать ВСЕХ клиентов и ротировать OAUTH_CLIENT_SECRET?\n\nВсе MCP-клиенты (Claude, Codex, OpenCode) должны будут заново авторизоваться!'))return;
+  if(!confirm('Отозвать ВСЕ управляемые JWT? Клиенты с этими токенами нужно будет подключить заново.'))return;
   if(!confirm('Точно? Это действие необратимо.'))return;
   try{
     const j=await api('/admin/api/clients/revoke-all',{method:'POST'});
-    alert('Отозвано клиентов: '+j.revoked_count+'\nOAuth secret ротирован: '+(j.oauth_secret_rotated?'да':'нет')+'\n\nПерезапустите хаб для применения.');
+    alert('Отозвано JWT: '+j.revoked_count);
     refreshAll();
   }catch(e){alert('ERR '+e.message)}
 }

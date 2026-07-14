@@ -209,6 +209,63 @@ func TestAdminIssueMCPTokenUsesPublicOriginAndWorksForRelay(t *testing.T) {
 	}
 }
 
+func TestAdminManagedMCPTokenCanBeListedAndRotated(t *testing.T) {
+	configDir := t.TempDir()
+	s := New(Config{
+		CtlToken: "ctl", AdminPassword: "pw", OAuthClientSecret: "oauth-secret",
+		PublicOrigin: "https://hub.example", MCPResource: "https://hub.example",
+		ConfigDir: configDir, DefaultTimeout: time.Second, PollMaxTimeout: time.Second,
+	})
+	h := s.Handler()
+	issue := httptest.NewRequest(http.MethodPost, "/admin/api/mcp/issue-token", bytes.NewBufferString(`{"client_id":"manual-client","ttl_days":7}`))
+	issue.Header.Set("Authorization", "Bearer ctl")
+	issue.Header.Set("Content-Type", "application/json")
+	issued := httptest.NewRecorder()
+	h.ServeHTTP(issued, issue)
+	if issued.Code != http.StatusOK {
+		t.Fatalf("issue status=%d body=%s", issued.Code, issued.Body.String())
+	}
+	var issuedBody map[string]any
+	if err := json.Unmarshal(issued.Body.Bytes(), &issuedBody); err != nil {
+		t.Fatal(err)
+	}
+	tokenID, _ := issuedBody["token_id"].(string)
+	oldToken, _ := issuedBody["access_token"].(string)
+	if tokenID == "" || oldToken == "" {
+		t.Fatalf("managed token response missing id or token: %v", issuedBody)
+	}
+
+	list := httptest.NewRequest(http.MethodGet, "/admin/api/clients", nil)
+	list.Header.Set("Authorization", "Bearer ctl")
+	listed := httptest.NewRecorder()
+	h.ServeHTTP(listed, list)
+	if listed.Code != http.StatusOK || !strings.Contains(listed.Body.String(), tokenID) {
+		t.Fatalf("managed token missing from client inventory: status=%d body=%s", listed.Code, listed.Body.String())
+	}
+
+	rotate := httptest.NewRequest(http.MethodPost, "/admin/api/mcp/tokens/"+tokenID+"/rotate", nil)
+	rotate.Header.Set("Authorization", "Bearer ctl")
+	rotated := httptest.NewRecorder()
+	h.ServeHTTP(rotated, rotate)
+	if rotated.Code != http.StatusOK {
+		t.Fatalf("rotate status=%d body=%s", rotated.Code, rotated.Body.String())
+	}
+	var rotatedBody map[string]any
+	if err := json.Unmarshal(rotated.Body.Bytes(), &rotatedBody); err != nil {
+		t.Fatal(err)
+	}
+	newToken, _ := rotatedBody["access_token"].(string)
+	if newToken == "" || newToken == oldToken {
+		t.Fatalf("rotation did not issue a replacement token: %v", rotatedBody)
+	}
+	if _, err := s.verifyJWT(oldToken); err == nil {
+		t.Fatal("rotated token remained valid")
+	}
+	if _, err := s.verifyJWT(newToken); err != nil {
+		t.Fatalf("replacement token invalid: %v", err)
+	}
+}
+
 func TestGeneratedActionEndpointsAdvertiseOAuthWhenUnauthorized(t *testing.T) {
 	s := New(Config{
 		CtlToken:                 "test-secret-not-for-production",

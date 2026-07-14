@@ -142,10 +142,9 @@
           <div class="row"><label class="small"><input type="checkbox" id="shellHeartbeatEnabled" onchange="setShellHeartbeatFromPanel(this.checked)"> ShellMCP heartbeat</label><span class="muted small">по умолчанию выключен</span></div>
           <p class="muted small">Long-poll и webhook сами обновляют active. Включайте heartbeat только при отдельной диагностической необходимости.</p>
         </div>
-        <div style="margin-top:16px"><h2 style="font-size:13px">MCP bearer-токен</h2>
+        <div style="margin-top:16px"><h2 style="font-size:13px">JWT для клиента без OAuth</h2>
           <div class="row"><input id="secMcpTokenName" placeholder="client_id" style="min-width:200px"><button onclick="issueMcpTokenFromPanel()">Выпустить</button></div>
-          <p class="muted small">Токен выпускает текущий hub, поэтому issuer и audience совпадают с live PUBLIC_ORIGIN, а не с локальным `127.0.0.1`.</p>
-          <p class="muted small">`/authorize` не является обычной landing page: он открывается внутри OAuth flow и должен получать `client_id`, `redirect_uri`, `resource`, `code_challenge` и `code_challenge_method=S256`.</p>
+          <p class="muted small">Большинство клиентов подключаются сами через OAuth. Если клиент OAuth не умеет, выпустите JWT здесь: URL и токен покажутся один раз, а затем появятся в списке клиентов для отзыва или ротации.</p>
           <pre id="secMcpTokenResult" style="min-height:60px">—</pre>
         </div>
         <div style="margin-top:16px"><h2 style="font-size:13px">Перезапуск</h2>

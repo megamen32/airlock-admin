@@ -48,6 +48,25 @@ plan is [`PROJECT_PLAN.md`](./PROJECT_PLAN.md).
 
 ## Entries
 
+## 2026-07-14 - Managed MCP JWT inventory and rotation - completed
+
+- Milestone: `S2.1`
+- Owner: Codex
+- Scope: Go Hub-issued MCP JWT registry, individual revoke/rotate APIs, admin
+  inventory and plain-language CLI/admin guidance.
+- Baseline / red evidence: The Go Hub returns an empty client list and its
+  revoke endpoints are placeholders, so the admin cannot show or rotate
+  issued JWTs even though it can issue one.
+- Change: Hub-issued JWTs now have a persisted metadata-only inventory and
+  revocable ID; the admin can list, revoke or rotate them. The panel explains
+  OAuth as the normal route and JWT as a simple fallback for unsupported
+  clients; CLI help uses the same language.
+- Verification: Red tests proved missing token ID and UI path. Green:
+  `go test ./...` in `go-hub`; `python3 -m pytest tests/ --ignore=tests/e2e
+  -q` (`93 passed, 2 skipped`); `node --check public/admin/app.js`.
+- Delivery: Commit and CI pending.
+- Next: Push and verify CI.
+
 ## 2026-07-14 - Automatic local MCP client registration - completed
 
 - Milestone: `S1.1`, `S1.3`
