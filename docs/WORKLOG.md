@@ -48,6 +48,25 @@ plan is [`PROJECT_PLAN.md`](./PROJECT_PLAN.md).
 
 ## Entries
 
+## 2026-07-14 - Automatic local MCP client registration - completed
+
+- Milestone: `S1.1`, `S1.3`
+- Owner: Codex
+- Scope: `/home/roomhacker/gptadmin/cli.py` client registration and its
+  installer/update regression tests for Codex, Claude Code, OpenCode and VS
+  Code.
+- Baseline / red evidence: Existing setup registers only three clients, emits
+  raw bearer credentials, has no VS Code support, and update intentionally
+  skips client registration.
+- Change: Added idempotent registration for Codex, Claude Code, OpenCode and
+  VS Code; client URLs now prefer `HUB_PUBLIC_URL`; setup and update perform
+  the registration; automatic output no longer prints a bearer credential.
+- Verification: Red baseline: `5 failed, 2 passed` in the new focused tests.
+  Green: `python3 -m pytest tests/ --ignore=tests/e2e -q` (`92 passed, 2
+  skipped`); `go test ./...` in both Go modules passed.
+- Delivery: Commit and CI verification pending.
+- Next: Push the implementation and record the resulting commit and CI run.
+
 ## 2026-07-14 - Zero-to-working setup principle - completed
 
 - Milestone: `S1.1`, `S1.3`, `S1.6`

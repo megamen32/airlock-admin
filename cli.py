@@ -3679,16 +3679,15 @@ def cmd_update(args):
         svc_enable_start(svc_shellmcp_name(), UNIT_PATH_SHELLMCP)
     if not getattr(args, 'auto', False):
         svc_autoupdate_enable_start(env_read())
-    # Updating binaries and service definitions must not change authorization
-    # state or rewrite external AI-client configuration. Those are explicit setup/
-    # mcp-connect operations, not update operations.
+    # A new desktop client should work after an ordinary update, without making
+    # the user rediscover the Hub URL or a client-specific transport command.
+    auto_configure_ai_mcp_clients(env_read(), install_hub)
 
     env = env_read()
     print('GPTAdmin updated in-place.')
     if install_hub:
         print(f"Hub URL: {env.get('HUB_PUBLIC_URL') or env.get('HUB_URL') or '—'}")
         print(f"OAuth resource: {env.get('MCP_RESOURCE') or env.get('PUBLIC_ORIGIN') or '—'}")
-    print('Next for Codex if it cached old discovery: codex mcp remove gptadmin && codex mcp add gptadmin --url <Hub URL>/mcp')
 
 
 # ===== AI client MCP auto-configuration =====
@@ -3727,7 +3726,9 @@ def make_mcp_bearer_token(env: dict, client_id: str, ttl_days: int = 365) -> str
 
 
 def _mcp_client_url(env: dict) -> str:
-    base = (env.get('HUB_URL') or '').rstrip('/')
+    # ShellMCP can intentionally use a loopback HUB_URL while desktop clients
+    # need the canonical externally reachable Hub identity.
+    base = (env.get('HUB_PUBLIC_URL') or env.get('PUBLIC_ORIGIN') or env.get('HUB_URL') or '').rstrip('/')
     if not base:
         base = f"http://127.0.0.1:{env.get('HUB_PORT', '9001')}"
     return base + '/mcp'
@@ -3781,16 +3782,17 @@ def cmd_mcp_token(args):
     print(f'Authorization: Bearer {token}')
 
 
-def configure_ai_mcp_clients(env: dict, *, rotate: bool = False, clients: set[str] | None = None, print_custom: bool = True) -> dict:
+def configure_ai_mcp_clients(env: dict, *, rotate: bool = False, clients: set[str] | None = None, print_custom: bool = False) -> dict:
     env = dict(env)
     sync_oauth_origin_env(env)
     env.setdefault('OAUTH_CLIENT_SECRET', gen_hex(32))
     env.setdefault('ADMIN_PASSWORD', gen_hex())
-    wanted = clients or {'claude-code', 'codex', 'opencode'}
+    wanted = clients or {'claude-code', 'codex', 'opencode', 'vscode'}
     tokens = {
         'GPTADMIN_CLAUDE_MCP_BEARER': ('' if rotate else env.get('GPTADMIN_CLAUDE_MCP_BEARER')) or make_mcp_bearer_token(env, 'claude-code'),
         'GPTADMIN_CODEX_MCP_BEARER': ('' if rotate else env.get('GPTADMIN_CODEX_MCP_BEARER')) or make_mcp_bearer_token(env, 'codex'),
         'GPTADMIN_OPENCODE_MCP_BEARER': ('' if rotate else env.get('GPTADMIN_OPENCODE_MCP_BEARER')) or make_mcp_bearer_token(env, 'opencode'),
+        'GPTADMIN_VSCODE_MCP_BEARER': ('' if rotate else env.get('GPTADMIN_VSCODE_MCP_BEARER')) or make_mcp_bearer_token(env, 'vscode'),
         'GPTADMIN_CUSTOM_MCP_BEARER': ('' if rotate else env.get('GPTADMIN_CUSTOM_MCP_BEARER')) or make_mcp_bearer_token(env, 'custom-mcp-client'),
     }
     env.update(tokens)
@@ -3811,6 +3813,8 @@ def configure_ai_mcp_clients(env: dict, *, rotate: bool = False, clients: set[st
         results['codex'] = _configure_codex_mcp(url, tokens['GPTADMIN_CODEX_MCP_BEARER'])
     if 'opencode' in wanted:
         results['opencode'] = _configure_opencode_mcp(url, tokens['GPTADMIN_OPENCODE_MCP_BEARER'])
+    if 'vscode' in wanted:
+        results['vscode'] = _configure_vscode_mcp(url, tokens['GPTADMIN_VSCODE_MCP_BEARER'])
     results['_url'] = url
     if print_custom:
         results['_custom_token'] = tokens['GPTADMIN_CUSTOM_MCP_BEARER']
@@ -3824,14 +3828,11 @@ def cmd_mcp_connect(args):
     aliases = {'claude': 'claude-code'}
     selected = {aliases.get(x, x) for x in selected}
     if not selected:
-        selected = {'claude-code', 'codex', 'opencode'}
-    results = configure_ai_mcp_clients(env, rotate=bool(getattr(args, 'fresh', False)), clients=selected, print_custom=not bool(getattr(args, 'no_print_token', False)))
+        selected = {'claude-code', 'codex', 'opencode', 'vscode'}
+    results = configure_ai_mcp_clients(env, rotate=bool(getattr(args, 'fresh', False)), clients=selected)
     url = results.pop('_url')
-    custom = results.pop('_custom_token', None)
     print('GPTAdmin MCP client install: ' + ', '.join(f'{k}={v}' for k, v in results.items()))
     print(f'URL: {url}')
-    if custom:
-        print(f'Custom MCP Authorization: Bearer {custom}')
 
 
 def _run_quiet(cmd: list[str], env: dict | None = None) -> subprocess.CompletedProcess:
@@ -3904,6 +3905,22 @@ def _configure_opencode_mcp(url: str, token: str) -> str:
     return 'ok'
 
 
+def _configure_vscode_mcp(url: str, token: str) -> str:
+    """Register GPTAdmin as a global remote MCP server in VS Code."""
+    if not shutil.which('code'):
+        return 'skip: VS Code not found'
+    config = {
+        'name': 'gptadmin',
+        'type': 'http',
+        'url': url,
+        'headers': {'Authorization': f'Bearer {token}'},
+    }
+    res = _run_quiet(['code', '--add-mcp', json.dumps(config, separators=(',', ':'))])
+    if res.returncode != 0:
+        return 'error: ' + ((res.stderr or res.stdout).strip() or f'code rc={res.returncode}')
+    return 'ok'
+
+
 def auto_configure_ai_mcp_clients(env: dict, install_hub: bool) -> None:
     if not install_hub:
         return
@@ -3912,13 +3929,10 @@ def auto_configure_ai_mcp_clients(env: dict, install_hub: bool) -> None:
         print('AI MCP clients auto-config skipped: GPTADMIN_AUTO_CONFIGURE_AI_MCP=0')
         return
     try:
-        results = configure_ai_mcp_clients(env, rotate=False, print_custom=True)
+        results = configure_ai_mcp_clients(env, rotate=False)
         url = results.pop('_url')
-        custom = results.pop('_custom_token')
         print('AI MCP clients auto-config: ' + ', '.join(f'{k}={v}' for k, v in results.items()))
-        print('Custom MCP client:')
-        print(f'  URL: {url}')
-        print(f'  Authorization: Bearer {custom}')
+        print(f'Hub URL: {url.removesuffix("/mcp")}')
     except Exception as e:
         print(f'WARNING: AI MCP clients auto-config failed: {e}', file=sys.stderr)
 
@@ -4192,10 +4206,9 @@ def main():
     ap_mcp_token_top.add_argument('--no-save', action='store_true', help='Только напечатать token, не сохранять в gptadmin.env')
     ap_mcp_token_top.set_defaults(func=cmd_mcp_token)
 
-    ap_mcp_connect_top = sub.add_parser('connect-mcp', aliases=['mcp-connect'], help='Установить GPTAdmin как MCP в Claude/Codex/OpenCode')
-    ap_mcp_connect_top.add_argument('--client', action='append', choices=['codex', 'claude', 'claude-code', 'opencode'], help='Кого настроить; можно повторять. По умолчанию все найденные')
+    ap_mcp_connect_top = sub.add_parser('connect-mcp', aliases=['mcp-connect'], help='Подключить GPTAdmin как MCP в локальных AI-клиентах')
+    ap_mcp_connect_top.add_argument('--client', action='append', choices=['codex', 'claude', 'claude-code', 'opencode', 'vscode'], help='Кого настроить; можно повторять. По умолчанию все найденные')
     ap_mcp_connect_top.add_argument('--fresh', action='store_true', help='Выпустить новые токены для AI MCP clients')
-    ap_mcp_connect_top.add_argument('--no-print-token', action='store_true', help='Не печатать custom Bearer token')
     ap_mcp_connect_top.set_defaults(func=cmd_mcp_connect)
 
     ap_rot = sub.add_parser('rotate', help='Переиздать токен (hub/shellmcp/mcp)')
@@ -4224,10 +4237,9 @@ def main():
     ap_mcp_token.add_argument('--no-save', action='store_true')
     ap_mcp_token.set_defaults(func=cmd_mcp_token)
 
-    ap_mcp_connect = mcp_sub.add_parser('connect', aliases=['self-install', 'install-self'], help='Установить GPTAdmin как MCP в Claude/Codex/OpenCode')
-    ap_mcp_connect.add_argument('--client', action='append', choices=['codex', 'claude', 'claude-code', 'opencode'])
+    ap_mcp_connect = mcp_sub.add_parser('connect', aliases=['self-install', 'install-self'], help='Подключить GPTAdmin как MCP в локальных AI-клиентах')
+    ap_mcp_connect.add_argument('--client', action='append', choices=['codex', 'claude', 'claude-code', 'opencode', 'vscode'])
     ap_mcp_connect.add_argument('--fresh', action='store_true')
-    ap_mcp_connect.add_argument('--no-print-token', action='store_true')
     ap_mcp_connect.set_defaults(func=cmd_mcp_connect)
 
     ap_mcp_add = mcp_sub.add_parser('add', help='Добавить MCP-сервер (стиль Claude/Codex)')
