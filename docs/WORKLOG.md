@@ -48,6 +48,17 @@ plan is [`PROJECT_PLAN.md`](./PROJECT_PLAN.md).
 
 ## Entries
 
+## 2026-07-14 - Redacted security environment metadata - completed
+
+- Milestone: `S2.3`
+- Owner: Codex
+- Scope: Replace the admin panel's raw env-file `shell_exec` read with a Hub metadata endpoint.
+- Baseline / red evidence: The panel sent `cat /etc/gptadmin/gptadmin.env` through MCP, allowing secret values to enter model context and client previews.
+- Change: `/admin/api/security/env` returns only variable names, presence, lengths and sensitivity flags; the UI no longer reads env through ShellMCP.
+- Verification: Focused Hub test, admin UI tests (`5 passed`), JS syntax and diff checks passed; live unauthenticated endpoint returns `401`; live Hub reports commit `a691b06`.
+- Delivery: Commit `a691b06` pushed to `main`; production binary rebuilt and `gptadmin-hub.service` restarted; Build, Sync, Release run `29359009257` is in progress.
+- Next: Implement the OS-enforced ShellMCP read-only worker and secret handles.
+
 ## 2026-07-14 - OAuth rotation and readonly boundary - completed
 
 - Milestone: `S2.1`, `S2.3`
