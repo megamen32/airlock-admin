@@ -56,8 +56,8 @@ plan is [`PROJECT_PLAN.md`](./PROJECT_PLAN.md).
 - Baseline / red evidence: The attached client probe read `structuredContent.response.servers`, but production returns the list at `structuredContent.servers`; direct production inspection reports 27 servers while that parser reports zero.
 - Change: Added a direct MCP JSON-RPC restart-contract test. Generic stdio relay now treats failed polling or registration as unregistered and retries registration with capped backoff before sending another poll. Docker failover now starts a real generic relay and fake stdio MCP, validates authenticated `list_mcp_servers`, then requires an `echo` tool call through the promoted fallback.
 - Verification: Red Python regression tests proved one-time registration and polling after a failed recovery registration; green `go test ./...` and `go vet ./...` in Hub/ShellMCP, Python `97 passed, 2 skipped`, and Docker failover suite with all tunnel, Hub, combined, agent, reclaim and ranked-fallback scenarios passing locally.
-- Delivery: Pending commit, push, CI and production relay rollout.
-- Next: Commit and push the recovery change; wait for CI, then deploy the generic relay update to hosts that run it.
+- Delivery: Commit `7ab87c9` pushed to `main`; Build, Sync, Release run `29359978802` passed, including Docker failover, macOS, Windows and Android artifact jobs. Production generic relay runtime copies on `roomhacker-server-100` were synchronized and its ten `gptadmin-mcp-*` services restarted as user-owned processes; authenticated Hub smoke reports all ten online.
+- Next: None.
 
 ## 2026-07-14 - Redacted security environment metadata - completed
 
