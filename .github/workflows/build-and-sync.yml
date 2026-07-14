@@ -20,6 +20,17 @@ env:
   OPENSOURCE_PAT: ${{ secrets.OPENSOURCE_PAT }}
 
 jobs:
+  failover-e2e:
+    # The suite builds its own Go image and needs no repository-hosted service.
+    # Keep it separate so HA regressions are visible independently from releases.
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Run failover Docker black-box suite
+        run: docker compose -f tests/e2e/failover/docker-compose.yml up --build --abort-on-container-exit --exit-code-from failover-e2e
+
   build-and-release:
     runs-on: ubuntu-latest
     steps:

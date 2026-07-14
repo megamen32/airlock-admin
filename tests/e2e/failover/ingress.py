@@ -1,0 +1,60 @@
+#!/usr/bin/env python3
+"""Public-ingress double used to isolate tunnel and hub failures in Docker E2E."""
+from __future__ import annotations
+
+import argparse
+import urllib.error
+import urllib.request
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
+
+
+class Handler(BaseHTTPRequestHandler):
+    def log_message(self, _format: str, *_args: object) -> None:
+        return
+
+    def do_GET(self) -> None:  # noqa: N802
+        self.proxy()
+
+    def do_POST(self) -> None:  # noqa: N802
+        self.proxy()
+
+    def proxy(self) -> None:
+        route = self.server.route_file.read_text().strip() if self.server.route_file.exists() else "primary"  # type: ignore[attr-defined]
+        upstream = self.server.fallback if route == "fallback" else self.server.primary  # type: ignore[attr-defined]
+        body = None
+        if self.command == "POST":
+            body = self.rfile.read(int(self.headers.get("Content-Length") or "0"))
+        request = urllib.request.Request(upstream + self.path, data=body, method=self.command)
+        try:
+            with urllib.request.urlopen(request, timeout=2) as response:  # noqa: S310 - test-local URLs
+                data = response.read()
+                self.send_response(response.status)
+                self.send_header("Content-Type", response.headers.get("Content-Type", "application/json"))
+                self.send_header("Content-Length", str(len(data)))
+                self.end_headers()
+                self.wfile.write(data)
+        except (OSError, urllib.error.URLError) as error:
+            data = str(error).encode()
+            self.send_response(502)
+            self.send_header("Content-Length", str(len(data)))
+            self.end_headers()
+            self.wfile.write(data)
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--listen", type=int, default=18080)
+    parser.add_argument("--primary", default="http://127.0.0.1:9001")
+    parser.add_argument("--fallback", default="http://127.0.0.1:9101")
+    parser.add_argument("--route-file", required=True)
+    args = parser.parse_args()
+    server = ThreadingHTTPServer(("127.0.0.1", args.listen), Handler)
+    server.primary = args.primary
+    server.fallback = args.fallback
+    server.route_file = Path(args.route_file)
+    server.serve_forever()
+
+
+if __name__ == "__main__":
+    main()
