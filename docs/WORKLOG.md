@@ -68,7 +68,9 @@ plan is [`PROJECT_PLAN.md`](./PROJECT_PLAN.md).
   admin APIs. Green: both `go test ./...`; both `go vet ./...`; Python `94
   passed, 2 skipped`; admin JavaScript syntax; Hub darwin amd64/arm64 builds;
   AirShell Windows and Android builds plus Windows inspector test compilation.
-- Delivery: Pending.
+- Delivery: Commit `3ec79d4`; Build, Sync, Release run `29354412360` passed,
+  including macOS runtime, Windows AirShell, Android artifact and Docker
+  failover jobs.
 - Next: Add the separate `ask-before-write` profile with approval-bound job
   ownership; do not expand read-only into filtered raw shell.
 
