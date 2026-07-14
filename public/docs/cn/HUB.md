@@ -27,7 +27,7 @@ CTL_TOKEN=your-token go run ./go-hub/cmd/gptadmin-hub
 
 ## 关键端点
 
-|端点 |授权 |目的|
+|端点|授权 |目的|
 |----------|------|---------|
 | `GET /admin` | `CTL_TOKEN`（基本）|网页面板|
 | `GET /admin/api/*` |持票人 `CTL_TOKEN` |管理 REST API |
@@ -55,7 +55,7 @@ CTL_TOKEN=your-token go run ./go-hub/cmd/gptadmin-hub
 
 有关完整列表，请参阅[配置](./CONFIGURATION.md)]。要点：
 
-|瓦尔 |必填|默认|目的|
+|瓦尔 |必填 |默认 |目的|
 |-----|----------|---------|---------|
 | `CTL_TOKEN` |是的 | — |管理 API + 面板的不记名令牌 |
 | `ADMIN_PASSWORD` |对于 OAuth | — | `/authorize` 表格的密码 |

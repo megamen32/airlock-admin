@@ -4,7 +4,7 @@
 
 ## 授权快速参考
 
-|端点 |授权 |
+|端点|授权 |
 |----------|------|
 | `GET /admin` |基本 (`CTL_TOKEN`) |
 | `GET /admin/api/*` |持票人 `CTL_TOKEN` |
@@ -102,7 +102,7 @@ shellmcp 工具作为 MCP 工具：
 
 这些由集线器调用，而不是直接由人工智能调用。持有者 `SHELLMCP_TOKEN`。
 
-|端点 |方法|目的|
+|端点|方法|目的|
 |----------|--------|---------|
 | `/exec` |发布 |运行 shell 命令 |
 | `/file` |获取/发布 |读/写文件 |
@@ -116,7 +116,7 @@ shellmcp 工具作为 MCP 工具：
 
 ## OAuth 端点
 
-|端点 |方法|目的|
+|端点|方法|目的|
 |----------|--------|---------|
 | `/oauth/authorize` |获取/发布 |授权端点 |
 | `/oauth/token` |发布 |令牌端点 |
@@ -173,7 +173,7 @@ shellmcp 工具作为 MCP 工具：
 GPTAdmin 通过经过身份验证的每服务器路由公开每个注册的 MCP 服务器。将 `{slug}` 替换为 `GET /mcp-relay/servers` 中的 `meta.public_mcp_slug`。|方法|路径|目的|
 |--------|------|---------|
 | `GET` / `POST` | `/server/{slug}/mcp` |一台服务器的 MCP 兼容端点 |
-| `GET` | `/server/{slug}/card` |服务器发现卡|
+| `GET` | `/server/{slug}/card` |服务器发现卡 |
 | `GET` | `/server/{slug}/health` |服务器健康状况 |
 | `GET` | `/server/{slug}/actions/openapi.yaml` |为自定义 GPT 操作生成 OpenAPI 架构 |
 | `GET` | `/server/{slug}/actions/openapi.json` |与 JSON 相同的架构 |

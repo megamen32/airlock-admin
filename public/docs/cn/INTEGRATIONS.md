@@ -146,7 +146,7 @@ curl -sS https://<your-hub>/.well-known/oauth-authorization-server
 
 ### 端点
 
-|端点 |方法|目的|
+|端点|方法|目的|
 |----------|--------|---------|
 | `/.well-known/oauth-authorization-server` | `GET` | RFC 8414 发行者元数据。 |
 | `/.well-known/oauth-protected-resource` | `GET` | RFC 9728 资源元数据。 |
@@ -243,14 +243,14 @@ curl -sS https://<your-hub>/.well-known/oauth-authorization-server
 ## 跨适配器故障排除
 
 - **`CTL_TOKEN` 在哪里？** 在集线器主机上：`grep ^CTL_TOKEN config/gptadmin.env`。通过编辑文件和 `systemctl restart gptadmin-hub` 进行旋转。
-- **无法从 ChatGPT / Claude / 我的客户端访问 Hub - 必须是公共 HTTPS。本地主机和 LAN IP 适用于手动测试，但不适用于 ChatGPT 操作或远程 MCP 客户端。使用 Cloudflare 隧道（请参阅 [TUNNELS.md](./TUNNELS_DOCS.md)]）或具有真实域的反向代理。
+- **无法从 ChatGPT / Claude / 我的客户端访问集线器** — 必须是公共 HTTPS。本地主机和 LAN IP 适用于手动测试，但不适用于 ChatGPT 操作或远程 MCP 客户端。使用 Cloudflare 隧道（请参阅 [TUNNELS.md](./TUNNELS_DOCS.md)]）或具有真实域的反向代理。
 - **MCP 连接，但每个工具都返回“未经授权”** — 在浏览器中打开 `https://<your-hub>/.well-known/oauth-authorization-server`；如果出现 404 错误，则表示您的集线器构建中未启用 OAuth 路由。重新检查 `apps/chatgpt-admin-app/` 是否已部署（或者 Go hub OAuth 处理程序是否已启用）。
 - **自定义 GPT 看不到该操作** — 验证架构 URL 是否公开：来自网络外部的 `curl -I https://<your-hub>/actions/openapi.yaml`。如果是 4xx/5xx，则隧道/DNS 未指向集线器。
-- **浏览器扩展不会注入** — 用户脚本管理器权限：Tampermonkey 仪表板 → 必须启用“允许用户脚本”； iOS Safari → 设置 → Safari → 扩展 → 用户脚本 → 允许； Android Firefox → 为当前站点启用了附加组件。
+- **浏览器扩展不会注入** — 用户脚本管理器权限：Tampermonkey 仪表板 → 必须打开“允许用户脚本”； iOS Safari → 设置 → Safari → 扩展 → 用户脚本 → 允许； Android Firefox → 为当前站点启用了附加组件。
 - **OAuth 同意页面 500s** — `config/gptadmin.env` 中的 `PUBLIC_ORIGIN` 与客户端调用的 URL 不匹配。将其设置为客户端使用的**准确**源（方案+主机+端口）。
 - **由客户快速选择。** ChatGPT（Plus/Team/Custom GPT）→ [§1](#1-openai-action-custom-gpt)。 Claude Desktop / Codex / OpenCode / Mavis → [§2](#2-mcp-remote-streamable-http)。免费网络聊天（DeepSeek / Qwen / Alice / ChatGPT 免费）→ [§4](#4-browser-extension)。仍然卡住 → [FAQ](./FAQ.md)、[SECURITY_DOCS.md](./SECURITY_DOCS.md) 或 `https://<your-hub>/admin` 每个部分的帮助面板。## 安全 MCP 代理/中继
 
-对于单一用途集成，请公开一台注册的 MCP 服务器而不是整个 GPTAdmin 中继。每个服务器都有：
+对于单一用途集成，请公开一台已注册的 MCP 服务器而不是整个 GPTAdmin 中继。每个服务器都有：
 
 ```text
 /server/{slug}/mcp

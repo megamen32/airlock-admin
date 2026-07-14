@@ -3,7 +3,7 @@
 该集线器公开了人工智能连接的**三种方式**。相同的中心，相同的功能
 — 选择与您的人工智能相匹配的一个。
 
-|适配器|对于 |如何|
+|适配器|对于|如何|
 |---------|-----|-----|
 | [MCP客户端](#1-mcp-client) |克劳德桌面、Codex、OpenCode | MCP 远程 SSE 为 `/mcp` |
 | [浏览器扩展](#2-browser-extension) | DeepSeek、Qwen、Alice、GigaChat、ChatGPT（免费）|用户脚本（Tampermonkey/Firefox）|
@@ -94,7 +94,7 @@ systemd 等）可用。
 |网站 |状态 |
 |------|--------|
 |聊天gpt.com |全力支持|
-|聊天.deepseek.com |全力支持|
+|聊天.deepseek.com |全力支持 |
 |聊天.qwen.ai |全力支持|
 | ya.ru / chat.yandex.ru |全力支持|
 
@@ -139,4 +139,4 @@ systemd 等）可用。
 - 使用 **ChatGPT with Plus** 并想要自定义 GPT？ → **OpenAI 行动**
 
 所有这三个都为您提供相同的功能 - 集线器并不关心哪个适配器
-使用的人工智能。请参阅 [Architecture](./ARCHITECTURE.md)] 了解原因。
+使用的人工智能。有关原因，请参阅[Architecture](./ARCHITECTURE.md)]。
