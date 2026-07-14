@@ -59,6 +59,7 @@ evidence unambiguous before adding surface area.
 | S1.2 Client quickstarts | Canonical, tested guides for Codex, ChatGPT and Claude-compatible clients | Fresh-host smoke test follows each guide verbatim and completes a harmless action | Planned |
 | S1.3 Safe demo capability | Built-in read-only demo/diagnostics tool and explicit destructive-action boundary | A user can validate connection without shell execution or credentials beyond setup | Planned |
 | S1.4 Activation telemetry | Opt-in, privacy-preserving local event summary | Operator can see funnel failures without sending command contents or secrets | Planned |
+| S1.5 Exposure profiles | Concrete local-only, private-network and public-Tunnel setup choices | Default is loopback; public access requires HTTPS, MFA and an external verification check | Planned |
 
 The vocabulary of every Stage 1 surface is **Hub**, **MCP clients** and
 **Tunnel**. Protocol/transport names are advanced diagnostics, not setup
@@ -72,6 +73,7 @@ experience, not an expert-only configuration exercise.
 | Milestone | Deliverable | Exit gate | Status |
 | --- | --- | --- | --- |
 | S2.1 One-password identity and connection hygiene | `AdminPassword` for humans; hidden internal keys and short-lived scoped JWT connections | Black-box tests reject wrong audience, expired token and token forwarding; normal user flows reveal no raw token | Planned |
+| S2.1a Admin MFA | WebAuthn/passkeys first, TOTP fallback, recovery codes and optional OIDC proxy identity | Public-Tunnel admin sessions cannot be enabled without MFA; enrollment, recovery and sensitive-setting re-auth are black-box tested | Planned |
 | S2.2 Capability policy | Per-agent, per-server and per-tool allow rules with explicit deny behavior | Policy decision is included in every audit event and covered by API/MCP tests | Planned |
 | S2.3 Progressive autonomy | Approval modes: read-only, ask-before-write, bounded autonomous | Dangerous calls require the configured approval and cannot bypass it through aliases or relay targets | Planned |
 | S2.4 Operator audit trail | Searchable immutable-enough action log with actor, target, policy, arguments digest and result reference | Incident drill can answer who did what, where, why and with what result | Planned |

@@ -48,6 +48,24 @@ plan is [`PROJECT_PLAN.md`](./PROJECT_PLAN.md).
 
 ## Entries
 
+## 2026-07-14 - Exposure profiles and admin MFA contract - completed
+
+- Milestone: `S1.5`, `S2.1a`
+- Owner: Codex
+- Scope: Plain-language setup exposure choices and conditional MFA rules.
+- Baseline / red evidence: Existing setup exposes transport/token terminology
+  instead of asking whether the Hub is local, private or public.
+- Change: Added local-only, private-network and public-Tunnel profiles;
+  specified passkey-first MFA, TOTP fallback and recovery codes for public
+  administration.
+- Verification: Compared against current OpenClaw security documentation:
+  loopback-first, pairing and identity-aware private access are sound patterns;
+  GPTAdmin retains scoped JWT as a stricter client/agent authorization model.
+- Delivery: Delivered in the accompanying documentation commit; no runtime
+  exposure profile or MFA code exists yet.
+- Next: Write failing installer and Hub black-box tests for the local-only
+  default before implementing profile selection.
+
 ## 2026-07-14 - One-password product contract - completed
 
 - Milestone: `S0.5`

@@ -47,6 +47,38 @@ It asks only for `AdminPassword` when needed, shows a Hub URL and finishes with
 a health check. Platform detection, service management, package architecture
 and tunnel implementation remain internal.
 
+The installer must ask one concrete product question, not "how secure do you
+want this to be?": **Where should you open the Hub?**
+
+| Choice | Product label | Network behavior | Authentication requirement |
+| --- | --- | --- | --- |
+| Recommended | This computer only | Hub and admin UI bind to loopback; Tunnel is off | Local OS account + AdminPassword |
+| Private access | My private network | Hub stays private; an approved private-network access path is configured | AdminPassword; MFA strongly recommended |
+| Public access | Internet through Tunnel | Hub remains behind the Tunnel; no direct public Hub port | HTTPS, rate limiting, explicit allowlist where possible, and mandatory MFA for admin sessions |
+
+"This computer only" means loopback, not the whole home or office LAN. LAN is
+an explicit private-network choice because every device on a shared Wi-Fi is a
+different trust boundary. The installer shows a short consequence for each
+choice and keeps **This computer only** when the user presses Enter.
+
+### Admin MFA
+
+MFA protects remote human administration. It does not replace device pairing,
+agent policy or JWT validation.
+
+- Local-only mode does not require MFA by default: local OS login is the first
+  boundary, and forcing a second prompt would harm the primary single-machine
+  flow without protecting a compromised host.
+- Private-network mode offers MFA during setup and recommends it before any
+  write-capable MCP client or agent is connected.
+- Public-Tunnel mode requires MFA before it can be enabled. Prefer WebAuthn
+  passkeys/security keys; support TOTP authenticator apps as a portable
+  fallback; generate one-time recovery codes and require fresh password plus
+  MFA before changing exposure, MFA or recovery settings.
+- Organization deployments may delegate human login to an identity-aware OIDC
+  proxy. GPTAdmin still verifies the proxy identity, maps it to local roles and
+  records it in the audit trail.
+
 ### Connect an MCP client
 
 The operator chooses **Connect Codex**, **Connect Claude** or **Connect custom
@@ -107,6 +139,8 @@ first vocabulary shown to an operator.
   audience at every protected endpoint.
 - Add policy decisions for admin, MCP client and agent identities; deny by
   default when scope is absent.
+- Add WebAuthn, TOTP fallback and recovery-code enrollment. Public-Tunnel mode
+  must fail closed until an MFA method is enrolled.
 
 ### Phase C - Connection UX
 
@@ -138,6 +172,9 @@ first vocabulary shown to an operator.
 - `gptadmin doctor` uses plain language and reports Hub, MCP clients and Tunnel
   states; advanced diagnostics can reveal implementation detail only to an
   authenticated administrator.
+- Public-Tunnel setup cannot complete without HTTPS, enrolled MFA and a
+  successful authenticated external access check. Local-only setup exposes no
+  listening admin port beyond loopback.
 - Upgrade from a legacy installation retains service availability, migrates
   client connections deliberately and removes the deprecated secret only after
   confirmation.
