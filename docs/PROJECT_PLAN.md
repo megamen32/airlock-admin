@@ -14,6 +14,10 @@ Primary outcome: a new operator can go from a clean machine to one working,
 audited MCP action through their chosen AI client in under 15 minutes, without
 reading topology or authentication documentation.
 
+Product decisions are governed by [`PHILOSOPHY.md`](./PHILOSOPHY.md): easy to
+install, flexible to configure, convenience and resilience by default, and the
+minimum practical MCP context loaded only when the current task needs it.
+
 ## Operating rules
 
 - A stage is complete only when every listed exit gate has current evidence.
@@ -21,8 +25,8 @@ reading topology or authentication documentation.
   implementation claim is not evidence by itself.
 - Prefer a thin vertical slice through installer, hub, agent, client and docs
   over isolated subsystem work.
-- Security-sensitive defaults must fail closed. Convenience paths need an
-  explicit, visible opt-in.
+- Security boundaries fail closed, while the normal product path prioritizes a
+  working, recoverable default and offers stronger restrictions progressively.
 - Preserve backward compatibility only for a documented migration window.
 
 ## Current baseline

@@ -48,6 +48,43 @@ plan is [`PROJECT_PLAN.md`](./PROJECT_PLAN.md).
 
 ## Entries
 
+## 2026-07-14 - Low-context product philosophy - completed
+
+- Milestone: `S0.5`, `S2.1`
+- Owner: Codex with Sol proposer and adversarial critic agents
+- Scope: Canonical product philosophy and staged low-context MCP/required
+  migration notice architecture.
+- Baseline / red evidence: No philosophy document existed; the plan did not
+  define MCP context as a budget, daily notice limits or evidence-based notice
+  completion.
+- Change: Added `PHILOSOPHY.md` and `MCP_CONTEXT_AND_NOTICES.md`; linked the
+  philosophy from the execution plan, docs home and both agent instruction
+  files. The synthesis preserves the current compact Hub tools and defers
+  broader storage/protocol changes until measured evidence justifies them.
+- Verification: Proposer and independent critic completed; `git diff --check`
+  passed; `python3 -m pytest tests/test_site_docs.py tests/test_admin_ui.py -q`
+  passed (`6 passed`).
+- Delivery: Commit, push and documentation CI pending.
+- Next: Implement V1 `connection_id` and notice-ledger tests as a separate TDD
+  runtime slice.
+
+## 2026-07-14 - Required AI migration notices - handed-off
+
+- Milestone: `S2.1`
+- Owner: Codex
+- Scope: Hub MCP tools that deliver a one-time required migration instruction
+  per JWT and record explicit agent acknowledgement.
+- Baseline / red evidence: Hub has no durable way to tell a connected AI that
+  a manual client migration needs user explanation and a confirmed completion.
+- Change: Runtime implementation was deliberately deferred after proposer and
+  critic review. The accepted V1/V2 contract is now
+  `docs/MCP_CONTEXT_AND_NOTICES.md`.
+- Verification: Design review rejected dynamic `tools/list`, a new generic
+  facade, premature SQLite and unmeasured token limits.
+- Delivery: Architecture handoff included with the philosophy documentation.
+- Next: Start with a failing test proving JWT rotation preserves
+  `connection_id`.
+
 ## 2026-07-14 - Managed MCP JWT inventory and rotation - completed
 
 - Milestone: `S2.1`
@@ -64,7 +101,7 @@ plan is [`PROJECT_PLAN.md`](./PROJECT_PLAN.md).
 - Verification: Red tests proved missing token ID and UI path. Green:
   `go test ./...` in `go-hub`; `python3 -m pytest tests/ --ignore=tests/e2e
   -q` (`93 passed, 2 skipped`); `node --check public/admin/app.js`.
-- Delivery: Commit and CI pending.
+- Delivery: Commit `771d421`; Build, Sync, Release run `29331893009` passed.
 - Next: Push and verify CI.
 
 ## 2026-07-14 - Automatic local MCP client registration - completed

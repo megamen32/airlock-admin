@@ -18,6 +18,9 @@ GPT‑Админ — self-hosted MCP hub. Три основные компоне
 
 - Канонический execution plan: [`docs/PROJECT_PLAN.md`](docs/PROJECT_PLAN.md).
   Публичный roadmap в `docs/ROADMAP.md` не заменяет его.
+- Каноническая продуктовая философия: [`docs/PHILOSOPHY.md`](docs/PHILOSOPHY.md).
+  Новые MCP surfaces должны иметь минимальный стабильный контекст и лениво
+  загружать только реально выбранные данные.
 - Канонический append-only handoff log: [`docs/WORKLOG.md`](docs/WORKLOG.md).
 - Перед существенной работой прочитайте оба файла, выберите один milestone и
   создайте `active` entry по шаблону из worklog. Перед завершением замените его

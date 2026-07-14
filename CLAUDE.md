@@ -12,6 +12,9 @@ Self-hosted MCP hub. Two Go binaries + one Python CLI + vanilla-JS admin UI.
 
 - The canonical execution plan is [`docs/PROJECT_PLAN.md`](docs/PROJECT_PLAN.md).
   The public `docs/ROADMAP.md` does not replace it.
+- The canonical product philosophy is [`docs/PHILOSOPHY.md`](docs/PHILOSOPHY.md).
+  New MCP surfaces keep a minimal stable context and lazily load only data the
+  current task actually selects.
 - The canonical append-only handoff log is [`docs/WORKLOG.md`](docs/WORKLOG.md).
 - Before substantial work, read both files, select one milestone and create an
   `active` entry using the worklog template. Before finishing, replace it with
