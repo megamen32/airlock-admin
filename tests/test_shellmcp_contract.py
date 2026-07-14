@@ -176,6 +176,27 @@ def _stop_root_shellmcp(shellmcp: ShellmcpProcess) -> None:
         subprocess.run(["sudo", "-n", "fuser", "-k", f"{shellmcp.port}/tcp"], check=False, capture_output=True, timeout=5)
 
 
+def _root_contract_command(command: str, tmp_path: Path) -> str:
+    """Build the default Go implementation before launching it as root.
+
+    Go keeps toolchains and module downloads in the invoking user's cache.  A
+    root ``go run`` on a clean CI runner would download those dependencies
+    during the server readiness window, making this black-box ownership test
+    depend on network timing rather than the AirShell contract.
+    """
+    if command != DEFAULT_COMMANDS[0]:
+        return command
+
+    binary = tmp_path / "shellmcp-contract"
+    subprocess.run(
+        ["go", "build", "-o", str(binary), "./cmd/shellmcp-go"],
+        cwd=str(ROOT / "go-shellmcp"),
+        check=True,
+        timeout=120,
+    )
+    return str(binary)
+
+
 def _start_root_shellmcp(command: str, tmp_path: Path, default_user: str | None) -> ShellmcpProcess:
     """Start a contract daemon as root while keeping test configuration explicit."""
     port = _free_port()
@@ -397,7 +418,8 @@ def test_shellmcp_contract_root_daemon_never_uses_implicit_root(command: str, tm
     if not default_user:
         pytest.skip("no non-root account is available for the ownership contract")
 
-    guarded = _start_root_shellmcp(command, tmp_path / "guarded", None)
+    root_command = _root_contract_command(command, tmp_path)
+    guarded = _start_root_shellmcp(root_command, tmp_path / "guarded", None)
     try:
         status, denied, _ = guarded.request("POST", "/exec", {"cmd": "id -u", "timeout": 5})
         assert status >= 400, denied
@@ -406,7 +428,7 @@ def test_shellmcp_contract_root_daemon_never_uses_implicit_root(command: str, tm
         _stop_root_shellmcp(guarded)
         _cleanup_root_test_dir(tmp_path / "guarded")
 
-    shellmcp = _start_root_shellmcp(command, tmp_path / "default-user", default_user)
+    shellmcp = _start_root_shellmcp(root_command, tmp_path / "default-user", default_user)
     try:
         marker = "user-owned-marker"
         status, res, _ = shellmcp.request("POST", "/exec", {"cmd": f"touch {marker}; stat -c '%U' {marker}", "timeout": 5})
