@@ -407,34 +407,13 @@ async function loadSecurityEnv(){
   const el=$('securityEnv');
   el.innerHTML='<p class="muted">Загрузка…</p>';
   try{
-    // Read env file via shell_exec on hub
-    const j=await api('/mcp-relay/call',{method:'POST',body:JSON.stringify({
-      target:'shell:roomhacker-server-100',
-      tool_name:'shell_exec',
-      arguments:{cmd:'cat /etc/gptadmin/gptadmin.env 2>/dev/null || cat ~/.config/gptadmin/gptadmin.env 2>/dev/null || echo NOT_FOUND'}
-    })});
-    const sc=j.response?.structuredContent||j.structuredContent||{};
-    const result=sc.result||{};
-    const stdout=result.stdout||'';
-    if(stdout.trim()==='NOT_FOUND'||!stdout.trim()){
-      el.innerHTML='<p class="muted">env-файл не найден. Возможно хаб использует другой путь.</p>';
-      return;
-    }
-    const lines=stdout.trim().split('\n').filter(l=>l.trim()&&!l.startsWith('#'));
-    const heartbeatLine=lines.find(line=>line.trim().startsWith('SHELLMCP_HEARTBEAT='));
-    const heartbeatValue=heartbeatLine?.split('=').slice(1).join('=').trim().toLowerCase();
+    const j=await api('/admin/api/security/env');
+    const variables=Array.isArray(j.variables)?j.variables:[];
     const heartbeatInput=$('shellHeartbeatEnabled');
-    if(heartbeatInput)heartbeatInput.checked=['1','true','yes','on'].includes(heartbeatValue);
-    const sensitive=['CTL_TOKEN','ADMIN_PASSWORD','OAUTH_CLIENT_SECRET','SHELLMCP_TOKEN','MCP_BRIDGE_KEY'];
-    el.innerHTML=lines.map(line=>{
-      const eq=line.indexOf('=');
-      if(eq<0)return '';
-      const key=line.substring(0,eq).trim();
-      const val=line.substring(eq+1).trim();
-      const isSensitive=sensitive.some(s=>key.includes(s))||key.includes('TOKEN')||key.includes('SECRET')||key.includes('PASSWORD')||key.includes('BEARER');
-      const displayVal=isSensitive?(val.substring(0,8)+'••••••••'+(val.length>20?'...':'')):val;
-      const valClass=isSensitive?'warn':'';
-      return `<div class="recentMiniItem"><div class="recentMiniTop"><span class="mono">${esc(key)}</span><span class="muted small">${isSensitive?'sensitive':''}</span></div><div class="mono ${valClass}">${esc(displayVal)}</div></div>`;
+    if(heartbeatInput)heartbeatInput.checked=!!j.shellmcp_heartbeat;
+    el.innerHTML=variables.map(v=>{
+      const label=v.sensitive?'sensitive · value hidden':(v.present?'set':'empty');
+      return `<div class="recentMiniItem"><div class="recentMiniTop"><span class="mono">${esc(v.key)}</span><span class="muted small">${label}</span></div><div class="mono">${v.present?'length '+esc(String(v.length)):'not set'}</div></div>`;
     }).join('');
   }catch(e){
     el.innerHTML='<p class="bad">ERR '+esc(e.message)+'</p>';

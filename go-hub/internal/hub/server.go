@@ -437,6 +437,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/admin/api/mcp/resources/list", s.requireCtl(s.adminMCPResourcesList))
 	mux.HandleFunc("/admin/api/mcp/resources/read", s.requireCtl(s.adminMCPResourceRead))
 	mux.HandleFunc("/admin/api/auth/rotate-oauth", s.requireCtl(s.adminRotateOAuth))
+	mux.HandleFunc("/admin/api/security/env", s.requireCtl(s.adminSecurityEnv))
 	mux.HandleFunc("/admin/api/clients/revoke-all", s.requireCtl(s.adminClientsRevokeAll))
 	mux.HandleFunc("/admin/api/clients/", s.requireCtl(s.adminClientDelete))
 	mux.HandleFunc("/admin/api/overview", s.requireCtl(s.adminOverview))
@@ -2281,6 +2282,56 @@ func (s *Server) adminRotateOAuth(w http.ResponseWriter, r *http.Request) {
 		"restart_required": true,
 		"message":          "OAuth secret rotated. Restart the Hub to load the persisted value for all workers.",
 	})
+}
+
+func (s *Server) adminSecurityEnv(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeJSON(w, http.StatusMethodNotAllowed, map[string]any{"detail": "method not allowed"})
+		return
+	}
+	data, err := os.ReadFile(s.cfg.EnvFile)
+	if err != nil {
+		if os.IsNotExist(err) {
+			writeJSON(w, http.StatusNotFound, map[string]any{"detail": "env file not found"})
+			return
+		}
+		writeJSON(w, http.StatusInternalServerError, map[string]any{"detail": "failed to read env metadata"})
+		return
+	}
+	variables := make([]map[string]any, 0)
+	heartbeat := false
+	for _, line := range strings.Split(string(data), "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		key, value, ok := strings.Cut(line, "=")
+		if !ok || strings.TrimSpace(key) == "" {
+			continue
+		}
+		key = strings.TrimSpace(key)
+		value = strings.TrimSpace(value)
+		if key == "SHELLMCP_HEARTBEAT" {
+			heartbeat = truthyString(value)
+		}
+		variables = append(variables, map[string]any{
+			"key":       key,
+			"present":   value != "",
+			"length":    len(value),
+			"sensitive": sensitiveEnvKey(key),
+		})
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"variables": variables, "shellmcp_heartbeat": heartbeat})
+}
+
+func sensitiveEnvKey(key string) bool {
+	key = strings.ToUpper(key)
+	for _, marker := range []string{"TOKEN", "SECRET", "PASSWORD", "BEARER", "API_KEY", "PRIVATE_KEY"} {
+		if strings.Contains(key, marker) {
+			return true
+		}
+	}
+	return false
 }
 
 func replaceEnvValue(filename, key, value string) error {

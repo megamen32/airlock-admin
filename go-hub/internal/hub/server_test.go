@@ -198,6 +198,21 @@ func TestOAuthRotationPersistsWithoutReturningSecret(t *testing.T) {
 	}
 }
 
+func TestSecurityEnvEndpointNeverReturnsValues(t *testing.T) {
+	envFile := filepath.Join(t.TempDir(), "gptadmin.env")
+	if err := os.WriteFile(envFile, []byte("OAUTH_CLIENT_SECRET=secret-value\nSHELLMCP_HEARTBEAT=1\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	s := New(Config{CtlToken: "ctl", EnvFile: envFile, DefaultTimeout: time.Second, PollMaxTimeout: time.Second})
+	req := httptest.NewRequest(http.MethodGet, "/admin/api/security/env", nil)
+	req.Header.Set("Authorization", "Bearer ctl")
+	rec := httptest.NewRecorder()
+	s.Handler().ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK || strings.Contains(rec.Body.String(), "secret-value") || !strings.Contains(rec.Body.String(), "OAUTH_CLIENT_SECRET") {
+		t.Fatalf("unsafe or incomplete env response: status=%d body=%s", rec.Code, rec.Body.String())
+	}
+}
+
 func TestAdminIssueMCPTokenUsesPublicOriginAndWorksForRelay(t *testing.T) {
 	s := New(Config{
 		CtlToken:                 "ctl",
