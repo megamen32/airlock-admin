@@ -21,7 +21,7 @@ class Handler(BaseHTTPRequestHandler):
 
     def proxy(self) -> None:
         route = self.server.route_file.read_text().strip() if self.server.route_file.exists() else "primary"  # type: ignore[attr-defined]
-        upstream = self.server.fallback if route == "fallback" else self.server.primary  # type: ignore[attr-defined]
+        upstream = self.server.routes.get(route, self.server.primary)  # type: ignore[attr-defined]
         body = None
         if self.command == "POST":
             body = self.rfile.read(int(self.headers.get("Content-Length") or "0"))
@@ -46,12 +46,17 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--listen", type=int, default=18080)
     parser.add_argument("--primary", default="http://127.0.0.1:9001")
-    parser.add_argument("--fallback", default="http://127.0.0.1:9101")
+    parser.add_argument("--fallback-one", default="http://127.0.0.1:9101")
+    parser.add_argument("--fallback-two", default="http://127.0.0.1:9102")
     parser.add_argument("--route-file", required=True)
     args = parser.parse_args()
     server = ThreadingHTTPServer(("127.0.0.1", args.listen), Handler)
     server.primary = args.primary
-    server.fallback = args.fallback
+    server.routes = {
+        "fallback": args.fallback_one,
+        "fallback-1": args.fallback_one,
+        "fallback-2": args.fallback_two,
+    }
     server.route_file = Path(args.route_file)
     server.serve_forever()
 

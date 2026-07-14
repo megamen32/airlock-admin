@@ -47,10 +47,18 @@ start_ingress() {
 }
 
 watchdog() {
-  E2E_ROUTE_FILE="$route_file" python3 /usr/local/bin/gptadmin_failover_watchdog.py \
-    --check-once --config "$config_file" --state "$state_file" --runtime-state "$runtime_file" \
-    --node-id shell:fallback --hub-service none --frpc-service none --frpc-bin /e2e/fake-frpc \
-    --frpc-config "$root/frpc.toml" --frpc-pid-file "$root/frpc.pid" \
+  watchdog_node shell:fallback "$runtime_file" "$root/frpc.pid" fallback
+}
+
+watchdog_node() {
+  local node_id="$1"
+  local runtime_path="$2"
+  local pid_path="$3"
+  local route_value="$4"
+  E2E_ROUTE_FILE="$route_file" E2E_ROUTE_VALUE="$route_value" python3 /usr/local/bin/gptadmin_failover_watchdog.py \
+    --check-once --config "$config_file" --state "$state_file" --runtime-state "$runtime_path" \
+    --node-id "$node_id" --hub-service none --frpc-service none --frpc-bin /e2e/fake-frpc \
+    --frpc-config "$root/${node_id//:/-}.toml" --frpc-pid-file "$pid_path" \
     --reclaim-command-file "$reclaim_file"
 }
 
@@ -83,6 +91,44 @@ JSON
   start python3 /usr/local/bin/gptadmin_failover_proxy.py --listen 127.0.0.1:9101 --upstream http://127.0.0.1:9002 --command-file "$reclaim_file" --node-id shell:fallback >/dev/null
   wait_http http://127.0.0.1:9001/healthz
   wait_http http://127.0.0.1:9002/healthz
+  start_ingress
+}
+
+fresh_two_fallback_topology() {
+  local start_rank_one="${1:-true}"
+  cleanup
+  pids=()
+  rm -rf "$root"
+  mkdir -p "$root/primary" "$root/fallback-1" "$root/fallback-2"
+  cat >"$config_file" <<'JSON'
+{
+  "enabled": true,
+  "primary_health_url": "http://127.0.0.1:9001/healthz",
+  "primary_public_url": "http://127.0.0.1:18080",
+  "fail_count_base": 2,
+  "promotion_cooldown_sec": 1,
+  "nodes": [
+    {"server_id":"shell:fallback-1","rank":1,"enabled":true,"local_hub_port":9002},
+    {"server_id":"shell:fallback-2","rank":2,"enabled":true,"local_hub_port":9003}
+  ]
+}
+JSON
+  cat >"$state_file" <<'JSON'
+{
+  "hub_public_url": "http://127.0.0.1:18080",
+  "tunnel": {"frp": {"token":"test-token","subdomain":"hub","endpoints":["test=127.0.0.1:7000"]}},
+  "secrets": {"bridge_key":"test-ctl"}
+}
+JSON
+  start_primary
+  if [[ "$start_rank_one" == true ]]; then
+    start env HUB_PORT=9002 HUB_HOST=127.0.0.1 CTL_TOKEN=test-ctl GPTADMIN_CONFIG_DIR="$root/fallback-1" /usr/local/bin/gptadmin_hub >/dev/null
+    start python3 /usr/local/bin/gptadmin_failover_proxy.py --listen 127.0.0.1:9101 --upstream http://127.0.0.1:9002 --command-file "$root/reclaim-1.json" --node-id shell:fallback-1 >/dev/null
+    wait_http http://127.0.0.1:9002/healthz
+  fi
+  start env HUB_PORT=9003 HUB_HOST=127.0.0.1 CTL_TOKEN=test-ctl GPTADMIN_CONFIG_DIR="$root/fallback-2" /usr/local/bin/gptadmin_hub >/dev/null
+  start python3 /usr/local/bin/gptadmin_failover_proxy.py --listen 127.0.0.1:9102 --upstream http://127.0.0.1:9003 --command-file "$root/reclaim-2.json" --node-id shell:fallback-2 >/dev/null
+  wait_http http://127.0.0.1:9003/healthz
   start_ingress
 }
 
@@ -156,8 +202,38 @@ scenario_primary_reclaim() {
   echo 'ok: signed reclaim demotes fallback after primary recovery'
 }
 
+scenario_rank_one_prevents_second_promotion() {
+  fresh_two_fallback_topology
+  kill_primary
+  watchdog_node shell:fallback-2 "$root/runtime-2.json" "$root/frpc-2.pid" fallback-2 | grep -q '"decision": "waiting_rank_threshold"'
+  watchdog_node shell:fallback-1 "$root/runtime-1.json" "$root/frpc-1.pid" fallback-1 | grep -q '"decision": "waiting_rank_threshold"'
+  watchdog_node shell:fallback-1 "$root/runtime-1.json" "$root/frpc-1.pid" fallback-1 | grep -q '"decision": "promote"'
+  test "$(cat "$route_file")" = fallback-1
+  wait_http http://127.0.0.1:18080/healthz
+  watchdog_node shell:fallback-2 "$root/runtime-2.json" "$root/frpc-2.pid" fallback-2 | grep -q '"decision": "waiting_rank_threshold"'
+  watchdog_node shell:fallback-2 "$root/runtime-2.json" "$root/frpc-2.pid" fallback-2 | grep -q '"decision": "waiting_rank_threshold"'
+  watchdog_node shell:fallback-2 "$root/runtime-2.json" "$root/frpc-2.pid" fallback-2 | grep -q '"decision": "public_confirm_ok"'
+  test "$(cat "$route_file")" = fallback-1
+  test ! -e "$root/frpc-2.pid"
+  echo 'ok: rank 1 promotion prevents competing rank 2 promotion'
+}
+
+scenario_rank_two_promotes_when_rank_one_unavailable() {
+  fresh_two_fallback_topology false
+  kill_primary
+  for _ in 1 2 3; do
+    watchdog_node shell:fallback-2 "$root/runtime-2.json" "$root/frpc-2.pid" fallback-2 | grep -q '"decision": "waiting_rank_threshold"'
+  done
+  watchdog_node shell:fallback-2 "$root/runtime-2.json" "$root/frpc-2.pid" fallback-2 | grep -q '"decision": "promote"'
+  test "$(cat "$route_file")" = fallback-2
+  wait_http http://127.0.0.1:18080/healthz
+  echo 'ok: rank 2 promotes when rank 1 is unavailable'
+}
+
 scenario_tunnel_only
 scenario_hub_only
 scenario_hub_and_tunnel
 scenario_primary_reclaim
+scenario_rank_one_prevents_second_promotion
+scenario_rank_two_promotes_when_rank_one_unavailable
 echo 'ALL FAILOVER BLACK-BOX SCENARIOS PASSED'

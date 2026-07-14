@@ -96,6 +96,8 @@ It verifies these boundaries separately before testing the combined outage:
 - primary hub loss promotes the fallback through a live tunnel;
 - simultaneous hub and tunnel loss recovers after the tunnel returns;
 - signed primary reclaim removes the fallback route after recovery.
+- rank 1 promotion fences rank 2 through the healthy public endpoint;
+- rank 2 promotes only after its longer threshold when rank 1 is unavailable.
 
 The suite uses real Go hubs, watchdog and proxy processes. Its local ingress
 and FRP-client doubles isolate the repository-owned failover contract from the

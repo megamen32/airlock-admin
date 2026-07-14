@@ -6,13 +6,15 @@ Run from the repository root:
 docker compose -f tests/e2e/failover/docker-compose.yml up --build --abort-on-container-exit --exit-code-from failover-e2e
 ```
 
-The suite runs two real Go hubs, the real failover watchdog and proxy, and a
-controlled ingress. It verifies three independent failure modes:
+The suite runs up to three real Go hubs, the real failover watchdog and proxy,
+and a controlled ingress. It verifies independent failure modes:
 
 - tunnel failure while the primary hub is healthy;
 - primary hub failure while the tunnel remains live;
 - primary hub and tunnel failure together, followed by tunnel recovery.
-- signed reclaim after primary recovery, which demotes the fallback route.
+- signed reclaim after primary recovery, which demotes the fallback route;
+- rank 1 promotion fencing a rank 2 fallback;
+- rank 2 promotion when the rank 1 node is unavailable.
 
 The ingress and FRP client are test doubles because an external FRP server is
 not part of this repository. The FRP double exposes only the observable
