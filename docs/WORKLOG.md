@@ -48,6 +48,24 @@ plan is [`PROJECT_PLAN.md`](./PROJECT_PLAN.md).
 
 ## Entries
 
+## 2026-07-14 - One-password product contract - completed
+
+- Milestone: `S0.5`
+- Owner: Codex
+- Scope: Authentication simplification decision, migration phases and surface
+  terminology.
+- Baseline / red evidence: Current code and docs expose `CTL_TOKEN`, shell,
+  relay and bridge tokens across installer, API, UI and quickstarts.
+- Change: Added `AUTH_SIMPLIFICATION.md`; updated execution plan to require
+  `AdminPassword` as the sole user-owned secret, internal scoped JWTs and the
+  terms Hub, MCP clients and Tunnel on product surfaces.
+- Verification: Repository inventory completed with `rg`; migration acceptance
+  tests and phases are recorded before runtime changes.
+- Delivery: Delivered in the accompanying documentation commit; runtime token
+  removal remains a planned breaking migration.
+- Next: Implement Phase A inventory tests and a new-install no-raw-token
+  regression before changing authentication code.
+
 ## 2026-07-14 - Execution plan and cross-agent handoff - completed
 
 - Milestone: `S0.4`

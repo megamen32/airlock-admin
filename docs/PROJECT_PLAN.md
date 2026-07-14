@@ -46,6 +46,7 @@ evidence unambiguous before adding surface area.
 | S0.2 Contract suite | Language-neutral Hub and AirShell contract suite with implementation matrix | Go is required green; alternative implementation can be run by env-configured command | In progress |
 | S0.3 Release provenance | Version, commit, checksum and platform architecture are observable from the artifact | CI verifies every release artifact, manifest and installer link before publish | In progress |
 | S0.4 Engineering governance | This plan, worklog and agent handoff discipline | New work records scope, evidence, CI link and next owner action | Active |
+| S0.5 One-password product contract | Implementable design and migration from visible token sprawl to AdminPassword + scoped JWT connections | Security model, migration phases and black-box acceptance suite are approved before runtime migration | Active |
 
 ## Stage 1 - Time to first safe value
 
@@ -59,6 +60,10 @@ evidence unambiguous before adding surface area.
 | S1.3 Safe demo capability | Built-in read-only demo/diagnostics tool and explicit destructive-action boundary | A user can validate connection without shell execution or credentials beyond setup | Planned |
 | S1.4 Activation telemetry | Opt-in, privacy-preserving local event summary | Operator can see funnel failures without sending command contents or secrets | Planned |
 
+The vocabulary of every Stage 1 surface is **Hub**, **MCP clients** and
+**Tunnel**. Protocol/transport names are advanced diagnostics, not setup
+requirements. See [`AUTH_SIMPLIFICATION.md`](./AUTH_SIMPLIFICATION.md).
+
 ## Stage 2 - Trustworthy agent access
 
 **Objective:** make least privilege, approval and audit the default product
@@ -66,7 +71,7 @@ experience, not an expert-only configuration exercise.
 
 | Milestone | Deliverable | Exit gate | Status |
 | --- | --- | --- | --- |
-| S2.1 Identity and token hygiene | OAuth 2.1 alignment, resource/audience validation, short-lived credentials and rotation | Black-box tests reject wrong audience, expired token and token forwarding; migration guide exists | Planned |
+| S2.1 One-password identity and connection hygiene | `AdminPassword` for humans; hidden internal keys and short-lived scoped JWT connections | Black-box tests reject wrong audience, expired token and token forwarding; normal user flows reveal no raw token | Planned |
 | S2.2 Capability policy | Per-agent, per-server and per-tool allow rules with explicit deny behavior | Policy decision is included in every audit event and covered by API/MCP tests | Planned |
 | S2.3 Progressive autonomy | Approval modes: read-only, ask-before-write, bounded autonomous | Dangerous calls require the configured approval and cannot bypass it through aliases or relay targets | Planned |
 | S2.4 Operator audit trail | Searchable immutable-enough action log with actor, target, policy, arguments digest and result reference | Incident drill can answer who did what, where, why and with what result | Planned |

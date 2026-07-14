@@ -23,6 +23,11 @@ Self-hosted MCP hub. Two Go binaries + one Python CLI + vanilla-JS admin UI.
 - Never record tokens, private URLs, customer data or raw logs in the worklog.
 - Do not edit files or runtime surfaces owned by another active agent without
   explicit coordination. Keep this section aligned with `AGENTS.md`.
+- Product-surface vocabulary is **Hub**, **MCP clients** and **Tunnel**. Do not
+  expose `CTL_TOKEN`, FRP/frpc or internal key names in normal setup, status,
+  UI or quickstarts. Read `docs/AUTH_SIMPLIFICATION.md` before auth, installer,
+  client-connect or documentation work. `AdminPassword` is the only
+  user-owned secret; internal JWT/signing/device credentials must stay hidden.
 
 ## Commands (copy-paste ready)
 ```bash

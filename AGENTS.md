@@ -30,6 +30,11 @@ GPT‑Админ — self-hosted MCP hub. Три основные компоне
 - При конфликтующей активной области другого агента не редактируйте те же
   файлы/рантайм без явной координации. `AGENTS.md` и `CLAUDE.md` должны
   содержать одинаковые правила этой секции.
+- Product-surface vocabulary is **Hub**, **MCP clients** and **Tunnel**. Do not
+  expose `CTL_TOKEN`, FRP/frpc or internal key names in normal setup, status,
+  UI or quickstarts. Read `docs/AUTH_SIMPLIFICATION.md` before auth, installer,
+  client-connect or documentation work. `AdminPassword` is the only
+  user-owned secret; internal JWT/signing/device credentials must stay hidden.
 
 ## Команды (копировать-вставить)
 
