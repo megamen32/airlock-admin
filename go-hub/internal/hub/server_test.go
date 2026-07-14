@@ -173,6 +173,31 @@ func TestLegacyCTLAppearsInClientInventoryWithoutBeingRevocableAsJWT(t *testing.
 	}
 }
 
+func TestOAuthRotationPersistsWithoutReturningSecret(t *testing.T) {
+	envFile := filepath.Join(t.TempDir(), "gptadmin.env")
+	if err := os.WriteFile(envFile, []byte("OAUTH_CLIENT_SECRET=old-secret\nOTHER=value\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	s := New(Config{CtlToken: "ctl", OAuthClientSecret: "old-secret", EnvFile: envFile, DefaultTimeout: time.Second, PollMaxTimeout: time.Second})
+	req := httptest.NewRequest(http.MethodPost, "/admin/api/auth/rotate-oauth", nil)
+	req.Header.Set("Authorization", "Bearer ctl")
+	rec := httptest.NewRecorder()
+	s.Handler().ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK || strings.Contains(rec.Body.String(), "old-secret") || strings.Contains(rec.Body.String(), s.cfg.OAuthClientSecret) {
+		t.Fatalf("rotation leaked secret or failed: status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	contents, err := os.ReadFile(envFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(contents), "old-secret") || !strings.Contains(string(contents), "OAUTH_CLIENT_SECRET=") {
+		t.Fatalf("env file was not rotated: %s", contents)
+	}
+	if s.cfg.OAuthClientSecret == "old-secret" {
+		t.Fatal("runtime OAuth secret was not rotated")
+	}
+}
+
 func TestAdminIssueMCPTokenUsesPublicOriginAndWorksForRelay(t *testing.T) {
 	s := New(Config{
 		CtlToken:                 "ctl",

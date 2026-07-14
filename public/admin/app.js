@@ -484,10 +484,11 @@ async function rotateCtlToken(){
 
 async function rotateOAuth(){
   if(!confirm('Сгенерировать новый OAUTH_CLIENT_SECRET? Все MCP-клиенты нужно будет переподключить!'))return;
-  const newSecret=Array.from(crypto.getRandomValues(new Uint8Array(32)),b=>b.toString(16).padStart(2,'0')).join('');
-  $('secEnvKey').value='OAUTH_CLIENT_SECRET';
-  $('secEnvVal').value=newSecret;
-  alert('Новый OAUTH_CLIENT_SECRET сгенерирован. Нажмите «Установить» чтобы применить, затем перезапустите хаб.');
+  try{
+    const j=await api('/admin/api/auth/rotate-oauth',{method:'POST'});
+    alert(j.message||'OAuth secret rotated. Перезапустите хаб.');
+    loadSecurityEnv();
+  }catch(e){alert('ERR '+e.message)}
 }
 
 async function issueMcpTokenFromPanel(){

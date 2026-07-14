@@ -44,6 +44,7 @@ type Config struct {
 	MCPResource                string
 	AdminPassword              string
 	OAuthClientSecret          string
+	EnvFile                    string
 	OAuthPermissiveRedirects   bool
 	OAuthPermissiveResources   bool
 	AuthLogSecrets             bool
@@ -76,6 +77,7 @@ func FromEnv() Config {
 		MCPResource:                strings.TrimRight(env("MCP_RESOURCE", env("PUBLIC_ORIGIN", "")), "/"),
 		AdminPassword:              env("ADMIN_PASSWORD", ""),
 		OAuthClientSecret:          env("OAUTH_CLIENT_SECRET", env("ADMIN_PASSWORD", env("CTL_TOKEN", "gptadmin-dev-secret"))),
+		EnvFile:                    env("GPTADMIN_ENV_FILE", "/etc/gptadmin/gptadmin.env"),
 		OAuthPermissiveRedirects:   truthyString(env("OAUTH_PERMISSIVE_REDIRECTS", "0")),
 		OAuthPermissiveResources:   truthyString(env("OAUTH_PERMISSIVE_RESOURCES", "0")),
 		AuthLogSecrets:             truthyString(env("AUTH_LOG_SECRETS", "0")),
@@ -434,6 +436,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/admin/api/mcp/tokens/", s.requireCtl(s.adminMCPTokenAction))
 	mux.HandleFunc("/admin/api/mcp/resources/list", s.requireCtl(s.adminMCPResourcesList))
 	mux.HandleFunc("/admin/api/mcp/resources/read", s.requireCtl(s.adminMCPResourceRead))
+	mux.HandleFunc("/admin/api/auth/rotate-oauth", s.requireCtl(s.adminRotateOAuth))
 	mux.HandleFunc("/admin/api/clients/revoke-all", s.requireCtl(s.adminClientsRevokeAll))
 	mux.HandleFunc("/admin/api/clients/", s.requireCtl(s.adminClientDelete))
 	mux.HandleFunc("/admin/api/overview", s.requireCtl(s.adminOverview))
@@ -2251,6 +2254,71 @@ func (s *Server) adminAudit(w http.ResponseWriter, r *http.Request) {
 	items := append([]auditEvent(nil), s.audit...)
 	s.mu.Unlock()
 	writeJSON(w, http.StatusOK, map[string]any{"events": items, "audit_log": "go-in-memory"})
+}
+
+func (s *Server) adminRotateOAuth(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeJSON(w, http.StatusMethodNotAllowed, map[string]any{"detail": "method not allowed"})
+		return
+	}
+	if strings.TrimSpace(s.cfg.EnvFile) == "" {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]any{"detail": "OAuth env file is not configured"})
+		return
+	}
+	secretBytes := make([]byte, 32)
+	if _, err := rand.Read(secretBytes); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]any{"detail": "failed to generate OAuth secret"})
+		return
+	}
+	secret := hex.EncodeToString(secretBytes)
+	if err := replaceEnvValue(s.cfg.EnvFile, "OAUTH_CLIENT_SECRET", secret); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]any{"detail": "failed to persist OAuth secret"})
+		return
+	}
+	s.cfg.OAuthClientSecret = secret
+	writeJSON(w, http.StatusOK, map[string]any{
+		"ok":               true,
+		"restart_required": true,
+		"message":          "OAuth secret rotated. Restart the Hub to load the persisted value for all workers.",
+	})
+}
+
+func replaceEnvValue(filename, key, value string) error {
+	data, err := os.ReadFile(filename)
+	if err != nil && !os.IsNotExist(err) {
+		return err
+	}
+	lines := strings.Split(strings.TrimSuffix(string(data), "\n"), "\n")
+	if len(lines) == 1 && lines[0] == "" {
+		lines = nil
+	}
+	prefix := key + "="
+	replaced := false
+	for i, line := range lines {
+		if strings.HasPrefix(line, prefix) {
+			lines[i] = prefix + value
+			replaced = true
+		}
+	}
+	if !replaced {
+		lines = append(lines, prefix+value)
+	}
+	if err := os.MkdirAll(filepath.Dir(filename), 0o750); err != nil {
+		return err
+	}
+	tmp := filename + ".tmp-" + newID()
+	if err := os.WriteFile(tmp, []byte(strings.Join(lines, "\n")+"\n"), 0o600); err != nil {
+		return err
+	}
+	if err := os.Chmod(tmp, 0o600); err != nil {
+		_ = os.Remove(tmp)
+		return err
+	}
+	if err := os.Rename(tmp, filename); err != nil {
+		_ = os.Remove(tmp)
+		return err
+	}
+	return nil
 }
 
 func (s *Server) adminClients(w http.ResponseWriter, r *http.Request) {

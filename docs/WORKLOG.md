@@ -48,6 +48,17 @@ plan is [`PROJECT_PLAN.md`](./PROJECT_PLAN.md).
 
 ## Entries
 
+## 2026-07-14 - OAuth rotation and readonly boundary - active
+
+- Milestone: `S2.1`, `S2.3`
+- Owner: Codex
+- Scope: Replace browser-side OAuth secret generation with an authenticated Hub endpoint, preserve secrets out of responses, and close the remaining readonly/redaction boundary with tests.
+- Baseline / red evidence: `rotateOAuth()` only filled an HTML field; the screenshot showed secret-looking values in a client confirmation preview; ShellMCP service still runs as root for supervisor duties.
+- Change: TDD implementation in progress.
+- Verification: Focused OAuth rotation test is green; full verification and live rollout pending.
+- Delivery: Not deployed.
+- Next: Complete the boundary tests, deploy, restart the Hub, and verify rotation without exposing a secret.
+
 ## 2026-07-14 - Live auth transition and read-only verification - completed
 
 - Milestone: `S2.1`, `S2.3`

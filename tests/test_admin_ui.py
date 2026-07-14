@@ -33,3 +33,9 @@ def test_admin_page_offers_simple_jwt_issue_and_rotation_for_non_oauth_clients()
     assert 'value="readonly" selected' in html
     assert 'access_mode:accessMode' in script
     assert "r.access_mode === 'readonly'" in script
+
+
+def test_admin_oauth_rotation_uses_hub_endpoint_without_client_side_secret_generation():
+    script = (ROOT / "public" / "admin" / "app.js").read_text()
+    assert "/admin/api/auth/rotate-oauth" in script
+    assert "crypto.getRandomValues" not in script[script.index("async function rotateOAuth") : script.index("async function issueMcpTokenFromPanel")]
