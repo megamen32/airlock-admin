@@ -41,6 +41,46 @@ wait_for_absent() {
   return 1
 }
 
+wait_mcp_server() {
+  local server_id="$1"
+  for _ in $(seq 1 120); do
+    curl -fsS --max-time 2 \
+      -H 'Authorization: Bearer test-ctl' \
+      -H 'Content-Type: application/json' \
+      --data '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"list_mcp_servers","arguments":{}}}' \
+      http://127.0.0.1:18080/mcp \
+      | jq -e --arg server_id "$server_id" '.result.structuredContent.servers | any(.server_id == $server_id and .status == "online")' >/dev/null && return 0
+    sleep 0.1
+  done
+  echo "MCP server did not become callable: $server_id" >&2
+  return 1
+}
+
+assert_mcp_echo() {
+  curl -fsS --max-time 5 \
+    -H 'Authorization: Bearer test-ctl' \
+    -H 'Content-Type: application/json' \
+    --data '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"call_mcp_tool","arguments":{"target":"e2e-survivor","tool_name":"echo","arguments":{"text":"survived"}}}}' \
+    http://127.0.0.1:18080/mcp \
+    | jq -e '.result.structuredContent.response.content | any(.text == "survived")' >/dev/null
+}
+
+start_relay() {
+  cat >"$root/relay.json" <<JSON
+{
+  "hub_url": "http://127.0.0.1:18080",
+  "token": "test-relay",
+  "agent_id": "e2e-survivor",
+  "name": "E2E survivor",
+  "command": "python3",
+  "args": ["/e2e/fake_mcp_stdio.py"],
+  "stdio_format": "ndjson"
+}
+JSON
+  start python3 /e2e/generic_stdio_mcp_relay.py --agent-config "$root/relay.json" >/dev/null
+  wait_mcp_server e2e-survivor
+}
+
 start_ingress() {
   start python3 /e2e/ingress.py --route-file "$route_file" >/dev/null
   wait_http http://127.0.0.1:18080/healthz
@@ -87,7 +127,7 @@ JSON
 }
 JSON
   start_primary
-  start env HUB_PORT=9002 HUB_HOST=127.0.0.1 CTL_TOKEN=test-ctl GPTADMIN_CONFIG_DIR="$root/fallback" GPTADMIN_FAILOVER_NODE_ID=shell:fallback GPTADMIN_FAILOVER_RECLAIM_COMMAND_FILE="$reclaim_file" /usr/local/bin/gptadmin_hub >/dev/null
+  start env HUB_PORT=9002 HUB_HOST=127.0.0.1 CTL_TOKEN=test-ctl MCP_RELAY_AGENT_TOKEN=test-relay GPTADMIN_CONFIG_DIR="$root/fallback" GPTADMIN_FAILOVER_NODE_ID=shell:fallback GPTADMIN_FAILOVER_RECLAIM_COMMAND_FILE="$reclaim_file" /usr/local/bin/gptadmin_hub >/dev/null
   start python3 /usr/local/bin/gptadmin_failover_proxy.py --listen 127.0.0.1:9101 --upstream http://127.0.0.1:9002 --command-file "$reclaim_file" --node-id shell:fallback >/dev/null
   wait_http http://127.0.0.1:9001/healthz
   wait_http http://127.0.0.1:9002/healthz
@@ -133,7 +173,7 @@ JSON
 }
 
 start_primary() {
-  start env HUB_PORT=9001 HUB_HOST=127.0.0.1 CTL_TOKEN=test-ctl GPTADMIN_CONFIG_DIR="$root/primary" /usr/local/bin/gptadmin_hub >/dev/null
+  start env HUB_PORT=9001 HUB_HOST=127.0.0.1 CTL_TOKEN=test-ctl MCP_RELAY_AGENT_TOKEN=test-relay GPTADMIN_CONFIG_DIR="$root/primary" /usr/local/bin/gptadmin_hub >/dev/null
   wait_http http://127.0.0.1:9001/healthz
 }
 
@@ -188,6 +228,19 @@ scenario_hub_and_tunnel() {
   echo 'ok: combined hub and tunnel failure recovers after tunnel restart'
 }
 
+scenario_agent_reregisters_after_hub_failover() {
+  fresh_topology
+  start_relay
+  assert_mcp_echo
+  kill_primary
+  watchdog >/dev/null
+  watchdog | grep -q '"decision": "promote"'
+  wait_http http://127.0.0.1:18080/healthz
+  wait_mcp_server e2e-survivor
+  assert_mcp_echo
+  echo 'ok: a live stdio MCP relay re-registers and remains callable after hub failover'
+}
+
 scenario_primary_reclaim() {
   fresh_topology
   kill_primary
@@ -233,6 +286,7 @@ scenario_rank_two_promotes_when_rank_one_unavailable() {
 scenario_tunnel_only
 scenario_hub_only
 scenario_hub_and_tunnel
+scenario_agent_reregisters_after_hub_failover
 scenario_primary_reclaim
 scenario_rank_one_prevents_second_promotion
 scenario_rank_two_promotes_when_rank_one_unavailable

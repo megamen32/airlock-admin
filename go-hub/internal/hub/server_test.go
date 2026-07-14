@@ -724,6 +724,51 @@ func TestRegistryStatePersistsAgentsAcrossRestart(t *testing.T) {
 	t.Fatalf("restored agent not listed: %+v", body.Agents)
 }
 
+func TestMCPListServersSurvivesHubRestartWithDirectStructuredContent(t *testing.T) {
+	tmp := t.TempDir()
+	cfg := Config{CtlToken: "ctl", RelayAgentToken: "relay", ConfigDir: tmp, RegistryStateFile: filepath.Join(tmp, "registry_state.json"), DefaultTimeout: time.Second, PollMaxTimeout: time.Second}
+	first := New(cfg)
+	register := httptest.NewRequest(http.MethodPost, "/mcp-relay/register", bytes.NewBufferString(`{"agent_id":"survivor","name":"Survivor","kind":"virtual_shell","transport":"long_poll"}`))
+	register.Header.Set("Authorization", "Bearer relay")
+	registered := httptest.NewRecorder()
+	first.Handler().ServeHTTP(registered, register)
+	if registered.Code != http.StatusOK {
+		t.Fatalf("register status=%d body=%s", registered.Code, registered.Body.String())
+	}
+
+	restarted := New(cfg)
+	rpc := httptest.NewRequest(http.MethodPost, "/mcp", bytes.NewBufferString(`{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"list_mcp_servers","arguments":{}}}`))
+	rpc.Header.Set("Authorization", "Bearer ctl")
+	response := httptest.NewRecorder()
+	restarted.Handler().ServeHTTP(response, rpc)
+	if response.Code != http.StatusOK {
+		t.Fatalf("MCP list after restart status=%d body=%s", response.Code, response.Body.String())
+	}
+	var body struct {
+		Result struct {
+			StructuredContent struct {
+				Servers  []map[string]any `json:"servers"`
+				Response map[string]any   `json:"response"`
+			} `json:"structuredContent"`
+		} `json:"result"`
+	}
+	if err := json.Unmarshal(response.Body.Bytes(), &body); err != nil {
+		t.Fatal(err)
+	}
+	found := false
+	for _, server := range body.Result.StructuredContent.Servers {
+		if server["server_id"] == "survivor" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("surviving agent missing from direct structured content: %s", response.Body.String())
+	}
+	if len(body.Result.StructuredContent.Response) != 0 {
+		t.Fatalf("list_mcp_servers must not nest its result under response: %s", response.Body.String())
+	}
+}
+
 func TestFailoverConfigAndStateEndpoints(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HUB_PUBLIC_URL", "https://primary.example.test")

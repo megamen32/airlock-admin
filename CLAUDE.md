@@ -16,6 +16,10 @@ Self-hosted MCP hub. Two Go binaries + one Python CLI + vanilla-JS admin UI.
   New MCP surfaces keep a minimal stable context and lazily load only data the
   current task actually selects.
 - The canonical append-only handoff log is [`docs/WORKLOG.md`](docs/WORKLOG.md).
+- Before implementing work directly, the orchestrator explicitly asks whether a
+  bounded slice can be delegated to a subagent with clear instructions.
+  Delegate independent diagnosis, tests or isolated edits; retain integration,
+  risky decisions, deployment and acceptance in the primary agent.
 - Before substantial work, read both files, select one milestone and create an
   `active` entry using the worklog template. Before finishing, replace it with
   a factual `completed`, `blocked` or `handed-off` entry containing tests,

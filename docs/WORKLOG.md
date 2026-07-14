@@ -48,6 +48,17 @@ plan is [`PROJECT_PLAN.md`](./PROJECT_PLAN.md).
 
 ## Entries
 
+## 2026-07-14 - MCP server list restart and failover contract - completed
+
+- Milestone: `S0.2`, `S3.4`
+- Owner: Codex with independent incident-review agents
+- Scope: Prove the public MCP `list_mcp_servers` shape and registry survival across Hub restart/failover; ensure a live generic relay re-registers to a fresh Hub without a service restart.
+- Baseline / red evidence: The attached client probe read `structuredContent.response.servers`, but production returns the list at `structuredContent.servers`; direct production inspection reports 27 servers while that parser reports zero.
+- Change: Added a direct MCP JSON-RPC restart-contract test. Generic stdio relay now treats failed polling or registration as unregistered and retries registration with capped backoff before sending another poll. Docker failover now starts a real generic relay and fake stdio MCP, validates authenticated `list_mcp_servers`, then requires an `echo` tool call through the promoted fallback.
+- Verification: Red Python regression tests proved one-time registration and polling after a failed recovery registration; green `go test ./...` and `go vet ./...` in Hub/ShellMCP, Python `97 passed, 2 skipped`, and Docker failover suite with all tunnel, Hub, combined, agent, reclaim and ranked-fallback scenarios passing locally.
+- Delivery: Pending commit, push, CI and production relay rollout.
+- Next: Commit and push the recovery change; wait for CI, then deploy the generic relay update to hosts that run it.
+
 ## 2026-07-14 - Redacted security environment metadata - completed
 
 - Milestone: `S2.3`

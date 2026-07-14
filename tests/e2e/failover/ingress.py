@@ -25,9 +25,16 @@ class Handler(BaseHTTPRequestHandler):
         body = None
         if self.command == "POST":
             body = self.rfile.read(int(self.headers.get("Content-Length") or "0"))
-        request = urllib.request.Request(upstream + self.path, data=body, method=self.command)
+        headers = {
+            name: value
+            for name, value in self.headers.items()
+            if name.lower() in {"authorization", "content-type", "x-ctl-token", "x-mcp-relay-token"}
+        }
+        request = urllib.request.Request(upstream + self.path, data=body, headers=headers, method=self.command)
         try:
-            with urllib.request.urlopen(request, timeout=2) as response:  # noqa: S310 - test-local URLs
+            # Relay polls are deliberately long-lived (up to 55 seconds), so
+            # this tunnel double must not turn an idle poll into a false 502.
+            with urllib.request.urlopen(request, timeout=75) as response:  # noqa: S310 - test-local URLs
                 data = response.read()
                 self.send_response(response.status)
                 self.send_header("Content-Type", response.headers.get("Content-Type", "application/json"))
