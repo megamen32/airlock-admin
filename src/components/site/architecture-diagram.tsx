@@ -37,23 +37,21 @@ type Column = {
   mcps: McpPill[];
 };
 
-const ICON_REGISTRY: Record<string, LucideIcon> = {
-  brain: BrainCircuit,
-  bot: Bot,
-  terminal: Terminal,
-  router: Router,
-  server: Server,
-  shield: Shield,
-  wifi: Wifi,
-  radio: Radio,
-  gamepad: Gamepad2,
-  git: GitBranch,
-  database: Database,
-  boxes: Boxes,
-};
-
-function pickIcon(key: string): LucideIcon {
-  return ICON_REGISTRY[key] ?? Server;
+function IconGlyph({ iconKey, className }: { iconKey: string; className: string }) {
+  switch (iconKey) {
+    case "brain": return <BrainCircuit className={className} />;
+    case "bot": return <Bot className={className} />;
+    case "terminal": return <Terminal className={className} />;
+    case "router": return <Router className={className} />;
+    case "shield": return <Shield className={className} />;
+    case "wifi": return <Wifi className={className} />;
+    case "radio": return <Radio className={className} />;
+    case "gamepad": return <Gamepad2 className={className} />;
+    case "git": return <GitBranch className={className} />;
+    case "database": return <Database className={className} />;
+    case "boxes": return <Boxes className={className} />;
+    default: return <Server className={className} />;
+  }
 }
 
 const FALLBACK_COLUMNS: Column[] = [
@@ -218,7 +216,6 @@ function FlowNode({
   learnMoreLabel: string;
 }) {
   const [hover, setHover] = useState(false);
-  const Icon = pickIcon(node.iconKey);
   const isAi = variant === "ai";
 
   return (
@@ -242,7 +239,7 @@ function FlowNode({
           "inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg sm:h-8 sm:w-8",
           isAi ? "bg-primary/10" : "border border-border/50 bg-white/[0.02]"
         )}>
-          <Icon className="h-3.5 w-3.5 text-primary sm:h-4 sm:w-4" />
+          <IconGlyph iconKey={node.iconKey} className="h-3.5 w-3.5 text-primary sm:h-4 sm:w-4" />
         </span>
         <div className="min-w-0">
           <p className="hidden truncate font-mono text-[11px] font-medium leading-tight text-foreground/90 sm:block">{node.label}</p>
@@ -267,8 +264,6 @@ function FlowNode({
 
 function ServerWithMcps({ col, index }: { col: Column; index: number }) {
   const [hover, setHover] = useState(false);
-  const Icon = pickIcon(col.server.iconKey);
-
   return (
     <motion.div
       initial={{ opacity: 0, y: 10 }}
@@ -286,7 +281,7 @@ function ServerWithMcps({ col, index }: { col: Column; index: number }) {
         )}
       >
         <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-border/50 bg-white/[0.02] sm:h-8 sm:w-8">
-          <Icon className="h-3.5 w-3.5 text-primary sm:h-4 sm:w-4" />
+          <IconGlyph iconKey={col.server.iconKey} className="h-3.5 w-3.5 text-primary sm:h-4 sm:w-4" />
         </span>
         <p className="hidden truncate font-mono text-[11px] font-medium leading-tight text-foreground/90 sm:block">{col.server.label}</p>
         <p className="hidden truncate text-[10px] leading-tight text-muted-foreground/70 sm:block">{col.server.sub}</p>
@@ -294,7 +289,6 @@ function ServerWithMcps({ col, index }: { col: Column; index: number }) {
 
       <div className="flex flex-col items-center gap-1">
         {col.mcps.map((mcp, mi) => {
-          const McpIcon = pickIcon(mcp.iconKey);
           return (
             <motion.span
               key={`${mcp.label}-${mi}`}
@@ -304,7 +298,7 @@ function ServerWithMcps({ col, index }: { col: Column; index: number }) {
               transition={{ duration: 0.4, delay: 1 + mi * 0.1 }}
               className="inline-flex items-center gap-1 rounded-md border border-primary/20 bg-primary/[0.06] px-1.5 py-0.5"
             >
-              <McpIcon className="h-2.5 w-2.5 text-primary" />
+              <IconGlyph iconKey={mcp.iconKey} className="h-2.5 w-2.5 text-primary" />
               <span className="font-mono text-[8px] text-primary/90 sm:text-[9px]">{mcp.label}</span>
             </motion.span>
           );

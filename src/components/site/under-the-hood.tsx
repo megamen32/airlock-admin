@@ -65,7 +65,6 @@ export function UnderTheHood() {
           ))}
         </Stagger>
 
-        {/* Coming soon — web panel */}
         <Reveal className="mt-5">
           <div className="surface surface-hover group relative flex flex-col gap-6 overflow-hidden rounded-2xl p-7 md:flex-row md:items-center md:justify-between md:p-9">
             <div className="pointer-events-none absolute -left-16 -top-16 h-56 w-56 glow-violet blur-3xl opacity-50" aria-hidden />
@@ -79,12 +78,13 @@ export function UnderTheHood() {
                   <h3 className="text-xl font-semibold tracking-tight">Веб‑панель</h3>
                   <span className="inline-flex items-center gap-1.5 rounded-full border border-primary/30 bg-primary/[0.08] px-2.5 py-0.5 text-[11px] font-medium text-primary">
                     <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-primary" />
-                    Скоро · следующее обновление
+                    Доступна сейчас
                   </span>
                 </div>
                 <p className="mt-2 max-w-xl text-sm leading-relaxed text-muted-foreground">
-                  Смотрите очередь заданий, здоровье агентов и MCP и читайте логи — прямо
-                  с сайта, без терминала. Полный контроль над фермой серверов в одном окне.
+                  Смотрите очередь заданий, здоровье агентов и MCP, читайте логи и
+                  управляйте конфигурацией прямо в браузере. Полный контроль над фермой
+                  серверов в одном окне.
                 </p>
               </div>
             </div>
@@ -134,7 +134,7 @@ function CardView({ card }: { card: Card }) {
   );
 }
 
-/** Decorative mini dashboard preview for the coming-soon web panel. */
+/** Decorative preview of the available web panel. */
 function MiniDashboard() {
   const rows = [
     { name: "shellmcp:server-01", status: "online", w: "92%" },

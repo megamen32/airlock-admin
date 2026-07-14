@@ -1,26 +1,27 @@
-# Адаптеры
+# адаптеры
 
-Хаб предоставляет **три способа** подключения ИИ. Один и тот же хаб, те же возможности — выберите тот, который подходит вашему ИИ.
+Хаб предоставляет **три способа** подключения ИИ. Тот же концентратор, те же возможности
+— выберите тот, который соответствует вашему ИИ.
 
 | Адаптер | Для | Как |
 |---------|-----|-----|
-| [MCP client](#1-mcp-client) | Claude Desktop, Codex, OpenCode | MCP remote SSE по `/mcp` |
-| [Browser extension](#2-browser-extension) | DeepSeek, Qwen, Alice, GigaChat, ChatGPT (бесплатно) | userscript (Tampermonkey/Firefox) |
-| [OpenAI Action](#3-openai-action) | ChatGPT Custom GPT, Open WebUI | REST + OpenAPI, Bearer token |
+| [MCP client](#1-mcp-client) | Клод Рабочий стол, Кодекс, OpenCode | Удаленный MCP SSE по телефону `/mcp` |
+| [Расширение браузера](#2-browser-extension) | DeepSeek, Qwen, Алиса, GigaChat, ChatGPT (бесплатно) | пользовательский скрипт (Tampermonkey/Firefox) |
+| [OpenAI Action](#3-openai-action) | ChatGPT Пользовательский GPT, открытый веб-интерфейс | REST + OpenAPI, токен на предъявителя |
 
 ---
 
-## 1. MCP client
+## 1. Клиент MCP
 
-**Для:** Claude Desktop, Codex, OpenCode, любой клиент, совместимый с MCP.
+**Для:** Claude Desktop, Codex, OpenCode, любого клиента, совместимого с MCP.
 
-**Протокол:** MCP remote SSE (потоковый HTTP).
+**Протокол:** удаленный SSE MCP (поточный HTTP).
 
 **Конечная точка:** `https://your-hub.bezrabotnyi.com/mcp`
 
 ### Настройка
 
-Добавьте хаб как MCP-сервер в конфигурацию вашего клиента. Для Claude Desktop отредактируйте
+Добавьте концентратор в качестве сервера MCP в конфигурацию клиента. Для Claude Desktop отредактируйте
 `claude_desktop_config.json`:
 
 ```json
@@ -37,105 +38,105 @@
 }
 ```
 
-Для Codex / OpenCode те же настройки помещаются в соответствующие разделы MCP.
+Для Codex/OpenCode одна и та же конфигурация находится в соответствующих настройках MCP.
 
-Перезапустите клиент. Вы должны увидеть доступные инструменты `gptadmin` (shell_exec, file ops,
+Перезапустите клиент. Вы должны увидеть `gptadmin` инструментов (shell_exec, file ops,
 systemd и т. д.).
 
 ### Примечания
 
-- `/mcp` **не** принимает `CTL_TOKEN` напрямую. Он требует токен Bearer OAuth, который хаб подписывает через `OAUTH_CLIENT_SECRET`. См.
-[Configuration → OAuth](./CONFIGURATION.md#oauth).
-- Для локальной разработки вы можете использовать `http://localhost:25900/mcp` без OAuth (хаб ослабляет аутентификацию на localhost).
+- `/mcp` **не** принимает `CTL_TOKEN` напрямую. Требуется носитель OAuth
+  токен, который концентратор подписывает через `OAUTH_CLIENT_SECRET`. См.
+  [Конфигурация → OAuth](./CONFIGURATION.md#oauth).
+- Для локальных разработчиков вы можете использовать `http://localhost:25900/mcp` без OAuth (
+  хаб ослабляет аутентификацию на локальном хосте).
 
 ---
 
-## 2. Browser extension
+## 2. Расширение для браузера
 
-**Для:** DeepSeek, Qwen, Yandex Alice, Sber GigaChat, ChatGPT (бесплатный тариф) —
+**Для:** DeepSeek, Qwen, Яндекс Алиса, Сбер GigaChat, ChatGPT (уровень бесплатного пользования) —
 любой бесплатный веб-чат.
 
-**Протокол:** userscript (работает в браузере через Tampermonkey/Firefox).
+**Протокол:** пользовательский скрипт (запускается в браузере через Tampermonkey/Firefox).
 
-**Установка:** https://became.bezrabotnyi.com/mcp-bridge.user.js
+**Установить:** https://became.bezrabotnaya.com/mcp-bridge.user.js
 
 ### Как это работает
 
-Userscript добавляет две кнопки в интерфейс веб-чата:
-- **MCP All** (`Alt+M`) — вставляет краткое описание всех ваших агентов MCP
-  и их инструментов в поле ввода чата. Также копирует запрос в буфер обмена.
-- **MCP** — открывает панель для выбора конкретного агента с подробной документацией по инструментам.
+Пользовательский скрипт добавляет в пользовательский интерфейс веб-чата две кнопки:
+- **MCP All** (`Alt+M`) — вставляет компактное описание всех ваших агентов MCP.
+  и их инструменты для ввода в чат. Также копирует приглашение в буфер обмена.
+- **MCP** — открывает панель для выбора конкретного агента с подробной документацией по инструменту.
 
-Когда ИИ отвечает блоком кода ` ```mcp ` с JSON-командой,
+Когда ИИ отвечает блоком кода ` ```mcp `, содержащим команду JSON,
 скрипт автоматически:
 1. Выделяет блок
-2. Отправляет вызов в ваш хаб
+2. Отправляет вызов на ваш хаб.
 3. Вставляет результат обратно в чат
 
-### Настройка для платформы
+### Настройка для каждой платформы
 
 | Платформа | Менеджер | Шаги |
 |----------|---------|-------|
-| macOS / Windows / Linux | Chrome + [Tampermonkey](https://www.tampermonkey.net/) | Установите Tampermonkey из Chrome Web Store, затем нажмите ссылку для установки. |
-| iPhone | Safari + [Userscripts](https://apps.apple.com/app/userscripts/id1463298887) | Установите приложение Userscripts, включите в Safari → Расширения, затем установите. |
-| Android | Firefox + Tampermonkey | Установите Firefox из Google Play, добавьте Tampermonkey, затем установите. |
+| macOS/Windows/Линукс | Chrome + [Tampermonkey](https://www.tampermonkey.net/) | Установите Tampermonkey из Интернет-магазина Chrome, затем нажмите ссылку установки. |
+| айфон | Safari + [Пользовательские скрипты](https://apps.apple.com/app/userscripts/id1463298887) | Установите приложение Userscripts, включите его в Safari → Расширения, затем установите. |
+| Андроид | Firefox + Тампермонки | Установите Firefox из Google Play, добавьте Tampermonkey, затем установите. |
 
 ### Конфигурация
 
-Нажмите `Alt+K` (или значок клавиши в правом нижнем углу) и введите:
-- **Bridge URL** — ваш URL хаба (`https://your-hub.bezrabotnyi.com`)
-- **Bridge Key** — ваш `CTL_TOKEN`
+Нажмите `Alt+K` (или значок ключа в правом нижнем углу) и введите:
+- **URL-адрес моста** — URL-адрес вашего хаба (`https://your-hub.bezrabotnyi.com`).
+- **Ключ от моста** — ваш `CTL_TOKEN`
 
 ### Поддерживаемые сайты
 
 | Сайт | Статус |
 |------|--------|
-| chatgpt.com | Полная поддержка |
-| chat.deepseek.com | Полная поддержка |
-| chat.qwen.ai | Полная поддержка |
-| ya.ru / chat.yandex.ru | Полная поддержка |
+| чатgpt.com | Полная поддержка |
+| чат.deepseek.com | Полная поддержка |
+| чат.qwen.ai | Полная поддержка |
+| ya.ru / чат.yandex.ru | Полная поддержка |
 
-> Если автовставка не работает (редко, на некоторых сайтах), запрос всегда находится
-> в вашем буфере обмена — просто `Ctrl+V` / `Cmd+V`.
+> Если автовставка не работает (редко, на некоторых сайтах), подсказка всегда отображается
+> ваш буфер обмена — всего `Ctrl+V` / `Cmd+V`.
 
 ---
 
-## 3. OpenAI Action
+## 3. Действие OpenAI
 
-**Для:** ChatGPT Custom GPT, Open WebUI.
+**Для:** ChatGPT Пользовательский GPT, открытый веб-интерфейс.
 
-**Протокол:** REST + схема OpenAPI, Bearer auth.
+**Протокол:** REST + схема OpenAPI, проверка подлинности носителя.
 
 **Конечная точка:** `https://your-hub.bezrabotnyi.com/admin/api/*`
 
-### Настройка (ChatGPT Custom GPT)
+### Настройка (пользовательский GPT ChatGPT)
 
-1. Откройте https://chatgpt.com/gpts/editor
-2. Создайте или отредактируйте GPT → Configure → Actions → Create new action
-3. Импортируйте OpenAPI по URL: `https://became.bezrabotnyi.com/api.json`
-4. В блоке `servers` замените `url` на URL вашего хаба
-5. Authentication → API key → Bearer → вставьте ваш `CTL_TOKEN`
-6. Сохраните. Теперь вы можете просить ChatGPT выполнять команды сервера — без ограничений Codex.
+1. Откройте https://chatgpt.com/gpts/editor.
+2. Создайте или отредактируйте GPT → Настроить → Действия → Создать новое действие.
+3. Импортируйте OpenAPI по URL-адресу: `https://became.bezrabotnyi.com/api.json`.
+4. В блоке `servers` замените `url` на URL-адрес вашего хаба.
+5. Аутентификация → Ключ API → Носитель → вставьте свой `CTL_TOKEN`.
+6. Сохраните. Теперь вы можете попросить ChatGPT запускать команды сервера — никаких ограничений Кодекса.
 
-### Настройка (Open WebUI)
+### Настройка (открытый веб-интерфейс)
 
-Добавьте хаб как конечную точку инструмента/функции в настройках Open WebUI:
-- URL: `https://your-hub.bezrabotnyi.com/admin/api`
-- Схема OpenAPI: импортировать из `https://became.bezrabotnyi.com/api.json`
-- Auth: Bearer `CTL_TOKEN`
+Добавьте хаб в качестве конечной точки инструмента/функции в настройках Open WebUI:
+- URL: `https://your-hub.bezrabotnyi.com/admin/api`.
+- Схема OpenAPI: импорт из `https://became.bezrabotnyi.com/api.json`.
+- Аутентификатор: предъявитель `CTL_TOKEN`.
 
-### Почему "без ограничений Codex"
+### Почему «нет ограничений Кодекса»
 
-Действия Custom GPT не имеют квот на вызов инструментов в час, как Codex. Пока
-ваш хаб работает, ChatGPT может вызывать его столько, сколько потребуется.
+Пользовательские действия GPT не имеют почасовых квот на вызовы инструментов, таких как Codex. Пока
+ваш хаб включен, ChatGPT может вызывать его столько, сколько необходимо.
 
 ---
 
-## Какой адаптер мне использовать?
+## Какой адаптер мне следует использовать?- Используете **Claude Desktop/Codex/OpenCode** изначально? → **Клиент MCP**
+- Хотите использовать **бесплатные веб-чаты** (Qwen, Alice, GigaChat)? → **Расширение для браузера**
+– Вы используете **ChatGPT с Plus** и хотите использовать собственный GPT? → **Действие OpenAI**
 
-- Используете **Claude Desktop / Codex / OpenCode** нативно? → **MCP client**
-- Хотите использовать **бесплатные веб-чаты** (Qwen, Alice, GigaChat)? → **Browser extension**
-- На **ChatGPT с Plus** и хотите Custom GPT? → **OpenAI Action**
-
-Все три дают вам одинаковые возможности — хабу неважно, какой адаптер
-использовал ИИ. См. [Architecture](./ARCHITECTURE.md), почему.
+Все три предоставляют одинаковые возможности — хабу не важно, какой адаптер
+используемый ИИ. См. [Architecture](./ARCHITECTURE.md), чтобы узнать, почему.

@@ -58,6 +58,10 @@ Response (truncated to save tokens if long):
 }
 ```
 
+Commands normally run as the ShellMCP agent's configured non-root user. Set
+`run_as_user: "root"` only for an intentional privileged operation; a root
+ShellMCP without a configured default user rejects ordinary commands.
+
 ### `GET /tasks/{task_id}`
 
 Get the status of a background task.
@@ -156,6 +160,12 @@ Long stdout/stderr is chunked. The response includes:
 
 The AI can read more on demand via a follow-up call. This saves tokens — the
 AI only reads what it needs to answer.
+
+## Relay target contract
+
+For the hub relay, call `listMcpServers` before `listMcpTools` or
+`callMcpTool`, then pass the returned explicit server id as `target`. There is
+no `default` target and `target: "default"` returns `400`.
 
 
 ## Per-server MCP and OpenAPI Action proxy

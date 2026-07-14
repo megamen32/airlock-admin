@@ -1,40 +1,49 @@
 # ShellMCP
 
-ShellMCP 是跑在每台目标机器上的 agent。它跟 hub 注册，在本地执行命令，把真正的输出回传。
+ShellMCP 是在每台目标计算机上运行的代理。它注册到
+hub，在本地执行命令，并返回真实的输出。
 
-## 它做什么
+## 它的作用
 
-- **注册** 到 hub：通过 `POST /heartbeat`（发送 URL + token + hostname）
+- **通过 `POST /heartbeat` 向集线器注册**（发送 URL + 令牌 + 主机名）
 - **执行** shell 命令、文件操作、systemd 操作
-- **回传** 真实的 stdout/stderr（hub 会把很长的输出截断，省 token）
-- **运行** 默认是 user-mode（不拿 sudo），需要时切到 system-mode
-- **支持** Linux、macOS、Windows
+- **返回**真实的标准输出/标准错误（集线器截断长输出以保存令牌）
+- **以配置的非 root 用户身份运行**普通命令
+- **适用于** Linux、macOS、Windows 和 Android/Termux
 
-## 实现
+## 实施
 
-| 实现 | 状态 | 路径 | 何时使用 |
-|------|------|------|----------|
-| Go（`go-shellmcp/`） | **主实现（且唯一）** | `go-shellmcp/` | 新部署 —— 更快、单二进制 |
+|实施 |状态 |地点 |何时使用 |
+|------|--------|----------|------------|
+|去 (`go-shellmcp/`) | **主要（仅）** | `go-shellmcp/` |新部署 - 更快、单一二进制文件 |
 
-> **注意。** 老的 Python 实现（`client/shellmcp*.py`）已从源码树删除，所有安装现在统一使用 Go 二进制 `shellmcp-go`。
+> **注意。** 旧版 Python 实现 (`client/shellmcp*.py`) 已
+> 从源代码树中删除。现在所有安装都使用 Go 二进制文件 `shellmcp-go`。
 
 ## 在目标机器上安装
 
 ```bash
-# Linux / macOS（默认把 Go 二进制装到 user-mode）
+# Linux / macOS (installs the Go binary in user-mode by default)
 curl -s https://became.bezrabotnyi.com/install.sh | bash
 ```
 
-安装脚本会：
+安装程序：
+- 自动检测模式：无 sudo → 用户模式 (`~/.local/share/gptadmin`)，
+  使用 sudo → 系统模式 (`/opt/gptadmin`)
+- 注册用户服务（Linux 上为 `systemctl --user`，macOS 上为 `LaunchAgents`）
+- 打印代理 URL + `SHELLMCP_TOKEN`
 
-- 自动判断模式：没有 sudo → user-mode（`~/.local/share/gptadmin`），有 sudo → system-mode（`/opt/gptadmin`）
-- 注册一个用户级 service（Linux 上 `systemctl --user`，macOS 上 `LaunchAgents`）
-- 打印 agent 的 URL 和 `SHELLMCP_TOKEN`
-
-## 手动启动
+对于 Android Termux，请使用 Android 安装程序。它安装了 `android-arm64`
+二进制文件，在 Termux 中启动它，并启用相同的基于清单的自动更新：
 
 ```bash
-# 用 Go 二进制向 hub 注册
+curl -fsS https://became.bezrabotnyi.com/install-android.sh | bash
+```
+
+## 手动运行
+
+```bash
+# Register with a hub using the Go binary
 SHELLMCP_TOKEN=agent-secret \
 HUB_URL=http://your-hub:25900 \
 ./go-shellmcp/shellmcp
@@ -42,46 +51,55 @@ HUB_URL=http://your-hub:25900 \
 
 ## 环境变量
 
-| 变量 | 必填 | 默认值 | 用途 |
-|------|------|--------|------|
-| `SHELLMCP_TOKEN` | 是 | — | Bearer token（必须与 hub 期望的值一致） |
-| `HUB_URL` | 是 | — | 要注册的 hub URL |
-| `SHELLMCP_NAME` | 否 | hostname | 在 hub 上显示的 agent 名字 |
-| `SHELLMCP_LISTEN` | 否 | 25901 | 本地监听端口 |
-| `EXEC_TIMEOUT` | 否 | 120 | 命令最长执行时间（秒） |
-| `LOG_LIMIT_B` | 否 | 65536 | 这个 ShellMCP agent 返回的 inline stdout/stderr 尾部的最大字节数；超出后完整流会落盘到 spool |
+|瓦尔 |必填|默认|目的|
+|-----|----------|---------|---------|
+| `SHELLMCP_TOKEN` |是的 | — |不记名令牌（必须符合集线器的期望）|
+| `HUB_URL` |是的 | — |用于注册的集线器 URL |
+| `SHELLMCP_NAME` |没有|主机名 |中心显示的代理名称 |
+| `SHELLMCP_BIND` |没有| `127.0.0.1` |本地监听地址 |
+| `SHELLMCP_PORT` |没有| `25900` |本地监听端口|
+| `SHELLMCP_DEFAULT_USER` |需要根服务| — |非root身份执行普通命令 |
+| `EXEC_TIMEOUT` |没有| `300` |最大命令执行时间（秒）|
+| `SHELLMCP_AUTO_UPDATE` |没有|来自安装人员的 `1` |启用基于清单的二进制更新 |
+| `SHELLMCP_UPDATE_INTERVAL_S` |没有|来自安装人员的 `3600` |更新检查间隔（秒） |
+| `SHELLMCP_UPDATE_MANIFEST_URL` |没有|集线器工件 URL |发布清单； Android使用`shellmcp-android-arm64.json` |
+| `SHELLMCP_UPDATE_TOKEN` |没有|代理令牌|私有工件端点的承载令牌 |
+| `LOG_LIMIT_B` |没有| 65536 |在将完整流假脱机到磁盘之前此 ShellMCP 代理返回的最大内联 stdout/stderr 尾部（字节） |
 
-`LOG_LIMIT_B` 是按 ShellMCP agent 单体的。它控制本地 `/exec` 结果的尾部，不会替代 hub/客户端侧的响应预算；hub 对 ChatGPT Actions、Claude、或其他 MCP 客户端仍可能使用另一套响应预算。
+`LOG_LIMIT_B` 是每个 ShellMCP 代理。它控制本地 `/exec` 结果尾部，并且不会替换集线器/客户端响应预算；中心仍可能对 ChatGPT Actions、Claude 或其他 MCP 客户端应用不同的响应预算。
 
-## 暴露出来的操作
+## 暴露的操作
 
-hub 把这些操作代理给 agent。三种适配器都能用：
+集线器将这些代理给代理。适用于所有 3 个适配器：
 
-| 操作 | 示例 |
-|------|------|
-| `shell_exec` | 跑一条 shell 命令，返回 stdout/stderr |
-| `file_read` | 读文件 |
-| `file_write` | 写文件（带备份） |
-| `file_backup` | 在编辑前做一份托管式备份 |
-| `systemd_*` | systemd unit 的 status / start / stop / restart / enable |
-| `system_info` | CPU、RAM、磁盘、uptime |
-| `system_health` | 快速健康检查 |
-| `venv_*` | 管理 Python virtualenv |
-| `dir` | 列目录 |
+|运营|示例|
+|------------|---------|
+| `shell_exec` |运行 shell 命令，返回 stdout/stderr |
+| `file_read` |读取文件 |
+| `file_write` |写一个文件（带备份） |
+| `file_backup` |编辑前创建托管备份 |
+| `systemd_*` |状态/启动/停止/重新启动/启用单元|
+| `system_info` | CPU、RAM、磁盘、正常运行时间 |
+| `system_health` |快速健康检查|
+| `venv_*` |管理 Python virtualenvs |
+| `dir` |列表目录 |
 
-具体 schema 见 [API Reference](./API_REFERENCE.md)。
+请参阅 [API 参考](./API_REFERENCE.md) 了解确切的架构。
 
-## 安全性
+## 安全
 
-- agent 只接受带有它的 `SHELLMCP_TOKEN` 的请求
-- 默认运行在安装它的用户下（非 root）—— system-mode（sudo）是 opt-in
-- 可配置 IP 白名单和命令白名单
-- 凭据在日志里会被遮罩
+- 代理仅接受带有 `SHELLMCP_TOKEN` 的请求
+- 默认情况下，安装以安装用户身份运行。系统服务可能
+  以 root 身份启动，但普通命令会降级为 `SHELLMCP_DEFAULT_USER`。
+- 没有 `SHELLMCP_DEFAULT_USER` 的根服务拒绝普通命令
+  而不是以 root 身份默默地执行它们。
+- 仅出于故意使用 `run_as_user: "root"` 或显式 `sudo` 命令
+  特权操作。
+- 可以配置IP白名单和命令白名单
+- 秘密被隐藏在日志中
 
-见 [Security](./SECURITY_DOCS.md)。
+请参阅[安全](./SECURITY_DOCS.md)。
 
-## 另见
-
-- [Hub](./HUB.md) —— agent 跟谁对话
-- [Install Paths](./INSTALL_PATHS.md) —— agent 在每个 OS 上安装在哪里
-- [Configuration](./CONFIGURATION.md) —— 完整环境变量参考
+## 另请参阅- [Hub](./HUB.md) — 代理与什么对话
+- [安装路径](./INSTALL_PATHS.md) - 它在每个操作系统上的位置
+- [Configuration](./CONFIGURATION.md) — 完整的环境变量参考

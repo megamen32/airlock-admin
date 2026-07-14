@@ -134,6 +134,18 @@ This means:
 - per-server Custom GPTs stay small and focused;
 - users do not need to hand-maintain large OpenAPI files.
 
+## Selecting a relay target
+
+The full hub relay has **no global default target**. Call `listMcpServers`
+first, then pass one returned `server_id` as `target` to `listMcpTools` and
+`callMcpTool`. Never send `target: "default"`: the hub rejects it rather than
+guessing which machine should receive a command.
+
+Use `hub` for hub/registry work and an explicit `shell:<server>` target for
+commands, logs, service management, and files on that server. For privileged
+shell work, keep the normal non-root identity unless the request deliberately
+sets `run_as_user: "root"` or uses `sudo`.
+
 ## Security notes
 
 - Do not expose raw stdio MCP servers directly to the internet; put GPTAdmin in front.

@@ -1,85 +1,106 @@
 # 常见问题解答
 
-## GPT-Admin 是免费的吗？
+## GPT‑Админ 是免费的吗？
 
-是的。核心功能（hub、shellmcp、所有三个适配器、基础网页面板）根据 AGPL-3.0 协议永久免费。未来的付费功能（托管云、企业 SSO、高级面板）是增量的——现有功能保持免费。
-请参阅 [路线图](./ROADMAP.md)。
+是的。核心（集线器、shellmcp、所有三个适配器、基本 Web 面板）是免费的
+永远在 AGPL-3.0 下。未来的付费产品（托管云、企业 SSO、
+高级面板）将是附加的 - 现有功能保持免费。
+请参阅[路线图](./ROADMAP.md)。
 
-## 我需要付费的 AI 订阅吗？
+## 我需要付费订阅 AI 吗？
 
-不需要。浏览器扩展支持**免费网络聊天**——包括 DeepSeek、Qwen、Yandex Alice、Sber GigaChat，甚至是免费版的 ChatGPT。请参阅 [适配器 → 浏览器扩展](./ADAPTERS.md#2-browser-extension)。
+不需要。浏览器扩展程序可与**免费网络聊天**配合使用 - DeepSeek、Qwen、
+Yandex Alice、Sber GigaChat，甚至免费版 ChatGPT。参见
+[适配器→浏览器扩展](./ADAPTERS.md#2-browser-extension)。
 
-## 让 AI 访问我的服务器安全吗？
+## 允许 AI 访问我的服务器安全吗？
 
-GPT-Admin 就是为此设计的。关键安全功能包括：
+GPT‑Админ 就是为此而设计的。主要安全特性：
 
-- **默认用户模式** — 无需 root/sudo
+- **默认用户模式** — 不需要 root/sudo
 - **命令白名单** — 限制 AI 可以运行的内容
-- **批准模式** — 对关键操作进行人工确认
-- **审计日志** — 每个命令都会记录调用者 + 结果
-- **日志中屏蔽密钥**
-- **文件编辑前的管理备份**
+- **批准模式** — 关键操作的人工确认
+- **审核日志** — 每个命令都记录有调用者 + 结果
+- **日志中隐藏的秘密**
+- 文件编辑前的**托管备份**
 
-请参阅 [安全](./SECURITY_DOCS.md)。
+请参阅[安全](./SECURITY_DOCS.md)。
 
-## AI 会在不知情的情况下运行命令吗？
+## AI 会在我不知情的情况下运行命令吗？
 
-不会。只有在您在聊天中要求时，命令才会运行。对于关键操作（删除、网络更改），批准模式需要人工确认。
+不会。命令仅在您在聊天中询问时运行。对于关键操作
+（删除、网络变更），批准模式需要人工确认。
 
-## 三个适配器有什么区别？
+## 这三个适配器有什么区别？
 
-同一个 hub，相同的能力——它们只是 AI 连接的不同方式：
+相同的中心，相同的功能——它们只是人工智能的不同方式
+连接：
 
 - **MCP 客户端** — 用于 Claude/Codex/OpenCode（原生 MCP 支持）
 - **浏览器扩展** — 用于免费网络聊天（无需 API）
-- **OpenAI Action** — 用于 ChatGPT 自定义 GPT / Open WebUI
+- **OpenAI 操作** — 用于 ChatGPT 自定义 GPT / 开放 WebUI
 
-请参阅 [适配器](./ADAPTERS.md)。
+请参阅[适配器](./ADAPTERS.md)。
 
-## 为什么叫 CTL_TOKEN？
+## 为什么叫CTL_TOKEN？
 
-这是历史命名。`CTL_TOKEN` 是 hub API + 网页面板的管理员凭证令牌。该命名在 1.0 版本前可能会更改（并提供迁移路径）。
-请参阅 [配置 → 命名](./CONFIGURATION.md)。
+历史命名。 `CTL_TOKEN` 是集线器 API 的管理员不记名令牌 +
+网页面板。 1.0之前命名可能会改变（带有迁移路径）。
+请参阅[配置→命名](./CONFIGURATION.md)。
 
 ## `/mcp` 返回 401 — 为什么？
 
-`/mcp` 不直接接受 `CTL_TOKEN`。它需要通过 `OAUTH_CLIENT_SECRET` 签名的 OAuth 凭证令牌。MCP 客户端通过 OAuth 流程自动处理这一点。对于本地开发，hub 会在 localhost 上放宽认证。请参阅 [配置 → OAuth](./CONFIGURATION.md#oauth)。
+`/mcp` 不直接接受 `CTL_TOKEN`。它需要 OAuth 不记名令牌
+通过 `OAUTH_CLIENT_SECRET` 签名。MCP 客户端通过以下方式自动处理此问题
+OAuth 流程。对于本地开发人员，中心放宽了本地主机上的身份验证。参见
+[配置→OAuth](./CONFIGURATION.md#oauth)。
 
 ## 我需要自己的域名吗？
 
-不需要。安装程序提供了一个通过 FRP 的自动隧道——您可以在 `frp.bezrabotnyi.com` 上获得一个公共 URL，无需设置 DNS。如果需要使用自己的域名，请使用 Cloudflare Tunnel 或 nginx + Certbot。请参阅 [隧道](./TUNNELS_DOCS.md)。
+不会。安装程序通过 FRP 提供自动隧道 — 您可以在
+`frp.bezrabotnyi.com` 没有 DNS 设置。对于您自己的域，请使用 Cloudflare
+隧道或 nginx + Certbot。请参阅[隧道](./TUNNELS_DOCS.md)。
 
-## 在 Windows 上可以使用吗？
+## 它可以在 Windows 上运行吗？
 
-可以。代理通过计划任务在 Windows 上运行（用户模式，无需管理员权限）。使用以下命令安装：
+是的。该代理通过以下方式在 Windows 上运行（用户模式，无需管理员）
+预定任务。安装：
 
 ```powershell
 iwr -UseBasicParsing https://became.bezrabotnyi.com/install_win.ps1 | iex
 ```
 
-请参阅 [安装路径](./INSTALL_PATHS.md)。
+请参阅[安装路径](./INSTALL_PATHS.md)。
 
-## 我可以在没有浏览器扩展/自定义 GPT 的情况下使用吗？
+## 我可以在没有浏览器扩展/自定义 GPT 的情况下使用它吗？
 
-可以——使用 **MCP 客户端**适配器连接 Claude Desktop、Codex 或 OpenCode。这些原生通过 MCP 远程 SSE 连接，无需浏览器。请参阅 [适配器 → MCP 客户端](./ADAPTERS.md#1-mcp-client)。
+是 — 将 **MCP 客户端** 适配器与 Claude Desktop、Codex 或 OpenCode 结合使用。
+这些通过 MCP 远程 SSE 进行本地连接，无需浏览器。参见
+[适配器 → MCP 客户端](./ADAPTERS.md#1-mcp-client)。
 
 ## 输出截断是如何工作的？
 
-长的 stdout/stderr 会被分块（默认为 1MB）。AI 只能看到开头 + 结尾 + 一个“阅读更多”的指针。这可以节省令牌——AI 只读取它回答所需的内容。请参阅 [API 参考 → 输出截断](./API_REFERENCE.md#output-truncation)。
+长的 stdout/stderr 被分块（默认值：1MB）。 AI看到头+尾+
+“阅读更多”指针。这可以节省代币——人工智能只读取它需要的内容
+来回答。请参阅 [API 参考 → 输出截断](./API_REFERENCE.md#output-truncation)。
 
-## 我可以接入其他 MCP 吗？
+## 我可以插入其他 MCP 吗？
 
-可以！hub 可以消费其他 MCP 服务器（用于网络搜索的 chrome-devtools、用于项目记忆的 openmemory 等），并将它们作为工具暴露给所有连接的 AI。请参阅 [架构](./ARCHITECTURE.md)。
+是的！该集线器可以使用其他 MCP 服务器（用于网络搜索的 chrome-devtools，
+openmemory 用于项目内存等）并将它们作为工具公开给每个人
+连接人工智能。请参阅[架构](./ARCHITECTURE.md)。
 
-## 如何轮换令牌？
+## 如何轮换代币？
 
-请参阅 [安全 → 令牌轮换](./SECURITY_DOCS.md#token-rotation)。简而言之：使用 `openssl rand -hex 32` 生成新值，更新 hub 环境变量，重启，然后更新客户端。
+请参阅[安全→令牌轮换](./SECURITY_DOCS.md#token-rotation)。简短版本：
+使用 `openssl rand -hex 32` 生成新值，更新集线器环境，重新启动，
+更新客户端。
 
-## 出了问题。日志在哪里？
+## 有东西坏了。日志在哪里？
 
-- Hub: `journalctl -u gptadmin_hub -n 100` (或 `--user` 用于用户模式)
-- Agent: `journalctl -u shellmcp -n 100` (或 `--user`)
-- 或者在网页面板中查看：`/admin` → Logs
+- 集线器：`journalctl -u gptadmin_hub -n 100`（或用户模式 `--user`）
+- 代理：`journalctl -u shellmcp -n 100`（或`--user`）
+- 或在网络面板中阅读它们：`/admin` → 日志
 
 ## 如何卸载？
 
@@ -87,10 +108,10 @@ iwr -UseBasicParsing https://became.bezrabotnyi.com/install_win.ps1 | iex
 gptadmin uninstall
 ```
 
-移除二进制文件、配置文件和服务单元。文件备份会保留。
+删除二进制文件、配置和服务单元。文件备份被保留。
 
-## 仍然卡住了？
+## 还是卡住了吗？
 
-- [在 GitHub 上开 Issue](https://github.com/megamen32/gptadmin/issues)
-- Telegram: [@careviolan](https://t.me/careviolan)
-- 网站: https://gptadmin.bezrabotnyi.com
+- [打开 GitHub 问题](https://github.com/megamen32/gptadmin/issues)
+- 电报：[@careviolan](https://t.me/careviolan)
+- 网站：https://gptadmin.bezrabotnyi.com

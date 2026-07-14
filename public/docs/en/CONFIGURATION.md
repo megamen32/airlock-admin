@@ -26,7 +26,7 @@ Full environment-variable reference, auth model, and OAuth setup.
 
 | Var | Default | Purpose |
 |-----|---------|---------|
-| `EXEC_TIMEOUT` | 120 | Max command execution time (seconds) |
+| `EXEC_TIMEOUT` | 300 | Max command execution time (seconds) |
 | `LOG_LIMIT_B` | 65536 | Per-ShellMCP-agent inline stdout/stderr tail budget. Larger command output is spooled to disk; hub/client response budgets are configured separately. |
 | `HEARTBEAT_TIMEOUT` | 60 | Seconds before an agent is marked offline |
 | `BACKGROUND_TASK_TTL` | 3600 | How long completed background jobs are kept (seconds) |
@@ -34,6 +34,8 @@ Full environment-variable reference, auth model, and OAuth setup.
 ## ShellMCP env vars
 
 See [ShellMCP → Environment variables](./SHELLMCP.md#environment-variables).
+In particular, a ShellMCP system service needs `SHELLMCP_DEFAULT_USER` to keep
+ordinary commands non-root. Installers set it to the invoking sudo user.
 
 ## Auth model
 

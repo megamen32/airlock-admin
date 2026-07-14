@@ -1,79 +1,82 @@
 # Пути установки
 
-Где GPT-Админ находится в каждой ОС, в пользовательском и системном режиме.
+Где GPT‑Админ находится в каждой ОС, в пользовательском и системном режиме.
 
 ## Режимы
 
 Установщик автоматически определяет режим:
 
-- **user-mode** (по умолчанию) — устанавливает в домашний каталог пользователя, работает как служба пользователя. Не требуется sudo/Администратор.
-- **system-mode** — устанавливает в систему, работает от имени root/системы. Используйте только тогда, когда вам требуются привилегированные операции (привязка к порту 80, управление системными службами для других пользователей и т. д.).
+- **user-mode** (по умолчанию) — устанавливается в домашний каталог пользователя, запускается от имени пользователя.
+  сервис. Никакого sudo/администратора не требуется.
+- **system-mode** — устанавливается в масштабе всей системы, запускается от имени пользователя root/system. Используйте только тогда, когда
+  вам нужны привилегированные операции (привязка к порту 80, управление системными службами
+  для других пользователей и т. д.).
 
 ## Пути по ОС
 
-### Linux
+### Линукс
 
-| | user-mode | system-mode |
+| | пользовательский режим | системный режим |
 |---|-----------|-------------|
-| Бинарный файл | `~/.local/share/gptadmin/` | `/opt/gptadmin/` |
-| Конфиг | `~/.config/gptadmin/` | `/etc/gptadmin/` |
-| Служба | `systemctl --user` | `systemctl` (юнит systemd) |
-| CLI | `~/.local/bin/gptadmin` | `/usr/local/bin/gptadmin` |
+| Двоичный | `~/.local/share/gptadmin/` | `/opt/gptadmin/` |
+| Конфигурация | `~/.config/gptadmin/` | `/etc/gptadmin/` |
+| Сервис | `systemctl --user` | `systemctl` (системный модуль) |
+| интерфейс командной строки | `~/.local/bin/gptadmin` | `/usr/local/bin/gptadmin` |
 
 ### macOS
 
-| | user-mode | system-mode |
+| | пользовательский режим | системный режим |
 |---|-----------|-------------|
-| Бинарный файл | `~/.local/share/gptadmin/` | `/opt/gptadmin/` |
-| Конфиг | `~/.config/gptadmin/` | `/etc/gptadmin/` |
-| Служба | LaunchAgents (`~/Library/LaunchAgents/`) | LaunchDaemons (`/Library/LaunchDaemons/`) |
-| CLI | `~/.local/bin/gptadmin` | `/usr/local/bin/gptadmin` |
+| Двоичный | `~/.local/share/gptadmin/` | `/opt/gptadmin/` |
+| Конфигурация | `~/.config/gptadmin/` | `/etc/gptadmin/` |
+| Сервис | Агенты запуска (`~/Library/LaunchAgents/`) | LaunchDaemons (`/Library/LaunchDaemons/`) |
+| интерфейс командной строки | `~/.local/bin/gptadmin` | `/usr/local/bin/gptadmin` |
 
-### Windows
+### Окна
 
-| | user-mode | system-mode |
+| | пользовательский режим | системный режим |
 |---|-----------|-------------|
-| Бинарный файл | `%LOCALAPPDATA%\gptadmin\` | `C:\Program Files\gptadmin\` |
-| Конфиг | `%LOCALAPPDATA%\gptadmin\config\` | `C:\ProgramData\gptadmin\` |
-| Служба | Планировщик заданий (при входе пользователя) | Служба Windows (Администратор) |
-| CLI | `%LOCALAPPDATA%\gptadmin\gptadmin.exe` | `C:\Program Files\gptadmin\gptadmin.exe` |
+| Двоичный | `%LOCALAPPDATA%\gptadmin\` | `C:\Program Files\gptadmin\` |
+| Конфигурация | `%LOCALAPPDATA%\gptadmin\config\` | `C:\ProgramData\gptadmin\` |
+| Сервис | Запланированное задание (при входе пользователя в систему) | Служба Windows (Администратор) |
+| интерфейс командной строки | `%LOCALAPPDATA%\gptadmin\gptadmin.exe` | `C:\Program Files\gptadmin\gptadmin.exe` |
 
 ## Команды установки
 
 ```bash
-# Linux / macOS — user-mode (по умолчанию)
+# Linux / macOS — user-mode (default)
 curl -s https://became.bezrabotnyi.com/install.sh | bash
 
-# Linux / macOS — system-mode (когда нужен root)
+# Linux / macOS — system-mode (when you need root)
 curl -s https://became.bezrabotnyi.com/install.sh | sudo bash
 ```
 
 ```powershell
-# Windows — user-mode (без Администратора)
+# Windows — user-mode (no Administrator)
 iwr -UseBasicParsing https://became.bezrabotnyi.com/install_win.ps1 | iex
 ```
 
 ## Что делает установщик
 
-1. Загружает CLI (`gptadmin.py`) и пакеты
-2. Запускает `gptadmin setup --user` (или `--system`) — интерактивный мастер
-3. Выбираете, что установить: хаб + агент, только хаб или только агент
-4. Выбираете туннель: auto-tunnel (FRP/Cloudflare) или свой домен
-5. Создает юнит службы и запускает их
-6. Выводит ваш **Hub URL**, **CTL_TOKEN** и **SHELLMCP_TOKEN**
+1. Загружает CLI (`gptadmin.py`) и пакеты.
+2. Запускает `gptadmin setup --user` (или `--system`) — интерактивный мастер.
+3. Вы выбираете, что устанавливать: хаб + агент, только хаб или только агент.
+4. Вы выбираете туннель: автотуннель (FRP/Cloudflare) или собственный домен.
+5. Записывает сервисные модули и запускает их.
+6. Печатает **URL-адрес концентратора**, **CTL_TOKEN** и **SHELLMCP_TOKEN**.
 
-## Удаление
+## Удалить
 
 ```bash
 gptadmin uninstall
 ```
 
-Удаляет бинарные файлы, конфиги и юниты служб. Резервные копии, созданные через
-`file_backup`, сохраняются в `~/.gptadmin/file-backups/` (или
-`/var/lib/gptadmin/file-backups/` в system-mode).
+Удаляет двоичные файлы, конфигурации и сервисные модули. Резервные копии, созданные с помощью
+`file_backup` сохраняются в `~/.gptadmin/file-backups/` (или
+`/var/lib/gptadmin/file-backups/` в системном режиме).
 
 ## См. также
 
-- [Начать работу](./GETTING_STARTED.md)
+- [Начало работы](./GETTING_STARTED.md)
 - [Конфигурация](./CONFIGURATION.md)
-- [Хаб](./HUB.md)
+- [Hub](./HUB.md)

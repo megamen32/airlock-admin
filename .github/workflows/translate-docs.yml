@@ -1,0 +1,77 @@
+name: Translate Docs
+
+# Watches English source-of-truth docs. When one changes (or a new one is
+# added) we translate into ru and cn via the megamen32/translate CLI,
+# commit the result back to this repo, and bump the submodule pointer
+# upstream via the parent repo's pointer-bump workflow.
+#
+# Loop guard: this workflow is gated by a `paths:` filter so it ONLY runs
+# when files under src/content/docs/en/ change. It will NEVER re-fire on
+# changes to ru/ or cn/ (which would cause an infinite translation loop).
+# The translate CLI also has its own `looksGenerated` guard.
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'src/content/docs/en/**'
+      - '.gittranslate'
+      - '.github/workflows/translate-docs.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  translate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GPTADMIN_BOT_PAT }}
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Translate en → ru/cn
+        env:
+          # Free machine translation is sufficient for generated copies.
+          # The script isolates en/ source docs and writes only ru/ and cn/.
+          TRANSLATE_PROVIDER: google
+        run: npm run translate-docs
+
+      - name: Sync to public/docs/ via npm script
+        run: npm run sync-docs
+
+      - name: Check locale layout
+        run: |
+          npm run i18n:check:layout
+          npm run i18n:check:literals
+
+      - name: Verify translations
+        if: always()
+        run: |
+          echo "Files translated or updated:"
+          git diff --name-only HEAD || true
+          echo "---"
+          ls src/content/docs/ru | wc -l
+          ls src/content/docs/cn | wc -l
+
+      - name: Commit + push translations
+        run: |
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git config user.name "github-actions[bot]"
+          if git diff --quiet -- src/content/docs public/docs; then
+            echo "No translation changes — nothing to push."
+            exit 0
+          fi
+          git add src/content/docs public/docs
+          git commit -m "docs(site): auto-translate from en/ [skip ci]
+
+          Triggered by upstream change to src/content/docs/en/."
+          git push

@@ -1,2 +1,2 @@
-ru en cn
-src/content/docs/**/*.md
+ru cn
+src/content/docs/en/*.md

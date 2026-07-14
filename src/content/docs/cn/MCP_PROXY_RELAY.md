@@ -1,53 +1,53 @@
-# GPT‑Админ 作为安全的 MCP 代理/中继
+# GPTAdmin 作为安全 MCP 代理/中继
 
-GPT‑Админ 可以通过两个公开的、带鉴权的兼容层来暴露每个已注册的 MCP server：
+GPTAdmin 可以通过两个公共的、经过身份验证的兼容层公开每个注册的 MCP 服务器：
 
-1. **MCP 兼容端点** —— 给能讲 MCP over HTTP 的客户端用，例如 Claude Desktop、Codex、OpenCode、Cursor 类工具。
-2. **OpenAPI Action 端点** —— 给 ChatGPT Custom GPT 和其他 OpenAPI-action 客户端用。
+1. **MCP 兼容端点**，适用于 MCP 客户端，例如 Claude Desktop、Codex、OpenCode、类似 Cursor 的工具或任何可以通过 HTTP 进行 MCP 通信的客户端。
+2. ChatGPT 自定义 GPT 和其他 OpenAPI 操作客户端的 **OpenAPI 操作端点**。
 
-这样真实的 MCP server 可以放在私有机器后面（NAT、stdio、内部隧道），而对外的 AI 客户端只需要面对一个 HTTPS 入口，由 GPT‑Админ 统一负责鉴权、审计日志、路由、队列和输出处理。
+这使您可以将真正的 MCP 服务器保留在私有计算机上、NAT 后面、stdio 后面或内部隧道后面，同时为外部 AI 客户端提供一个 HTTPS 入口点，包括 GPTAdmin 身份验证、审核日志记录、路由、队列和输出处理。
 
-## 为什么要在前面放 GPT‑Админ
+## 为什么使用GPTAdmin作为前门
 
-- 一个公共 HTTPS 入口，而不是把一堆 MCP server 直接暴露出去。
-- 网关层的 Bearer/OAuth 鉴权。
-- 每个 server 拥有稳定的 URL 和 slug。
-- 同时支持 stdio MCP、远程 MCP、shell 连接器和 GPT‑Админ 内部 hub 工具。
-- OpenAPI schema 是从 upstream MCP server 的 `tools/list` 响应动态生成的，所以 Action schema 始终跟真实工具集一致。
-- 调用只会代理到选中的那一个 MCP server；Custom GPT 看到的可以只是 OpenMemory、只是 FileShare，或者别的某个单一 server，而不是整个 GPT‑Админ 中继的全部工具。
+- 一个公共 HTTPS 端点，而不是暴露许多 MCP 服务器。
+- 网关处的承载/OAuth 保护。
+- 每个服务器稳定的 URL 和 slugs。
+- 可与 stdio MCP、远程 MCP、shell 连接器和内部 GPTAdmin 集线器工具配合使用。
+- OpenAPI 模式是从上游 MCP 服务器 `tools/list` 响应生成的，因此操作模式遵循真实的工具集。
+- 呼叫仅代理至选定的 MCP 服务器；自定义 GPT 只能看到 OpenMemory、只能看到 FileShare 或任何其他单个服务器，而无法看到完整的 GPTAdmin 中继。
 
-## URL 布局
+## 网址布局
 
-假设你的 hub 公开发布在：
+假设您的中心发布于：
 
 ```text
 https://hub.example.com
 ```
 
-每个已注册的 MCP server 都会拿到一个 slug，在 `/admin` 和 `GET /mcp-relay/servers` 的 `meta.public_mcp_slug` 字段里能看到。
+每个注册的 MCP 服务器都会获得一个 slug，在 `/admin` 和 `GET /mcp-relay/servers` 下的 `meta.public_mcp_slug` 中可见。
 
-| 用途 | URL |
-|------|-----|
+|目的|网址 |
+|---------|-----|
 | MCP 兼容端点 | `https://hub.example.com/server/{slug}/mcp` |
-| server 卡片 / 发现 | `https://hub.example.com/server/{slug}/card` |
-| 健康检查 | `https://hub.example.com/server/{slug}/health` |
-| OpenAPI Action（YAML） | `https://hub.example.com/server/{slug}/actions/openapi.yaml` |
-| OpenAPI Action（JSON） | `https://hub.example.com/server/{slug}/actions/openapi.json` |
-| OpenAPI Action 工具调用 | `POST https://hub.example.com/server/{slug}/actions/tools/{tool_name}` |
+|服务器卡/发现| `https://hub.example.com/server/{slug}/card` |
+|健康 | `https://hub.example.com/server/{slug}/health` |
+| OpenAPI 操作架构 | `https://hub.example.com/server/{slug}/actions/openapi.yaml` |
+| OpenAPI 操作架构、JSON | `https://hub.example.com/server/{slug}/actions/openapi.json` |
+| OpenAPI Action工具调用| `POST https://hub.example.com/server/{slug}/actions/tools/{tool_name}` |
 
-老的 `/agent/{slug}/...` 路由保留为兼容别名，新客户端请使用 `/server/{slug}/...`。
+旧的 `/agent/{slug}/...` 路由保留为兼容性别名，但新客户端应使用 `/server/{slug}/...`。
 
-## 示例：只把 OpenMemory 暴露给一个 Custom GPT
+## 示例：仅向自定义 GPT 公开 OpenMemory
 
-在 GPT 编辑器导入 Action 时，使用这个 schema URL：
+在 GPT 编辑器中使用此架构 URL 操作导入：
 
 ```text
 https://hub.example.com/server/openmemory/actions/openapi.yaml
 ```
 
-在鉴权部分选 API key / bearer token，并填入你的 hub 接受的 GPT‑Админ token。
+将身份验证配置为 API 密钥/不记名令牌，并提供您的集线器接受的 GPTAdmin 令牌。
 
-生成的 schema 会包含 OpenMemory 的工具，例如：
+生成的架构将包含 OpenMemory 工具，例如：
 
 ```text
 openmemory_query
@@ -56,9 +56,9 @@ openmemory_store
 openmemory_list
 ```
 
-除非选中的 server 是内部 `hub`，否则不会包含 GPT‑Админ 中继自己的工具（比如 `call_mcp_tool`）。
+除非所选服务器是内部 `hub` 服务器，否则它将不包括 GPTAdmin 中继工具，例如 `call_mcp_tool`。
 
-一次直接的 Action 调用长这样：
+直接的 Action 调用如下所示：
 
 ```bash
 curl -fsS \
@@ -68,7 +68,7 @@ curl -fsS \
   https://hub.example.com/server/openmemory/actions/tools/openmemory_query
 ```
 
-响应结构：
+响应形状：
 
 ```json
 {
@@ -83,15 +83,15 @@ curl -fsS \
 }
 ```
 
-## 示例：连一个 MCP 兼容客户端
+## 示例：连接 MCP 兼容客户端
 
-如果客户端本来就讲 MCP，使用 per-server MCP URL：
+当客户端已经使用 MCP 时，使用每服务器 MCP URL：
 
 ```text
 https://hub.example.com/server/openmemory/mcp
 ```
 
-这个端点接受标准的 MCP JSON-RPC 方法，例如：
+此端点接受标准 MCP JSON-RPC 方法，例如：
 
 ```text
 initialize
@@ -103,13 +103,13 @@ prompts/list
 prompts/get
 ```
 
-要使用整个 GPT‑Админ hub 的能力：
+对于完整的 GPTAdmin 中心界面，请使用：
 
 ```text
 https://hub.example.com/server/hub/mcp
 ```
 
-要只用某一个 upstream server，用它的 slug：
+对于单个上游服务器，使用其 slug：
 
 ```text
 https://hub.example.com/server/fileshare/mcp
@@ -117,34 +117,44 @@ https://hub.example.com/server/chromedevtools-roomhacker-server-100/mcp
 https://hub.example.com/server/openmemory/mcp
 ```
 
-## schema 是怎么生成的
+## 模式是如何生成的
 
-当客户端请求：
+当客户要求：
 
 ```text
 GET /server/{slug}/actions/openapi.yaml
 ```
 
-GPT‑Админ 把 `{slug}` 解析到唯一一个已注册的 MCP server，调用 `tools/list`，把每个 MCP 工具描述符转换成一条 OpenAPI 的 `POST /server/{slug}/actions/tools/{tool_name}` 操作。MCP 的 `inputSchema` 直接变成 OpenAPI 请求体的 schema。
+GPTAdmin 将 `{slug}` 解析为一个已注册的 MCP 服务器，调用 `tools/list`，并将每个 MCP 工具描述符转换为 OpenAPI `POST /server/{slug}/actions/tools/{tool_name}` 操作。 MCP `inputSchema` 成为 OpenAPI 请求主体架构。
 
 这意味着：
 
-- 新增一个 MCP 工具会立刻反映到 OpenAPI Action schema；
-- 删除一个工具会把它从生成的 schema 中移除；
-- 每个 server 的 Custom GPT 都保持小而精；
-- 用户不需要手写庞大的 OpenAPI 文件。
+- 添加新的 MCP 工具会自动更新 OpenAPI Action 架构；
+- 删除工具会将其从生成的模式中删除；
+- 每台服务器的自定义 GPT 保持小而集中；
+- 用户无需手动维护大型 OpenAPI 文件。
 
-## 安全注意事项
+## 选择中继目标
 
-- 不要把裸的 stdio MCP server 直接暴露到公网，请把 GPT‑Админ 放在前面。
-- 公网 hub 请用 HTTPS。
-- 使用足够强的 Bearer/OAuth 凭据；如果凭据分享给 Custom GPT 或 MCP 客户端，请定期轮换。
-- 当一个 GPT 只需要一种能力时，优先给它 per-server 的 OpenAPI schema。
-- 只有在客户端真的需要完整的中继/管理面时才用 `/server/hub/mcp` 或 GPT‑Админ 的 Apps SDK。
+全集线器中继没有**无全局默认目标**。拨打 `listMcpServers`
+首先，然后通过一个返回 `server_id` 作为 `target` 到 `listMcpTools` 和
+`callMcpTool`。从不发送 `target: "default"`：集线器拒绝它而不是
+猜测哪台机器应该接收命令。
 
-## 另见
+使用 `hub` 进行中心/注册表工作，并使用明确的 `shell:<server>` 目标
+该服务器上的命令、日志、服务管理和文件。对于特权
+shell工作时，保持正常的非root身份除非刻意请求
+设置 `run_as_user: "root"` 或使用 `sudo`。
 
-- [API Reference](./API_REFERENCE.md)
-- [Integrations](./INTEGRATIONS.md)
-- [Security](./SECURITY_DOCS.md)
-- [Hub](./HUB.md)
+## 安全说明- 不要将原始 stdio MCP 服务器直接暴露到互联网上；将 GPTAdmin 放在前面。
+- 对公共中心使用 HTTPS。
+- 如果与自定义 GPT 或 MCP 客户端共享，请使用强承载/OAuth 凭据并轮换它们。
+- 当 GPT 仅需要一种功能时，首选针对自定义 GPT 的每服务器 OpenAPI 架构。
+- 仅当客户端确实需要完整的中继/管理界面时，才使用 `/server/hub/mcp` 或 GPTAdmin Apps SDK。
+
+## 另请参阅
+
+- [API参考](./API_REFERENCE.md)
+- [积分](./INTEGRATIONS.md)
+- [安全](./SECURITY_DOCS.md)
+- [集线器](./HUB.md)

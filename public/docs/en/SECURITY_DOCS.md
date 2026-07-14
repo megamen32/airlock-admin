@@ -17,6 +17,10 @@ Plus `SHELLMCP_TOKEN` for agent → hub registration.
 
 - **User-mode by default** — the agent runs as the installing user, not root.
   System-mode (sudo) is opt-in, only when you need privileged operations.
+- **Root services fail closed** — when ShellMCP runs as root, configure
+  `SHELLMCP_DEFAULT_USER`. Otherwise ordinary commands are rejected; they never
+  silently inherit root. Use `run_as_user: "root"` or explicit `sudo` only for
+  a deliberate privileged action.
 - **Command allowlist** — restrict which commands the agent will execute
   (configure in `~/.config/gptadmin/allowlist.txt`).
 - **IP allowlist** — restrict which IPs can reach the agent.

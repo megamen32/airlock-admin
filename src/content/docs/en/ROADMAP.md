@@ -21,9 +21,9 @@ What's built, what's coming, and the open-core split.
 - **Output truncation** (saves tokens)
 - **Managed file backups** with TTLs
 
-### 🚧 Coming soon
+### 🚧 Next
 
-- **Advanced web panel** — teams, RBAC, alerting, audit log export
+- **Advanced web panel** — teams, RBAC, alerting, and richer audit-log export
 - **Hosted cloud** — don't want to self-host? A managed cloud option is planned
 - **Enterprise SSO** — SAML, OIDC, SCIM provisioning
 - **MCP marketplace** — browse and install MCPs (openmemory, chrome-devtools,
@@ -56,16 +56,19 @@ functionality.
 
 ## Versioning
 
-GPT‑Админ follows [SemVer](https://semver.org/). See [CHANGELOG.md](../CHANGELOG.md)
-for release history.
+GPT‑Админ follows [SemVer](https://semver.org/). See the
+[CHANGELOG](https://github.com/megamen32/gptadmin/blob/main/CHANGELOG.md) for
+release history.
 
 - `0.x` — pre-1.0, breaking changes possible between minor versions
-- `1.0` — first stable release (after web panel ships)
+- `1.0` — first stable release
 - `1.x+` — backward-compatible additions
 
 ## Contributing
 
-PRs are welcome — see [CONTRIBUTING.md](../CONTRIBUTING.md). Good places to contribute:
+PRs are welcome — see the
+[contribution guide](https://github.com/megamen32/gptadmin/blob/main/CONTRIBUTING.md).
+Good places to contribute:
 
 - More test coverage (tunnels, MCP-SSE, CLI)
 - Documentation improvements
@@ -75,4 +78,4 @@ PRs are welcome — see [CONTRIBUTING.md](../CONTRIBUTING.md). Good places to co
 ## See also
 
 - [Architecture](./ARCHITECTURE.md) — how it's built
-- [CHANGELOG.md](../CHANGELOG.md) — what changed
+- [CHANGELOG](https://github.com/megamen32/gptadmin/blob/main/CHANGELOG.md) — what changed
