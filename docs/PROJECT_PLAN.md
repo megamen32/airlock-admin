@@ -33,7 +33,7 @@ minimum practical MCP context loaded only when the current task needs it.
 
 | Area | Current evidence | Status |
 | --- | --- | --- |
-| Go hub and Go AirShell | Unit, HTTP/MCP contract and cross-platform CI coverage | In progress |
+| Go hub and Go ShellMCP | Unit, HTTP/MCP contract and cross-platform CI coverage | In progress |
 | Installation and updates | Linux, macOS, Windows and Android packaging checks | In progress |
 | Failover | Docker black-box coverage for tunnel, hub, combined outage, reclaim and ranked fallback promotion | In progress |
 | Auth and relay target safety | OAuth/OpenAPI paths and explicit MCP target contract | In progress |
@@ -48,7 +48,7 @@ evidence unambiguous before adding surface area.
 | Milestone | Deliverable | Exit gate | Status |
 | --- | --- | --- | --- |
 | S0.1 Supported golden paths | One matrix for Linux/macOS/Windows/Android and Codex/ChatGPT/Claude-style clients | Each path has install, auth, first tool call and uninstall/rollback commands | Planned |
-| S0.2 Contract suite | Language-neutral Hub and AirShell contract suite with implementation matrix | Go is required green; alternative implementation can be run by env-configured command | In progress |
+| S0.2 Contract suite | Language-neutral Hub and ShellMCP contract suite with implementation matrix | Go is required green; alternative implementation can be run by env-configured command | In progress |
 | S0.3 Release provenance | Version, commit, checksum and platform architecture are observable from the artifact | CI verifies every release artifact, manifest and installer link before publish | In progress |
 | S0.4 Engineering governance | This plan, worklog and agent handoff discipline | New work records scope, evidence, CI link and next owner action | Active |
 | S0.5 One-password product contract | Implementable design and migration from visible token sprawl to AdminPassword + scoped JWT connections | Security model, migration phases and black-box acceptance suite are approved before runtime migration | Active |
@@ -93,7 +93,7 @@ upgrades and realistic failures.
 
 | Milestone | Deliverable | Exit gate | Status |
 | --- | --- | --- | --- |
-| S3.1 Standard telemetry | OpenTelemetry traces, metrics and structured logs spanning client, hub, relay and AirShell | One trace correlates an AI request, policy decision, tool call, retries and durable result without secret payloads | Planned |
+| S3.1 Standard telemetry | OpenTelemetry traces, metrics and structured logs spanning client, hub, relay and ShellMCP | One trace correlates an AI request, policy decision, tool call, retries and durable result without secret payloads | Planned |
 | S3.2 SLO and alerts | Operator-facing health model, error budget and actionable alerts | Documented SLOs; alert runbook includes owner, symptom, diagnosis and recovery | Planned |
 | S3.3 Backup/restore drill | Versioned backup, restore verification and rollback procedure | Clean-host restore passes a scripted drill with integrity check and no root-owned user files | Planned |
 | S3.4 HA maturity | Multi-fallback configuration, fencing, reclaim, upgrade and partition scenarios | Docker black-box suite covers rank 1/rank 2 selection; a deployment recipe verifies two physical fallback hosts | In progress |

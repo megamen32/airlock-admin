@@ -33,7 +33,7 @@ subprocess or an operating-system API. PowerShell constrained mode, a denied
 `rm`, or a prompt instruction is not a read-only guarantee.
 
 GPTAdmin therefore does not expose a command interpreter to a read-only
-connection. `inspect_system` calls the typed AirShell `system_inspect` tool,
+connection. `inspect_system` calls the typed ShellMCP `system_inspect` tool,
 which currently supports:
 
 - `read_file`: read a bounded regular file;
@@ -44,11 +44,11 @@ No Bash, PowerShell or CMD process is started.
 
 ## Filesystem boundary
 
-AirShell limits inspection to `SHELLMCP_INSPECT_ROOTS`. The value is a
+ShellMCP limits inspection to `SHELLMCP_INSPECT_ROOTS`. The value is a
 platform path list (`:` on Unix, `;` on Windows). A normal installation uses
 `SHELLMCP_DEFAULT_CWD` as the default root.
 
-Before reading, AirShell resolves symlinks and verifies that the resulting
+Before reading, ShellMCP resolves symlinks and verifies that the resulting
 path still belongs to one configured root. Known credential directories such
 as `.ssh`, `.gnupg`, `.aws`, `.kube`, `.docker` and `.password-store` are
 denied even when they are under an allowed root. Files must be regular files;
@@ -57,11 +57,11 @@ responses and directory lists are bounded.
 This boundary prevents writes and accidental broad filesystem traversal. It is
 not a claim that pattern matching can recognize every possible confidential
 value. Operators should configure roots that contain diagnostics the AI is
-intended to inspect, and run AirShell as the normal user whenever possible.
+intended to inspect, and run ShellMCP as the normal user whenever possible.
 
 ## Automatic secret redaction
 
-Before text reaches the MCP response, AirShell replaces recognizable:
+Before text reaches the MCP response, ShellMCP replaces recognizable:
 
 - Bearer values and JWTs;
 - API keys, tokens, secrets and passwords in assignments;

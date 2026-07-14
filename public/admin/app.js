@@ -234,10 +234,12 @@ function renderClientCard(r) {
           (r.access_mode ? '<span class="pill">' + esc(r.access_mode === 'readonly' ? 'только просмотр' : 'полный доступ') + '</span>' : '') +
           (r.client_id ? ' <span class="muted small">' + esc(r.client_id) + '</span>' : '') +
         '</div>' +
-        '<div class="row" style="margin-top:6px">' +
-        '<button onclick="rotateClient(\'' + esc(r.id || r.key || r.token_id) + '\')">ротировать</button>' +
-        '<button class="bad" onclick="revokeClient(\'' + esc(r.id || r.key || r.token_id) + '\')">отозвать</button>' +
-        '</div>' +
+        (r.token_kind === 'legacy_ctl' ?
+          '<div class="entrySub warn small">Переходный CTL: значение не показывается и не ротируется как JWT. Выпустите новый JWT после проверки OAuth.</div>' :
+          '<div class="row" style="margin-top:6px">' +
+          '<button onclick="rotateClient(\'' + esc(r.id || r.key || r.token_id) + '\')">ротировать</button>' +
+          '<button class="bad" onclick="revokeClient(\'' + esc(r.id || r.key || r.token_id) + '\')">отозвать</button>' +
+          '</div>') +
         '<div class="entrySub muted small">' +
           'last seen <b>' + esc(r.last_seen_fmt || '') + '</b>' +
           (r.seen_count != null ? ' · seen ' + esc(String(r.seen_count)) : '') +

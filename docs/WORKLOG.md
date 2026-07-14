@@ -48,28 +48,39 @@ plan is [`PROJECT_PLAN.md`](./PROJECT_PLAN.md).
 
 ## Entries
 
+## 2026-07-14 - Live auth transition and read-only verification - active
+
+- Milestone: `S2.1`, `S2.3`
+- Owner: Codex with auth, deploy and redaction review agents
+- Scope: Verify the configured public Hub, restore the documented CTL migration path, make managed Client/Auth inventory usable, and prove ShellMCP read-only plus model-output redaction at the real MCP boundary.
+- Baseline / red evidence: Public admin currently serves a login page whose visible contract still references Bearer CTL; unauthenticated MCP returns `401`; the supplied client confirmation preview exposes API-key/password-looking values before execution.
+- Change: Investigation in progress; no runtime claim is accepted from local CI alone.
+- Verification: Pending live authenticated black-box checks with secret-safe output.
+- Delivery: Not deployed.
+- Next: Integrate agent findings, add failing regression tests, deploy the configured Hub, and verify admin inventory, legacy CTL access, redaction and read-only behavior live.
+
 ## 2026-07-14 - Cross-platform read-only client profile - completed
 
 - Milestone: `S2.3`
 - Owner: Codex
-- Scope: Hub-issued read-only JWT profile, typed AirShell inspection and
+- Scope: Hub-issued read-only JWT profile, typed ShellMCP inspection and
   mandatory model-output secret redaction across Linux, macOS, Windows and
   Android contracts.
 - Baseline / red evidence: `gptadmin.read` is advertised but MCP authorization
-  does not enforce tool-call scopes; AirShell exposes arbitrary `shell_exec`
+  does not enforce tool-call scopes; ShellMCP exposes arbitrary `shell_exec`
   and has no model-output secret redaction boundary.
 - Change: Added managed and CLI `readonly` JWTs, profile-aware Hub MCP tool
   lists and fail-closed enforcement across relay, global MCP, pinned MCP,
-  generated Actions and admin APIs. Added typed AirShell `system_inspect` with
+  generated Actions and admin APIs. Added typed ShellMCP `system_inspect` with
   allowed roots, symlink containment, credential-directory denial, bounds and
   mandatory credential redaction. Admin issuance defaults visibly to read-only.
 - Verification: Red tests showed missing inspector/redactor, ignored
   `access_mode`, shell execution through every MCP route and MCP JWT access to
   admin APIs. Green: both `go test ./...`; both `go vet ./...`; Python `94
   passed, 2 skipped`; admin JavaScript syntax; Hub darwin amd64/arm64 builds;
-  AirShell Windows and Android builds plus Windows inspector test compilation.
+  ShellMCP Windows and Android builds plus Windows inspector test compilation.
 - Delivery: Commit `3ec79d4`; Build, Sync, Release run `29354412360` passed,
-  including macOS runtime, Windows AirShell, Android artifact and Docker
+  including macOS runtime, Windows ShellMCP, Android artifact and Docker
   failover jobs.
 - Next: Add the separate `ask-before-write` profile with approval-bound job
   ownership; do not expand read-only into filtered raw shell.

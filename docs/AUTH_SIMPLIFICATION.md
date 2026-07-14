@@ -113,12 +113,12 @@ expiry before issuance, and store the credential only where the client needs
 it. Raw JWT display is an advanced, deliberate export action.
 
 Connections have a plain-language access mode. **Read only** is recommended
-for ChatGPT-style inspection: it exposes typed, bounded AirShell inspection,
+for ChatGPT-style inspection: it exposes typed, bounded ShellMCP inspection,
 automatically hides recognizable credentials and cannot invoke a command
 interpreter or admin API. **Full access** is explicit and intended for clients
 such as Codex that must make changes. See [`READONLY_MODE.md`](./READONLY_MODE.md).
 
-### Connect an AirShell agent
+### Connect a ShellMCP agent
 
 An agent joins through a short-lived pairing code or a Hub-initiated local
 setup flow. Pairing creates a device-bound identity and renewable least-
@@ -186,7 +186,7 @@ first vocabulary shown to an operator.
   bearer configuration from default paths.
 - Delete deprecated CLI token commands and environment variables after the
   documented migration window.
-- Prove the removal with contract, installer, browser and AirShell black-box
+- Prove the removal with contract, installer, browser and ShellMCP black-box
   tests; run a clean install, upgrade and rollback drill.
 
 ## Required acceptance tests
@@ -197,7 +197,7 @@ first vocabulary shown to an operator.
   manual bearer-token copying.
 - JWTs with wrong audience, missing scope, expired `exp`, malformed signature
   or a revoked device identity are rejected.
-- A normal AirShell pairing flow requires no token copied by the operator.
+- A normal ShellMCP pairing flow requires no token copied by the operator.
 - `gptadmin doctor` uses plain language and reports Hub, MCP clients and Tunnel
   states; advanced diagnostics can reveal implementation detail only to an
   authenticated administrator.

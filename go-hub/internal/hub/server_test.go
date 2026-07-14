@@ -153,6 +153,26 @@ func TestOAuthAndMCPJSONRPC(t *testing.T) {
 	}
 }
 
+func TestLegacyCTLAppearsInClientInventoryWithoutBeingRevocableAsJWT(t *testing.T) {
+	s := New(Config{CtlToken: "legacy-ctl", ConfigDir: t.TempDir(), DefaultTimeout: time.Second, PollMaxTimeout: time.Second})
+
+	list := httptest.NewRequest(http.MethodGet, "/admin/api/clients", nil)
+	list.Header.Set("Authorization", "Bearer legacy-ctl")
+	listed := httptest.NewRecorder()
+	s.Handler().ServeHTTP(listed, list)
+	if listed.Code != http.StatusOK || !strings.Contains(listed.Body.String(), `"token_kind":"legacy_ctl"`) {
+		t.Fatalf("legacy CTL inventory status=%d body=%s", listed.Code, listed.Body.String())
+	}
+
+	revoke := httptest.NewRequest(http.MethodPost, "/admin/api/clients/revoke-all", nil)
+	revoke.Header.Set("Authorization", "Bearer legacy-ctl")
+	revoked := httptest.NewRecorder()
+	s.Handler().ServeHTTP(revoked, revoke)
+	if revoked.Code != http.StatusOK || !strings.Contains(revoked.Body.String(), `"revoked_count":0`) {
+		t.Fatalf("legacy CTL revoke-all status=%d body=%s", revoked.Code, revoked.Body.String())
+	}
+}
+
 func TestAdminIssueMCPTokenUsesPublicOriginAndWorksForRelay(t *testing.T) {
 	s := New(Config{
 		CtlToken:                 "ctl",

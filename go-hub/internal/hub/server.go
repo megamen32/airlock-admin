@@ -177,6 +177,7 @@ type oauthCode struct {
 type managedMCPToken struct {
 	ID         string `json:"id"`
 	ClientID   string `json:"client_id"`
+	TokenKind  string `json:"token_kind,omitempty"`
 	Scope      string `json:"scope"`
 	AccessMode string `json:"access_mode"`
 	IssuedAt   int64  `json:"issued_at"`
@@ -1886,6 +1887,9 @@ func (s *Server) adminClientsRevokeAll(w http.ResponseWriter, r *http.Request) {
 	s.mu.Lock()
 	revoked := 0
 	for id, record := range s.managedMCP {
+		if record.TokenKind == "legacy_ctl" {
+			continue
+		}
 		if record.RevokedAt == 0 {
 			record.RevokedAt = time.Now().Unix()
 			s.managedMCP[id] = record
@@ -2257,9 +2261,18 @@ func (s *Server) adminClients(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) managedMCPClientsLocked() []managedMCPToken {
-	clients := make([]managedMCPToken, 0, len(s.managedMCP))
+	clients := make([]managedMCPToken, 0, len(s.managedMCP)+1)
 	for _, record := range s.managedMCP {
 		clients = append(clients, record)
+	}
+	if s.cfg.CtlToken != "" {
+		clients = append(clients, managedMCPToken{
+			ID:         "legacy-ctl",
+			ClientID:   "legacy-ctl",
+			TokenKind:  "legacy_ctl",
+			Scope:      "legacy transition credential",
+			AccessMode: accessModeFull,
+		})
 	}
 	return clients
 }
