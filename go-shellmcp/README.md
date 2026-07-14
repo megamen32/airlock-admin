@@ -63,6 +63,8 @@ SHELL_DEFAULT_CWD=/home/roomhacker
 
 Commands containing a `sudo` token stay in the service/root context, so privileged operations can still be requested explicitly with `sudo ...`.
 
+When ShellMCP itself runs as root, `SHELL_DEFAULT_USER` (or `SHELLMCP_DEFAULT_USER`) is required for ordinary commands. Without it, the command is rejected rather than silently running as root. Use `run_as_user: "root"` or an explicit `sudo ...` command only for intentional privileged operations.
+
 ## Output size and client budgets
 
 `LOG_LIMIT_B` is a per-agent ShellMCP setting. It controls how much stdout/stderr tail is returned inline from `/exec`; full larger output is still written to the spool file and returned through `stdout_path`/`stderr_path`. The default is `65536` bytes.

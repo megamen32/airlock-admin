@@ -321,6 +321,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/actions/openapi.yaml", s.actionsOpenAPI)
 	mux.HandleFunc("/artifacts/shellmcp.json", s.requireCtl(s.shellmcpArtifactManifest))
 	mux.HandleFunc("/artifacts/shellmcp.tar.gz", s.requireCtl(s.shellmcpArtifactDownload))
+	mux.HandleFunc("/artifacts/shellmcp-android-arm64.json", s.requireCtl(s.androidShellmcpArtifactManifest))
+	mux.HandleFunc("/artifacts/shellmcp-android-arm64.bin", s.requireCtl(s.androidShellmcpArtifactDownload))
 	// Legacy rootd artifact aliases: old services still point ROOTD_UPDATE_MANIFEST_URL here.
 	mux.HandleFunc("/artifacts/rootd.json", s.requireCtl(s.shellmcpArtifactManifest))
 	mux.HandleFunc("/artifacts/rootd.tar.gz", s.requireCtl(s.shellmcpArtifactDownload))
@@ -509,7 +511,9 @@ func (s *Server) requireCtl(next http.HandlerFunc) http.HandlerFunc {
 			next(w, r)
 			return
 		}
-		if s.adminSessionValid(r) {
+		// An unset admin password means the dashboard has no cookie gate; it must
+		// not turn every request into an authenticated relay API request.
+		if s.cfg.AdminPassword != "" && s.adminSessionValid(r) {
 			s.authAudit("ctl_auth_ok", r, map[string]any{"auth_kind": "admin_cookie"})
 			next(w, r)
 			return
@@ -852,6 +856,54 @@ func (s *Server) shellmcpArtifactDownload(w http.ResponseWriter, r *http.Request
 	w.Header().Set("Content-Type", "application/gzip")
 	w.Header().Set("Content-Disposition", `attachment; filename="gptadmin-shellmcp.tar.gz"`)
 	http.ServeFile(w, r, artifact)
+}
+
+func (s *Server) androidShellmcpBinaryPath() string {
+	return filepath.Join(s.cfg.ArtifactDir, "android-arm64", "bin", "shellmcp")
+}
+
+func (s *Server) androidShellmcpBuildVersion() (int, error) {
+	versionPath := filepath.Join(s.cfg.ArtifactDir, "gptadmin-android-arm64.version")
+	raw, err := os.ReadFile(versionPath)
+	if err != nil {
+		return 0, fmt.Errorf("read Android artifact version: %w", err)
+	}
+	version, err := strconv.Atoi(strings.TrimSpace(string(raw)))
+	if err != nil || version <= 0 {
+		return 0, fmt.Errorf("invalid Android artifact version %q", strings.TrimSpace(string(raw)))
+	}
+	return version, nil
+}
+
+func (s *Server) androidShellmcpArtifactManifest(w http.ResponseWriter, r *http.Request) {
+	binary := s.androidShellmcpBinaryPath()
+	st, err := os.Stat(binary)
+	if err != nil {
+		writeJSON(w, http.StatusNotFound, map[string]any{"detail": "Android shellmcp binary not found: " + binary})
+		return
+	}
+	version, err := s.androidShellmcpBuildVersion()
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]any{"detail": err.Error()})
+		return
+	}
+	sha, err := sha256File(binary)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]any{"detail": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"component": "shellmcp-android-arm64", "build_version": version, "sha256": sha, "size": st.Size(), "url": s.origin(r) + "/artifacts/shellmcp-android-arm64.bin"})
+}
+
+func (s *Server) androidShellmcpArtifactDownload(w http.ResponseWriter, r *http.Request) {
+	binary := s.androidShellmcpBinaryPath()
+	if _, err := os.Stat(binary); err != nil {
+		writeJSON(w, http.StatusNotFound, map[string]any{"detail": "Android shellmcp binary not found: " + binary})
+		return
+	}
+	w.Header().Set("Content-Type", "application/octet-stream")
+	w.Header().Set("Content-Disposition", `attachment; filename="shellmcp-android-arm64"`)
+	http.ServeFile(w, r, binary)
 }
 
 func (s *Server) serversList(w http.ResponseWriter, r *http.Request) {
@@ -1298,6 +1350,30 @@ func (s *Server) hubAgentLocked() Agent {
 	return Agent{AgentID: "hub", Name: "GPTAdmin Hub", Kind: "hub", Transport: "internal", Status: "online", LastSeen: nowFloat(), Capabilities: []string{"registry", "pending_servers", "mcp_relay"}, Meta: map[string]any{"server_count": len(s.agents)}}
 }
 
+// selectMCPRelayTarget validates a target before it can create a relay job.
+// The relay must never infer a target because that can route an operation to
+// an unrelated server.
+func (s *Server) selectMCPRelayTarget(target string) (string, int, string) {
+	target = strings.TrimSpace(target)
+	if target == "" || target == "default" {
+		return "", http.StatusBadRequest, "Explicit MCP target is required. Call listMcpServers first and pass one returned server_id. There is no default target."
+	}
+	if target == "hub" {
+		return target, http.StatusOK, ""
+	}
+
+	s.mu.Lock()
+	_, exists := s.agents[target]
+	s.mu.Unlock()
+	if exists {
+		return target, http.StatusOK, ""
+	}
+	if strings.HasPrefix(target, "shell:") {
+		return "", http.StatusNotFound, fmt.Sprintf("unknown shell server %s", strings.TrimPrefix(target, "shell:"))
+	}
+	return "", http.StatusNotFound, fmt.Sprintf("unknown MCP relay server %s", target)
+}
+
 func (s *Server) mcpRelayTools(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		writeJSON(w, http.StatusMethodNotAllowed, map[string]any{"detail": "method not allowed"})
@@ -1306,10 +1382,12 @@ func (s *Server) mcpRelayTools(w http.ResponseWriter, r *http.Request) {
 	var req map[string]any
 	_ = readJSON(r, &req)
 	target := firstString(req, "target", "server_id", "agent_id")
-	if target == "" {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"detail": "missing target"})
+	selectedTarget, status, detail := s.selectMCPRelayTarget(target)
+	if status != http.StatusOK {
+		writeJSON(w, status, map[string]any{"detail": detail})
 		return
 	}
+	target = selectedTarget
 	if target == "hub" {
 		writeJSON(w, http.StatusOK, withActionToolHints(map[string]any{"server_id": target, "status": "completed", "response": map[string]any{"tools": hubTools()}}, target))
 		return
@@ -1346,10 +1424,16 @@ func (s *Server) mcpRelayCall(w http.ResponseWriter, r *http.Request) {
 	if len(args) == 0 {
 		args = toolArgsFromTopLevel(req)
 	}
-	if target == "" || toolName == "" {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"detail": "missing target or tool_name"})
+	if toolName == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"detail": "missing tool_name"})
 		return
 	}
+	selectedTarget, status, detail := s.selectMCPRelayTarget(target)
+	if status != http.StatusOK {
+		writeJSON(w, status, map[string]any{"detail": detail})
+		return
+	}
+	target = selectedTarget
 	if target == "hub" {
 		resp, status := s.callHubTool(toolName, args)
 		writeJSON(w, status, map[string]any{"server_id": target, "status": "completed", "response": resp})
@@ -1418,7 +1502,7 @@ func actionShortcutFields(tool map[string]any) []string {
 	schema := mapValue(tool["inputSchema"])
 	props := mapValue(schema["properties"])
 	out := []string{}
-	for _, key := range []string{"cmd", "query", "cwd", "timeout"} {
+	for _, key := range []string{"cmd", "query", "cwd", "timeout", "run_as_user"} {
 		if _, ok := props[key]; ok {
 			out = append(out, key)
 		}
@@ -1438,18 +1522,25 @@ func (s *Server) mcpRelayShellExec(w http.ResponseWriter, r *http.Request) {
 	}
 	target := firstString(req, "target", "server_id", "agent_id")
 	cmd := firstString(req, "cmd", "command")
-	if target == "" || cmd == "" {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"detail": "missing target or cmd"})
+	if cmd == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"detail": "missing cmd"})
 		return
 	}
+	selectedTarget, status, detail := s.selectMCPRelayTarget(target)
+	if status != http.StatusOK {
+		writeJSON(w, status, map[string]any{"detail": detail})
+		return
+	}
+	target = selectedTarget
 	if !strings.HasPrefix(target, "shell:") {
 		writeJSON(w, http.StatusBadRequest, map[string]any{"detail": "target must be a shell:* agent"})
 		return
 	}
 	args := map[string]any{
-		"cmd":     cmd,
-		"cwd":     req["cwd"],
-		"timeout": req["timeout"],
+		"cmd":         cmd,
+		"cwd":         req["cwd"],
+		"timeout":     req["timeout"],
+		"run_as_user": firstString(req, "run_as_user", "user"),
 	}
 	resp := s.callShellTool(target, "shell_exec", args, truthy(req["background"]), timeoutFromReq(req, s.cfg.DefaultTimeout))
 	writeJSON(w, http.StatusOK, resp)
@@ -1615,7 +1706,7 @@ func hubTools() []map[string]any {
 
 func shellTools() []map[string]any {
 	return []map[string]any{
-		{"name": "shell_exec", "description": "Execute a shell command through a polling shellmcp agent", "inputSchema": map[string]any{"type": "object", "properties": map[string]any{"cmd": map[string]any{"type": "string"}, "cwd": map[string]any{"type": []string{"string", "null"}}, "timeout": map[string]any{"type": []string{"integer", "null"}}}, "required": []string{"cmd"}}},
+		{"name": "shell_exec", "description": "Execute a shell command through a polling shellmcp agent. Commands use the agent's default non-root user unless run_as_user is explicitly set.", "inputSchema": map[string]any{"type": "object", "properties": map[string]any{"cmd": map[string]any{"type": "string"}, "cwd": map[string]any{"type": []string{"string", "null"}}, "timeout": map[string]any{"type": []string{"integer", "null"}}, "run_as_user": map[string]any{"type": []string{"string", "null"}, "description": "Explicit execution user; use root only for intentional privileged operations."}}, "required": []string{"cmd"}}},
 		{"name": "mcp_manage", "description": "Persist and manage child MCP definitions on this ShellMCP", "inputSchema": map[string]any{"type": "object", "properties": map[string]any{"action": map[string]any{"type": "string", "enum": []string{"list", "upsert", "remove", "enable", "disable", "restart", "status", "config"}}, "ref": map[string]any{"type": []string{"string", "null"}}, "config": map[string]any{"type": []string{"object", "null"}, "additionalProperties": true}}, "required": []string{"action"}, "additionalProperties": false}},
 		{"name": "mcp_tools", "description": "List tools exposed by an enabled child MCP configured on this ShellMCP", "inputSchema": map[string]any{"type": "object", "properties": map[string]any{"ref": map[string]any{"type": "string"}}, "required": []string{"ref"}, "additionalProperties": false}},
 		{"name": "mcp_call", "description": "Call a tool on an enabled child MCP configured on this ShellMCP", "inputSchema": map[string]any{"type": "object", "properties": map[string]any{"ref": map[string]any{"type": "string"}, "name": map[string]any{"type": "string"}, "arguments": map[string]any{"type": []string{"object", "null"}, "additionalProperties": true}}, "required": []string{"ref", "name"}, "additionalProperties": false}},
@@ -3186,6 +3277,11 @@ func (s *Server) appsSDKCall(name string, args map[string]any) any {
 		return map[string]any{"agents": agents}
 	case "list_mcp_tools", "listMcpTools":
 		target := firstString(args, "target", "server_id", "agent_id")
+		selectedTarget, status, detail := s.selectMCPRelayTarget(target)
+		if status != http.StatusOK {
+			return map[string]any{"server_id": target, "status": "failed", "error": map[string]any{"status_code": status, "message": detail}}
+		}
+		target = selectedTarget
 		if target == "hub" {
 			return map[string]any{"server_id": target, "status": "completed", "response": map[string]any{"tools": hubTools()}}
 		}
@@ -3197,7 +3293,21 @@ func (s *Server) appsSDKCall(name string, args map[string]any) any {
 	case "call_mcp_tool", "callMcpTool":
 		target := firstString(args, "target", "server_id", "agent_id")
 		toolName := firstString(args, "tool_name", "name")
+		if toolName == "" {
+			return map[string]any{"server_id": target, "status": "failed", "error": "missing tool_name"}
+		}
 		callArgs := mapValue(args["arguments"])
+		if len(callArgs) == 0 {
+			callArgs = mapValue(args["args"])
+		}
+		if len(callArgs) == 0 {
+			callArgs = toolArgsFromTopLevel(args)
+		}
+		selectedTarget, status, detail := s.selectMCPRelayTarget(target)
+		if status != http.StatusOK {
+			return map[string]any{"server_id": target, "status": "failed", "error": map[string]any{"status_code": status, "message": detail}}
+		}
+		target = selectedTarget
 		if target == "hub" {
 			resp, _ := s.callHubTool(toolName, callArgs)
 			return map[string]any{"server_id": target, "status": "completed", "response": resp}
@@ -3287,8 +3397,8 @@ func appsSDKTools() []map[string]any {
 		{
 			"name":            "call_mcp_tool",
 			"title":           "Call tool",
-			"description":     "Call exactly one tool on exactly one explicit GPTAdmin MCP target. For shell commands use target shell:<server>, tool_name shell_exec, and arguments {cmd,cwd?,timeout?}. This may execute commands or change remote systems.",
-			"inputSchema":     map[string]any{"type": "object", "properties": map[string]any{"target": map[string]any{"type": "string"}, "tool_name": map[string]any{"type": "string"}, "arguments": map[string]any{"type": "object", "additionalProperties": true}, "background": map[string]any{"type": "boolean"}}, "required": []string{"target", "tool_name"}, "additionalProperties": false},
+			"description":     "Call exactly one tool on one explicit GPTAdmin MCP target. Put the selected tool's input in arguments; arbitrary top-level tool fields are also forwarded when arguments is absent. For shell commands use target shell:<server>, tool_name shell_exec, and arguments {cmd,cwd?,timeout?}. This may execute commands or change remote systems.",
+			"inputSchema":     map[string]any{"type": "object", "properties": map[string]any{"target": map[string]any{"type": "string"}, "tool_name": map[string]any{"type": "string"}, "arguments": map[string]any{"type": "object", "additionalProperties": true}, "args": map[string]any{"type": "object", "additionalProperties": true}, "background": map[string]any{"type": "boolean"}}, "required": []string{"target", "tool_name"}, "additionalProperties": true},
 			"outputSchema":    map[string]any{"type": "object", "additionalProperties": true},
 			"annotations":     map[string]any{"readOnlyHint": false, "destructiveHint": true, "openWorldHint": true},
 			"securitySchemes": execSecurity,

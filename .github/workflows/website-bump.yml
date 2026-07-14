@@ -19,6 +19,15 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
+      - name: Require cross-repository token
+        env:
+          GPTADMIN_BOT_PAT: ${{ secrets.GPTADMIN_BOT_PAT }}
+        run: |
+          if [ -z "$GPTADMIN_BOT_PAT" ]; then
+            echo "::error::Missing GPTADMIN_BOT_PAT. Configure a fine-grained token with Contents read/write access to megamen32/gptadmin and Contents read access to megamen32/adminchatgpt_website."
+            exit 1
+          fi
+
       - name: Checkout
         uses: actions/checkout@v4
         with:

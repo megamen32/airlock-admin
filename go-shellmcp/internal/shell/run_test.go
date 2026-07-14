@@ -87,6 +87,16 @@ func TestDefaultUserSelection(t *testing.T) {
 	}
 }
 
+func TestRootProcessWithoutDefaultUserIsRejected(t *testing.T) {
+	if os.Geteuid() != 0 {
+		t.Skip("requires a root test process")
+	}
+	res := Run(context.Background(), Request{Cmd: "id -u", SpillDir: t.TempDir()}, 8192)
+	if res.ReturnCode == 0 || !strings.Contains(res.Error, "default user") {
+		t.Fatalf("root process must reject an implicit root command: %+v", res)
+	}
+}
+
 func TestAndroidPrivilegeModeAndShizukuHelpers(t *testing.T) {
 	if got := androidPrivilegeMode(Request{Cmd: "id"}); got != "auto" {
 		t.Fatalf("default mode should be auto: %q", got)

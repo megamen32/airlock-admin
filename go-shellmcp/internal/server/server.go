@@ -450,6 +450,9 @@ func (s *Server) applyDefaults(req *shell.Request) {
 // existing local shell.Run path is used. Both branches produce the
 // same shell.Result so the JSON response shape is unchanged.
 func (s *Server) runShell(ctx context.Context, req shell.Request) shell.Result {
+	if err := shell.ImplicitRootExecutionError(req); err != nil {
+		return shell.Result{ReturnCode: -1, Error: err.Error()}
+	}
 	if s.sshClient == nil {
 		return shell.Run(ctx, req, s.cfg.LogLimit)
 	}
@@ -459,9 +462,10 @@ func (s *Server) runShell(ctx context.Context, req shell.Request) shell.Result {
 	}
 	runCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
-	composed := sshexec.ComposeCmd(req.Cmd, req.Cwd, req.Env)
+	user, _ := shell.TargetRunUser(req)
+	composed := sshexec.ComposeCmdForUser(req.Cmd, req.Cwd, req.Env, user, s.cfg.SSHUser)
 	sshRes, _ := s.sshClient.Run(runCtx, composed, timeout)
-	return sshexecResultToShell(sshRes, req, timeout)
+	return sshexecResultToShell(sshRes, req, timeout, user)
 }
 
 // runShellStream is the streaming analogue of runShell. The emit
@@ -469,6 +473,9 @@ func (s *Server) runShell(ctx context.Context, req shell.Request) shell.Result {
 // shell.RunLive path emits (stdout/stderr "chunk" events + final
 // "exit") so the SSE / NDJSON response shape is unchanged.
 func (s *Server) runShellStream(ctx context.Context, req shell.Request, emit func(shell.Event)) shell.Result {
+	if err := shell.ImplicitRootExecutionError(req); err != nil {
+		return shell.Result{ReturnCode: -1, Error: err.Error()}
+	}
 	if s.sshClient == nil {
 		return shell.RunLive(ctx, req, s.cfg.LogLimit, emit)
 	}
@@ -478,7 +485,8 @@ func (s *Server) runShellStream(ctx context.Context, req shell.Request, emit fun
 	}
 	runCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
-	composed := sshexec.ComposeCmd(req.Cmd, req.Cwd, req.Env)
+	user, _ := shell.TargetRunUser(req)
+	composed := sshexec.ComposeCmdForUser(req.Cmd, req.Cwd, req.Env, user, s.cfg.SSHUser)
 	var last shell.Result
 	s.sshClient.RunStream(runCtx, composed, timeout, func(e map[string]any) {
 		t, _ := e["type"].(string)
@@ -509,7 +517,7 @@ func (s *Server) runShellStream(ctx context.Context, req shell.Request, emit fun
 // JSON wire format is identical to the local-exec path. Fields that
 // have no meaningful remote equivalent (Spilled / StdoutPath / Files)
 // stay empty.
-func sshexecResultToShell(r sshexec.Result, req shell.Request, timeout time.Duration) shell.Result {
+func sshexecResultToShell(r sshexec.Result, req shell.Request, timeout time.Duration, runAsUser string) shell.Result {
 	cwd := req.Cwd
 	if cwd == "" {
 		cwd = req.DefaultCwd
@@ -522,7 +530,7 @@ func sshexecResultToShell(r sshexec.Result, req shell.Request, timeout time.Dura
 		Error:      r.Error,
 		TimedOut:   r.TimedOut,
 		Cwd:        cwd,
-		RunAsUser:  req.RunAsUser,
+		RunAsUser:  runAsUser,
 	}
 }
 
@@ -750,12 +758,20 @@ func (s *Server) queueLoop(ctx context.Context) {
 			if q.ToolName != "" && q.ToolName != "shell_exec" {
 				go s.runCallbackTool(q.ID, q.ToolName, q.Arguments)
 			} else {
-				req := shell.Request{Cmd: q.Cmd, Cwd: q.Cwd, Timeout: q.Timeout, Env: q.Env, SpillDir: s.cfg.SpillDir}
+				req := shellRequestFromQueueJob(q, s.cfg.SpillDir)
 				s.applyDefaults(&req)
 				go s.runCallbackJob(q.ID, req)
 			}
 		}
 	}
+}
+
+func shellRequestFromQueueJob(q hub.QueueJob, spillDir string) shell.Request {
+	runAsUser, _ := q.Arguments["run_as_user"].(string)
+	if runAsUser == "" {
+		runAsUser, _ = q.Arguments["user"].(string)
+	}
+	return shell.Request{Cmd: q.Cmd, Cwd: q.Cwd, Timeout: q.Timeout, Env: q.Env, SpillDir: spillDir, RunAsUser: runAsUser}
 }
 
 func (s *Server) runCallbackTool(jobID, name string, args map[string]any) {

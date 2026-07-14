@@ -88,6 +88,9 @@ func runInternal(ctx context.Context, req Request, limitBytes int64, emit func(E
 	}
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
+	if err := ImplicitRootExecutionError(req); err != nil {
+		return Result{ReturnCode: -1, Error: err.Error(), DurationMS: time.Since(started).Milliseconds()}, err
+	}
 
 	cmd, runAsUser := buildCommand(ctx, req)
 	if req.Cwd != "" {
@@ -277,6 +280,18 @@ func targetRunUser(req Request) (string, bool) {
 	}
 	return "", false
 }
+
+func ImplicitRootExecutionError(req Request) error {
+	// A system service is often launched as root so it can serve privileged
+	// maintenance requests. Ordinary commands must not silently inherit that
+	// identity and leave root-owned files in a user's workspace.
+	if runtime.GOOS != "windows" && os.Geteuid() == 0 && req.DefaultUser == "" && req.RunAsUser == "" && req.User == "" && !commandMentionsSudo(req.Cmd) {
+		return errors.New("root shellmcp requires SHELLMCP_DEFAULT_USER for ordinary commands; use run_as_user=root or sudo explicitly for privileged commands")
+	}
+	return nil
+}
+
+func TargetRunUser(req Request) (string, bool) { return targetRunUser(req) }
 
 func buildCommand(ctx context.Context, req Request) (*exec.Cmd, string) {
 	user, explicit := targetRunUser(req)

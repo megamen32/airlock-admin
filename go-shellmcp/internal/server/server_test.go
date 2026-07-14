@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/megamen32/gptadmin/go-shellmcp/internal/hub"
 	"github.com/megamen32/gptadmin/go-shellmcp/internal/output"
 	"github.com/megamen32/gptadmin/go-shellmcp/internal/supervisor"
 )
@@ -25,6 +26,19 @@ func TestFromEnvDefaultLogLimit(t *testing.T) {
 	}
 }
 
+func TestFromEnvUsesWindowsInstallerPollingContract(t *testing.T) {
+	t.Setenv("SHELLMCP_QUEUE", "1")
+	t.Setenv("SHELLMCP_HOST", "127.0.0.1")
+	t.Setenv("SHELLMCP_PORT", "25900")
+	cfg := FromEnv()
+	if !cfg.QueueEnabled || cfg.Mode != "long_poll" {
+		t.Fatalf("installer polling config not applied: %+v", cfg)
+	}
+	if cfg.Addr != "127.0.0.1:25900" {
+		t.Fatalf("installer bind config ignored: Addr=%q", cfg.Addr)
+	}
+}
+
 func TestQueueTransportNeverNeedsLocalListener(t *testing.T) {
 	for _, heartbeat := range []bool{false, true} {
 		s := New(Config{QueueEnabled: true, HeartbeatEnabled: heartbeat})
@@ -34,6 +48,18 @@ func TestQueueTransportNeverNeedsLocalListener(t *testing.T) {
 	}
 	if !New(Config{QueueEnabled: false}).needsLocalListener() {
 		t.Fatal("non-queue transport must retain its local listener")
+	}
+}
+
+func TestQueueShellExecPreservesExplicitRunAsUser(t *testing.T) {
+	req := shellRequestFromQueueJob(hub.QueueJob{
+		Cmd:       "id -un",
+		Cwd:       "/tmp",
+		Timeout:   5,
+		Arguments: map[string]any{"run_as_user": "root"},
+	}, "/tmp/spool")
+	if req.RunAsUser != "root" {
+		t.Fatalf("queued run_as_user was lost: %+v", req)
 	}
 }
 

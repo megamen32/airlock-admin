@@ -575,6 +575,16 @@ func TestCompatibilityEndpoints(t *testing.T) {
 	if err := os.WriteFile(artifactPath, []byte("dummy artifact"), 0o644); err != nil {
 		t.Fatal(err)
 	}
+	androidBinary := filepath.Join(artifactDir, "android-arm64", "bin", "shellmcp")
+	if err := os.MkdirAll(filepath.Dir(androidBinary), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(androidBinary, []byte("android shellmcp binary"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(artifactDir, "gptadmin-android-arm64.version"), []byte("126\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
 	s := New(Config{CtlToken: "ctl", ArtifactDir: artifactDir, DefaultTimeout: 1, PollMaxTimeout: 1})
 	h := s.Handler()
 
@@ -588,6 +598,8 @@ func TestCompatibilityEndpoints(t *testing.T) {
 		{http.MethodGet, "/servers", http.StatusOK, "servers"},
 		{http.MethodGet, "/tasks/demo", http.StatusOK, "tasks"},
 		{http.MethodGet, "/artifacts/shellmcp.json", http.StatusOK, "sha256"},
+		{http.MethodGet, "/artifacts/shellmcp-android-arm64.json", http.StatusOK, "shellmcp-android-arm64"},
+		{http.MethodGet, "/artifacts/shellmcp-android-arm64.bin", http.StatusOK, "android shellmcp binary"},
 	} {
 		req := httptest.NewRequest(tc.method, tc.path, nil)
 		req.Header.Set("Authorization", "Bearer ctl")
@@ -618,6 +630,9 @@ func TestCompatibilityEndpoints(t *testing.T) {
 
 func TestCallMcpToolAcceptsTopLevelShellArgs(t *testing.T) {
 	s := New(Config{CtlToken: "ctl", DefaultTimeout: time.Second, PollMaxTimeout: time.Second})
+	s.mu.Lock()
+	s.agents["shell:roomhacker-server-100"] = &Agent{AgentID: "shell:roomhacker-server-100", Name: "Shell: roomhacker-server-100", Kind: "virtual_shell", Status: "online"}
+	s.mu.Unlock()
 	h := s.Handler()
 
 	req := httptest.NewRequest(http.MethodPost, "/mcp-relay/call", bytes.NewReader([]byte(`{"target":"shell:roomhacker-server-100","tool_name":"shell_exec","cmd":"pwd"}`)))
@@ -632,6 +647,164 @@ func TestCallMcpToolAcceptsTopLevelShellArgs(t *testing.T) {
 	}
 	if strings.Contains(w.Body.String(), "missing cmd") {
 		t.Fatalf("callMcpTool did not forward top-level cmd: %s", w.Body.String())
+	}
+}
+
+func TestRelayShellExecForwardsExplicitRunAsUser(t *testing.T) {
+	s := New(Config{CtlToken: "ctl", DefaultTimeout: time.Second, PollMaxTimeout: time.Second})
+	s.mu.Lock()
+	s.agents["shell:roomhacker-server-100"] = &Agent{AgentID: "shell:roomhacker-server-100", Name: "Shell: roomhacker-server-100", Kind: "virtual_shell", Status: "online"}
+	s.mu.Unlock()
+	h := s.Handler()
+
+	req := httptest.NewRequest(http.MethodPost, "/mcp-relay/shell_exec", bytes.NewReader([]byte(`{"target":"shell:roomhacker-server-100","cmd":"id -un","run_as_user":"root","background":true}`)))
+	req.Header.Set("Authorization", "Bearer ctl")
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("shell_exec status=%d body=%s", w.Code, w.Body.String())
+	}
+	var response struct {
+		JobID string `json:"job_id"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &response); err != nil {
+		t.Fatal(err)
+	}
+	s.mu.Lock()
+	job := s.shellJobs[response.JobID]
+	s.mu.Unlock()
+	if job == nil || firstString(job.Arguments, "run_as_user") != "root" {
+		t.Fatalf("run_as_user was not queued: %#v", job)
+	}
+}
+
+func TestMcpRelayRejectsDefaultTarget(t *testing.T) {
+	s := New(Config{CtlToken: "ctl", DefaultTimeout: time.Second, PollMaxTimeout: time.Second})
+	h := s.Handler()
+
+	for _, tc := range []struct {
+		path string
+		body string
+	}{
+		{path: "/mcp-relay/tools", body: `{"target":"default"}`},
+		{path: "/mcp-relay/call", body: `{"target":"default","tool_name":"shell_exec"}`},
+	} {
+		req := httptest.NewRequest(http.MethodPost, tc.path, bytes.NewBufferString(tc.body))
+		req.Header.Set("Authorization", "Bearer ctl")
+		w := httptest.NewRecorder()
+		h.ServeHTTP(w, req)
+		if w.Code != http.StatusBadRequest {
+			t.Fatalf("%s status=%d body=%s", tc.path, w.Code, w.Body.String())
+		}
+		if !strings.Contains(w.Body.String(), "There is no default target") {
+			t.Fatalf("%s did not explain explicit target requirement: %s", tc.path, w.Body.String())
+		}
+	}
+}
+
+func TestAppsSDKRejectsDefaultTarget(t *testing.T) {
+	s := New(Config{DefaultTimeout: time.Second, PollMaxTimeout: time.Second})
+
+	for _, tc := range []struct {
+		name string
+		args map[string]any
+	}{
+		{name: "list_mcp_tools", args: map[string]any{"target": "default"}},
+		{name: "call_mcp_tool", args: map[string]any{"target": "default", "tool_name": "shell_exec"}},
+	} {
+		result, ok := s.appsSDKCall(tc.name, tc.args).(map[string]any)
+		if !ok {
+			t.Fatalf("%s returned %T, want map", tc.name, result)
+		}
+		if result["status"] != "failed" {
+			t.Fatalf("%s status=%v, want failed: %v", tc.name, result["status"], result)
+		}
+		err := mapValue(result["error"])
+		if err["status_code"] != http.StatusBadRequest || !strings.Contains(firstString(err, "message"), "There is no default target") {
+			t.Fatalf("%s did not reject default target: %v", tc.name, result)
+		}
+	}
+}
+
+func TestAppsSDKCallForwardsArbitraryTopLevelToolArgs(t *testing.T) {
+	var callSchema map[string]any
+	for _, tool := range appsSDKTools() {
+		if tool["name"] == "call_mcp_tool" {
+			callSchema = tool["inputSchema"].(map[string]any)
+			break
+		}
+	}
+	if callSchema == nil || callSchema["additionalProperties"] != true {
+		t.Fatalf("call_mcp_tool schema must permit arbitrary selected-tool fields: %v", callSchema)
+	}
+	if _, ok := callSchema["properties"].(map[string]any)["args"]; !ok {
+		t.Fatalf("call_mcp_tool schema must expose args alias: %v", callSchema)
+	}
+
+	s := New(Config{CtlToken: "ctl", RelayAgentToken: "relay", DefaultTimeout: time.Second, PollMaxTimeout: time.Second})
+	h := s.Handler()
+
+	register := httptest.NewRequest(http.MethodPost, "/mcp-relay/register", bytes.NewReader([]byte(`{"agent_id":"OpenMemory","name":"OpenMemory","capabilities":["tools/call"]}`)))
+	register.Header.Set("Authorization", "Bearer relay")
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, register)
+	if w.Code != http.StatusOK {
+		t.Fatalf("register status=%d body=%s", w.Code, w.Body.String())
+	}
+
+	done := make(chan any, 1)
+	go func() {
+		done <- s.appsSDKCall("call_mcp_tool", map[string]any{
+			"target":     "OpenMemory",
+			"tool_name":  "openmemory_store_project",
+			"content":    "release notes",
+			"project_id": "gptadmin",
+			"tags":       []any{"release", "mcp"},
+			"metadata":   map[string]any{"source": "chatgpt"},
+			"type":       "project",
+		})
+	}()
+
+	time.Sleep(30 * time.Millisecond)
+	poll := httptest.NewRequest(http.MethodGet, "/mcp-relay/poll/OpenMemory?timeout=1", nil)
+	poll.Header.Set("Authorization", "Bearer relay")
+	w = httptest.NewRecorder()
+	h.ServeHTTP(w, poll)
+	if w.Code != http.StatusOK {
+		t.Fatalf("poll status=%d body=%s", w.Code, w.Body.String())
+	}
+	var job map[string]any
+	if err := json.Unmarshal(w.Body.Bytes(), &job); err != nil {
+		t.Fatal(err)
+	}
+	params := job["params"].(map[string]any)
+	args := params["arguments"].(map[string]any)
+	for key, want := range map[string]any{
+		"content": "release notes", "project_id": "gptadmin", "type": "project",
+	} {
+		if args[key] != want {
+			t.Fatalf("apps SDK dropped %s: arguments=%v", key, args)
+		}
+	}
+	if _, ok := args["tags"].([]any); !ok {
+		t.Fatalf("apps SDK dropped tags: arguments=%v", args)
+	}
+	if metadata := args["metadata"].(map[string]any); metadata["source"] != "chatgpt" {
+		t.Fatalf("apps SDK changed metadata: arguments=%v", args)
+	}
+
+	result := []byte(`{"id":"` + job["id"].(string) + `","result":{"ok":true}}`)
+	complete := httptest.NewRequest(http.MethodPost, "/mcp-relay/result/OpenMemory", bytes.NewReader(result))
+	complete.Header.Set("Authorization", "Bearer relay")
+	w = httptest.NewRecorder()
+	h.ServeHTTP(w, complete)
+	if w.Code != http.StatusOK {
+		t.Fatalf("result status=%d body=%s", w.Code, w.Body.String())
+	}
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("apps SDK call did not complete")
 	}
 }
 

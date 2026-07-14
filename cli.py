@@ -295,6 +295,32 @@ def env_set_many(upd: dict):
     os.chmod(ENV_FILE, 0o640)
 
 
+def ensure_shellmcp_default_user(env: dict) -> None:
+    """Persist the invoking non-root account for ordinary ShellMCP commands."""
+    if env.get('SHELL_DEFAULT_USER') or env.get('SHELLMCP_DEFAULT_USER'):
+        return
+    candidate = os.environ.get('SHELLMCP_DEFAULT_USER') or os.environ.get('SHELL_DEFAULT_USER')
+    if not candidate:
+        sudo_user = os.environ.get('SUDO_USER', '')
+        if sudo_user and sudo_user != 'root':
+            candidate = sudo_user
+    if not candidate:
+        try:
+            if os.geteuid() != 0:
+                candidate = pwd.getpwuid(os.geteuid()).pw_name
+        except (AttributeError, KeyError, OSError):
+            pass
+    if not candidate or candidate == 'root':
+        return
+    try:
+        home = pwd.getpwnam(candidate).pw_dir
+    except KeyError:
+        home = str(Path('/Users' if IS_MACOS else '/home') / candidate)
+    env.setdefault('SHELLMCP_DEFAULT_USER', candidate)
+    env.setdefault('SHELLMCP_DEFAULT_HOME', home)
+    env.setdefault('SHELLMCP_DEFAULT_CWD', home)
+
+
 def env_remove_keys(keys: list[str]):
     cur = env_read()
     changed = False
@@ -1805,6 +1831,7 @@ def setup_interactive(args):
         env.setdefault('MCP_RELAY_AGENT_TOKEN', gen_hex())
     if install_shellmcp:
         env.setdefault('SHELLMCP_AUTO_UPDATE', '1')
+        ensure_shellmcp_default_user(env)
         ensure_shellmcp_identity_env(env)
         env.setdefault('SHELLMCP_UPDATE_INTERVAL_S', '3600')
         env.setdefault('SHELLMCP_UPDATE_TOKEN', env.get('CTL_TOKEN', ''))
@@ -3561,6 +3588,7 @@ def cmd_update(args):
         print('GPTAdmin auto-update is disabled; skipping automatic update.')
         return
     if install_shellmcp:
+        ensure_shellmcp_default_user(env)
         ensure_shellmcp_identity_env(env)
         env.setdefault('SHELLMCP_AUTO_UPDATE', '1')
         hub_for_update = (env.get('HUB_PUBLIC_URL') or env.get('HUB_URL') or 'https://gptadmin.bezrabotnyi.com').rstrip('/')
