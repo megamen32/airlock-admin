@@ -64,8 +64,10 @@ plan is [`PROJECT_PLAN.md`](./PROJECT_PLAN.md).
 - Verification: Red baseline: `5 failed, 2 passed` in the new focused tests.
   Green: `python3 -m pytest tests/ --ignore=tests/e2e -q` (`92 passed, 2
   skipped`); `go test ./...` in both Go modules passed.
-- Delivery: Commit and CI verification pending.
-- Next: Push the implementation and record the resulting commit and CI run.
+- Delivery: `de9f9e9` pushed to `main`; GitHub Actions run `29330935641`
+  passed Linux build/release, Android artifact, macOS, Windows and Docker
+  failover jobs.
+- Next: None.
 
 ## 2026-07-14 - Zero-to-working setup principle - completed
 
