@@ -48,16 +48,16 @@ plan is [`PROJECT_PLAN.md`](./PROJECT_PLAN.md).
 
 ## Entries
 
-## 2026-07-14 - Live auth transition and read-only verification - active
+## 2026-07-14 - Live auth transition and read-only verification - completed
 
 - Milestone: `S2.1`, `S2.3`
 - Owner: Codex with auth, deploy and redaction review agents
 - Scope: Verify the configured public Hub, restore the documented CTL migration path, make managed Client/Auth inventory usable, and prove ShellMCP read-only plus model-output redaction at the real MCP boundary.
 - Baseline / red evidence: Public admin currently serves a login page whose visible contract still references Bearer CTL; unauthenticated MCP returns `401`; the supplied client confirmation preview exposes API-key/password-looking values before execution.
-- Change: Investigation in progress; no runtime claim is accepted from local CI alone.
-- Verification: Pending live authenticated black-box checks with secret-safe output.
-- Delivery: Not deployed.
-- Next: Integrate agent findings, add failing regression tests, deploy the configured Hub, and verify admin inventory, legacy CTL access, redaction and read-only behavior live.
+- Change: Corrected the product terminology to ShellMCP; exposed the legacy CTL transition credential in inventory without persisting or showing its value; excluded it from JWT revoke-all and JWT rotation UI; added a regression test.
+- Verification: Hub/ShellMCP Go tests and vet passed; Python `94 passed, 2 skipped`; live `/version` reports build `126` at commit `fbc45e8`; live OAuth metadata includes `gptadmin.inspect`; authenticated live checks returned `200` for both Bearer CTL and `X-CTL-Token`; inventory reports one redacted `legacy_ctl` record.
+- Delivery: Commit `fbc45e8` pushed to `main`; Build, Sync, Release run `29357359924` passed; `/opt/gptadmin/bin/gptadmin_hub` rebuilt with commit ldflags and `gptadmin-hub.service` restarted successfully.
+- Next: Add the OS-enforced ShellMCP read-only sandbox and secret-handle boundary so secrets are absent from client confirmation previews, then verify with black-box tests.
 
 ## 2026-07-14 - Cross-platform read-only client profile - completed
 
