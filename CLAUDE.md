@@ -8,6 +8,22 @@ Self-hosted MCP hub. Two Go binaries + one Python CLI + vanilla-JS admin UI.
 - `public/admin/` — vanilla JS SPA (no framework). `app.js` `renderAll()` reads `/admin/api/overview`.
 - `tools/build.sh` — build/release: bumps VERSION, Go ldflags inject version, packages tarballs.
 
+## Plan and multi-agent work
+
+- The canonical execution plan is [`docs/PROJECT_PLAN.md`](docs/PROJECT_PLAN.md).
+  The public `docs/ROADMAP.md` does not replace it.
+- The canonical append-only handoff log is [`docs/WORKLOG.md`](docs/WORKLOG.md).
+- Before substantial work, read both files, select one milestone and create an
+  `active` entry using the worklog template. Before finishing, replace it with
+  a factual `completed`, `blocked` or `handed-off` entry containing tests,
+  commit, CI/deploy evidence and one next action.
+- For behavior changes use TDD: record a failing regression test or precise
+  pre-fix evidence before implementation, then focused and full verification.
+  Do not mark a milestone or stage complete without its listed exit gate.
+- Never record tokens, private URLs, customer data or raw logs in the worklog.
+- Do not edit files or runtime surfaces owned by another active agent without
+  explicit coordination. Keep this section aligned with `AGENTS.md`.
+
 ## Commands (copy-paste ready)
 ```bash
 # Go tests (run from each module dir)

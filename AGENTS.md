@@ -14,6 +14,23 @@ GPT‑Админ — self-hosted MCP hub. Три основные компоне
 - `tools/build.sh` — сборка/релиз: бампит VERSION, инжектит версию в Go через ldflags, пакует tarballs.
 - `deploy/` — install-скрипты (Linux/macOS/Windows), systemd/launchd юниты, nginx setup.
 
+## План и межагентная работа
+
+- Канонический execution plan: [`docs/PROJECT_PLAN.md`](docs/PROJECT_PLAN.md).
+  Публичный roadmap в `docs/ROADMAP.md` не заменяет его.
+- Канонический append-only handoff log: [`docs/WORKLOG.md`](docs/WORKLOG.md).
+- Перед существенной работой прочитайте оба файла, выберите один milestone и
+  создайте `active` entry по шаблону из worklog. Перед завершением замените его
+  на factual `completed`, `blocked` или `handed-off` entry с тестами, commit,
+  CI/deploy evidence и единственным next action.
+- Для поведенческих изменений применяйте TDD: сначала зафиксируйте failing
+  regression test или точное pre-fix evidence, затем реализацию и focused/full
+  verification. Не отмечайте milestone/stage завершённым без его exit gate.
+- Не записывайте в worklog токены, приватные URL, customer data или raw logs.
+- При конфликтующей активной области другого агента не редактируйте те же
+  файлы/рантайм без явной координации. `AGENTS.md` и `CLAUDE.md` должны
+  содержать одинаковые правила этой секции.
+
 ## Команды (копировать-вставить)
 
 ```bash
