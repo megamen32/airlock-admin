@@ -56,8 +56,8 @@ plan is [`PROJECT_PLAN.md`](./PROJECT_PLAN.md).
 - Baseline / red evidence: A write can complete while its response is lost; a retry currently has no Hub-level duplicate key and may enqueue the same operation twice.
 - Change: Added one Hub-level deduplication layer shared by HTTP and MCP Apps calls. It scopes keys by caller authorization fingerprint, fingerprints target/tool/arguments, reuses the original result/job, rejects conflicting reuse with `409`, refreshes background records when downstream results arrive, and bounds memory with a 15-minute TTL and 1024-entry limit.
 - Verification: Red tests first; `go test ./...` in `go-hub` and `go-shellmcp`; `go test -race ./internal/hub`; `python3 -m pytest tests/ --ignore=tests/e2e` (`97 passed, 2 skipped`).
-- Delivery: Implementation and contract docs are ready for commit; production deployment is not yet claimed.
-- Next: Commit/push and wait for CI; then deploy/restart the Hub and run the live retry smoke test.
+- Delivery: Commit `0227a34` pushed to `main`; Build, Sync, Release run `29417782872` passed across build/release, macOS, Windows and Docker failover; `/opt/gptadmin/bin/gptadmin_hub` rebuilt from this commit and `gptadmin-hub.service` restarted active on `roomhacker-server-100`; live duplicate smoke returned one job id for two identical `shell:server-44` calls.
+- Next: Add durable idempotency recovery semantics only as a separate milestone; current retry safety is bounded to the running Hub process.
 
 ## 2026-07-15 - Align integration contract with existing Hub flow - completed
 
