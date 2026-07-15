@@ -48,6 +48,17 @@ plan is [`PROJECT_PLAN.md`](./PROJECT_PLAN.md).
 
 ## Entries
 
+## 2026-07-15 - Align integration contract with existing Hub flow - completed
+
+- Milestone: `S4.1`
+- Owner: Codex
+- Scope: Correct the integration-control plan so it certifies GPTAdmin's existing agent/tool/call flow instead of implying a new Codex-style facade.
+- Baseline / red evidence: GPTAdmin already exposes `list_mcp_agents` or `list_mcp_servers`, `list_mcp_tools`, and `call_mcp_tool`; the new contract wording did not document this mapping or distinguish the remaining idempotency/version gaps.
+- Change: Map the external pattern onto current Hub operations and record only the missing guarantees as future work.
+- Verification: Documentation tests and diff checks.
+- Delivery: Pending commit and push.
+- Next: Add idempotency/schema digest only when the corresponding S4.1 implementation slice is started.
+
 ## 2026-07-15 - External integration control contract - completed
 
 - Milestone: `S4.1`
