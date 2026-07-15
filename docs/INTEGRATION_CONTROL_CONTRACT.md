@@ -36,11 +36,17 @@ selected server.
 
 ## Remaining Gaps
 
-The existing flow does not yet accept a caller-stable idempotency key for
-ordinary synchronous `call_mcp_tool` writes, and it does not attach a schema
-version/digest to a call. Background `job_id` tracks asynchronous completion;
-it is not a duplicate-write key. These are certification and targeted contract
-extensions, not a reason to create a second copy of the Hub relay API.
+`call_mcp_tool` now accepts an optional caller-stable `idempotency_key`. The Hub
+fingerprints `target`, `tool_name`, and `arguments` under the authenticated
+caller scope. A retry with the same key and fingerprint reuses the original
+job/result; reusing the key for a different operation returns `409 Conflict`.
+The bounded record is in-memory for the current Hub process and expires after a
+short TTL, so this is retry safety, not a claim of exactly-once execution after
+a Hub restart. Background `job_id` remains the completion handle.
+
+The flow does not yet attach a schema version/digest to a call. This is a
+targeted future extension, not a reason to create a second copy of the Hub
+relay API.
 
 ## GPTAdmin Scope
 

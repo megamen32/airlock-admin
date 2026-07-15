@@ -87,6 +87,127 @@ func TestRelayToolsRoundTrip(t *testing.T) {
 	}
 }
 
+func TestMCPRelayCallIdempotencyReusesJobAndRejectsConflict(t *testing.T) {
+	s := New(Config{CtlToken: "ctl", RelayAgentToken: "relay", DefaultTimeout: time.Second, PollMaxTimeout: time.Second})
+	registerRelayAgent(t, s, "demo")
+
+	call := func(arguments string) map[string]any {
+		req := httptest.NewRequest(http.MethodPost, "/mcp-relay/call_mcp_tool", strings.NewReader(arguments))
+		req.Header.Set("Authorization", "Bearer ctl")
+		w := httptest.NewRecorder()
+		s.Handler().ServeHTTP(w, req)
+		if w.Code != http.StatusOK {
+			t.Fatalf("call status=%d body=%s", w.Code, w.Body.String())
+		}
+		var body map[string]any
+		if err := json.Unmarshal(w.Body.Bytes(), &body); err != nil {
+			t.Fatal(err)
+		}
+		return body
+	}
+
+	first := call(`{"target":"demo","tool_name":"write","arguments":{"value":"one"},"idempotency_key":"write-1","background":true}`)
+	second := call(`{"target":"demo","tool_name":"write","arguments":{"value":"one"},"idempotency_key":"write-1","background":true}`)
+	if first["job_id"] != second["job_id"] {
+		t.Fatalf("same idempotency key created different jobs: first=%v second=%v", first, second)
+	}
+	s.mu.Lock()
+	queued := len(s.relayQueues["demo"])
+	s.mu.Unlock()
+	if queued != 1 {
+		t.Fatalf("queued jobs=%d, want 1", queued)
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/mcp-relay/call_mcp_tool", strings.NewReader(`{"target":"demo","tool_name":"write","arguments":{"value":"two"},"idempotency_key":"write-1","background":true}`))
+	req.Header.Set("Authorization", "Bearer ctl")
+	w := httptest.NewRecorder()
+	s.Handler().ServeHTTP(w, req)
+	if w.Code != http.StatusConflict {
+		t.Fatalf("conflicting reuse status=%d body=%s", w.Code, w.Body.String())
+	}
+}
+
+func TestMCPRelayCallIdempotencyReturnsCompletedResultAfterRetry(t *testing.T) {
+	s := New(Config{CtlToken: "ctl", RelayAgentToken: "relay", DefaultTimeout: time.Second, PollMaxTimeout: time.Second})
+	registerRelayAgent(t, s, "demo")
+
+	body := postHubJSON(t, s, "/mcp-relay/call_mcp_tool", "ctl", `{"target":"demo","tool_name":"write","arguments":{"value":"one"},"idempotency_key":"write-2"}`)
+	jobID, _ := body["job_id"].(string)
+	if jobID == "" {
+		t.Fatalf("missing job_id from timed-out synchronous call: %v", body)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/mcp-relay/poll/demo?timeout=1", nil)
+	req.Header.Set("Authorization", "Bearer relay")
+	poll := httptest.NewRecorder()
+	s.Handler().ServeHTTP(poll, req)
+	if poll.Code != http.StatusOK {
+		t.Fatalf("poll status=%d body=%s", poll.Code, poll.Body.String())
+	}
+	postHubJSON(t, s, "/mcp-relay/result/demo", "relay", `{"id":"`+jobID+`","ok":true,"result":{"changed":true}}`)
+
+	retried := postHubJSON(t, s, "/mcp-relay/call_mcp_tool", "ctl", `{"target":"demo","tool_name":"write","arguments":{"value":"one"},"idempotency_key":"write-2"}`)
+	if retried["job_id"] != jobID || retried["status"] != "completed" {
+		t.Fatalf("retry did not return completed original result: %v", retried)
+	}
+	s.mu.Lock()
+	queued := len(s.relayQueues["demo"])
+	s.mu.Unlock()
+	if queued != 0 {
+		t.Fatalf("retry enqueued another job, queue length=%d", queued)
+	}
+}
+
+func TestMCPAppsCallUsesSameIdempotencyContract(t *testing.T) {
+	s := New(Config{CtlToken: "ctl", RelayAgentToken: "relay", DefaultTimeout: time.Second, PollMaxTimeout: time.Second})
+	registerRelayAgent(t, s, "demo")
+	payload := `{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"call_mcp_tool","arguments":{"target":"demo","tool_name":"write","arguments":{"value":"one"},"idempotency_key":"apps-write-1","background":true}}}`
+	first := postMCPRPC(t, s, payload)
+	second := postMCPRPC(t, s, strings.Replace(payload, `"id":1`, `"id":2`, 1))
+	firstStructured := mapValue(mapValue(first["result"])["structuredContent"])
+	secondStructured := mapValue(mapValue(second["result"])["structuredContent"])
+	if firstStructured["job_id"] != secondStructured["job_id"] {
+		t.Fatalf("MCP Apps retry created different jobs: first=%v second=%v", firstStructured, secondStructured)
+	}
+}
+
+func registerRelayAgent(t *testing.T, s *Server, agentID string) {
+	t.Helper()
+	postHubJSON(t, s, "/mcp-relay/register", "relay", `{"agent_id":"`+agentID+`","name":"Demo","capabilities":["tools/list","tools/call"]}`)
+}
+
+func postHubJSON(t *testing.T, s *Server, path, token, payload string) map[string]any {
+	t.Helper()
+	req := httptest.NewRequest(http.MethodPost, path, strings.NewReader(payload))
+	req.Header.Set("Authorization", "Bearer "+token)
+	w := httptest.NewRecorder()
+	s.Handler().ServeHTTP(w, req)
+	if w.Code < http.StatusOK || w.Code >= 300 {
+		t.Fatalf("POST %s status=%d body=%s", path, w.Code, w.Body.String())
+	}
+	var body map[string]any
+	if err := json.Unmarshal(w.Body.Bytes(), &body); err != nil {
+		t.Fatal(err)
+	}
+	return body
+}
+
+func postMCPRPC(t *testing.T, s *Server, payload string) map[string]any {
+	t.Helper()
+	req := httptest.NewRequest(http.MethodPost, "/mcp", strings.NewReader(payload))
+	req.Header.Set("Authorization", "Bearer ctl")
+	w := httptest.NewRecorder()
+	s.Handler().ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("MCP status=%d body=%s", w.Code, w.Body.String())
+	}
+	var body map[string]any
+	if err := json.Unmarshal(w.Body.Bytes(), &body); err != nil {
+		t.Fatal(err)
+	}
+	return body
+}
+
 func TestOAuthAndMCPJSONRPC(t *testing.T) {
 	s := New(Config{CtlToken: "ctl", AdminPassword: "pw", OAuthClientSecret: "oauth-secret", PublicOrigin: "https://hub.example", MCPResource: "https://hub.example", OAuthPermissiveRedirects: true, OAuthPermissiveResources: true, DefaultTimeout: 1, PollMaxTimeout: 1})
 

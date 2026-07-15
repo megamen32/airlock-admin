@@ -191,6 +191,15 @@ type managedMCPTokenState struct {
 	Tokens map[string]managedMCPToken `json:"tokens"`
 }
 
+type idempotencyEntry struct {
+	Fingerprint string
+	CreatedAt   time.Time
+	Done        chan struct{}
+	JobID       string
+	Response    map[string]any
+	Status      int
+}
+
 type Server struct {
 	cfg Config
 
@@ -201,6 +210,7 @@ type Server struct {
 	relayJobs   map[string]*relayJob
 	shellQueues map[string][]string
 	shellJobs   map[string]*shellJob
+	idempotency map[string]*idempotencyEntry
 	oauthCodes  map[string]oauthCode
 	managedMCP  map[string]managedMCPToken
 	audit       []auditEvent
@@ -219,6 +229,7 @@ func New(cfg Config) *Server {
 		relayJobs:   map[string]*relayJob{},
 		shellQueues: map[string][]string{},
 		shellJobs:   map[string]*shellJob{},
+		idempotency: map[string]*idempotencyEntry{},
 		oauthCodes:  map[string]oauthCode{},
 		managedMCP:  map[string]managedMCPToken{},
 		audit:       []auditEvent{},
@@ -846,6 +857,11 @@ components:
         background:
           type: boolean
           default: false
+        idempotency_key:
+          type: string
+          minLength: 1
+          maxLength: 200
+          description: Stable caller key reused only when retrying the same logical operation with identical target, tool_name, and arguments.
     McpToolResponse:
       type: object
       additionalProperties: true
@@ -1352,6 +1368,11 @@ func (s *Server) mcpRelayResult(w http.ResponseWriter, r *http.Request) {
 	} else {
 		job.Status = "completed"
 	}
+	for _, entry := range s.idempotency {
+		if entry.JobID == job.ID {
+			entry.Response = cloneMap(relayJobResponse(job))
+		}
+	}
 	s.addAuditLocked("mcp_result", map[string]any{"server_id": agentID, "job_id": res.ID, "status": job.Status})
 	s.cond.Broadcast()
 	s.mu.Unlock()
@@ -1527,24 +1548,111 @@ func (s *Server) mcpRelayCall(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	target = selectedTarget
-	if target == "hub" {
-		resp, status := s.callHubTool(toolName, args)
-		writeJSON(w, status, map[string]any{"server_id": target, "status": "completed", "response": resp})
-		return
+	resp, status := s.executeMCPTool(r, target, toolName, args, truthy(req["background"]), timeoutFromReq(req, s.cfg.DefaultTimeout), firstString(req, "idempotency_key"))
+	writeJSON(w, status, resp)
+}
+
+const (
+	idempotencyTTL     = 15 * time.Minute
+	idempotencyMaxSize = 1024
+	idempotencyKeyMax  = 200
+)
+
+func (s *Server) executeMCPTool(r *http.Request, target, toolName string, args map[string]any, background bool, timeout time.Duration, key string) (map[string]any, int) {
+	operation := func() (map[string]any, int) {
+		if target == "hub" {
+			resp, status := s.callHubTool(toolName, args)
+			return map[string]any{"server_id": target, "status": "completed", "response": resp}, status
+		}
+		if strings.HasPrefix(target, "shell:") {
+			return s.callShellTool(target, toolName, args, background, timeout), http.StatusOK
+		}
+		jobID := s.enqueueRelay(target, "tools/call", map[string]any{"name": toolName, "arguments": args})
+		if background {
+			return map[string]any{"server_id": target, "status": "running", "background": true, "job_id": jobID}, http.StatusOK
+		}
+		return s.waitRelay(jobID, timeout), http.StatusOK
 	}
-	if strings.HasPrefix(target, "shell:") {
-		resp := s.callShellTool(target, toolName, args, truthy(req["background"]), timeoutFromReq(req, s.cfg.DefaultTimeout))
-		writeJSON(w, http.StatusOK, resp)
-		return
+	key = strings.TrimSpace(key)
+	if key == "" {
+		return operation()
 	}
-	params := map[string]any{"name": toolName, "arguments": args}
-	jobID := s.enqueueRelay(target, "tools/call", params)
-	if truthy(req["background"]) {
-		writeJSON(w, http.StatusOK, map[string]any{"server_id": target, "status": "running", "background": true, "job_id": jobID})
-		return
+	if len(key) > idempotencyKeyMax {
+		return map[string]any{"detail": fmt.Sprintf("idempotency_key must be at most %d characters", idempotencyKeyMax)}, http.StatusBadRequest
 	}
-	resp := s.waitRelay(jobID, timeoutFromReq(req, s.cfg.DefaultTimeout))
-	writeJSON(w, http.StatusOK, resp)
+	fingerprintBytes, err := json.Marshal(struct {
+		Target    string         `json:"target"`
+		ToolName  string         `json:"tool_name"`
+		Arguments map[string]any `json:"arguments"`
+	}{target, toolName, args})
+	if err != nil {
+		return map[string]any{"detail": "arguments cannot be serialized for idempotency"}, http.StatusBadRequest
+	}
+	fingerprint := sha256Hex(fingerprintBytes)
+	authorization := ""
+	if r != nil {
+		authorization = r.Header.Get("Authorization")
+	}
+	scope := sha256Hex([]byte(authorization))
+	entryKey := scope + ":" + key
+
+	s.mu.Lock()
+	now := time.Now()
+	for existingKey, entry := range s.idempotency {
+		if now.Sub(entry.CreatedAt) > idempotencyTTL {
+			delete(s.idempotency, existingKey)
+		}
+	}
+	if len(s.idempotency) >= idempotencyMaxSize {
+		for existingKey, existingEntry := range s.idempotency {
+			select {
+			case <-existingEntry.Done:
+				delete(s.idempotency, existingKey)
+			default:
+			}
+			if len(s.idempotency) < idempotencyMaxSize {
+				break
+			}
+		}
+		if len(s.idempotency) >= idempotencyMaxSize {
+			s.mu.Unlock()
+			return map[string]any{"detail": "idempotency store is temporarily full; retry later"}, http.StatusTooManyRequests
+		}
+	}
+	if entry := s.idempotency[entryKey]; entry != nil {
+		if entry.Fingerprint != fingerprint {
+			s.mu.Unlock()
+			return map[string]any{"detail": "idempotency_key was already used for different target, tool_name, or arguments"}, http.StatusConflict
+		}
+		done := entry.Done
+		s.mu.Unlock()
+		select {
+		case <-done:
+			s.mu.Lock()
+			response, status := cloneMap(entry.Response), entry.Status
+			s.mu.Unlock()
+			return response, status
+		case <-time.After(timeout):
+			return map[string]any{"status": "running", "idempotency_key": key, "message": "the original MCP call is still running"}, http.StatusAccepted
+		}
+	}
+	entry := &idempotencyEntry{Fingerprint: fingerprint, CreatedAt: now, Done: make(chan struct{})}
+	s.idempotency[entryKey] = entry
+	s.mu.Unlock()
+
+	response, status := operation()
+	s.mu.Lock()
+	entry.JobID = firstString(response, "job_id")
+	entry.Response = cloneMap(response)
+	entry.Status = status
+	close(entry.Done)
+	s.mu.Unlock()
+	return response, status
+}
+
+func sha256Hex(value []byte) string {
+	digest := sha256.Sum256(value)
+	return hex.EncodeToString(digest[:])
 }
 
 func toolArgsFromTopLevel(req map[string]any) map[string]any {
@@ -1552,7 +1660,8 @@ func toolArgsFromTopLevel(req map[string]any) map[string]any {
 		"target": true, "server_id": true, "agent_id": true,
 		"tool_name": true, "name": true,
 		"arguments": true, "args": true,
-		"background": true,
+		"background":      true,
+		"idempotency_key": true,
 	}
 	args := map[string]any{}
 	for k, v := range req {
@@ -3678,35 +3787,7 @@ func (s *Server) appsSDKCall(name string, args map[string]any) any {
 		}
 		return s.callShellTool(selectedTarget, "system_inspect", toolArgsFromTopLevel(args), false, s.cfg.DefaultTimeout)
 	case "call_mcp_tool", "callMcpTool":
-		target := firstString(args, "target", "server_id", "agent_id")
-		toolName := firstString(args, "tool_name", "name")
-		if toolName == "" {
-			return map[string]any{"server_id": target, "status": "failed", "error": "missing tool_name"}
-		}
-		callArgs := mapValue(args["arguments"])
-		if len(callArgs) == 0 {
-			callArgs = mapValue(args["args"])
-		}
-		if len(callArgs) == 0 {
-			callArgs = toolArgsFromTopLevel(args)
-		}
-		selectedTarget, status, detail := s.selectMCPRelayTarget(target)
-		if status != http.StatusOK {
-			return map[string]any{"server_id": target, "status": "failed", "error": map[string]any{"status_code": status, "message": detail}}
-		}
-		target = selectedTarget
-		if target == "hub" {
-			resp, _ := s.callHubTool(toolName, callArgs)
-			return map[string]any{"server_id": target, "status": "completed", "response": resp}
-		}
-		if strings.HasPrefix(target, "shell:") {
-			return s.callShellTool(target, toolName, callArgs, truthy(args["background"]), s.cfg.DefaultTimeout)
-		}
-		jobID := s.enqueueRelay(target, "tools/call", map[string]any{"name": toolName, "arguments": callArgs})
-		if truthy(args["background"]) {
-			return map[string]any{"server_id": target, "status": "running", "background": true, "job_id": jobID}
-		}
-		return s.waitRelay(jobID, s.cfg.DefaultTimeout)
+		return s.appsSDKCallMCP(nil, name, args)
 	case "get_mcp_job", "getMcpJob":
 		jobID := firstString(args, "job_id")
 		s.mu.Lock()
@@ -3734,6 +3815,9 @@ func (s *Server) appsSDKCallForRequest(r *http.Request, name string, args map[st
 			return map[string]any{"server_id": target, "status": "completed", "response": map[string]any{"tools": []map[string]any{}}}
 		}
 	}
+	if name == "call_mcp_tool" || name == "callMcpTool" {
+		return s.appsSDKCallMCP(r, name, args)
+	}
 	result := s.appsSDKCall(name, args)
 	if requestAccessMode(r) != accessModeReadonly || (name != "list_mcp_tools" && name != "listMcpTools") {
 		return result
@@ -3748,6 +3832,30 @@ func (s *Server) appsSDKCallForRequest(r *http.Request, name string, args map[st
 		response["tools"] = toolsForRequest(r, target, raw)
 	}
 	return payload
+}
+
+func (s *Server) appsSDKCallMCP(r *http.Request, name string, args map[string]any) any {
+	target := firstString(args, "target", "server_id", "agent_id")
+	toolName := firstString(args, "tool_name", "name")
+	if toolName == "" {
+		return map[string]any{"server_id": target, "status": "failed", "error": "missing tool_name"}
+	}
+	callArgs := mapValue(args["arguments"])
+	if len(callArgs) == 0 {
+		callArgs = mapValue(args["args"])
+	}
+	if len(callArgs) == 0 {
+		callArgs = toolArgsFromTopLevel(args)
+	}
+	selectedTarget, status, detail := s.selectMCPRelayTarget(target)
+	if status != http.StatusOK {
+		return map[string]any{"server_id": target, "status": "failed", "error": map[string]any{"status_code": status, "message": detail}}
+	}
+	response, status := s.executeMCPTool(r, selectedTarget, toolName, callArgs, truthy(args["background"]), s.cfg.DefaultTimeout, firstString(args, "idempotency_key"))
+	if status >= http.StatusBadRequest {
+		return map[string]any{"server_id": selectedTarget, "status": "failed", "error": response}
+	}
+	return response
 }
 
 func appsSDKTools() []map[string]any {
@@ -3822,8 +3930,8 @@ func appsSDKTools() []map[string]any {
 		{
 			"name":            "call_mcp_tool",
 			"title":           "Call tool",
-			"description":     "Call exactly one tool on one explicit GPTAdmin MCP target. Put the selected tool's input in arguments; arbitrary top-level tool fields are also forwarded when arguments is absent. For shell commands use target shell:<server>, tool_name shell_exec, and arguments {cmd,cwd?,timeout?}. This may execute commands or change remote systems.",
-			"inputSchema":     map[string]any{"type": "object", "properties": map[string]any{"target": map[string]any{"type": "string"}, "tool_name": map[string]any{"type": "string"}, "arguments": map[string]any{"type": "object", "additionalProperties": true}, "args": map[string]any{"type": "object", "additionalProperties": true}, "background": map[string]any{"type": "boolean"}}, "required": []string{"target", "tool_name"}, "additionalProperties": true},
+			"description":     "Call exactly one tool on one explicit GPTAdmin MCP target. Put the selected tool's input in arguments; arbitrary top-level tool fields are also forwarded when arguments is absent. For shell commands use target shell:<server>, tool_name shell_exec, and arguments {cmd,cwd?,timeout?}. This may execute commands or change remote systems. For a retry of the same logical operation, reuse idempotency_key with identical target, tool_name, and arguments; a different operation must use a new key.",
+			"inputSchema":     map[string]any{"type": "object", "properties": map[string]any{"target": map[string]any{"type": "string"}, "tool_name": map[string]any{"type": "string"}, "arguments": map[string]any{"type": "object", "additionalProperties": true}, "args": map[string]any{"type": "object", "additionalProperties": true}, "background": map[string]any{"type": "boolean"}, "idempotency_key": map[string]any{"type": "string", "minLength": 1, "maxLength": idempotencyKeyMax, "description": "Stable caller key for retrying the same logical operation."}}, "required": []string{"target", "tool_name"}, "additionalProperties": true},
 			"outputSchema":    map[string]any{"type": "object", "additionalProperties": true},
 			"annotations":     map[string]any{"readOnlyHint": false, "destructiveHint": true, "openWorldHint": true},
 			"securitySchemes": execSecurity,

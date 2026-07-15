@@ -197,6 +197,11 @@ components:
         background:
           type: boolean
           default: false
+        idempotency_key:
+          type: string
+          minLength: 1
+          maxLength: 200
+          description: Stable caller key reused only when retrying the same logical operation with identical target, tool_name, and arguments.
     McpToolResponse:
       type: object
       additionalProperties: true

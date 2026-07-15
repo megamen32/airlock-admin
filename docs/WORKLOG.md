@@ -48,6 +48,17 @@ plan is [`PROJECT_PLAN.md`](./PROJECT_PLAN.md).
 
 ## Entries
 
+## 2026-07-15 - Idempotent MCP writes - completed
+
+- Milestone: `S4.1`
+- Owner: Codex with one bounded contract-review agent
+- Scope: Add optional idempotency to existing `call_mcp_tool` writes without creating a second execution facade.
+- Baseline / red evidence: A write can complete while its response is lost; a retry currently has no Hub-level duplicate key and may enqueue the same operation twice.
+- Change: Added one Hub-level deduplication layer shared by HTTP and MCP Apps calls. It scopes keys by caller authorization fingerprint, fingerprints target/tool/arguments, reuses the original result/job, rejects conflicting reuse with `409`, refreshes background records when downstream results arrive, and bounds memory with a 15-minute TTL and 1024-entry limit.
+- Verification: Red tests first; `go test ./...` in `go-hub` and `go-shellmcp`; `go test -race ./internal/hub`; `python3 -m pytest tests/ --ignore=tests/e2e` (`97 passed, 2 skipped`).
+- Delivery: Implementation and contract docs are ready for commit; production deployment is not yet claimed.
+- Next: Commit/push and wait for CI; then deploy/restart the Hub and run the live retry smoke test.
+
 ## 2026-07-15 - Align integration contract with existing Hub flow - completed
 
 - Milestone: `S4.1`
