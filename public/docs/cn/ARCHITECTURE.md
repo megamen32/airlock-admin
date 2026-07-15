@@ -46,7 +46,7 @@ Go 实现 (`go-shellmcp/`) 是第一个实现。 Python 客户端
 该集线器公开了人工智能连接的三种方式。相同的中心，相同的功能 -
 选择适合您的人工智能的。
 
-|适配器|协议|对于|端点|
+|适配器|协议|对于 |端点 |
 |--------|----------|-----|---------|
 | **MCP 客户端** | MCP 远程 SSE |克劳德桌面、Codex、OpenCode | `/mcp` |
 | **浏览器扩展** |用户脚本（Tampermonkey/Firefox）| DeepSeek、Qwen、Alice、GigaChat、ChatGPT（免费）|注入 Web UI |

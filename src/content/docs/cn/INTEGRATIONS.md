@@ -17,7 +17,7 @@
 
 **何时使用。** 仅 ChatGPT 系列客户端：`chat.openai.com`、ChatGPT 桌面版、Plus/Team。导入 OpenAPI 3.x 架构的任何工具。当您需要一个自定义 GPT 来调用您的中心而无需 Codex 风格的每小时工具调用配额时，请正确选择。
 
-**协议** REST + OpenAPI 3.1，承载身份验证，`/mcp-relay/*` 系列（`list_mcp_agents`、`list_mcp_tools`、`call_mcp_tool`、 `get_mcp_job`、`resources/list`、`resources/read`）。
+**协议。** REST + OpenAPI 3.1，承载身份验证。紧凑流为`discover → schema → execute`； `job` 投票后台工作。旧的长名称仍然被接受，但不会做广告。
 
 **架构 URL。** `https://<your-hub>/actions/openapi.yaml` — 规范的实时服务规范。该存储库还提供 `public/openapi.json` （同一规范的同义词），因此您可以在本地 `curl` 。
 
@@ -32,21 +32,21 @@
 ### 示例
 
 ```bash
-curl -sS -X POST https://<your-hub>/mcp-relay/list_mcp_agents \
+curl -sS -X GET https://<your-hub>/mcp-relay/servers \
   -H "Authorization: Bearer $CTL_TOKEN" \
   -H "Content-Type: application/json" -d '{}'
 ```
 
 ```text
-POST /mcp-relay/call_mcp_tool
+POST /mcp-relay/call
 {
-  "agent_id": "shell:roomhacker-server-100",
-  "tool_name": "shell_exec",
-  "arguments": { "cmd": "uptime" }
+  "target": "shell:roomhacker-server-100",
+  "tool": "shell_exec",
+  "args": { "cmd": "uptime" }
 }
 ```
 
-> **承载与 OAuth。** 今天，集线器在 `/mcp-relay/*` 上接受承载 `CTL_TOKEN` 以进行快速设置。对于生产 - 每个客户端范围、轮换、审核、撤销 - 将 auth 块切换到 OAuth ([§3](#3-oauth-handshake))。相同的端点，更强的身份验证。
+> **承载与 OAuth。** 今天，集线器接受 `/mcp-relay/*` 上的承载 `CTL_TOKEN` 以进行快速设置。对于生产 - 每个客户端范围、轮换、审核、撤销 - 将 auth 块切换到 OAuth ([§3](#3-oauth-handshake))。相同的端点，更强的身份验证。
 
 ### 故障排除
 
@@ -67,7 +67,7 @@ POST /mcp-relay/call_mcp_tool
 
 **Auth.** Bearer JWT，HS256-由中心使用 `OAUTH_CLIENT_SECRET` 签名，12 小时到期，`iss = PUBLIC_ORIGIN`，`aud = MCP_RESOURCE`。通过 [§3](#3-oauth-handshake) 获取一个。
 
-> `/mcp` 仅接受 OAuth 颁发的 JWT； `CTL_TOKEN` 用于 REST/管理 API。本地异常：集线器主机本身上的 `http://localhost:<port>/mcp`，其中集线器放松了身份验证（对于 `claude_desktop_config.json` dev 很方便）。
+> `/mcp` 仅接受 OAuth 颁发的 JWT； `CTL_TOKEN` 用于 REST/管理 API。本地异常：集线器主机本身上的 `http://localhost:<port>/mcp`，其中集线器放宽了身份验证（对于 `claude_desktop_config.json` dev 很方便）。
 
 ### 如何连接
 
@@ -87,7 +87,7 @@ POST /mcp-relay/call_mcp_tool
 }
 ```
 
-重新启动克劳德桌面。 `gptadmin` 服务器显示 `list_mcp_agents`、`list_mcp_tools`、`call_mcp_tool`、`get_mcp_job`、 `resources/list`、`resources/read`。
+重新启动克劳德桌面。 `gptadmin`服务器公开`discover`、`schema`、`execute`、`job`、 `inspect` 和 `ui`。
 
 #### 梅维斯
 
@@ -135,18 +135,18 @@ curl -sS https://<your-hub>/.well-known/oauth-authorization-server
 
 **何时使用。** 每当您（或 MCP 客户端）需要 `/mcp`（适配器 #2）的 Bearer JWT，或者想要将 OpenAI Action auth 块从 `CTL_TOKEN` 切换到 OAuth（适配器 #1）时。握手**不是**客户端适配器 - 它是**提供**其他两个适配器的流程。
 
-**授予类型。** `authorization_code` 带 PKCE。 **仅 `S256`** — 普通验证器被拒绝。
+**授予类型。** `authorization_code` 带 PKCE。 **仅限 `S256`** — 普通验证程序被拒绝。
 
 **范围。**
 
 - `gptadmin.read` — 列出服务器/工具、读取资源、读取作业。
-- `gptadmin.exec` — 调用工具 (`call_mcp_tool`)，将作业排队。
+- `gptadmin.exec` — 执行工具 (`execute`)，将作业排队。
 
 该中心的 `/authorize` 页面列出了请求的范围；用户输入管理员密码以表示同意。
 
 ### 端点
 
-|端点|方法|目的|
+|端点 |方法|目的|
 |----------|--------|---------|
 | `/.well-known/oauth-authorization-server` | `GET` | RFC 8414 发行者元数据。 |
 | `/.well-known/oauth-protected-resource` | `GET` | RFC 9728 资源元数据。 |
@@ -165,7 +165,7 @@ curl -sS https://<your-hub>/.well-known/oauth-authorization-server
 3. 浏览器打开 `GET /authorize?response_type=code&client_id=...&redirect_uri=...&code_challenge=...&code_challenge_method=S256&resource=<hub>&scope=gptadmin.read+gptadmin.exec`。
 4. 用户查看范围 → 输入管理员密码 → 提交。
 5.集线器302转`redirect_uri?code=...&state=...`。
-6. 客户端 `POST /token` 与 `code`, `code_verifier`, `redirect_uri`, `client_id` → `access_token` (JWT) → 存储在 MCP 配置中。
+6. 客户 `POST /token` 与 `code`, `code_verifier`, `redirect_uri`, `client_id` → `access_token` (JWT) → 存储在 MCP 配置中。
 7. 每`/mcp`拨打：`Authorization: Bearer <access_token>`。
 
 ### JWT 形状
@@ -197,13 +197,13 @@ curl -sS https://<your-hub>/.well-known/oauth-authorization-server
 
 **何时使用。** 原生不支持 MCP 的免费网络聊天 AI — DeepSeek、Qwen、Tongyi、Yandex Alice、ChatGPT（免费套餐）。该扩展将“任何网络聊天”转换为 gptadmin 客户端：拦截 ` ```mcp ` 代码阻止 AI 发出，将它们发布到您的集线器，将结果粘贴回来。
 
-**Artifact.** `apps/chatgpt-admin-app/` — 一个 Tampermonkey / Userscripts 用户脚本；已发布的版本镜像为 `public/mcp-bridge.user.js`。
+**Artifact.** `apps/chatgpt-admin-app/` — Tampermonkey / Userscripts 用户脚本；已发布的版本镜像为 `public/mcp-bridge.user.js`。
 
 ### 如何连接1. **安装用户脚本管理器：**
    - 桌面 Chrome / Edge / Brave → [Tampermonkey](https://www.tampermonkey.net/)。
    - iPhone / iPad → Safari + [Userscripts](https://apps.apple.com/app/userscripts/id1463298887) 应用程序；在 Safari → 扩展下启用。
    - Android → Firefox（来自 Google Play）+ Tampermonkey（来自 [tampermonkey.net](https://www.tampermonkey.net/)]）。
-2. **安装脚本** — 打开 `https://<your-hub>/mcp-bridge.user.js` （或从 `apps/chatgpt-admin-app/` 加载文件）。 Tampermonkey 获取 `@userscript` 元数据块 → **安装**。
+2. **安装脚本** — 打开 `https://<your-hub>/mcp-bridge.user.js`（或从 `apps/chatgpt-admin-app/` 加载文件）。 Tampermonkey 获取 `@userscript` 元数据块 → **安装**。
 3. **配置：** 按 <kbd>Alt</kbd>+<kbd>K</kbd> （或右下角的钥匙图标）：
    - **桥 URL** — `https://<your-hub>`（无尾部斜杠）。
    - **网桥密钥** — 您的 `CTL_TOKEN`（与 §1 相同）。
@@ -212,10 +212,10 @@ curl -sS https://<your-hub>/.well-known/oauth-authorization-server
 
 网络聊天 UI 中添加了两个按钮：
 
-- **MCP All** (`Alt+M`) — 将每个代理及其工具的紧凑描述插入聊天输入中，并将相同的提示复制到剪贴板。
+- **MCP All** (`Alt+M`) — 将每个代理及其工具的紧凑描述插入聊天输入，并将相同的提示复制到剪贴板。
 - **MCP** — 打开一个面板来选择具有详细工具文档的特定代理。
 
-当 AI 使用 ` ```mcp ` 受防护的 JSON 块进行响应时，脚本会突出显示该块，将调用 POST 到 `<Bridge URL>/mcp-relay/call_mcp_tool`，并用集线器的响应替换该块。
+当 AI 使用 ` ```mcp ` 受防护的 JSON 块进行响应时，脚本会突出显示该块，将调用 POST 到 `<Bridge URL>/mcp-relay/call`，并用集线器的响应替换该块。
 
 > 如果在使用自定义编辑器的网站上自动插入失败，则提示始终显示在剪贴板上 - <kbd>Ctrl</kbd>/<kbd>⌘</kbd>+<kbd>V</kbd>。
 
@@ -226,15 +226,15 @@ curl -sS https://<your-hub>/.well-known/oauth-authorization-server
 | `chatgpt.com` |全力支持|
 | `chat.deepseek.com` |全力支持|
 | `tongyi.aliyun.com` |全力支持|
-| `qwenlm.github.io`, `chat.qwenlm.ai`, `chat.qwen.ai` |全力支持|
+| `qwenlm.github.io`、 `chat.qwenlm.ai`、 `chat.qwen.ai` |全力支持|
 | `ya.ru`、 `yandex.ru`、 `alice.yandex.ru`、 `chat.yandex.ru` |全力支持|
 
-要添加新站点，请将 `apps/chatgpt-admin-app/public/userscript-header` 附加 `@match` 行（或已发布的 `mcp-bridge.user.js`）并重新安装。
+要添加新站点，请将 `apps/chatgpt-admin-app/public/userscript-header` 行附加到 `@match` 行（或已发布的 `mcp-bridge.user.js`）并重新安装。
 
 ### 故障排除
 
 - **按钮不出现** — 站点未启用用户脚本管理器，或者脚本崩溃（Tampermonkey 仪表板 → 脚本 → 错误）。
-- **来自网桥的 401** — 错误的 `CTL_TOKEN`，或者集线器位于本地主机上，没有隧道（集线器仅在 `127.0.0.1` 上放宽身份验证）。
+- **来自网桥的 401** — 错误 `CTL_TOKEN`，或者集线器位于本地主机上，没有隧道（集线器仅在 `127.0.0.1` 上放宽身份验证）。
 - **无自动插入** — AI 发出的代码没有 ` ```mcp ` 栅栏。重新提示它：*“在标记为 `mcp` 的围栏块内响应呼叫。”* 后备：从剪贴板粘贴。
 - **`GM_xmlhttpRequest` 被阻止** — Tampermonkey 脚本设置：设置 **运行于** `document-idle`，确保 `@grant GM_xmlhttpRequest` 位于元数据块中。
 

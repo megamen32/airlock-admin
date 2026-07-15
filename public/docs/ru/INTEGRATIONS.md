@@ -17,7 +17,7 @@
 
 **Когда использовать.** Только для клиентов семейства ChatGPT: `chat.openai.com`, ChatGPT Desktop, Plus/Team. Любой инструмент, который импортирует схему OpenAPI 3.x. Правильный выбор, если вам нужен пользовательский GPT, который вызывает ваш хаб без почасовых квот на вызовы инструментов в стиле Кодекса.
 
-**Протокол.** REST + OpenAPI 3.1, проверка подлинности на предъявителя, семейство `/mcp-relay/*` (`list_mcp_agents`, `list_mcp_tools`, `call_mcp_tool`, `get_mcp_job`, `resources/list`, `resources/read`).
+**Протокол.** REST + OpenAPI 3.1, проверка подлинности носителя. Компактный поток — `discover → schema → execute`; `job` опросы фоновые работают. Устаревшие длинные имена остаются принятыми, но не рекламируются.
 
 **URL-адрес схемы.** `https://<your-hub>/actions/openapi.yaml` — каноническая спецификация, обслуживаемая в реальном времени. В репозиторий также входит `public/openapi.json` (синоним той же спецификации), так что вы можете `curl` его локально.
 
@@ -32,17 +32,17 @@
 ### Пример
 
 ```bash
-curl -sS -X POST https://<your-hub>/mcp-relay/list_mcp_agents \
+curl -sS -X GET https://<your-hub>/mcp-relay/servers \
   -H "Authorization: Bearer $CTL_TOKEN" \
   -H "Content-Type: application/json" -d '{}'
 ```
 
 ```text
-POST /mcp-relay/call_mcp_tool
+POST /mcp-relay/call
 {
-  "agent_id": "shell:roomhacker-server-100",
-  "tool_name": "shell_exec",
-  "arguments": { "cmd": "uptime" }
+  "target": "shell:roomhacker-server-100",
+  "tool": "shell_exec",
+  "args": { "cmd": "uptime" }
 }
 ```
 
@@ -53,7 +53,7 @@ POST /mcp-relay/call_mcp_tool
 - **"Действие не найдено"** — URL-адрес схемы недоступен со стороны ChatGPT. Хаб должен находиться на общедоступном HTTPS (Cloudflare Tunnel, общедоступном домене или зеркале в стиле `become.bezrabotnyi.com`); `http://localhost` не подойдет.
 - **401 при каждом вызове** — неверный `CTL_TOKEN`, или токен содержит случайные пробелы/переводы строк из-за копирования и вставки.
 - **Импортирует схему, инструменты не отображаются** — редактор GPT активно кэширует схемы. Реимпорт.
-- **Подробная ссылка** — полный список операций см. в `docs/CHATGPT_ACTION.md` (устаревшая версия) и `public/openapi.json`.
+- **Подробная ссылка** — полный список операций см. в `docs/CHATGPT_ACTION.md` (старая версия) и `public/openapi.json`.
 
 ---
 
@@ -65,9 +65,9 @@ POST /mcp-relay/call_mcp_tool
 
 **Конечная точка.** `POST https://<your-hub>/mcp` (также `GET` для открытия `initialize`).
 
-**Аутентификация.** Носитель JWT, HS256, подписанный концентратором с использованием `OAUTH_CLIENT_SECRET`, срок действия 12 часов, `iss = PUBLIC_ORIGIN`, `aud = MCP_RESOURCE`. Получите его через [§3](#3-oauth-handshake).
+**Аутентификация**. Носитель JWT, HS256, подписанный концентратором с использованием `OAUTH_CLIENT_SECRET`, срок действия 12 часов, `iss = PUBLIC_ORIGIN`, `aud = MCP_RESOURCE`. Получите его через [§3](#3-oauth-handshake).
 
-> `/mcp` принимает только JWT, выданные OAuth; `CTL_TOKEN` предназначен для REST/API администратора. Локальное исключение: `http://localhost:<port>/mcp` на самом хосте концентратора, где концентратор ослабляет аутентификацию (удобно для `claude_desktop_config.json` разработчиков).
+> `/mcp` принимает только JWT, выданные OAuth; `CTL_TOKEN` предназначен для REST/API администратора. Локальное исключение: `http://localhost:<port>/mcp` на самом хосте концентратора, где концентратор ослабляет аутентификацию (удобно для разработчиков `claude_desktop_config.json`).
 
 ### Как подключиться
 
@@ -87,7 +87,7 @@ POST /mcp-relay/call_mcp_tool
 }
 ```
 
-Перезапустите Клод Рабочий стол. Сервер `gptadmin` отображается с `list_mcp_agents`, `list_mcp_tools`, `call_mcp_tool`, `get_mcp_job`, `resources/list`, `resources/read`.
+Перезапустите Клод Рабочий стол. Сервер `gptadmin` предоставляет `discover`, `schema`, `execute`, `job`, `inspect` и `ui`.
 
 #### Мэвис
 
@@ -140,7 +140,7 @@ curl -sS https://<your-hub>/.well-known/oauth-authorization-server
 **Области применения.**
 
 - `gptadmin.read` — список серверов/инструментов, чтение ресурсов, чтение заданий.
-- `gptadmin.exec` — вызвать инструменты (`call_mcp_tool`), поставить задания в очередь.
+- `gptadmin.exec` — выполнить инструменты (`execute`), поставить задания в очередь.
 
 На странице хаба `/authorize` перечислены запрошенные области; пользователь вводит пароль администратора для согласия.
 
@@ -162,7 +162,7 @@ curl -sS https://<your-hub>/.well-known/oauth-authorization-server
 2. Клиент `POST /register` с `redirect_uris` (например.
    `https://chatgpt.com/connector/oauth/...` или
    `http://127.0.0.1:<port>/callback` для локальных клиентов CLI) → получает `client_id`.
-3. В браузере открывается `GET /authorize?response_type=code&client_id=...&redirect_uri=...&code_challenge=...&code_challenge_method=S256&resource=<hub>&scope=gptadmin.read+gptadmin.exec`.
+3. В браузере открывается номер `GET /authorize?response_type=code&client_id=...&redirect_uri=...&code_challenge=...&code_challenge_method=S256&resource=<hub>&scope=gptadmin.read+gptadmin.exec`.
 4. Пользовательские обзоры → вводят пароль администратора → отправляют.
 5. Хаб 302s на `redirect_uri?code=...&state=...`.
 6. Клиент `POST /token` с `code`, `code_verifier`, `redirect_uri`, `client_id` → `access_token` (JWT) → сохранить в конфиге MCP.
@@ -189,7 +189,7 @@ curl -sS https://<your-hub>/.well-known/oauth-authorization-server
 - **`invalid_request: invalid redirect_uri`** — нет в белом списке. Используйте канонический номер `https://chatgpt.com/connector/oauth/...` или ослабьте список разрешенных на хабе.
 - **`invalid_grant` по номеру `/token`** — `code_verifier` не соответствует `code_challenge`, или истекло 5-минутное окно кода. Повторно введите `/authorize`.
 - **"истёк" при каждом вызове** — срок жизни JWT составляет 12 часов. Большинство клиентов MCP повторно запускают поток автоматически.
-- **Отменить все** — панель администратора по адресу `https://<your-hub>/admin` → **Безопасность → Отозвать все** меняет номер `OAUTH_CLIENT_SECRET` и уничтожает все активные JWT.
+- **Отменить все** — панель администратора по адресу `https://<your-hub>/admin` → **Безопасность → Отозвать все** меняет номер `OAUTH_CLIENT_SECRET` и уничтожает все действующие JWT.
 
 ---
 
@@ -205,7 +205,7 @@ curl -sS https://<your-hub>/.well-known/oauth-authorization-server
    - Android → Firefox из Google Play + Tampermonkey из [tampermonkey.net](https://www.tampermonkey.net/).
 2. **Установить скрипт** — открыть `https://<your-hub>/mcp-bridge.user.js` (или загрузить файл с `apps/chatgpt-admin-app/`). Tampermonkey подхватывает блок метаданных `@userscript` → **Установить**.
 3. **Настройка**: нажмите <kbd>Alt</kbd>+<kbd>K</kbd> (или значок ключа в правом нижнем углу):
-   - **URL моста** — `https://<your-hub>` (без косой черты в конце).
+   - **URL-адрес моста** — `https://<your-hub>` (без косой черты в конце).
    - **Ключ от моста** — ваш `CTL_TOKEN` (тот же, что и §1).
 
 ### Как это работает
@@ -215,7 +215,7 @@ curl -sS https://<your-hub>/.well-known/oauth-authorization-server
 - **MCP All** (`Alt+M`) — вставляет компактное описание каждого агента и его инструментов во ввод чата и копирует это же приглашение в буфер обмена.
 - **MCP** — открывает панель для выбора конкретного агента с подробной документацией по инструменту.
 
-Когда ИИ отвечает ` ```mcp ` изолированным блоком JSON, скрипт выделяет его, отправляет POST-вызов на `<Bridge URL>/mcp-relay/call_mcp_tool` и заменяет блок ответом концентратора.
+Когда ИИ отвечает ` ```mcp ` изолированным блоком JSON, сценарий выделяет его, отправляет POST-вызов на `<Bridge URL>/mcp-relay/call` и заменяет блок ответом концентратора.
 
 > Если автоматическая вставка на сайте с пользовательским редактором не удалась, подсказка всегда находится в буфере обмена — <kbd>Ctrl</kbd>/<kbd>⌘</kbd>+<kbd>V</kbd>.
 
@@ -244,10 +244,10 @@ curl -sS https://<your-hub>/.well-known/oauth-authorization-server
 
 - **Где `CTL_TOKEN`?** На хосте хаба: `grep ^CTL_TOKEN config/gptadmin.env`. Поверните, отредактировав файл и `systemctl restart gptadmin-hub`.
 - **Хаб недоступен из ChatGPT/Клода/моего клиента** — должен быть общедоступный HTTPS. IP-адреса локального хоста и локальной сети подходят для ручного тестирования, но не для действий ChatGPT или удаленных клиентов MCP. Используйте туннель Cloudflare (см. [TUNNELS.md](./TUNNELS_DOCS.md)) или обратный прокси-сервер с реальным доменом.
-- **MCP подключается, но каждый инструмент возвращает «неавторизованный»** — откройте `https://<your-hub>/.well-known/oauth-authorization-server` в браузере; если выдается ошибка 404, маршруты OAuth не включены в вашей сборке хаба. Еще раз проверьте, что `apps/chatgpt-admin-app/` развернут (или что обработчики OAuth Go Hub включены).
-- **Пользовательский тег GPT не видит действия** — убедитесь, что URL-адрес схемы общедоступен: `curl -I https://<your-hub>/actions/openapi.yaml` из-за пределов вашей сети. Если 4xx/5xx, туннель/DNS не указывает на концентратор.
+- **MCP подключается, но каждый инструмент возвращает «неавторизованный»** — откройте `https://<your-hub>/.well-known/oauth-authorization-server` в браузере; если выдается ошибка 404, маршруты OAuth не включены в вашей сборке хаба. Повторно проверьте, что `apps/chatgpt-admin-app/` развернут (или что обработчики OAuth Go Hub включены).
+- **Пользовательский тег GPT не видит действия** – убедитесь, что URL-адрес схемы является общедоступным: `curl -I https://<your-hub>/actions/openapi.yaml` из-за пределов вашей сети. Если 4xx/5xx, туннель/DNS не указывает на концентратор.
 - **Расширение браузера не внедряется** — разрешения менеджера пользовательских сценариев: Tampermonkey Dashboard → «Разрешить пользовательские сценарии» должно быть включено; iOS Safari → Настройки → Safari → Расширения → Пользовательские скрипты → Разрешить; Android Firefox → дополнение включено для текущего сайта.
-- **Страница согласия OAuth 500** — `PUBLIC_ORIGIN` в `config/gptadmin.env` не соответствует URL-адресу, на который обращается клиент. Установите для него **точное** происхождение (схема + хост + порт), которое использует клиент.
+- **Страница согласия OAuth 500** — `PUBLIC_ORIGIN` в `config/gptadmin.env` не соответствует URL-адресу, по которому обращается клиент. Установите для него **точное** происхождение (схема + хост + порт), которое использует клиент.
 - **Быстрый выбор клиентом.** ChatGPT (плюс/командный/пользовательский GPT) → [§1](#1-openai-action-custom-gpt). Claude Desktop / Codex / OpenCode / Mavis → [§2](#2-mcp-remote-streamable-http). Бесплатный веб-чат (DeepSeek/Qwen/Alice/ChatGPT бесплатно) → [§4](#4-browser-extension). Все еще застряло → [FAQ](./FAQ.md), [SECURITY_DOCS.md](./SECURITY_DOCS.md) или `https://<your-hub>/admin` для каждого раздела справочной панели.## Безопасный прокси/реле MCP
 
 Для одноцелевой интеграции откройте один зарегистрированный сервер MCP вместо всего ретранслятора GPTAdmin. На каждом сервере есть:

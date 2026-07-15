@@ -16,12 +16,12 @@ GPT‑Админ 存在于每个操作系统的用户模式和系统模式中。
 
 ### Linux
 
-| |用户模式|系统模式 |
+| |用户模式 ​​|系统模式 |
 |---|-----------|-------------|
 |二进制 | `~/.local/share/gptadmin/` | `/opt/gptadmin/` |
 |配置 | `~/.config/gptadmin/` | `/etc/gptadmin/` |
 |服务 | `systemctl --user` | `systemctl`（系统单元）|
-|命令行 | `~/.local/bin/gptadmin` | `/usr/local/bin/gptadmin` |
+|命令行| `~/.local/bin/gptadmin` | `/usr/local/bin/gptadmin` |
 
 ### macOS
 
@@ -39,7 +39,7 @@ GPT‑Админ 存在于每个操作系统的用户模式和系统模式中。
 |二进制 | `%LOCALAPPDATA%\gptadmin\` | `C:\Program Files\gptadmin\` |
 |配置 | `%LOCALAPPDATA%\gptadmin\config\` | `C:\ProgramData\gptadmin\` |
 |服务 |计划任务（用户登录时）| Windows 服务（管理员）|
-|命令行 | `%LOCALAPPDATA%\gptadmin\gptadmin.exe` | `C:\Program Files\gptadmin\gptadmin.exe` |
+|命令行| `%LOCALAPPDATA%\gptadmin\gptadmin.exe` | `C:\Program Files\gptadmin\gptadmin.exe` |
 
 ## 安装命令
 
