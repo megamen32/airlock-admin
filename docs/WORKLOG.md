@@ -59,6 +59,17 @@ plan is [`PROJECT_PLAN.md`](./PROJECT_PLAN.md).
 - Delivery: Commit `9adf894` pushed to `main`; Build, Sync, Release run `29419512851` passed across build/release, macOS, Windows and Docker failover; Hub rebuilt with this commit and `gptadmin-hub.service` restarted active on `roomhacker-server-100`; live smoke passed `discover`, `schema(target=hub)`, and `execute(tool=status)`, advertising only compact names. Website docs commit `bc76d8c` and parent pointer `1290935` are pushed.
 - Next: Keep legacy names through the documented migration window; remove aliases only in a planned breaking release after client telemetry confirms migration.
 
+## 2026-07-15 - Relax repeated MCP discovery - completed
+
+- Milestone: `S4.1`
+- Owner: Codex
+- Scope: Remove the prompt requirement to rediscover agents before every MCP operation.
+- Baseline / red evidence: Public instructions required `Always call listMcpAgents first` and prescribed discovery/schema before every infrastructure action.
+- Change: Discover once when target is unknown; reuse a healthy target and schema; repeat only after stale/disconnected state, unknown tool schema, or explicit refresh. Added a black-box prompt guard and clarified the philosophy.
+- Verification: `python3 -m pytest tests/test_hub_contract.py -q` (`5 passed`); Build, Sync, Release run `29420583122` passed.
+- Delivery: Commit `0ff518f` pushed to `main`; both prompt files synchronized to `/opt/gptadmin/public` on `roomhacker-server-100`; no Hub restart required because only static instructions changed.
+- Next: Observe client behavior; do not reintroduce mandatory per-call discovery without measured correctness evidence.
+
 ## 2026-07-15 - Idempotent MCP writes - completed
 
 - Milestone: `S4.1`
