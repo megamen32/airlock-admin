@@ -35,18 +35,6 @@ CONTRACT_TOKEN = "hub-contract-token"
 RELAY_TOKEN = "hub-contract-relay-token"
 
 
-def test_mcp_instructions_do_not_require_discovery_before_every_call() -> None:
-    """Prompts must permit target/schema reuse within one task."""
-    prompt_paths = [
-        ROOT / "public/gptadmin_instructions_under_8000.md",
-        ROOT / "public/gptadmin_infrastructure_mcp_instructions.md",
-    ]
-    for path in prompt_paths:
-        text = path.read_text()
-        assert "Always call `listMcpAgents` first" not in text
-        assert "reuse" in text.lower()
-
-
 def _contract_commands() -> list[str]:
     """Return configured hub commands, defaulting to the Go implementation."""
     raw = os.getenv("HUB_CONTRACT_COMMANDS", "").strip()

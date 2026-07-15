@@ -338,3 +338,20 @@ plan is [`PROJECT_PLAN.md`](./PROJECT_PLAN.md).
   `failover-e2e`, Linux, macOS, Windows and Android artifact jobs.
 - Next: Add a physical two-host deployment drill and partition-specific
   fencing evidence before calling HA maturity complete.
+
+## 2026-07-15 - Remove private infrastructure prompts from public repo - completed
+
+- Milestone: `S4.1`
+- Owner: Codex
+- Scope: Keep personal short and infrastructure MCP instructions outside the
+  public repository and its Git history.
+- Baseline / red evidence: Two private prompt artifacts were tracked in the
+  public tree and present in 12 historical commits.
+- Change: Preserved private local copies outside the repository, removed the
+  artifacts from the public tree, added ignore rules, and removed the public
+  contract-test dependency on their contents.
+- Verification: History rewrite and force-push are required; final verification
+  must show no matching path in any public ref or reachable Git object.
+- Delivery: In progress until the rewritten refs and remote are verified.
+- Next: Keep personal prompts in the private directory and maintain only the
+  public deletion manifest in the repository.

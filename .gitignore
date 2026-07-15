@@ -46,6 +46,10 @@ scripts/check_mac_tunnel_matrix.env
 .claude/
 .serena/
 
+# --- Private infrastructure prompts ---
+public/gptadmin_instructions_under_8000.md
+public/gptadmin_infrastructure_mcp_instructions.md
+
 # --- Archives belong in releases, not the repo ---
 *.tar.gz
 *.zip
