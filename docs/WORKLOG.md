@@ -48,6 +48,17 @@ plan is [`PROJECT_PLAN.md`](./PROJECT_PLAN.md).
 
 ## Entries
 
+## 2026-07-15 - External integration control contract - completed
+
+- Milestone: `S4.1`
+- Owner: Codex
+- Scope: Record whether the Codex Document Control discover/schema/execute pattern is a GPTAdmin commitment or only an external reference; define the first bounded GPTAdmin integration slice.
+- Baseline / red evidence: The pattern was described as a standard for “future integrations”, but neither `PROJECT_PLAN.md` nor this worklog named an owner, deliverable or acceptance test.
+- Change: Add a canonical integration-control contract and make S4.1 explicit about session discovery, schema retrieval and idempotent execution.
+- Verification: Documentation link/diff checks and the existing site-doc test.
+- Delivery: Pending commit and push.
+- Next: Implement the S1.3 candidate only when that milestone is started; no runtime change is claimed here.
+
 ## 2026-07-14 - MCP server list restart and failover contract - completed
 
 - Milestone: `S0.2`, `S3.4`

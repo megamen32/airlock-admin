@@ -106,7 +106,7 @@ tools, rather than another isolated server.
 
 | Milestone | Deliverable | Exit gate | Status |
 | --- | --- | --- | --- |
-| S4.1 Integration certification | Versioned compatibility matrix and reusable client/server conformance fixtures | Every listed integration has automated smoke evidence and a known-version support policy | Planned |
+| S4.1 Integration certification and control contract | Versioned compatibility matrix plus a reusable discover -> schema -> execute contract for integrations that control connected client sessions | Every listed integration has automated smoke evidence, a known-version support policy, and idempotent execution semantics; first GPTAdmin candidate is the S1.3 Universal connection page | Planned |
 | S4.2 Curated capability catalog | Signed/attributed MCP definitions with scopes, network needs, risk level and maintenance owner | Install flow displays requested capabilities and provenance before activation | Planned |
 | S4.3 Supply-chain controls | Artifact digest verification, SBOM and dependency/update policy | CI publishes provenance; installer rejects mismatched artifacts; vulnerability response policy is documented | Planned |
 | S4.4 Developer extension path | Stable plugin/adapter SDK and reference implementation | A third party can add a capability without editing hub internals and passes the conformance suite | Planned |
