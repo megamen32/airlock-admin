@@ -291,8 +291,38 @@ def env_set_many(upd: dict):
     cur.update(upd)
     lines = [f'{k}={cur[k]}' for k in sorted(cur.keys())]
     ENV_FILE.parent.mkdir(parents=True, exist_ok=True)
-    ENV_FILE.write_text('\n'.join(lines) + '\n')
-    os.chmod(ENV_FILE, 0o640)
+    tmp = ENV_FILE.with_name(f'.{ENV_FILE.name}.{os.getpid()}.tmp')
+    try:
+        tmp.write_text('\n'.join(lines) + '\n')
+        os.chmod(tmp, 0o640)
+        os.replace(tmp, ENV_FILE)
+    finally:
+        tmp.unlink(missing_ok=True)
+
+
+_PERSISTENT_AUTH_KEYS = frozenset({
+    'CTL_TOKEN',
+    'SHELLMCP_TOKEN',
+    'ADMIN_PASSWORD',
+    'OAUTH_CLIENT_SECRET',
+    'MCP_BRIDGE_KEY',
+    'MCP_RELAY_AGENT_TOKEN',
+    'SHELLMCP_UPDATE_TOKEN',
+})
+
+
+def _capture_persistent_auth_material(env: dict) -> dict[str, str]:
+    """Capture secrets and client JWTs that an in-place update must preserve."""
+    return {
+        key: str(value)
+        for key, value in env.items()
+        if value and (key in _PERSISTENT_AUTH_KEYS or key.startswith('GPTADMIN_') and key.endswith('_MCP_BEARER'))
+    }
+
+
+def _restore_persistent_auth_material(env: dict, saved: dict[str, str]) -> None:
+    """Restore auth material captured before package replacement."""
+    env.update(saved)
 
 
 def ensure_shellmcp_default_user(env: dict) -> None:
@@ -3560,6 +3590,7 @@ def cmd_update(args):
     """
     need_root()
     env = env_read()
+    saved_auth_material = _capture_persistent_auth_material(env)
     if not env and not any(p.exists() for p in (UNIT_PATH_HUB, UNIT_PATH_SHELLMCP, CLI_PATH, BIN_DIR / 'gptadmin_hub', BIN_DIR / 'shellmcp')):
         die('GPTAdmin installation was not found. Run: gptadmin setup')
 
@@ -3653,6 +3684,13 @@ def cmd_update(args):
                 print('  Component package unavailable, using full package...')
                 download(pkg_all, pkg)
             install_component_from_pkg(pkg, 'shellmcp')
+
+    # Package payloads must never be able to invalidate existing Hub JWTs or
+    # client credentials. Restore the pre-update auth state before services
+    # restart, then persist it atomically through env_set_many.
+    env = env_read()
+    _restore_persistent_auth_material(env, saved_auth_material)
+    env_set_many(env)
 
     _write_installed_build_marker(remote_info, target_pkg)
     _cleanup_obsolete_runtime_files()

@@ -4,6 +4,7 @@ GPTADMIN_PROMPT.md
 docs/old_prompt.txt
 public/gptadmin_infrastructure_mcp_instructions.md
 public/gptadmin_instructions_under_8000.md
+private/
 
 # deployment/private config
 **/.env

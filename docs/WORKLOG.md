@@ -357,3 +357,22 @@ plan is [`PROJECT_PLAN.md`](./PROJECT_PLAN.md).
   after history rewrite; private copies remain outside the repository.
 - Next: Keep personal prompts in the private directory and maintain only the
   public deletion manifest in the repository.
+
+## 2026-07-15 - Preserve JWTs across updates and anchor private prompts - completed
+
+- Milestone: `S2.2`, `S4.1`
+- Owner: Codex
+- Scope: Make in-place and automatic updates preserve all existing auth
+  material, and keep personal instructions in the private source repository.
+- Baseline / red evidence: A package step that rewrote `gptadmin.env` dropped
+  `OAUTH_CLIENT_SECRET` and client bearer JWTs; private prompt copies lived in
+  an external directory that was easy to lose.
+- Change: Added pre-update auth capture and post-package restoration, atomic
+  `.env` replacement, and moved private instructions under
+  `private/instructions/` in the private repo. Both `git-private2public` and
+  GitHub rsync explicitly exclude `private/`.
+- Verification: TDD regression and mirror guard pass; private instruction
+  hashes were preserved during the move.
+- Delivery: Pending commit and CI.
+- Next: Keep auth state in the managed config and never rotate it as part of
+  binary/package replacement.
