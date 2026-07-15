@@ -16,7 +16,15 @@ paths:
     get:
       operationId: discover
       summary: Discover targets
-      description: List available MCP targets.
+      description: List compact MCP targets. Add detail=full only when metadata is needed.
+      parameters:
+        - name: detail
+          in: query
+          required: false
+          description: Opt in to transport, capabilities and metadata.
+          schema:
+            type: string
+            enum: [full]
       responses:
         "200":
           description: Available MCP servers

@@ -376,3 +376,20 @@ plan is [`PROJECT_PLAN.md`](./PROJECT_PLAN.md).
 - Delivery: Pending commit and CI.
 - Next: Keep auth state in the managed config and never rotate it as part of
   binary/package replacement.
+
+## 2026-07-15 - Compact discover with explicit detail opt-in - completed
+
+- Milestone: `S1.3`, `S4.2`
+- Owner: Codex
+- Scope: Reduce default MCP context cost without removing target metadata when
+  an integration explicitly needs it.
+- Baseline / red evidence: `discover` returned transport, timestamps,
+  capabilities and arbitrary metadata on every call.
+- Change: Default REST, MCP and Apps SDK discovery now returns only
+  `server_id`, `name`, `kind` and `status`; `detail: "full"` or
+  `GET /mcp-relay/servers?detail=full` opts into the previous detail payload.
+  OpenAPI and generated MCP schemas document the opt-in.
+- Verification: Go Hub tests and black-box contract tests pass.
+- Delivery: Pending commit and CI.
+- Next: Apply the same compact/default policy to `listMcpAgents` only if a
+  measured client still needs it; do not expand the default tool surface.

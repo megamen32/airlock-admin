@@ -269,6 +269,14 @@ def test_hub_contract_relay_and_openapi(hub_contract: HubProcess) -> None:
     servers = servers_body.get("servers")
     assert isinstance(servers, list) and servers
     assert any(server.get("server_id") == "hub" for server in servers if isinstance(server, dict))
+    hub_server = next(server for server in servers if server.get("server_id") == "hub")
+    assert set(hub_server) <= {"server_id", "name", "kind", "status"}
+
+    status, detailed_body, _ = hub_contract.request("GET", "/mcp-relay/servers?detail=full")
+    assert status == 200
+    detailed_hub = next(server for server in detailed_body["servers"] if server.get("server_id") == "hub")
+    assert "meta" in detailed_hub
+    assert "capabilities" in detailed_hub
 
     status, tools_body, _ = hub_contract.request("POST", "/mcp-relay/tools", payload={"target": "hub"})
     assert status == 200
@@ -303,6 +311,8 @@ def test_hub_contract_global_mcp(hub_contract: HubProcess) -> None:
     assert isinstance(tools, list)
     names = {tool.get("name") for tool in tools if isinstance(tool, dict)}
     assert {"discover", "schema", "execute"} <= names
+    discover_schema = next(tool for tool in tools if tool.get("name") == "discover")
+    assert discover_schema["inputSchema"]["properties"]["detail"]["enum"] == ["full"]
 
     list_servers = hub_contract.rpc(
         "/mcp",
@@ -313,6 +323,15 @@ def test_hub_contract_global_mcp(hub_contract: HubProcess) -> None:
     servers = _structured_content(list_servers).get("servers")
     assert isinstance(servers, list)
     assert any(server.get("server_id") == "hub" for server in servers if isinstance(server, dict))
+
+    detailed = hub_contract.rpc(
+        "/mcp",
+        "tools/call",
+        {"name": "discover", "arguments": {"detail": "full"}},
+        31,
+    )
+    detailed_servers = _structured_content(detailed).get("servers")
+    assert any("meta" in server for server in detailed_servers if isinstance(server, dict))
 
     rejected = hub_contract.rpc(
         "/mcp",

@@ -1274,7 +1274,7 @@ func TestAgentFacadeDefaultExposesAllAgents(t *testing.T) {
 		t.Fatalf("register status=%d body=%s", w.Code, w.Body.String())
 	}
 
-	req = httptest.NewRequest(http.MethodGet, "/mcp-relay/list_mcp_servers", nil)
+	req = httptest.NewRequest(http.MethodGet, "/mcp-relay/list_mcp_servers?detail=full", nil)
 	req.Header.Set("Authorization", "Bearer ctl")
 	w = httptest.NewRecorder()
 	h.ServeHTTP(w, req)

@@ -678,7 +678,15 @@ paths:
     get:
       operationId: discover
       summary: Discover targets
-      description: List available MCP targets.
+      description: List compact MCP targets. Add detail=full only when metadata is needed.
+      parameters:
+        - name: detail
+          in: query
+          required: false
+          description: Opt in to transport, capabilities and metadata.
+          schema:
+            type: string
+            enum: [full]
       responses:
         "200":
           description: Available MCP servers
@@ -1372,7 +1380,7 @@ func (s *Server) mcpRelayResult(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) mcpRelayServers(w http.ResponseWriter, r *http.Request) {
 	s.mu.Lock()
-	servers := s.publicServersLocked(r)
+	servers := s.publicServersLockedWithDetail(r, fullDetailRequested(r.URL.Query().Get("detail")))
 	s.mu.Unlock()
 	writeJSON(w, http.StatusOK, map[string]any{"servers": servers})
 }
@@ -1386,12 +1394,40 @@ func (s *Server) mcpRelayAgents(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) publicServersLocked(r *http.Request) []map[string]any {
+	return s.publicServersLockedWithDetail(r, false)
+}
+
+func (s *Server) publicServersLockedWithDetail(r *http.Request, detail bool) []map[string]any {
 	agents := s.publicAgentsLocked(r)
 	servers := make([]map[string]any, 0, len(agents))
 	for _, a := range agents {
-		servers = append(servers, agentAsServer(a))
+		server := agentAsServer(a)
+		if !detail {
+			server = compactServer(server)
+		}
+		servers = append(servers, server)
 	}
 	return servers
+}
+
+func compactServer(server map[string]any) map[string]any {
+	return map[string]any{
+		"server_id": server["server_id"],
+		"name":      server["name"],
+		"kind":      server["kind"],
+		"status":    server["status"],
+	}
+}
+
+func fullDetailRequested(value any) bool {
+	switch v := value.(type) {
+	case bool:
+		return v
+	case string:
+		return strings.EqualFold(strings.TrimSpace(v), "full") || truthyString(v)
+	default:
+		return false
+	}
 }
 
 func agentAsServer(a Agent) map[string]any {
@@ -1830,7 +1866,7 @@ func (s *Server) callHubTool(name string, args map[string]any) (map[string]any, 
 	s.addAuditLocked("hub_tool", map[string]any{"tool": name})
 	switch name {
 	case "discover", "listMcpServers", "list_mcp_servers":
-		servers := s.publicServersLocked(nil)
+		servers := s.publicServersLockedWithDetail(nil, fullDetailRequested(args["detail"]))
 		return map[string]any{"servers": servers}, http.StatusOK
 	case "listMcpAgents", "list_mcp_agents":
 		agents := s.publicAgentsLocked(nil)
@@ -3744,7 +3780,7 @@ func (s *Server) appsSDKCall(name string, args map[string]any) any {
 		}
 	case "discover", "list_mcp_servers", "listMcpServers":
 		s.mu.Lock()
-		servers := s.publicServersLocked(nil)
+		servers := s.publicServersLockedWithDetail(nil, fullDetailRequested(args["detail"]))
 		s.mu.Unlock()
 		return map[string]any{"servers": servers}
 	case "list_mcp_agents", "listMcpAgents":
@@ -3886,8 +3922,8 @@ func appsSDKTools() []map[string]any {
 		{
 			"name":            "discover",
 			"title":           "Discover",
-			"description":     "List available MCP targets. Choose one target before schema or execute.",
-			"inputSchema":     map[string]any{"type": "object", "properties": map[string]any{}, "additionalProperties": false},
+			"description":     "List compact MCP targets. Set detail=full only when metadata is needed.",
+			"inputSchema":     map[string]any{"type": "object", "properties": map[string]any{"detail": map[string]any{"type": "string", "enum": []string{"full"}, "description": "Opt in to transport, capabilities and metadata."}}, "additionalProperties": false},
 			"outputSchema":    map[string]any{"type": "object", "properties": map[string]any{"servers": map[string]any{"type": "array", "items": map[string]any{"type": "object", "additionalProperties": true}}}, "required": []string{"servers"}, "additionalProperties": true},
 			"annotations":     map[string]any{"readOnlyHint": true, "destructiveHint": false, "openWorldHint": false},
 			"securitySchemes": readSecurity,
