@@ -39,7 +39,7 @@ with the user's real task.
 - Keep the global Hub tool surface small, stable and deterministic.
 - Load server inventories, schemas, resources and result detail only when the
   current task actually needs them.
-- Discover first; describe or load content only after an explicit selection.
+- Discover once at task start when the target is unknown; reuse a healthy target and its schema until stale, disconnected, or explicitly refreshed.
 - Never inject the full upstream MCP inventory into every session.
 - Paginate and bound lists and results. Return a concise summary and a handle
   for large content instead of duplicating full payloads.
