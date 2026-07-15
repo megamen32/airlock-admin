@@ -274,7 +274,7 @@ def test_hub_contract_relay_and_openapi(hub_contract: HubProcess) -> None:
     assert status == 200
     assert tools_body.get("server_id") == "hub"
     tools = tools_body.get("response", {}).get("tools")
-    assert isinstance(tools, list) and any(tool.get("name") == "list_mcp_servers" for tool in tools)
+    assert isinstance(tools, list) and any(tool.get("name") == "discover" for tool in tools)
 
     for path, payload in (
         ("/mcp-relay/tools", {"target": "default"}),
@@ -288,7 +288,7 @@ def test_hub_contract_relay_and_openapi(hub_contract: HubProcess) -> None:
     status, schema = _request_text(f"{hub_contract.base_url}/actions/openapi.yaml")
     assert status == 200
     assert "required: [target]" in schema
-    assert "There is no default target" in schema
+    assert 'Never use target="default"' in schema
     assert "default: default" not in schema
 
 
@@ -302,12 +302,12 @@ def test_hub_contract_global_mcp(hub_contract: HubProcess) -> None:
     tools = tools_result.get("tools")
     assert isinstance(tools, list)
     names = {tool.get("name") for tool in tools if isinstance(tool, dict)}
-    assert {"list_mcp_servers", "list_mcp_tools", "call_mcp_tool"} <= names
+    assert {"discover", "schema", "execute"} <= names
 
     list_servers = hub_contract.rpc(
         "/mcp",
         "tools/call",
-        {"name": "list_mcp_servers", "arguments": {}},
+        {"name": "discover", "arguments": {}},
         3,
     )
     servers = _structured_content(list_servers).get("servers")
@@ -317,7 +317,7 @@ def test_hub_contract_global_mcp(hub_contract: HubProcess) -> None:
     rejected = hub_contract.rpc(
         "/mcp",
         "tools/call",
-        {"name": "list_mcp_tools", "arguments": {"target": "default"}},
+        {"name": "schema", "arguments": {"target": "default"}},
         4,
     )
     payload = _structured_content(rejected)
@@ -329,14 +329,14 @@ def test_hub_contract_per_server_mcp_and_action_proxy(hub_contract: HubProcess) 
     """Verify the MCP and generated OpenAPI proxy for the built-in hub server."""
     status, schema = _request_text(f"{hub_contract.base_url}/server/hub/actions/openapi.yaml")
     assert status == 200
-    assert "/server/hub/actions/tools/list_mcp_servers" in schema
+    assert "/server/hub/actions/tools/discover" in schema
 
     tools_result = hub_contract.rpc("/server/hub/mcp", "tools/list", {}, 5)
     tools = tools_result.get("tools")
     assert isinstance(tools, list)
-    assert any(tool.get("name") == "list_mcp_servers" for tool in tools if isinstance(tool, dict))
+    assert any(tool.get("name") == "discover" for tool in tools if isinstance(tool, dict))
 
-    status, action, _ = hub_contract.request("POST", "/server/hub/actions/tools/list_mcp_servers", payload={})
+    status, action, _ = hub_contract.request("POST", "/server/hub/actions/tools/discover", payload={})
     assert status == 200
     assert action.get("server_id") == "hub"
     assert action.get("status") == "completed"

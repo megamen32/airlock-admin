@@ -25,9 +25,9 @@ operation gets a new key.
 
 | Control pattern | Existing Hub operation |
 | --- | --- |
-| `discover` | `list_mcp_agents` or `list_mcp_servers` |
-| `schema` | `list_mcp_tools` for the selected `target` |
-| `execute` | `call_mcp_tool` with the same `target` and `tool_name` |
+| `discover` | `discover` (legacy aliases: `list_mcp_agents`, `list_mcp_servers`) |
+| `schema` | `schema` for the selected `target` (legacy alias: `list_mcp_tools`) |
+| `execute` | `execute` with the same `target` and `tool` (legacy alias: `call_mcp_tool`) |
 
 The selected `target` is the current stable agent/server identity. A separate
 executor session and schema version are not currently part of the ordinary
@@ -36,7 +36,7 @@ selected server.
 
 ## Remaining Gaps
 
-`call_mcp_tool` now accepts an optional caller-stable `idempotency_key`. The Hub
+`execute` accepts an optional caller-stable `idempotency_key`. The Hub
 fingerprints `target`, `tool_name`, and `arguments` under the authenticated
 caller scope. A retry with the same key and fingerprint reuses the original
 job/result; reusing the key for a different operation returns `409 Conflict`.

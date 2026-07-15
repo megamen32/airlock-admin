@@ -171,6 +171,38 @@ func TestMCPAppsCallUsesSameIdempotencyContract(t *testing.T) {
 	}
 }
 
+func TestMCPToolsExposeCompactCanonicalNames(t *testing.T) {
+	tools := appsSDKTools()
+	encoded, err := json.Marshal(tools)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(encoded) > 12000 {
+		t.Fatalf("tools/list payload is %d bytes; want <=12000", len(encoded))
+	}
+	got := map[string]map[string]any{}
+	for _, tool := range tools {
+		name, _ := tool["name"].(string)
+		got[name] = tool
+	}
+	for _, name := range []string{"discover", "schema", "execute", "job", "inspect", "ui"} {
+		if _, ok := got[name]; !ok {
+			t.Fatalf("missing canonical tool %q; tools=%v", name, got)
+		}
+	}
+	for _, legacy := range []string{"list_mcp_servers", "list_mcp_tools", "call_mcp_tool", "get_mcp_job"} {
+		if _, ok := got[legacy]; ok {
+			t.Fatalf("legacy tool %q must not be advertised in tools/list", legacy)
+		}
+	}
+	for name, tool := range got {
+		description, _ := tool["description"].(string)
+		if len(description) > 180 {
+			t.Fatalf("description for %s is %d bytes; want <=180: %s", name, len(description), description)
+		}
+	}
+}
+
 func registerRelayAgent(t *testing.T, s *Server, agentID string) {
 	t.Helper()
 	postHubJSON(t, s, "/mcp-relay/register", "relay", `{"agent_id":"`+agentID+`","name":"Demo","capabilities":["tools/list","tools/call"]}`)
@@ -269,7 +301,7 @@ func TestOAuthAndMCPJSONRPC(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("mcp status=%d body=%s", w.Code, w.Body.String())
 	}
-	if !bytes.Contains(w.Body.Bytes(), []byte("list_mcp_servers")) {
+	if !bytes.Contains(w.Body.Bytes(), []byte(`"name":"discover"`)) {
 		t.Fatalf("tools/list missing expected server tool: %s", w.Body.String())
 	}
 }
@@ -516,7 +548,7 @@ func TestReadonlyManagedTokenCannotCallShellExec(t *testing.T) {
 	globalList.Header.Set("Content-Type", "application/json")
 	globalListed := httptest.NewRecorder()
 	h.ServeHTTP(globalListed, globalList)
-	if globalListed.Code != http.StatusOK || !strings.Contains(globalListed.Body.String(), "inspect_system") || strings.Contains(globalListed.Body.String(), `"name":"call_mcp_tool"`) {
+	if globalListed.Code != http.StatusOK || !strings.Contains(globalListed.Body.String(), `"name":"inspect"`) || strings.Contains(globalListed.Body.String(), `"name":"execute"`) {
 		t.Fatalf("global readonly tool list is unsafe: status=%d body=%s", globalListed.Code, globalListed.Body.String())
 	}
 
@@ -1015,7 +1047,7 @@ func TestCompatibilityEndpoints(t *testing.T) {
 		want   int
 		needle string
 	}{
-		{http.MethodGet, "/actions/openapi.yaml", http.StatusOK, "operationId: listMcpServers"},
+		{http.MethodGet, "/actions/openapi.yaml", http.StatusOK, "operationId: discover"},
 		{http.MethodGet, "/servers", http.StatusOK, "servers"},
 		{http.MethodGet, "/tasks/demo", http.StatusOK, "tasks"},
 		{http.MethodGet, "/artifacts/shellmcp.json", http.StatusOK, "sha256"},
@@ -1039,7 +1071,7 @@ func TestCompatibilityEndpoints(t *testing.T) {
 	w := httptest.NewRecorder()
 	h.ServeHTTP(w, req)
 	body := w.Body.String()
-	for _, want := range []string{"openapi: 3.1.0", "version: \"1.0.0\"", "additionalProperties: true", "cmd:", "query:", "cwd:", "arguments:", "common tool fields can also be sent as top-level fields", "args:", "Short alias for arguments."} {
+	for _, want := range []string{"openapi: 3.1.0", "version: \"1.0.0\"", "additionalProperties: true", "cmd:", "query:", "cwd:", "arguments:", "args:", "operationId: execute", "Tool name from schema."} {
 		if !strings.Contains(body, want) {
 			t.Fatalf("/actions/openapi.yaml missing %q in %s", want, body)
 		}
@@ -1150,16 +1182,16 @@ func TestAppsSDKRejectsDefaultTarget(t *testing.T) {
 func TestAppsSDKCallForwardsArbitraryTopLevelToolArgs(t *testing.T) {
 	var callSchema map[string]any
 	for _, tool := range appsSDKTools() {
-		if tool["name"] == "call_mcp_tool" {
+		if tool["name"] == "execute" {
 			callSchema = tool["inputSchema"].(map[string]any)
 			break
 		}
 	}
 	if callSchema == nil || callSchema["additionalProperties"] != true {
-		t.Fatalf("call_mcp_tool schema must permit arbitrary selected-tool fields: %v", callSchema)
+		t.Fatalf("execute schema must permit arbitrary selected-tool fields: %v", callSchema)
 	}
 	if _, ok := callSchema["properties"].(map[string]any)["args"]; !ok {
-		t.Fatalf("call_mcp_tool schema must expose args alias: %v", callSchema)
+		t.Fatalf("execute schema must expose args: %v", callSchema)
 	}
 
 	s := New(Config{CtlToken: "ctl", RelayAgentToken: "relay", DefaultTimeout: time.Second, PollMaxTimeout: time.Second})
@@ -1294,8 +1326,8 @@ func TestAgentFacadeDefaultExposesAllAgents(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("hub server mcp status=%d body=%s", w.Code, w.Body.String())
 	}
-	if !strings.Contains(w.Body.String(), "list_mcp_servers") {
-		t.Fatalf("hub server tools/list missing list_mcp_servers: %s", w.Body.String())
+	if !strings.Contains(w.Body.String(), `"name":"discover"`) {
+		t.Fatalf("hub server tools/list missing discover: %s", w.Body.String())
 	}
 }
 
@@ -1402,7 +1434,7 @@ func TestAppsSDKMetadataAndWidget(t *testing.T) {
 		if _, ok := meta["securitySchemes"]; !ok {
 			t.Fatalf("tool %s missing _meta.securitySchemes", tool["name"])
 		}
-		if tool["name"] == "render_gptadmin_dashboard" {
+		if tool["name"] == "ui" {
 			renderTools++
 			ui := meta["ui"].(map[string]any)
 			if meta["openai/widgetAccessible"] != true {
@@ -1446,7 +1478,7 @@ func TestAppsSDKMetadataAndWidget(t *testing.T) {
 		t.Fatalf("bad mime: %v", content["mimeType"])
 	}
 	htmlText := content["text"].(string)
-	for _, want := range []string{"GPTAdmin MCP", "ui/notifications/tool-result", "tools/call", "list_mcp_servers"} {
+	for _, want := range []string{"GPTAdmin MCP", "ui/notifications/tool-result", "tools/call", "discover"} {
 		if !strings.Contains(htmlText, want) {
 			t.Fatalf("widget html missing %q", want)
 		}

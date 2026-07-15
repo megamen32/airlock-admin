@@ -665,13 +665,7 @@ info:
   title: GPTAdmin MCP Relay
   version: "1.0.0"
   description: |
-    Universal MCP relay for GPTAdmin.
-
-    Use this API as a single interface for remote servers:
-      1. listMcpServers — choose an online server.
-      2. listMcpTools — inspect tools available on that server.
-      3. callMcpTool — call exactly one tool on exactly one target.
-      4. If background=true and job_id is returned, poll getMcpJob until status is completed or failed.
+    Compact control API: discover → schema → execute. Poll job when background=true.
 
     Shell hosts and MCP services are exposed as GPTAdmin servers with ids like shell:<server_name>.
     The hub itself is exposed as target "hub" for registry and approval tools.
@@ -682,62 +676,62 @@ security:
 paths:
   /mcp-relay/servers:
     get:
-      operationId: listMcpServers
-      summary: List MCP servers
-      description: Lists real MCP servers, virtual shell servers, and the built-in hub server.
+      operationId: discover
+      summary: Discover targets
+      description: List available MCP targets.
       responses:
         "200":
           description: Available MCP servers
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/ListMcpServersResponse"
+                $ref: "#/components/schemas/DiscoverResponse"
   /mcp-relay/tools:
     post:
-      operationId: listMcpTools
-      summary: List tools for one MCP server target
-      description: Requests tools/list from an explicitly selected MCP server. Call listMcpServers first and pass one returned server_id as target. There is no default target; never use target="default".
+      operationId: schema
+      summary: Get target schema
+      description: List tools for one target from discover. Never use target="default".
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/ListMcpToolsRequest"
+              $ref: "#/components/schemas/SchemaRequest"
       responses:
         "200":
           description: Tool list response or background job reference
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/McpToolResponse"
+                $ref: "#/components/schemas/Result"
   /mcp-relay/call:
     post:
-      operationId: callMcpTool
-      summary: Call one tool on one MCP server target
-      description: Calls one tool on one selected target. Do not use this as bulk API; call it once per target when several servers must be used.
+      operationId: execute
+      summary: Execute one tool
+      description: Execute one tool on one selected target. Use schema first.
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/CallMcpToolRequest"
+              $ref: "#/components/schemas/ExecuteRequest"
       responses:
         "200":
           description: Tool call response or background job reference
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/McpToolResponse"
+                $ref: "#/components/schemas/Result"
   /mcp-relay/job/{job_id}:
     get:
-      operationId: getMcpJob
-      summary: Get MCP background job status
-      description: Polls a background MCP job. Set ack=true after reading a completed or failed result to remove it from hub memory.
+      operationId: job
+      summary: Get job
+      description: Read a background job by id.
       parameters:
         - name: job_id
           in: path
           required: true
-          description: Job id returned by listMcpTools or callMcpTool.
+          description: Job id returned by execute.
           schema:
             type: string
         - name: ack
@@ -753,14 +747,14 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/McpJobResponse"
+                $ref: "#/components/schemas/Job"
 components:
   securitySchemes:
     bearerAuth:
       type: http
       scheme: bearer
   schemas:
-    ListMcpServersResponse:
+    DiscoverResponse:
       type: object
       additionalProperties: false
       required: [servers]
@@ -776,7 +770,7 @@ components:
       properties:
         server_id:
           type: string
-          description: Target id to use in listMcpTools and callMcpTool.
+                  description: Target id to use in schema and execute.
         name:
           type: string
         kind:
@@ -798,14 +792,14 @@ components:
         meta:
           type: object
           additionalProperties: true
-    ListMcpToolsRequest:
+    SchemaRequest:
       type: object
       additionalProperties: false
       required: [target]
       properties:
         target:
           type: string
-          description: Explicit server id from listMcpServers. There is no default target. Never use "default".
+          description: Target id from discover. Never use "default".
         timeout:
           type: integer
           nullable: true
@@ -815,39 +809,36 @@ components:
         background:
           type: boolean
           default: false
-    CallMcpToolRequest:
+    ExecuteRequest:
       type: object
       additionalProperties: true
-      required: [target, tool_name]
+      required: [target, tool]
       properties:
         target:
           type: string
-          description: Explicit server id from listMcpServers. There is no default target. Never use "default".
+          description: Target id from discover. Never use "default".
+        tool:
+          type: string
+          description: Tool name from schema.
         tool_name:
           type: string
-          description: Tool name returned by listMcpTools.
         arguments:
           type: object
           additionalProperties: true
           default: {}
-          description: Tool input object for the selected tool. Optional; common tool fields can also be sent as top-level fields.
         args:
           type: object
           additionalProperties: true
           default: {}
-          description: Short alias for arguments. Also accepted for compatibility.
         cmd:
           type: string
           nullable: true
-          description: Top-level shortcut passed to shell_exec as cmd.
         query:
           type: string
           nullable: true
-          description: Top-level shortcut passed to tools like OpenMemory query as query.
         cwd:
           type: string
           nullable: true
-          description: Top-level shortcut passed to shell_exec as cwd.
         timeout:
           type: integer
           nullable: true
@@ -861,8 +852,8 @@ components:
           type: string
           minLength: 1
           maxLength: 200
-          description: Stable caller key reused only when retrying the same logical operation with identical target, tool_name, and arguments.
-    McpToolResponse:
+          description: Reuse only for the same operation.
+    Result:
       type: object
       additionalProperties: true
       required: [server_id, status]
@@ -888,7 +879,7 @@ components:
           type: object
           nullable: true
           additionalProperties: true
-    McpJobResponse:
+    Job:
       type: object
       additionalProperties: true
       required: [job_id, status]
@@ -1526,7 +1517,7 @@ func (s *Server) mcpRelayCall(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	target := firstString(req, "target", "server_id", "agent_id")
-	toolName := firstString(req, "tool_name", "name")
+	toolName := firstString(req, "tool", "tool_name", "name")
 	args := mapValue(req["arguments"])
 	if len(args) == 0 {
 		args = mapValue(req["args"])
@@ -1658,7 +1649,7 @@ func sha256Hex(value []byte) string {
 func toolArgsFromTopLevel(req map[string]any) map[string]any {
 	reserved := map[string]bool{
 		"target": true, "server_id": true, "agent_id": true,
-		"tool_name": true, "name": true,
+		"tool": true, "tool_name": true, "name": true,
 		"arguments": true, "args": true,
 		"background":      true,
 		"idempotency_key": true,
@@ -1838,13 +1829,13 @@ func (s *Server) callHubTool(name string, args map[string]any) (map[string]any, 
 	defer s.mu.Unlock()
 	s.addAuditLocked("hub_tool", map[string]any{"tool": name})
 	switch name {
-	case "listMcpServers", "list_mcp_servers":
+	case "discover", "listMcpServers", "list_mcp_servers":
 		servers := s.publicServersLocked(nil)
 		return map[string]any{"servers": servers}, http.StatusOK
 	case "listMcpAgents", "list_mcp_agents":
 		agents := s.publicAgentsLocked(nil)
 		return map[string]any{"agents": agents}, http.StatusOK
-	case "list_pending_servers":
+	case "pending", "list_pending_servers":
 		return map[string]any{"pending": []any{}, "count": 0}, http.StatusOK
 	case "hub_status", "status":
 		return map[string]any{"ok": true, "servers": len(s.agents), "relay_jobs": len(s.relayJobs), "shell_jobs": len(s.shellJobs)}, http.StatusOK
@@ -1904,19 +1895,19 @@ func (s *Server) callShellTool(target, toolName string, args map[string]any, bac
 
 func hubTools() []map[string]any {
 	return []map[string]any{
-		{"name": "list_mcp_servers", "description": "List registered GPTAdmin servers, including the internal hub", "inputSchema": map[string]any{"type": "object", "properties": map[string]any{}}},
-		{"name": "list_pending_servers", "description": "List pending shell server approvals", "inputSchema": map[string]any{"type": "object", "properties": map[string]any{}}},
-		{"name": "hub_status", "description": "Return Go hub runtime status", "inputSchema": map[string]any{"type": "object", "properties": map[string]any{}}},
+		{"name": "discover", "description": "List registered targets", "inputSchema": map[string]any{"type": "object", "properties": map[string]any{}}},
+		{"name": "pending", "description": "List pending approvals", "inputSchema": map[string]any{"type": "object", "properties": map[string]any{}}},
+		{"name": "status", "description": "Return Hub status", "inputSchema": map[string]any{"type": "object", "properties": map[string]any{}}},
 	}
 }
 
 func shellTools() []map[string]any {
 	return []map[string]any{
-		{"name": "system_inspect", "description": "Read bounded, automatically redacted host diagnostics without executing a command", "inputSchema": map[string]any{"type": "object", "properties": map[string]any{"action": map[string]any{"type": "string", "enum": []string{"read_file", "list_directory"}}, "path": map[string]any{"type": "string"}, "max_bytes": map[string]any{"type": []string{"integer", "null"}, "minimum": 1, "maximum": 1048576}}, "required": []string{"action", "path"}, "additionalProperties": false}},
-		{"name": "shell_exec", "description": "Execute a shell command through a polling shellmcp agent. Commands use the agent's default non-root user unless run_as_user is explicitly set.", "inputSchema": map[string]any{"type": "object", "properties": map[string]any{"cmd": map[string]any{"type": "string"}, "cwd": map[string]any{"type": []string{"string", "null"}}, "timeout": map[string]any{"type": []string{"integer", "null"}}, "run_as_user": map[string]any{"type": []string{"string", "null"}, "description": "Explicit execution user; use root only for intentional privileged operations."}}, "required": []string{"cmd"}}},
-		{"name": "mcp_manage", "description": "Persist and manage child MCP definitions on this ShellMCP", "inputSchema": map[string]any{"type": "object", "properties": map[string]any{"action": map[string]any{"type": "string", "enum": []string{"list", "upsert", "remove", "enable", "disable", "restart", "status", "config"}}, "ref": map[string]any{"type": []string{"string", "null"}}, "config": map[string]any{"type": []string{"object", "null"}, "additionalProperties": true}}, "required": []string{"action"}, "additionalProperties": false}},
-		{"name": "mcp_tools", "description": "List tools exposed by an enabled child MCP configured on this ShellMCP", "inputSchema": map[string]any{"type": "object", "properties": map[string]any{"ref": map[string]any{"type": "string"}}, "required": []string{"ref"}, "additionalProperties": false}},
-		{"name": "mcp_call", "description": "Call a tool on an enabled child MCP configured on this ShellMCP", "inputSchema": map[string]any{"type": "object", "properties": map[string]any{"ref": map[string]any{"type": "string"}, "name": map[string]any{"type": "string"}, "arguments": map[string]any{"type": []string{"object", "null"}, "additionalProperties": true}}, "required": []string{"ref", "name"}, "additionalProperties": false}},
+		{"name": "system_inspect", "description": "Read bounded redacted files/directories; no commands", "inputSchema": map[string]any{"type": "object", "properties": map[string]any{"action": map[string]any{"type": "string", "enum": []string{"read_file", "list_directory"}}, "path": map[string]any{"type": "string"}, "max_bytes": map[string]any{"type": []string{"integer", "null"}, "minimum": 1, "maximum": 1048576}}, "required": []string{"action", "path"}, "additionalProperties": false}},
+		{"name": "shell_exec", "description": "Run one command as the default non-root user", "inputSchema": map[string]any{"type": "object", "properties": map[string]any{"cmd": map[string]any{"type": "string"}, "cwd": map[string]any{"type": []string{"string", "null"}}, "timeout": map[string]any{"type": []string{"integer", "null"}}, "run_as_user": map[string]any{"type": []string{"string", "null"}, "description": "Use root only when intentional"}}, "required": []string{"cmd"}}},
+		{"name": "mcp_manage", "description": "Manage child MCPs", "inputSchema": map[string]any{"type": "object", "properties": map[string]any{"action": map[string]any{"type": "string", "enum": []string{"list", "upsert", "remove", "enable", "disable", "restart", "status", "config"}}, "ref": map[string]any{"type": []string{"string", "null"}}, "config": map[string]any{"type": []string{"object", "null"}, "additionalProperties": true}}, "required": []string{"action"}, "additionalProperties": false}},
+		{"name": "mcp_tools", "description": "List child MCP tools", "inputSchema": map[string]any{"type": "object", "properties": map[string]any{"ref": map[string]any{"type": "string"}}, "required": []string{"ref"}, "additionalProperties": false}},
+		{"name": "mcp_call", "description": "Call a child MCP tool", "inputSchema": map[string]any{"type": "object", "properties": map[string]any{"ref": map[string]any{"type": "string"}, "name": map[string]any{"type": "string"}, "arguments": map[string]any{"type": []string{"object", "null"}, "additionalProperties": true}}, "required": []string{"ref", "name"}, "additionalProperties": false}},
 	}
 }
 
@@ -3740,7 +3731,7 @@ func (s *Server) mcpPromptCall(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) appsSDKCall(name string, args map[string]any) any {
 	switch name {
-	case "render_gptadmin_dashboard", "renderGptadminDashboard":
+	case "ui", "render_gptadmin_dashboard", "renderGptadminDashboard":
 		s.mu.Lock()
 		servers := s.publicServersLocked(nil)
 		s.mu.Unlock()
@@ -3749,9 +3740,9 @@ func (s *Server) appsSDKCall(name string, args map[string]any) any {
 			"app":          "GPTAdmin MCP",
 			"server_count": len(servers),
 			"servers":      servers,
-			"hint":         "Interactive dashboard rendered. The widget can call list_mcp_servers, list_mcp_tools, call_mcp_tool, and get_mcp_job through the MCP Apps bridge.",
+			"hint":         "Interactive dashboard rendered. The widget can call discover, schema, execute, and job through the MCP Apps bridge.",
 		}
-	case "list_mcp_servers", "listMcpServers":
+	case "discover", "list_mcp_servers", "listMcpServers":
 		s.mu.Lock()
 		servers := s.publicServersLocked(nil)
 		s.mu.Unlock()
@@ -3761,7 +3752,7 @@ func (s *Server) appsSDKCall(name string, args map[string]any) any {
 		agents := s.publicAgentsLocked(nil)
 		s.mu.Unlock()
 		return map[string]any{"agents": agents}
-	case "list_mcp_tools", "listMcpTools":
+	case "schema", "list_mcp_tools", "listMcpTools":
 		target := firstString(args, "target", "server_id", "agent_id")
 		selectedTarget, status, detail := s.selectMCPRelayTarget(target)
 		if status != http.StatusOK {
@@ -3776,7 +3767,7 @@ func (s *Server) appsSDKCall(name string, args map[string]any) any {
 		}
 		jobID := s.enqueueRelay(target, "tools/list", map[string]any{})
 		return s.waitRelay(jobID, s.cfg.DefaultTimeout)
-	case "inspect_system", "inspectSystem":
+	case "inspect", "inspect_system", "inspectSystem":
 		target := firstString(args, "target", "server_id", "agent_id")
 		selectedTarget, status, detail := s.selectMCPRelayTarget(target)
 		if status != http.StatusOK {
@@ -3786,10 +3777,10 @@ func (s *Server) appsSDKCall(name string, args map[string]any) any {
 			return map[string]any{"server_id": selectedTarget, "status": "failed", "error": "system inspection requires a shell:* target"}
 		}
 		return s.callShellTool(selectedTarget, "system_inspect", toolArgsFromTopLevel(args), false, s.cfg.DefaultTimeout)
-	case "call_mcp_tool", "callMcpTool":
+	case "execute", "call_mcp_tool", "callMcpTool":
 		return s.appsSDKCallMCP(nil, name, args)
-	case "get_mcp_job", "getMcpJob":
-		jobID := firstString(args, "job_id")
+	case "job", "get_mcp_job", "getMcpJob":
+		jobID := firstString(args, "id", "job_id")
 		s.mu.Lock()
 		if j := s.relayJobs[jobID]; j != nil {
 			resp := relayJobResponse(j)
@@ -3809,7 +3800,7 @@ func (s *Server) appsSDKCall(name string, args map[string]any) any {
 }
 
 func (s *Server) appsSDKCallForRequest(r *http.Request, name string, args map[string]any) any {
-	if requestAccessMode(r) == accessModeReadonly && (name == "list_mcp_tools" || name == "listMcpTools") {
+	if requestAccessMode(r) == accessModeReadonly && (name == "schema" || name == "list_mcp_tools" || name == "listMcpTools") {
 		target := firstString(args, "target", "server_id", "agent_id")
 		if target != "hub" && !strings.HasPrefix(target, "shell:") {
 			return map[string]any{"server_id": target, "status": "completed", "response": map[string]any{"tools": []map[string]any{}}}
@@ -3819,7 +3810,7 @@ func (s *Server) appsSDKCallForRequest(r *http.Request, name string, args map[st
 		return s.appsSDKCallMCP(r, name, args)
 	}
 	result := s.appsSDKCall(name, args)
-	if requestAccessMode(r) != accessModeReadonly || (name != "list_mcp_tools" && name != "listMcpTools") {
+	if requestAccessMode(r) != accessModeReadonly || (name != "schema" && name != "list_mcp_tools" && name != "listMcpTools") {
 		return result
 	}
 	payload, ok := result.(map[string]any)
@@ -3836,7 +3827,7 @@ func (s *Server) appsSDKCallForRequest(r *http.Request, name string, args map[st
 
 func (s *Server) appsSDKCallMCP(r *http.Request, name string, args map[string]any) any {
 	target := firstString(args, "target", "server_id", "agent_id")
-	toolName := firstString(args, "tool_name", "name")
+	toolName := firstString(args, "tool", "tool_name", "name")
 	if toolName == "" {
 		return map[string]any{"server_id": target, "status": "failed", "error": "missing tool_name"}
 	}
@@ -3883,9 +3874,9 @@ func appsSDKTools() []map[string]any {
 	}
 	return []map[string]any{
 		{
-			"name":            "render_gptadmin_dashboard",
-			"title":           "Open GPTAdmin dashboard",
-			"description":     "Render the interactive GPTAdmin Apps SDK dashboard. Use this when the user asks to open AdminGpt/GPTAdmin UI or when an interactive server/tool console would help. This is the only render tool; data tools return structuredContent without a widget template.",
+			"name":            "ui",
+			"title":           "Open UI",
+			"description":     "Open the GPTAdmin UI when interactive server or tool selection is needed.",
 			"inputSchema":     map[string]any{"type": "object", "properties": map[string]any{}, "additionalProperties": false},
 			"outputSchema":    map[string]any{"type": "object", "properties": map[string]any{"status": map[string]any{"type": "string"}, "app": map[string]any{"type": "string"}, "server_count": map[string]any{"type": "integer"}, "servers": map[string]any{"type": "array", "items": map[string]any{"type": "object", "additionalProperties": true}}, "hint": map[string]any{"type": "string"}}, "required": []string{"status", "app"}, "additionalProperties": true},
 			"annotations":     map[string]any{"readOnlyHint": true, "destructiveHint": false, "openWorldHint": false},
@@ -3893,9 +3884,9 @@ func appsSDKTools() []map[string]any {
 			"_meta":           renderMeta,
 		},
 		{
-			"name":            "list_mcp_servers",
-			"title":           "List servers",
-			"description":     "List real MCP servers, shell servers, and the internal hub. Data-first tool: returns structuredContent only; call render_gptadmin_dashboard when an interactive UI is needed.",
+			"name":            "discover",
+			"title":           "Discover",
+			"description":     "List available MCP targets. Choose one target before schema or execute.",
 			"inputSchema":     map[string]any{"type": "object", "properties": map[string]any{}, "additionalProperties": false},
 			"outputSchema":    map[string]any{"type": "object", "properties": map[string]any{"servers": map[string]any{"type": "array", "items": map[string]any{"type": "object", "additionalProperties": true}}}, "required": []string{"servers"}, "additionalProperties": true},
 			"annotations":     map[string]any{"readOnlyHint": true, "destructiveHint": false, "openWorldHint": false},
@@ -3903,19 +3894,19 @@ func appsSDKTools() []map[string]any {
 			"_meta":           readMeta,
 		},
 		{
-			"name":            "list_mcp_tools",
-			"title":           "List tools",
-			"description":     "List tools available on an explicitly selected GPTAdmin MCP target. Never use target=default; call list_mcp_servers first.",
-			"inputSchema":     map[string]any{"type": "object", "properties": map[string]any{"target": map[string]any{"type": "string", "description": "Explicit target/server_id/agent_id, for example shell:roomhacker-server-100 or hub."}}, "required": []string{"target"}, "additionalProperties": false},
+			"name":            "schema",
+			"title":           "Schema",
+			"description":     "List tools for one target selected by discover. Never use target=default.",
+			"inputSchema":     map[string]any{"type": "object", "properties": map[string]any{"target": map[string]any{"type": "string"}}, "required": []string{"target"}, "additionalProperties": false},
 			"outputSchema":    map[string]any{"type": "object", "properties": map[string]any{"server_id": map[string]any{"type": "string"}, "status": map[string]any{"type": "string"}, "response": map[string]any{"type": "object", "additionalProperties": true}}, "additionalProperties": true},
 			"annotations":     map[string]any{"readOnlyHint": true, "destructiveHint": false, "openWorldHint": false},
 			"securitySchemes": readSecurity,
 			"_meta":           readMeta,
 		},
 		{
-			"name":        "inspect_system",
-			"title":       "Inspect system safely",
-			"description": "Read a bounded file or list a directory on one explicit shell server. This never executes a command and automatically redacts recognizable credentials.",
+			"name":        "inspect",
+			"title":       "Inspect",
+			"description": "Read a bounded file or directory on a shell target; no command execution.",
 			"inputSchema": map[string]any{"type": "object", "properties": map[string]any{
 				"target":    map[string]any{"type": "string", "description": "Explicit shell:* server id"},
 				"action":    map[string]any{"type": "string", "enum": []string{"read_file", "list_directory"}},
@@ -3928,20 +3919,20 @@ func appsSDKTools() []map[string]any {
 			"_meta":           readMeta,
 		},
 		{
-			"name":            "call_mcp_tool",
-			"title":           "Call tool",
-			"description":     "Call exactly one tool on one explicit GPTAdmin MCP target. Put the selected tool's input in arguments; arbitrary top-level tool fields are also forwarded when arguments is absent. For shell commands use target shell:<server>, tool_name shell_exec, and arguments {cmd,cwd?,timeout?}. This may execute commands or change remote systems. For a retry of the same logical operation, reuse idempotency_key with identical target, tool_name, and arguments; a different operation must use a new key.",
-			"inputSchema":     map[string]any{"type": "object", "properties": map[string]any{"target": map[string]any{"type": "string"}, "tool_name": map[string]any{"type": "string"}, "arguments": map[string]any{"type": "object", "additionalProperties": true}, "args": map[string]any{"type": "object", "additionalProperties": true}, "background": map[string]any{"type": "boolean"}, "idempotency_key": map[string]any{"type": "string", "minLength": 1, "maxLength": idempotencyKeyMax, "description": "Stable caller key for retrying the same logical operation."}}, "required": []string{"target", "tool_name"}, "additionalProperties": true},
+			"name":            "execute",
+			"title":           "Execute",
+			"description":     "Execute one tool on one target. Use schema first. Retry the same operation with the same idempotency_key.",
+			"inputSchema":     map[string]any{"type": "object", "properties": map[string]any{"target": map[string]any{"type": "string"}, "tool": map[string]any{"type": "string"}, "args": map[string]any{"type": "object", "additionalProperties": true}, "background": map[string]any{"type": "boolean"}, "idempotency_key": map[string]any{"type": "string", "minLength": 1, "maxLength": idempotencyKeyMax}}, "required": []string{"target", "tool"}, "additionalProperties": true},
 			"outputSchema":    map[string]any{"type": "object", "additionalProperties": true},
 			"annotations":     map[string]any{"readOnlyHint": false, "destructiveHint": true, "openWorldHint": true},
 			"securitySchemes": execSecurity,
 			"_meta":           execMeta,
 		},
 		{
-			"name":            "get_mcp_job",
-			"title":           "Get job",
-			"description":     "Read a queued, running, completed, or failed GPTAdmin MCP job by job_id. Use after background calls.",
-			"inputSchema":     map[string]any{"type": "object", "properties": map[string]any{"job_id": map[string]any{"type": "string"}, "ack": map[string]any{"type": "boolean"}}, "required": []string{"job_id"}, "additionalProperties": false},
+			"name":            "job",
+			"title":           "Job",
+			"description":     "Read a background job by id.",
+			"inputSchema":     map[string]any{"type": "object", "properties": map[string]any{"id": map[string]any{"type": "string"}, "ack": map[string]any{"type": "boolean"}}, "required": []string{"id"}, "additionalProperties": false},
 			"outputSchema":    map[string]any{"type": "object", "additionalProperties": true},
 			"annotations":     map[string]any{"readOnlyHint": true, "destructiveHint": false, "openWorldHint": false},
 			"securitySchemes": readSecurity,
@@ -4030,11 +4021,11 @@ window.addEventListener('message',function(event){if(event.source!==window.paren
 async function callTool(name,args){setStatus('calling '+name+'...','w');var r;if(window.openai&&window.openai.callTool){r=await window.openai.callTool(name,args||{})}else{r=await rpc('tools/call',{name:name,arguments:args||{}})}var sc=(r&&r.structuredContent)||r;show(sc);setStatus('ready','');resize();return sc}
 function normalizeResult(r,key){if(!r)return[];if(r[key])return r[key];if(r.structuredContent&&r.structuredContent[key])return r.structuredContent[key];if(r.response&&r.response[key])return r.response[key];return[]}
 function renderServers(items){var q=el('filter').value.toLowerCase();var box=el('servers');box.innerHTML='';items.filter(function(a){return !q||pretty(a).toLowerCase().indexOf(q)>=0}).forEach(function(a){var id=a.agent_id||a.server_id||a.id||'';var d=document.createElement('div');d.className='item'+(id===state.target?' sel':'');d.innerHTML='<div class="title">'+id.replace(/&/g,'&amp;').replace(/</g,'&lt;')+'</div><div class="small muted">'+(a.status||'')+' · '+(a.kind||'')+' · '+(a.name||'')+'</div>';d.onclick=function(){state.target=id;el('target').textContent=id;renderServers(items);listTools()};box.appendChild(d)});resize()}
-async function loadServers(){var r=await callTool('list_mcp_servers',{});state.servers=normalizeResult(r,'servers');renderServers(state.servers);return state.servers}
-async function listTools(){if(!state.target){setStatus('choose target','w');return}var r=await callTool('list_mcp_tools',{target:state.target});var tools=normalizeResult(r.response||r,'tools');state.tools=tools;el('toolCount').textContent=String(tools.length);var sel=el('tool');sel.innerHTML='';tools.forEach(function(t){var o=document.createElement('option');o.value=t.name;o.textContent=t.name+(t.description?' — '+t.description.slice(0,80):'');sel.appendChild(o)});if(tools.length){sel.value=tools[0].name;fillArgs()}resize()}
+async function loadServers(){var r=await callTool('discover',{});state.servers=normalizeResult(r,'servers');renderServers(state.servers);return state.servers}
+async function listTools(){if(!state.target){setStatus('choose target','w');return}var r=await callTool('schema',{target:state.target});var tools=normalizeResult(r.response||r,'tools');state.tools=tools;el('toolCount').textContent=String(tools.length);var sel=el('tool');sel.innerHTML='';tools.forEach(function(t){var o=document.createElement('option');o.value=t.name;o.textContent=t.name+(t.description?' — '+t.description.slice(0,80):'');sel.appendChild(o)});if(tools.length){sel.value=tools[0].name;fillArgs()}resize()}
 function fillArgs(){var name=el('tool').value;if(name==='shell_exec')el('args').value=JSON.stringify({cmd:'pwd',cwd:null,timeout:30},null,2);else el('args').value='{}'}
-async function callSelected(){if(!state.target){setStatus('choose target','w');return}var args={};try{args=JSON.parse(el('args').value||'{}')}catch(e){setStatus('bad JSON: '+e.message,'b');return}await callTool('call_mcp_tool',{target:state.target,tool_name:el('tool').value,arguments:args})}
-async function poll(){if(!state.job_id){setStatus('no job','w');return}await callTool('get_mcp_job',{job_id:state.job_id,ack:false})}
+async function callSelected(){if(!state.target){setStatus('choose target','w');return}var args={};try{args=JSON.parse(el('args').value||'{}')}catch(e){setStatus('bad JSON: '+e.message,'b');return}await callTool('execute',{target:state.target,tool:el('tool').value,args:args})}
+async function poll(){if(!state.job_id){setStatus('no job','w');return}await callTool('job',{id:state.job_id,ack:false})}
 el('refresh').onclick=loadServers;el('serversBtn').onclick=loadServers;el('filter').oninput=function(){renderServers(state.servers)};el('listTools').onclick=listTools;el('call').onclick=callSelected;el('poll').onclick=poll;el('tool').onchange=fillArgs;
 try{setStatus('ready at '+ORIGIN,'');var initial=(window.openai&&(window.openai.toolOutput||window.openai.toolResponseMetadata));if(initial)show(initial);loadServers().catch(function(e){setStatus(String(e.message||e),'b');show({error:String(e.message||e)})})}catch(e){setStatus(String(e),'b');show({error:String(e)})}
 })();

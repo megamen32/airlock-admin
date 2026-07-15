@@ -17,7 +17,7 @@ All four reach the same hub and the same tools. See [ADAPTERS.md](./ADAPTERS.md)
 
 **When to use.** ChatGPT-family clients only: `chat.openai.com`, ChatGPT Desktop, Plus/Team. Any tool that imports an OpenAPI 3.x schema. Right pick when you want a Custom GPT that calls your hub without Codex-style per-hour tool-call quotas.
 
-**Protocol.** REST + OpenAPI 3.1, Bearer auth, over the `/mcp-relay/*` family (`list_mcp_agents`, `list_mcp_tools`, `call_mcp_tool`, `get_mcp_job`, `resources/list`, `resources/read`).
+**Protocol.** REST + OpenAPI 3.1, Bearer auth. The compact control flow is `discover → schema → execute`; `job` polls background work. Legacy long names remain accepted but are not advertised.
 
 **Schema URL.** `https://<your-hub>/actions/openapi.yaml` — the canonical, live-served spec. The repo also ships `public/openapi.json` (synonym of the same spec) so you can `curl` it locally.
 
@@ -32,17 +32,17 @@ All four reach the same hub and the same tools. See [ADAPTERS.md](./ADAPTERS.md)
 ### Example
 
 ```bash
-curl -sS -X POST https://<your-hub>/mcp-relay/list_mcp_agents \
+curl -sS -X GET https://<your-hub>/mcp-relay/servers \
   -H "Authorization: Bearer $CTL_TOKEN" \
   -H "Content-Type: application/json" -d '{}'
 ```
 
 ```text
-POST /mcp-relay/call_mcp_tool
+POST /mcp-relay/call
 {
-  "agent_id": "shell:roomhacker-server-100",
-  "tool_name": "shell_exec",
-  "arguments": { "cmd": "uptime" }
+  "target": "shell:roomhacker-server-100",
+  "tool": "shell_exec",
+  "args": { "cmd": "uptime" }
 }
 ```
 
@@ -87,7 +87,7 @@ POST /mcp-relay/call_mcp_tool
 }
 ```
 
-Restart Claude Desktop. The `gptadmin` server shows up with `list_mcp_agents`, `list_mcp_tools`, `call_mcp_tool`, `get_mcp_job`, `resources/list`, `resources/read`.
+Restart Claude Desktop. The `gptadmin` server exposes `discover`, `schema`, `execute`, `job`, `inspect`, and `ui`.
 
 #### Mavis
 
@@ -142,7 +142,7 @@ Clients that support [RFC 8414](https://www.rfc-editor.org/rfc/rfc8414) / [RFC 9
 **Scopes.**
 
 - `gptadmin.read` — list servers / tools, read resources, read jobs.
-- `gptadmin.exec` — call tools (`call_mcp_tool`), enqueue jobs.
+- `gptadmin.exec` — execute tools (`execute`), enqueue jobs.
 
 The hub's `/authorize` page lists the requested scopes; the user types the admin password to consent.
 
@@ -219,7 +219,7 @@ Two buttons added to the web-chat UI:
 - **MCP All** (`Alt+M`) — inserts a compact description of every agent and its tools into the chat input, and copies the same prompt to clipboard.
 - **MCP** — opens a panel to pick a specific agent with detailed tool docs.
 
-When the AI responds with a ` ```mcp ` fenced JSON block, the script highlights it, POSTs the call to `<Bridge URL>/mcp-relay/call_mcp_tool`, and replaces the block with the hub's response.
+When the AI responds with a ` ```mcp ` fenced JSON block, the script highlights it, POSTs the call to `<Bridge URL>/mcp-relay/call`, and replaces the block with the hub's response.
 
 > If auto-insert fails on a site with a custom editor, the prompt is always on the clipboard — <kbd>Ctrl</kbd>/<kbd>⌘</kbd>+<kbd>V</kbd>.
 
