@@ -350,8 +350,10 @@ plan is [`PROJECT_PLAN.md`](./PROJECT_PLAN.md).
 - Change: Preserved private local copies outside the repository, removed the
   artifacts from the public tree, added ignore rules, and removed the public
   contract-test dependency on their contents.
-- Verification: History rewrite and force-push are required; final verification
-  must show no matching path in any public ref or reachable Git object.
-- Delivery: In progress until the rewritten refs and remote are verified.
+- Verification: Rewritten local and remote refs contain no matching path in a
+  commit history or tree; focused contract-test collection and `git diff
+  --check` pass.
+- Delivery: Commit `fadc58d` and all public branches/tags were force-pushed
+  after history rewrite; private copies remain outside the repository.
 - Next: Keep personal prompts in the private directory and maintain only the
   public deletion manifest in the repository.
