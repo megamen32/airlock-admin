@@ -76,7 +76,7 @@ func FromEnv() Config {
 		PublicOrigin:               strings.TrimRight(env("PUBLIC_ORIGIN", ""), "/"),
 		MCPResource:                strings.TrimRight(env("MCP_RESOURCE", env("PUBLIC_ORIGIN", "")), "/"),
 		AdminPassword:              env("ADMIN_PASSWORD", ""),
-		OAuthClientSecret:          env("OAUTH_CLIENT_SECRET", env("ADMIN_PASSWORD", env("CTL_TOKEN", "gptadmin-dev-secret"))),
+		OAuthClientSecret:          env("OAUTH_CLIENT_SECRET", ""),
 		EnvFile:                    env("GPTADMIN_ENV_FILE", "/etc/gptadmin/gptadmin.env"),
 		OAuthPermissiveRedirects:   truthyString(env("OAUTH_PERMISSIVE_REDIRECTS", "0")),
 		OAuthPermissiveResources:   truthyString(env("OAUTH_PERMISSIVE_RESOURCES", "0")),
@@ -410,10 +410,10 @@ func (s *Server) Handler() http.Handler {
 	// Legacy rootd artifact aliases: old services still point ROOTD_UPDATE_MANIFEST_URL here.
 	mux.HandleFunc("/artifacts/rootd.json", s.requireCtl(s.shellmcpArtifactManifest))
 	mux.HandleFunc("/artifacts/rootd.tar.gz", s.requireCtl(s.shellmcpArtifactDownload))
-	mux.HandleFunc("/heartbeat", s.heartbeat)
+	mux.HandleFunc("/heartbeat", s.requireShell(s.heartbeat))
 	mux.HandleFunc("/servers", s.requireCtl(s.serversList))
 	mux.HandleFunc("/bulk/exec", s.requireCtl(s.bulkExec))
-	mux.HandleFunc("/queue/", s.queue)
+	mux.HandleFunc("/queue/", s.requireShell(s.queue))
 	mux.HandleFunc("/tasks/", s.requireCtl(s.tasksEndpoint))
 	mux.HandleFunc("/mcp-relay/register", s.mcpRelayRegister)
 	mux.HandleFunc("/mcp-relay/poll/", s.mcpRelayPoll)
@@ -454,7 +454,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/admin/api/overview", s.requireCtl(s.adminOverview))
 	mux.HandleFunc("/admin/api/update", s.requireCtl(s.adminTriggerUpdate))
 	mux.HandleFunc("/admin/api/failover/state", s.requireCtl(s.adminFailoverState))
-	mux.HandleFunc("/admin/api/failover/reclaim/accept", s.adminFailoverReclaimAccept)
+	mux.HandleFunc("/admin/api/failover/reclaim/accept", s.requireCtl(s.adminFailoverReclaimAccept))
 	mux.HandleFunc("/admin/api/failover/reclaim", s.requireCtl(s.adminFailoverReclaim))
 	mux.HandleFunc("/admin/api/failover", s.requireCtl(s.adminFailover))
 	mux.HandleFunc("/admin/api/jobs", s.requireCtl(s.adminJobs))
@@ -593,7 +593,7 @@ func (s *Server) healthz(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) requireCtl(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		if s.cfg.CtlToken == "" || tokenMatches(r, s.cfg.CtlToken) {
+		if s.cfg.CtlToken != "" && tokenMatches(r, s.cfg.CtlToken) {
 			s.authAudit("ctl_auth_ok", r, map[string]any{"auth_kind": "ctl_token"})
 			next(w, r)
 			return
@@ -626,17 +626,24 @@ func (s *Server) requireCtl(next http.HandlerFunc) http.HandlerFunc {
 }
 
 func (s *Server) requireRelay(w http.ResponseWriter, r *http.Request) bool {
-	if s.cfg.RelayAgentToken == "" || tokenMatches(r, s.cfg.RelayAgentToken) || r.Header.Get("X-MCP-Relay-Token") == s.cfg.RelayAgentToken {
+	if s.cfg.RelayAgentToken != "" && (tokenMatches(r, s.cfg.RelayAgentToken) || hmac.Equal([]byte(r.Header.Get("X-MCP-Relay-Token")), []byte(s.cfg.RelayAgentToken))) {
 		return true
 	}
 	writeJSON(w, http.StatusUnauthorized, map[string]any{"detail": "unauthorized"})
 	return false
 }
 
-func tokenMatches(r *http.Request, expected string) bool {
-	if expected == "" {
-		return true
+func (s *Server) requireShell(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if s.cfg.ShellToken == "" || !tokenMatches(r, s.cfg.ShellToken) {
+			writeJSON(w, http.StatusUnauthorized, map[string]any{"detail": "unauthorized"})
+			return
+		}
+		next(w, r)
 	}
+}
+
+func tokenMatches(r *http.Request, expected string) bool {
 	candidates := []string{
 		r.Header.Get("X-CTL-Token"),
 		r.Header.Get("X-GPTAdmin-Token"),
@@ -4107,7 +4114,7 @@ func (s *Server) requestForAudit(r *http.Request) map[string]any {
 	fields := map[string]any{
 		"method":          r.Method,
 		"path":            r.URL.Path,
-		"raw_query":       r.URL.RawQuery,
+		"raw_query":       queryForAudit(r.URL.RawQuery),
 		"host":            r.Host,
 		"remote_addr":     r.RemoteAddr,
 		"x_forwarded_for": r.Header.Get("X-Forwarded-For"),
@@ -4117,14 +4124,9 @@ func (s *Server) requestForAudit(r *http.Request) map[string]any {
 		"origin":          r.Header.Get("Origin"),
 		"content_type":    r.Header.Get("Content-Type"),
 	}
-	if s.cfg.AuthLogSecrets {
-		fields["authorization"] = r.Header.Get("Authorization")
-		fields["cookie"] = r.Header.Get("Cookie")
-	} else {
-		fields["authorization"] = redactSecret(r.Header.Get("Authorization"))
-		if r.Header.Get("Cookie") != "" {
-			fields["cookie"] = "<redacted>"
-		}
+	fields["authorization"] = redactSecret(r.Header.Get("Authorization"))
+	if r.Header.Get("Cookie") != "" {
+		fields["cookie"] = "<redacted>"
 	}
 	return fields
 }
@@ -4136,7 +4138,7 @@ func (s *Server) formForAudit(r *http.Request) map[string]any {
 	}
 	for k, vals := range r.Form {
 		vv := append([]string(nil), vals...)
-		if !s.cfg.AuthLogSecrets && isSensitiveField(k) {
+		if isSensitiveField(k) {
 			for i := range vv {
 				vv[i] = redactSecret(vv[i])
 			}
@@ -4151,9 +4153,6 @@ func (s *Server) formForAudit(r *http.Request) map[string]any {
 }
 
 func (s *Server) secretForAudit(v string) string {
-	if s.cfg.AuthLogSecrets {
-		return v
-	}
 	return redactSecret(v)
 }
 
@@ -4162,15 +4161,28 @@ func isSensitiveField(k string) bool {
 	return strings.Contains(k, "secret") || strings.Contains(k, "password") || strings.Contains(k, "token") || strings.Contains(k, "code") || strings.Contains(k, "verifier")
 }
 
+func queryForAudit(raw string) string {
+	values, err := url.ParseQuery(raw)
+	if err != nil {
+		return "<unparseable>"
+	}
+	for key, entries := range values {
+		if isSensitiveField(key) {
+			for i := range entries {
+				entries[i] = redactSecret(entries[i])
+			}
+			values[key] = entries
+		}
+	}
+	return values.Encode()
+}
+
 func redactSecret(v string) string {
 	v = strings.TrimSpace(v)
 	if v == "" {
 		return ""
 	}
-	if len(v) <= 12 {
-		return "<redacted len=" + strconv.Itoa(len(v)) + ">"
-	}
-	return v[:6] + "..." + v[len(v)-4:] + " (len=" + strconv.Itoa(len(v)) + ")"
+	return "<redacted len=" + strconv.Itoa(len(v)) + ">"
 }
 
 func decodeJWTClaimsUnverified(token string) map[string]any {
@@ -4277,6 +4289,9 @@ func pkceOK(verifier, challenge string) bool {
 }
 
 func (s *Server) signJWT(claims map[string]any) (string, error) {
+	if s.cfg.OAuthClientSecret == "" {
+		return "", errors.New("OAuth client secret is not configured")
+	}
 	header := map[string]any{"alg": "HS256", "typ": "JWT"}
 	hb, err := json.Marshal(header)
 	if err != nil {
@@ -4293,9 +4308,19 @@ func (s *Server) signJWT(claims map[string]any) (string, error) {
 }
 
 func (s *Server) verifyJWT(token string) (map[string]any, error) {
+	if s.cfg.OAuthClientSecret == "" {
+		return nil, errors.New("OAuth client secret is not configured")
+	}
 	parts := strings.Split(token, ".")
 	if len(parts) != 3 {
 		return nil, errors.New("invalid jwt")
+	}
+	var header struct {
+		Alg string `json:"alg"`
+	}
+	headerBytes, err := base64.RawURLEncoding.DecodeString(parts[0])
+	if err != nil || json.Unmarshal(headerBytes, &header) != nil || header.Alg != "HS256" {
+		return nil, errors.New("unsupported jwt algorithm")
 	}
 	unsigned := parts[0] + "." + parts[1]
 	mac := hmac.New(sha256.New, []byte(s.cfg.OAuthClientSecret))
@@ -4311,7 +4336,11 @@ func (s *Server) verifyJWT(token string) (map[string]any, error) {
 	if err := json.Unmarshal(payload, &claims); err != nil {
 		return nil, err
 	}
-	if exp := intFromAny(claims["exp"]); exp > 0 && time.Now().Unix() > int64(exp) {
+	exp := intFromAny(claims["exp"])
+	if exp <= 0 {
+		return nil, errors.New("token expiry is required")
+	}
+	if time.Now().Unix() > int64(exp) {
 		return nil, errors.New("token expired")
 	}
 	if jti, _ := claims["jti"].(string); jti != "" {

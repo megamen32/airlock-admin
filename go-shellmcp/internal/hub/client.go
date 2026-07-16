@@ -20,10 +20,11 @@ type Client struct {
 	BaseURL  string
 	HTTP     *http.Client
 	Identity *security.Identity
+	Token    string
 }
 
-func New(base string, id *security.Identity) *Client {
-	return &Client{BaseURL: strings.TrimRight(base, "/"), Identity: id, HTTP: &http.Client{Timeout: 90 * time.Second}}
+func New(base string, id *security.Identity, token string) *Client {
+	return &Client{BaseURL: strings.TrimRight(base, "/"), Identity: id, Token: token, HTTP: &http.Client{Timeout: 90 * time.Second}}
 }
 
 type Beat struct {
@@ -196,6 +197,9 @@ func (c *Client) do(ctx context.Context, method, p string, body []byte) (*http.R
 	}
 	if body != nil {
 		req.Header.Set("Content-Type", "application/json")
+	}
+	if c.Token != "" {
+		req.Header.Set("Authorization", "Bearer "+c.Token)
 	}
 	if c.Identity != nil {
 		for k, v := range c.Identity.Sign(method, u.EscapedPath(), body) {

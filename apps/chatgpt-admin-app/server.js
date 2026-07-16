@@ -119,10 +119,14 @@ function createAdminServer() {
 const port = Number(process.env.PORT || 8787);
 const MCP_PATH = '/mcp';
 const OAUTH_CLIENT_SECRET = process.env.OAUTH_CLIENT_SECRET || crypto.randomBytes(32).toString('hex');
-const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'changeme';
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD;
 const PUBLIC_ORIGIN = process.env.PUBLIC_ORIGIN || 'https://gptadminmcp.bezrabotnyi.com';
 const MCP_RESOURCE = process.env.MCP_RESOURCE || PUBLIC_ORIGIN;
 const OAUTH_SCOPES = ['gptadmin.read', 'gptadmin.exec'];
+
+if (!ADMIN_PASSWORD) {
+  throw new Error('ADMIN_PASSWORD must be configured');
+}
 
 function isAllowedRedirectUri(uri) {
   try {

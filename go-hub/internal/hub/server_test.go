@@ -488,7 +488,7 @@ func TestAdminManagedMCPTokenCanBeListedAndRotated(t *testing.T) {
 
 func TestReadonlyManagedTokenCannotCallShellExec(t *testing.T) {
 	s := New(Config{
-		CtlToken: "ctl", AdminPassword: "pw", OAuthClientSecret: "oauth-secret",
+		CtlToken: "ctl", RelayAgentToken: "relay", AdminPassword: "pw", OAuthClientSecret: "oauth-secret",
 		PublicOrigin: "https://hub.example", MCPResource: "https://hub.example",
 		ConfigDir: t.TempDir(), DefaultTimeout: 20 * time.Millisecond, PollMaxTimeout: 20 * time.Millisecond,
 	})
@@ -1003,13 +1003,10 @@ func TestFailoverConfigAndStateEndpoints(t *testing.T) {
 	w = httptest.NewRecorder()
 	h.ServeHTTP(w, req)
 	if w.Code != http.StatusOK {
-		t.Fatalf("state secrets status=%d body=%s", w.Code, w.Body.String())
+		t.Fatalf("state status=%d body=%s", w.Code, w.Body.String())
 	}
-	if !strings.Contains(w.Body.String(), "frp-secret") {
-		t.Fatalf("state with secrets missing FRP token: %s", w.Body.String())
-	}
-	if strings.Contains(w.Body.String(), "should-not-leak") {
-		t.Fatalf("state with secrets leaked agent meta token material: %s", w.Body.String())
+	if strings.Contains(w.Body.String(), "frp-secret") || strings.Contains(w.Body.String(), "should-not-leak") {
+		t.Fatalf("state leaked credential material: %s", w.Body.String())
 	}
 }
 
@@ -1403,7 +1400,7 @@ func TestAppsSDKMetadataAndWidget(t *testing.T) {
 	s := New(Config{CtlToken: "ctl", AdminPassword: "pw", OAuthClientSecret: "oauth-secret", PublicOrigin: "https://hub.example", MCPResource: "https://hub.example", OAuthPermissiveRedirects: true, OAuthPermissiveResources: true, DefaultTimeout: time.Second, PollMaxTimeout: time.Second})
 	h := s.Handler()
 
-	token, err := s.signJWT(map[string]any{"sub": "admin", "aud": "https://hub.example", "resource": "https://hub.example", "scope": "gptadmin.read gptadmin.exec", "client_id": "test"})
+	token, err := s.signJWT(map[string]any{"sub": "admin", "aud": "https://hub.example", "resource": "https://hub.example", "scope": "gptadmin.read gptadmin.exec", "client_id": "test", "exp": time.Now().Add(time.Hour).Unix()})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1672,12 +1669,13 @@ func TestHTTPServiceEndpointRejectsPrivateCapability(t *testing.T) {
 }
 
 func TestPollingShellQueueCarriesGenericMCPToolCall(t *testing.T) {
-	s := New(Config{DefaultTimeout: time.Second, PollMaxTimeout: time.Second})
+	s := New(Config{ShellToken: "shell", DefaultTimeout: time.Second, PollMaxTimeout: time.Second})
 	queued := s.callShellTool("shell:demo", "mcp_tools", map[string]any{"ref": "docs"}, true, time.Second)
 	if queued["status"] != "running" {
 		t.Fatalf("queue result=%#v", queued)
 	}
 	req := httptest.NewRequest(http.MethodGet, "/queue/demo?timeout=0", nil)
+	req.Header.Set("Authorization", "Bearer shell")
 	rec := httptest.NewRecorder()
 	s.Handler().ServeHTTP(rec, req)
 	if rec.Code != http.StatusOK {
@@ -1715,6 +1713,84 @@ func TestCanonicalShellQueueNameHomeAssistantAlias(t *testing.T) {
 	for _, alias := range []string{"homeassistant", "home-assistant", "haos"} {
 		if got := canonicalShellQueueName(alias); got != "haos" {
 			t.Fatalf("%s => %s", alias, got)
+		}
+	}
+}
+
+func TestCriticalHubEndpointsFailClosed(t *testing.T) {
+	s := New(Config{DefaultTimeout: time.Second, PollMaxTimeout: time.Second})
+	for _, tc := range []struct {
+		method string
+		path   string
+		body   string
+	}{
+		{http.MethodPost, "/heartbeat", `{"name":"victim"}`},
+		{http.MethodGet, "/queue/victim?timeout=0", ""},
+		{http.MethodPost, "/mcp-relay/register", `{"agent_id":"attacker"}`},
+		{http.MethodGet, "/admin/api/overview", ""},
+		{http.MethodPost, "/admin/api/failover/reclaim/accept", `{}`},
+	} {
+		req := httptest.NewRequest(tc.method, tc.path, strings.NewReader(tc.body))
+		rec := httptest.NewRecorder()
+		s.Handler().ServeHTTP(rec, req)
+		if rec.Code != http.StatusUnauthorized {
+			t.Errorf("%s %s status=%d, want %d; body=%s", tc.method, tc.path, rec.Code, http.StatusUnauthorized, rec.Body.String())
+		}
+	}
+}
+
+func TestShellQueueRequiresDedicatedShellToken(t *testing.T) {
+	s := New(Config{ShellToken: "shell-secret", DefaultTimeout: time.Second, PollMaxTimeout: time.Second})
+	queued := s.callShellTool("shell:demo", "shell_exec", map[string]any{"cmd": "echo secret"}, true, time.Second)
+	if queued["status"] != "running" {
+		t.Fatalf("queue result=%#v", queued)
+	}
+	unauthorized := httptest.NewRequest(http.MethodGet, "/queue/demo?timeout=0", nil)
+	unauthorizedRec := httptest.NewRecorder()
+	s.Handler().ServeHTTP(unauthorizedRec, unauthorized)
+	if unauthorizedRec.Code != http.StatusUnauthorized {
+		t.Fatalf("unauthenticated queue poll status=%d body=%s", unauthorizedRec.Code, unauthorizedRec.Body.String())
+	}
+	authorized := httptest.NewRequest(http.MethodGet, "/queue/demo?timeout=0", nil)
+	authorized.Header.Set("Authorization", "Bearer shell-secret")
+	authorizedRec := httptest.NewRecorder()
+	s.Handler().ServeHTTP(authorizedRec, authorized)
+	if authorizedRec.Code != http.StatusOK || !strings.Contains(authorizedRec.Body.String(), "echo secret") {
+		t.Fatalf("authenticated queue poll status=%d body=%s", authorizedRec.Code, authorizedRec.Body.String())
+	}
+}
+
+func TestJWTRejectsEmptySecretWrongAlgorithmAndMissingExpiry(t *testing.T) {
+	empty := New(Config{})
+	if _, err := empty.signJWT(map[string]any{"exp": time.Now().Add(time.Hour).Unix()}); err == nil {
+		t.Fatal("signJWT accepted an unset OAuth secret")
+	}
+	s := New(Config{OAuthClientSecret: "oauth-secret"})
+	wrongAlg := b64url([]byte(`{"alg":"none","typ":"JWT"}`)) + "." + b64url([]byte(`{"exp":9999999999}`)) + ".sig"
+	if _, err := s.verifyJWT(wrongAlg); err == nil {
+		t.Fatal("verifyJWT accepted an unsupported algorithm")
+	}
+	token, err := s.signJWT(map[string]any{"sub": "admin"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.verifyJWT(token); err == nil {
+		t.Fatal("verifyJWT accepted a token without expiry")
+	}
+}
+
+func TestAuditRedactsAuthorizationAndQueryCredentials(t *testing.T) {
+	s := New(Config{})
+	req := httptest.NewRequest(http.MethodGet, "/x?token=query-secret&safe=value", nil)
+	req.Header.Set("Authorization", "Bearer authorization-secret")
+	fields := s.requestForAudit(req)
+	encoded, err := json.Marshal(fields)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, secret := range []string{"query-secret", "authorization-secret"} {
+		if strings.Contains(string(encoded), secret) {
+			t.Fatalf("audit fields leaked %q: %s", secret, encoded)
 		}
 	}
 }

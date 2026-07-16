@@ -221,7 +221,7 @@ func New(cfg Config) *Server {
 	}
 	var hc *hub.Client
 	if cfg.HubURL != "" {
-		hc = hub.New(cfg.HubURL, ident)
+		hc = hub.New(cfg.HubURL, ident, cfg.Token)
 	}
 
 	auditLog, auditErr := audit.New(cfg.AuditLog)
