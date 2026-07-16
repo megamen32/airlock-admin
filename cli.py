@@ -3832,12 +3832,15 @@ def configure_ai_mcp_clients(env: dict, *, rotate: bool = False, clients: set[st
     sync_oauth_origin_env(env)
     env.setdefault('OAUTH_CLIENT_SECRET', gen_hex(32))
     env.setdefault('ADMIN_PASSWORD', gen_hex())
-    wanted = clients or {'claude-code', 'codex', 'opencode', 'vscode'}
+    wanted = clients or {'claude-code', 'codex', 'opencode', 'vscode', 'hermes', 'openclaw', 'zed'}
     tokens = {
         'GPTADMIN_CLAUDE_MCP_BEARER': ('' if rotate else env.get('GPTADMIN_CLAUDE_MCP_BEARER')) or make_mcp_bearer_token(env, 'claude-code'),
         'GPTADMIN_CODEX_MCP_BEARER': ('' if rotate else env.get('GPTADMIN_CODEX_MCP_BEARER')) or make_mcp_bearer_token(env, 'codex'),
         'GPTADMIN_OPENCODE_MCP_BEARER': ('' if rotate else env.get('GPTADMIN_OPENCODE_MCP_BEARER')) or make_mcp_bearer_token(env, 'opencode'),
         'GPTADMIN_VSCODE_MCP_BEARER': ('' if rotate else env.get('GPTADMIN_VSCODE_MCP_BEARER')) or make_mcp_bearer_token(env, 'vscode'),
+        'GPTADMIN_HERMES_MCP_BEARER': ('' if rotate else env.get('GPTADMIN_HERMES_MCP_BEARER')) or make_mcp_bearer_token(env, 'hermes-agent'),
+        'GPTADMIN_OPENCLAW_MCP_BEARER': ('' if rotate else env.get('GPTADMIN_OPENCLAW_MCP_BEARER')) or make_mcp_bearer_token(env, 'openclaw-assistant'),
+        'GPTADMIN_ZED_MCP_BEARER': ('' if rotate else env.get('GPTADMIN_ZED_MCP_BEARER')) or make_mcp_bearer_token(env, 'zed'),
         'GPTADMIN_CUSTOM_MCP_BEARER': ('' if rotate else env.get('GPTADMIN_CUSTOM_MCP_BEARER')) or make_mcp_bearer_token(env, 'custom-mcp-client'),
     }
     env.update(tokens)
@@ -3860,6 +3863,12 @@ def configure_ai_mcp_clients(env: dict, *, rotate: bool = False, clients: set[st
         results['opencode'] = _configure_opencode_mcp(url, tokens['GPTADMIN_OPENCODE_MCP_BEARER'])
     if 'vscode' in wanted:
         results['vscode'] = _configure_vscode_mcp(url, tokens['GPTADMIN_VSCODE_MCP_BEARER'])
+    if 'hermes' in wanted:
+        results['hermes'] = _configure_hermes_mcp(url, tokens['GPTADMIN_HERMES_MCP_BEARER'])
+    if 'openclaw' in wanted:
+        results['openclaw'] = _configure_openclaw_mcp(url, tokens['GPTADMIN_OPENCLAW_MCP_BEARER'])
+    if 'zed' in wanted:
+        results['zed'] = _configure_zed_mcp(url, tokens['GPTADMIN_ZED_MCP_BEARER'])
     results['_url'] = url
     if print_custom:
         results['_custom_token'] = tokens['GPTADMIN_CUSTOM_MCP_BEARER']
@@ -3963,6 +3972,96 @@ def _configure_vscode_mcp(url: str, token: str) -> str:
     res = _run_quiet(['code', '--add-mcp', json.dumps(config, separators=(',', ':'))])
     if res.returncode != 0:
         return 'error: ' + ((res.stderr or res.stdout).strip() or f'code rc={res.returncode}')
+    return 'ok'
+
+
+def _configure_hermes_mcp(url: str, token: str) -> str:
+    """Register GPTAdmin as a remote MCP server in Hermes (Nous/Nous-platform agent).
+
+    Mirrors what claude mcp add does for Claude Code: a non-interactive
+    `hermes mcp add <name> --url ... --auth header --env KEY=VAL` call.
+    The auth header is sourced from the bearer token via an environment
+    variable so the value never lands on the command line.
+    """
+    if not shutil.which('hermes'):
+        return 'skip: hermes CLI not found'
+    env_var = 'GPTADMIN_GPTADMIN_MCP_BEARER'
+    env = _merge_env_for_client({env_var: token})
+    _run_quiet(['hermes', 'mcp', 'remove', 'gptadmin'], env=env)
+    res = _run_quiet(
+        ['hermes', 'mcp', 'add', 'gptadmin',
+         '--url', url,
+         '--auth', 'header',
+         '--env', f'{env_var}={token}'],
+        env=env,
+    )
+    if res.returncode != 0:
+        err = ((res.stderr or res.stdout).strip() or f'hermes rc={res.returncode}')
+        # If `hermes mcp add` rejected `--env` for HTTP transport, fall back
+        # to writing the header-value directly (still better than nothing).
+        if 'env is only supported' in err or 'stdio' in err:
+            res = _run_quiet(
+                ['hermes', 'mcp', 'add', 'gptadmin',
+                 '--url', url,
+                 '--auth', 'header'],
+                env=env,
+            )
+            err = ((res.stderr or res.stdout).strip() or f'hermes rc={res.returncode}')
+            if res.returncode == 0:
+                _run_quiet(['hermes', 'config', 'set', f'mcp_servers.gptadmin.headers.Authorization', f'Bearer {token}'], env=env)
+                return 'ok'
+        return 'error: ' + err
+    return 'ok'
+
+
+def _configure_openclaw_mcp(url: str, token: str) -> str:
+    """Register GPTAdmin as a remote MCP server in OpenClaw (HA add-on assistant).
+
+    OpenClaw runs as a Home Assistant add-on. Its config is managed via the
+    HA Supervisor API (POST /core/api/services/<domain>/<service>). The
+    add-on slug on this host is `64fc532e_openclaw_assistant`. Update this
+    helper once the canonical registration endpoint is documented in
+    docs/INTEGRATIONS.md.
+    """
+    return (
+        'skip: openclaw is a Home Assistant add-on; configure via the '
+        'HA Supervisor UI or POST /core/api/services/persistent_notification/... '
+        '(see docs/INTEGRATIONS.md)'
+    )
+
+
+def _configure_zed_mcp(url: str, token: str) -> str:
+    """Register GPTAdmin as a remote MCP server in Zed (context_server).
+
+    Zed stores MCP servers under "context_servers" in ~/.config/zed/settings.json
+    using one entry per server, with an HTTP transport exposing URL + headers.
+    The token is written into the JSON file; that path is fine because the
+    settings file is mode 0600 on first write.
+    """
+    cfg_dir = USER_HOME / '.config' / 'zed'
+    cfg_dir.mkdir(parents=True, exist_ok=True)
+    cfg = cfg_dir / 'settings.json'
+    data: dict = {}
+    if cfg.exists():
+        try:
+            data = json.loads(cfg.read_text() or '{}')
+        except Exception as e:
+            return f'error: cannot parse {cfg}: {e}'
+    data.setdefault('context_servers', {})
+    data['context_servers']['gptadmin'] = {
+        'name': 'gptadmin',
+        'url': url,
+        'headers': {'Authorization': f'Bearer {token}'},
+        'enabled': True,
+    }
+    if cfg.exists():
+        backup = cfg.with_suffix(cfg.suffix + '.bak.gptadmin-mcp.' + time.strftime('%Y%m%d_%H%M%S'))
+        shutil.copy2(cfg, backup)
+    cfg.write_text(json.dumps(data, ensure_ascii=False, indent=2) + '\n')
+    try:
+        os.chmod(cfg, 0o600)
+    except Exception:
+        pass
     return 'ok'
 
 
