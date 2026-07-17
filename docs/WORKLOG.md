@@ -48,6 +48,17 @@ plan is [`PROJECT_PLAN.md`](./PROJECT_PLAN.md).
 
 ## Entries
 
+## 2026-07-17 - Convert Cloud to a normal private tree - completed
+
+- Milestone: `S0.4`
+- Owner: Codex
+- Scope: Replace the `private/Cloud` linked worktree with ordinary `main`-tracked private Cloud materials, while preserving unrelated untracked agent state.
+- Baseline / red evidence: The previous move retained a linked worktree, contradicting the intended single-tree layout and leaving a 245 MB duplicate checkout under `private/Cloud`.
+- Change: Preserved the three private Cloud materials in `private/Cloud/`, removed the linked worktree and its 245 MB duplicate code tree, and restored its unrelated `.juggler/` state under the new directory. Added a narrow ignore rule for that state directory; the root user's `.juggler/` was untouched.
+- Verification: `git worktree list --porcelain` no longer contains Cloud; `git status` reports the three intended Cloud paths as ordinary additions; `git check-ignore` matches only `private/Cloud/.juggler/`; `.gitpublic/ignore` excludes all of `private/`.
+- Delivery: Pending private-repository commit and push.
+- Next: Work on reviewed Cloud materials directly under `private/Cloud` in `main`.
+
 ## 2026-07-17 - Move private Cloud worktree - completed
 
 - Milestone: `S0.4`

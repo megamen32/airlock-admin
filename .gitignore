@@ -60,3 +60,4 @@ public/gptadmin_infrastructure_mcp_instructions.md
 .gitpublic/scan
 *.db-shm
 *.db-wal
+private/Cloud/.juggler/
