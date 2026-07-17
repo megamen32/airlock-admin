@@ -119,6 +119,8 @@ MCP_TOKEN_FILE = ETC_DIR / 'mcp-relay.token'
 MCP_RUNTIME_DIR = INSTALL_DIR / 'agents' / 'generic_stdio_mcp_relay'
 MCP_MANAGER = MCP_RUNTIME_DIR / 'mcp_agent_manager.py'
 MCP_RELAY = MCP_RUNTIME_DIR / 'generic_stdio_mcp_relay.py'
+STARTUP_INSTRUCTIONS_FILE = ETC_DIR / 'startup_instructions.md'
+STARTUP_INSTRUCTIONS_MAX_BYTES = 16 * 1024
 
 if IS_MACOS:
     SERVICES_DIR = USER_HOME / 'Library' / 'LaunchAgents' if IS_USER_INSTALL else Path('/Library/LaunchDaemons')
@@ -3022,6 +3024,82 @@ def cmd_status(_):
         print(f'  {c_dim("Tunnel:")}  {c_green(tunnel)}')
     print_autoupdate_status(env)
 
+def startup_instructions_path() -> Path:
+    """Return the startup-instructions path for the selected install scope."""
+    return STARTUP_INSTRUCTIONS_FILE
+
+
+def read_startup_instructions(path: Path | None = None) -> str:
+    path = path or startup_instructions_path()
+    try:
+        stat = path.stat()
+    except FileNotFoundError:
+        die(f'startup instructions file does not exist: {path}')
+    if not path.is_file() or stat.st_size > STARTUP_INSTRUCTIONS_MAX_BYTES:
+        die(f'startup instructions must be a regular file of at most {STARTUP_INSTRUCTIONS_MAX_BYTES} bytes')
+    data = path.read_bytes()
+    if len(data) > STARTUP_INSTRUCTIONS_MAX_BYTES:
+        die(f'startup instructions exceed {STARTUP_INSTRUCTIONS_MAX_BYTES} bytes')
+    try:
+        return data.decode('utf-8')
+    except UnicodeDecodeError:
+        die('startup instructions must be UTF-8 text')
+
+
+def set_startup_instructions_file(source: Path, destination: Path | None = None) -> Path:
+    destination = destination or startup_instructions_path()
+    try:
+        stat = source.stat()
+    except FileNotFoundError:
+        die(f'source file does not exist: {source}')
+    if not source.is_file() or stat.st_size > STARTUP_INSTRUCTIONS_MAX_BYTES:
+        die(f'source must be a regular file of at most {STARTUP_INSTRUCTIONS_MAX_BYTES} bytes')
+    data = source.read_bytes()
+    if not data or len(data) > STARTUP_INSTRUCTIONS_MAX_BYTES:
+        die(f'source must contain 1-{STARTUP_INSTRUCTIONS_MAX_BYTES} bytes')
+    try:
+        data.decode('utf-8')
+    except UnicodeDecodeError:
+        die('source must be UTF-8 text')
+
+    destination.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+    fd, temporary = tempfile.mkstemp(prefix='.startup_instructions.', dir=destination.parent)
+    try:
+        os.fchmod(fd, 0o600)
+        with os.fdopen(fd, 'wb') as handle:
+            fd = -1
+            handle.write(data)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(temporary, destination)
+        os.chmod(destination, 0o600)
+    finally:
+        if fd >= 0:
+            os.close(fd)
+        try:
+            os.unlink(temporary)
+        except FileNotFoundError:
+            pass
+    return destination
+
+
+def cmd_instructions(args):
+    path = startup_instructions_path()
+    if args.instructions_cmd == 'path':
+        print(path)
+        return
+    if args.instructions_cmd == 'show':
+        # This is the only instructions command that emits file contents.
+        sys.stdout.write(read_startup_instructions(path))
+        return
+    if args.instructions_cmd == 'set-file':
+        written = set_startup_instructions_file(Path(args.source).expanduser(), path)
+        print(f'Startup instructions installed: {written}')
+        print('Restart the hub to apply them: gptadmin hub restart')
+        return
+    die('choose one of: show, path, set-file')
+
+
 def cmd_start(_):
     need_root()
     svc_start_multi(installed_units())
@@ -4320,6 +4398,14 @@ def main():
     sub.add_parser('stop', help='Остановить сервисы').set_defaults(func=cmd_stop)
     sub.add_parser('restart', help='Перезапустить сервисы').set_defaults(func=cmd_restart)
 
+    ap_instructions = sub.add_parser('instructions', help='Управление startup instructions хаба')
+    instructions_sub = ap_instructions.add_subparsers(dest='instructions_cmd')
+    instructions_sub.add_parser('show', help='Явно показать содержимое инструкций').set_defaults(func=cmd_instructions)
+    instructions_sub.add_parser('path', help='Показать путь без содержимого').set_defaults(func=cmd_instructions)
+    ap_instructions_set = instructions_sub.add_parser('set-file', help='Безопасно установить инструкции из UTF-8 файла')
+    ap_instructions_set.add_argument('source')
+    ap_instructions_set.set_defaults(func=cmd_instructions)
+
     hub = sub.add_parser('hub', help='Управление хабом')
     hub_sub = hub.add_subparsers(dest='hub_cmd')
     hub_sub.add_parser('status', help='Статус хаба').set_defaults(func=cmd_status)
@@ -4458,6 +4544,8 @@ def main():
         ap.print_help(); return
     if args.cmd == 'mcp' and not getattr(args, 'mcp_cmd', None):
         ap_mcp.print_help(); return
+    if args.cmd == 'instructions' and not getattr(args, 'instructions_cmd', None):
+        ap_instructions.print_help(); return
     # Best-effort update hint (silent on any error, auto-update off, new version available).
     try:
         maybe_update_hint(args)

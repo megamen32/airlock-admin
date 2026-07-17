@@ -393,3 +393,24 @@ plan is [`PROJECT_PLAN.md`](./PROJECT_PLAN.md).
 - Delivery: Pending commit and CI.
 - Next: Apply the same compact/default policy to `listMcpAgents` only if a
   measured client still needs it; do not expand the default tool surface.
+
+## 2026-07-17 - GPTAdmin Cloud startup instructions - completed
+
+- Milestone: `S1.4`
+- Owner: Codex
+- Scope: Provide owner-managed startup instructions through Hub MCP without
+  contaminating direct third-party MCP endpoints.
+- Baseline / red evidence: No persistent owner instruction channel existed;
+  direct and administrative MCP surfaces had no tested separation.
+- Change: Added bounded UTF-8 startup instructions from the private config,
+  MCP `initialize.instructions`, the
+  `gptadmin://startup-instructions` resource, and CLI `instructions path/show/set-file`.
+  Hub and Shell surfaces receive GPTAdmin guidance; third-party direct MCP
+  surfaces proxy upstream initialize/resources unchanged. Private owner
+  instructions remain under `private/instructions/` and are excluded from
+  public mirrors.
+- Verification: `go test ./...`; `python3 -m pytest tests/ --ignore=tests/e2e`
+  (`104 passed, 2 skipped`); `git diff --check`.
+- Delivery: Pending commit and CI.
+- Next: Publish this feature slice only after review; do not include it in the
+  already-running `v127` release.
