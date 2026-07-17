@@ -48,16 +48,34 @@ plan is [`PROJECT_PLAN.md`](./PROJECT_PLAN.md).
 
 ## Entries
 
-## 2026-07-17 - Admin profile workspace - active
+## 2026-07-17 - Admin profile instruction workspace - handed-off
 
 - Milestone: `S1.3a`
 - Owner: Codex orchestrating bounded Luna workers
-- Scope: Establish the versioned instruction contract and new admin frontend foundation, then carry the first profile through persistence, external machine/workspace references, effective MCP behavior and enforced tool access without copying private repositories into GPTAdmin or Cloud.
-- Baseline / red evidence: The current admin surface has no profile domain, startup instructions are a single restart-loaded file, access is only `full` or `readonly`, and the monolithic UI exposes implementation-oriented auth/tool screens.
-- Change: In progress using disjoint backend-contract and frontend-shell workstreams.
-- Verification: Red tests first; focused Go/frontend tests, full Hub/ShellMCP/Python suites, browser smoke and CI required before completion.
-- Delivery: Pending commits, push, CI and deployment evidence.
-- Next: Land the versioned instruction vertical slice before expanding profile policy.
+- Scope: Deliver the first `S1.3a` vertical slice: versioned instructions,
+  failover-safe persistence and the CI-gated React admin foundation. Define
+  external machine/workspace references without copying private repositories
+  into GPTAdmin or Cloud.
+- Baseline / red evidence: Regression tests reproduced stale cross-Hub ETag
+  writes, cacheable private responses, invalid inline overrides blocking edits,
+  a Unix-epoch fallback timestamp and Windows Hub compile failures.
+- Change: Added authenticated GET/PUT instruction-set CAS, OS-level file locks,
+  cross-Hub read refresh, atomic persistence, nullable fallback timestamps and
+  Windows-native locking. Added the React/TypeScript admin source and its exact
+  API, stale-write, size, keyboard and build contracts. `public/admin/` remains
+  production until the explicit parity gate. `ADMIN_PROFILES.md` defines
+  reference-only external workspaces and the Cloud metadata boundary.
+- Verification: `go test ./...` in Hub and ShellMCP; Hub race detector; Windows
+  amd64 and Darwin arm64 compile; Python `106 passed, 2 skipped`; React 5 tests,
+  lint, build and dependency audit; desktop/mobile browser smoke; `git diff
+  --check`. Build, Sync, Release run `29587947262` passed all five jobs,
+  including admin UI, Windows, macOS and failover E2E.
+- Delivery: Commit `39d1931632ba546deb9c3727b67f852d70131af4` pushed to
+  `origin/main`; CI run `29587947262` passed. No production admin replacement
+  or runtime deployment was performed in this source-foundation slice.
+- Next: Implement versioned `AccessProfile`, client binding and target/tool
+  policy enforcement with black-box allow/deny tests, then pass the UI parity
+  gate before replacing `public/admin/`.
 
 ## 2026-07-17 - Make cold Hub contract startup deterministic - completed
 
