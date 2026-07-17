@@ -394,7 +394,7 @@ plan is [`PROJECT_PLAN.md`](./PROJECT_PLAN.md).
 - Next: Apply the same compact/default policy to `listMcpAgents` only if a
   measured client still needs it; do not expand the default tool surface.
 
-## 2026-07-17 - Publish release 127 - active
+## 2026-07-17 - Publish release 127 - completed
 
 - Milestone: `S1.3`, `S4.2`
 - Owner: Codex
@@ -402,10 +402,14 @@ plan is [`PROJECT_PLAN.md`](./PROJECT_PLAN.md).
   `discover` output and explicit detail opt-in.
 - Baseline: `main` was at build `126`; CI builds passed but no new release
   tag or platform artifacts had been published.
-- Change: Bump `VERSION` to `127`; the release workflow will create `v127`,
-  build all platform artifacts, and sync the public mirror.
-- Verification: Pending release workflow and public artifact checks.
-- Delivery: Active until the tag, GitHub Release and artifact manifest are
-  verified.
-- Next: Wait for `v127` Build, Sync, Release and verify all five artifact
-  families.
+- Change: Bumped `VERSION` to `127`; auto-tag created `v127`, and the release
+  workflow built and synchronized all platform artifacts.
+- Verification: Build, Sync, Release run `29581385996` passed all jobs,
+  including Linux/Ubuntu, macOS, Windows and Android artifact checks;
+  failover-e2e also passed. Public release `v127` in
+  `megamen32/gptadmin_opensource` is published with nine assets, including
+  Android arm64, Linux amd64/arm64, macOS amd64/arm64, Windows CLI/Hub/
+  ShellMCP and the combined package.
+- Delivery: `v127` is published and the public mirror sync completed.
+- Next: Verify one real auto-update on each installed platform; no code change
+  is required for this release gate.
