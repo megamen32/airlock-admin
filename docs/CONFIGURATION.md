@@ -30,6 +30,37 @@ Full environment-variable reference, auth model, and OAuth setup.
 | `LOG_LIMIT_B` | 65536 | Per-ShellMCP-agent inline stdout/stderr tail budget. Larger command output is spooled to disk; hub/client response budgets are configured separately. |
 | `HEARTBEAT_TIMEOUT` | 60 | Seconds before an agent is marked offline |
 | `BACKGROUND_TASK_TTL` | 3600 | How long completed background jobs are kept (seconds) |
+| `GPTADMIN_STARTUP_INSTRUCTIONS_FILE` | `$GPTADMIN_CONFIG_DIR/startup_instructions.md` | Optional local Markdown startup instructions for MCP clients. |
+| `GPTADMIN_STARTUP_INSTRUCTIONS` | — | Optional environment override for startup instructions; takes precedence over the file. |
+
+### MCP startup instructions
+
+GPTAdmin supplies generic system-administration guidance in the MCP `initialize`
+result. To customize it persistently, create
+`$GPTADMIN_CONFIG_DIR/startup_instructions.md` (normally
+`$GPTADMIN_ROOT/config/startup_instructions.md`). The file must be a regular file
+of at most 16 KiB; unreadable, empty, or oversized files safely fall back to the
+built-in generic guidance. `GPTADMIN_STARTUP_INSTRUCTIONS` overrides the file
+when it is non-empty and at most 16 KiB.
+
+The same content is available to clients that ignore `initialize.instructions`
+via MCP `resources/read` at `gptadmin://startup-instructions`. Startup
+instructions are operational guidance, **not** a security boundary: configured
+permissions and approvals still control access and execution.
+
+Manage the file without exposing its contents accidentally:
+
+```bash
+gptadmin instructions path
+gptadmin instructions set-file /secure/path/sysadmin_startup.md
+gptadmin hub restart
+gptadmin instructions show  # explicitly prints the potentially sensitive content
+```
+
+`set-file` accepts UTF-8 files up to 16 KiB, installs atomically with mode `0600`,
+and prints only the destination path plus the restart hint. The CLI uses the
+selected installation scope: `~/.config/gptadmin` for `--user` installs and
+`/etc/gptadmin` for `--system` installs, unless `GPTADMIN_CONFIG_DIR` overrides it.
 
 ## ShellMCP env vars
 

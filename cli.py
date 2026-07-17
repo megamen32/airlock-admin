@@ -119,6 +119,8 @@ MCP_TOKEN_FILE = ETC_DIR / 'mcp-relay.token'
 MCP_RUNTIME_DIR = INSTALL_DIR / 'agents' / 'generic_stdio_mcp_relay'
 MCP_MANAGER = MCP_RUNTIME_DIR / 'mcp_agent_manager.py'
 MCP_RELAY = MCP_RUNTIME_DIR / 'generic_stdio_mcp_relay.py'
+STARTUP_INSTRUCTIONS_FILE = ETC_DIR / 'startup_instructions.md'
+STARTUP_INSTRUCTIONS_MAX_BYTES = 16 * 1024
 
 if IS_MACOS:
     SERVICES_DIR = USER_HOME / 'Library' / 'LaunchAgents' if IS_USER_INSTALL else Path('/Library/LaunchDaemons')
@@ -3022,6 +3024,82 @@ def cmd_status(_):
         print(f'  {c_dim("Tunnel:")}  {c_green(tunnel)}')
     print_autoupdate_status(env)
 
+def startup_instructions_path() -> Path:
+    """Return the startup-instructions path for the selected install scope."""
+    return STARTUP_INSTRUCTIONS_FILE
+
+
+def read_startup_instructions(path: Path | None = None) -> str:
+    path = path or startup_instructions_path()
+    try:
+        stat = path.stat()
+    except FileNotFoundError:
+        die(f'startup instructions file does not exist: {path}')
+    if not path.is_file() or stat.st_size > STARTUP_INSTRUCTIONS_MAX_BYTES:
+        die(f'startup instructions must be a regular file of at most {STARTUP_INSTRUCTIONS_MAX_BYTES} bytes')
+    data = path.read_bytes()
+    if len(data) > STARTUP_INSTRUCTIONS_MAX_BYTES:
+        die(f'startup instructions exceed {STARTUP_INSTRUCTIONS_MAX_BYTES} bytes')
+    try:
+        return data.decode('utf-8')
+    except UnicodeDecodeError:
+        die('startup instructions must be UTF-8 text')
+
+
+def set_startup_instructions_file(source: Path, destination: Path | None = None) -> Path:
+    destination = destination or startup_instructions_path()
+    try:
+        stat = source.stat()
+    except FileNotFoundError:
+        die(f'source file does not exist: {source}')
+    if not source.is_file() or stat.st_size > STARTUP_INSTRUCTIONS_MAX_BYTES:
+        die(f'source must be a regular file of at most {STARTUP_INSTRUCTIONS_MAX_BYTES} bytes')
+    data = source.read_bytes()
+    if not data or len(data) > STARTUP_INSTRUCTIONS_MAX_BYTES:
+        die(f'source must contain 1-{STARTUP_INSTRUCTIONS_MAX_BYTES} bytes')
+    try:
+        data.decode('utf-8')
+    except UnicodeDecodeError:
+        die('source must be UTF-8 text')
+
+    destination.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+    fd, temporary = tempfile.mkstemp(prefix='.startup_instructions.', dir=destination.parent)
+    try:
+        os.fchmod(fd, 0o600)
+        with os.fdopen(fd, 'wb') as handle:
+            fd = -1
+            handle.write(data)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(temporary, destination)
+        os.chmod(destination, 0o600)
+    finally:
+        if fd >= 0:
+            os.close(fd)
+        try:
+            os.unlink(temporary)
+        except FileNotFoundError:
+            pass
+    return destination
+
+
+def cmd_instructions(args):
+    path = startup_instructions_path()
+    if args.instructions_cmd == 'path':
+        print(path)
+        return
+    if args.instructions_cmd == 'show':
+        # This is the only instructions command that emits file contents.
+        sys.stdout.write(read_startup_instructions(path))
+        return
+    if args.instructions_cmd == 'set-file':
+        written = set_startup_instructions_file(Path(args.source).expanduser(), path)
+        print(f'Startup instructions installed: {written}')
+        print('Restart the hub to apply them: gptadmin hub restart')
+        return
+    die('choose one of: show, path, set-file')
+
+
 def cmd_start(_):
     need_root()
     svc_start_multi(installed_units())
@@ -3832,12 +3910,15 @@ def configure_ai_mcp_clients(env: dict, *, rotate: bool = False, clients: set[st
     sync_oauth_origin_env(env)
     env.setdefault('OAUTH_CLIENT_SECRET', gen_hex(32))
     env.setdefault('ADMIN_PASSWORD', gen_hex())
-    wanted = clients or {'claude-code', 'codex', 'opencode', 'vscode'}
+    wanted = clients or {'claude-code', 'codex', 'opencode', 'vscode', 'hermes', 'openclaw', 'zed'}
     tokens = {
         'GPTADMIN_CLAUDE_MCP_BEARER': ('' if rotate else env.get('GPTADMIN_CLAUDE_MCP_BEARER')) or make_mcp_bearer_token(env, 'claude-code'),
         'GPTADMIN_CODEX_MCP_BEARER': ('' if rotate else env.get('GPTADMIN_CODEX_MCP_BEARER')) or make_mcp_bearer_token(env, 'codex'),
         'GPTADMIN_OPENCODE_MCP_BEARER': ('' if rotate else env.get('GPTADMIN_OPENCODE_MCP_BEARER')) or make_mcp_bearer_token(env, 'opencode'),
         'GPTADMIN_VSCODE_MCP_BEARER': ('' if rotate else env.get('GPTADMIN_VSCODE_MCP_BEARER')) or make_mcp_bearer_token(env, 'vscode'),
+        'GPTADMIN_HERMES_MCP_BEARER': ('' if rotate else env.get('GPTADMIN_HERMES_MCP_BEARER')) or make_mcp_bearer_token(env, 'hermes-agent'),
+        'GPTADMIN_OPENCLAW_MCP_BEARER': ('' if rotate else env.get('GPTADMIN_OPENCLAW_MCP_BEARER')) or make_mcp_bearer_token(env, 'openclaw-assistant'),
+        'GPTADMIN_ZED_MCP_BEARER': ('' if rotate else env.get('GPTADMIN_ZED_MCP_BEARER')) or make_mcp_bearer_token(env, 'zed'),
         'GPTADMIN_CUSTOM_MCP_BEARER': ('' if rotate else env.get('GPTADMIN_CUSTOM_MCP_BEARER')) or make_mcp_bearer_token(env, 'custom-mcp-client'),
     }
     env.update(tokens)
@@ -3860,6 +3941,12 @@ def configure_ai_mcp_clients(env: dict, *, rotate: bool = False, clients: set[st
         results['opencode'] = _configure_opencode_mcp(url, tokens['GPTADMIN_OPENCODE_MCP_BEARER'])
     if 'vscode' in wanted:
         results['vscode'] = _configure_vscode_mcp(url, tokens['GPTADMIN_VSCODE_MCP_BEARER'])
+    if 'hermes' in wanted:
+        results['hermes'] = _configure_hermes_mcp(url, tokens['GPTADMIN_HERMES_MCP_BEARER'])
+    if 'openclaw' in wanted:
+        results['openclaw'] = _configure_openclaw_mcp(url, tokens['GPTADMIN_OPENCLAW_MCP_BEARER'])
+    if 'zed' in wanted:
+        results['zed'] = _configure_zed_mcp(url, tokens['GPTADMIN_ZED_MCP_BEARER'])
     results['_url'] = url
     if print_custom:
         results['_custom_token'] = tokens['GPTADMIN_CUSTOM_MCP_BEARER']
@@ -3963,6 +4050,96 @@ def _configure_vscode_mcp(url: str, token: str) -> str:
     res = _run_quiet(['code', '--add-mcp', json.dumps(config, separators=(',', ':'))])
     if res.returncode != 0:
         return 'error: ' + ((res.stderr or res.stdout).strip() or f'code rc={res.returncode}')
+    return 'ok'
+
+
+def _configure_hermes_mcp(url: str, token: str) -> str:
+    """Register GPTAdmin as a remote MCP server in Hermes (Nous/Nous-platform agent).
+
+    Mirrors what claude mcp add does for Claude Code: a non-interactive
+    `hermes mcp add <name> --url ... --auth header --env KEY=VAL` call.
+    The auth header is sourced from the bearer token via an environment
+    variable so the value never lands on the command line.
+    """
+    if not shutil.which('hermes'):
+        return 'skip: hermes CLI not found'
+    env_var = 'GPTADMIN_GPTADMIN_MCP_BEARER'
+    env = _merge_env_for_client({env_var: token})
+    _run_quiet(['hermes', 'mcp', 'remove', 'gptadmin'], env=env)
+    res = _run_quiet(
+        ['hermes', 'mcp', 'add', 'gptadmin',
+         '--url', url,
+         '--auth', 'header',
+         '--env', f'{env_var}={token}'],
+        env=env,
+    )
+    if res.returncode != 0:
+        err = ((res.stderr or res.stdout).strip() or f'hermes rc={res.returncode}')
+        # If `hermes mcp add` rejected `--env` for HTTP transport, fall back
+        # to writing the header-value directly (still better than nothing).
+        if 'env is only supported' in err or 'stdio' in err:
+            res = _run_quiet(
+                ['hermes', 'mcp', 'add', 'gptadmin',
+                 '--url', url,
+                 '--auth', 'header'],
+                env=env,
+            )
+            err = ((res.stderr or res.stdout).strip() or f'hermes rc={res.returncode}')
+            if res.returncode == 0:
+                _run_quiet(['hermes', 'config', 'set', f'mcp_servers.gptadmin.headers.Authorization', f'Bearer {token}'], env=env)
+                return 'ok'
+        return 'error: ' + err
+    return 'ok'
+
+
+def _configure_openclaw_mcp(url: str, token: str) -> str:
+    """Register GPTAdmin as a remote MCP server in OpenClaw (HA add-on assistant).
+
+    OpenClaw runs as a Home Assistant add-on. Its config is managed via the
+    HA Supervisor API (POST /core/api/services/<domain>/<service>). The
+    add-on slug on this host is `64fc532e_openclaw_assistant`. Update this
+    helper once the canonical registration endpoint is documented in
+    docs/INTEGRATIONS.md.
+    """
+    return (
+        'skip: openclaw is a Home Assistant add-on; configure via the '
+        'HA Supervisor UI or POST /core/api/services/persistent_notification/... '
+        '(see docs/INTEGRATIONS.md)'
+    )
+
+
+def _configure_zed_mcp(url: str, token: str) -> str:
+    """Register GPTAdmin as a remote MCP server in Zed (context_server).
+
+    Zed stores MCP servers under "context_servers" in ~/.config/zed/settings.json
+    using one entry per server, with an HTTP transport exposing URL + headers.
+    The token is written into the JSON file; that path is fine because the
+    settings file is mode 0600 on first write.
+    """
+    cfg_dir = USER_HOME / '.config' / 'zed'
+    cfg_dir.mkdir(parents=True, exist_ok=True)
+    cfg = cfg_dir / 'settings.json'
+    data: dict = {}
+    if cfg.exists():
+        try:
+            data = json.loads(cfg.read_text() or '{}')
+        except Exception as e:
+            return f'error: cannot parse {cfg}: {e}'
+    data.setdefault('context_servers', {})
+    data['context_servers']['gptadmin'] = {
+        'name': 'gptadmin',
+        'url': url,
+        'headers': {'Authorization': f'Bearer {token}'},
+        'enabled': True,
+    }
+    if cfg.exists():
+        backup = cfg.with_suffix(cfg.suffix + '.bak.gptadmin-mcp.' + time.strftime('%Y%m%d_%H%M%S'))
+        shutil.copy2(cfg, backup)
+    cfg.write_text(json.dumps(data, ensure_ascii=False, indent=2) + '\n')
+    try:
+        os.chmod(cfg, 0o600)
+    except Exception:
+        pass
     return 'ok'
 
 
@@ -4221,6 +4398,14 @@ def main():
     sub.add_parser('stop', help='Остановить сервисы').set_defaults(func=cmd_stop)
     sub.add_parser('restart', help='Перезапустить сервисы').set_defaults(func=cmd_restart)
 
+    ap_instructions = sub.add_parser('instructions', help='Управление startup instructions хаба')
+    instructions_sub = ap_instructions.add_subparsers(dest='instructions_cmd')
+    instructions_sub.add_parser('show', help='Явно показать содержимое инструкций').set_defaults(func=cmd_instructions)
+    instructions_sub.add_parser('path', help='Показать путь без содержимого').set_defaults(func=cmd_instructions)
+    ap_instructions_set = instructions_sub.add_parser('set-file', help='Безопасно установить инструкции из UTF-8 файла')
+    ap_instructions_set.add_argument('source')
+    ap_instructions_set.set_defaults(func=cmd_instructions)
+
     hub = sub.add_parser('hub', help='Управление хабом')
     hub_sub = hub.add_subparsers(dest='hub_cmd')
     hub_sub.add_parser('status', help='Статус хаба').set_defaults(func=cmd_status)
@@ -4359,6 +4544,8 @@ def main():
         ap.print_help(); return
     if args.cmd == 'mcp' and not getattr(args, 'mcp_cmd', None):
         ap_mcp.print_help(); return
+    if args.cmd == 'instructions' and not getattr(args, 'instructions_cmd', None):
+        ap_instructions.print_help(); return
     # Best-effort update hint (silent on any error, auto-update off, new version available).
     try:
         maybe_update_hint(args)

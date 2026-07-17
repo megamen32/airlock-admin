@@ -1794,3 +1794,193 @@ func TestAuditRedactsAuthorizationAndQueryCredentials(t *testing.T) {
 		}
 	}
 }
+
+func TestThirdPartyDirectEndpointDoesNotInjectStartupInstructions(t *testing.T) {
+	instructions := "PRIVATE GPTADMIN OWNER INSTRUCTIONS"
+	s := New(Config{CtlToken: "ctl", RelayAgentToken: "relay", StartupInstructions: instructions, DefaultTimeout: 2 * time.Second, PollMaxTimeout: 2 * time.Second})
+	h := s.Handler()
+
+	register := []byte(`{"agent_id":"OpenMemory","name":"OpenMemory","capabilities":["resources/list","resources/read"]}`)
+	req := httptest.NewRequest(http.MethodPost, "/mcp-relay/register", bytes.NewReader(register))
+	req.Header.Set("Authorization", "Bearer relay")
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("register status=%d body=%s", w.Code, w.Body.String())
+	}
+
+	proxy := func(rpc, upstreamResult string) map[string]any {
+		t.Helper()
+		done := make(chan *httptest.ResponseRecorder, 1)
+		go func() {
+			req := httptest.NewRequest(http.MethodPost, "/server/openmemory/mcp", strings.NewReader(rpc))
+			req.Header.Set("Authorization", "Bearer ctl")
+			w := httptest.NewRecorder()
+			h.ServeHTTP(w, req)
+			done <- w
+		}()
+
+		time.Sleep(30 * time.Millisecond)
+		req := httptest.NewRequest(http.MethodGet, "/mcp-relay/poll/OpenMemory?timeout=1", nil)
+		req.Header.Set("Authorization", "Bearer relay")
+		w := httptest.NewRecorder()
+		h.ServeHTTP(w, req)
+		if w.Code != http.StatusOK {
+			t.Fatalf("poll status=%d body=%s", w.Code, w.Body.String())
+		}
+		var job map[string]any
+		if err := json.Unmarshal(w.Body.Bytes(), &job); err != nil {
+			t.Fatal(err)
+		}
+		jobID, _ := job["id"].(string)
+		if jobID == "" {
+			t.Fatalf("bad relay job: %v", job)
+		}
+
+		result := `{"id":"` + jobID + `","result":` + upstreamResult + `}`
+		req = httptest.NewRequest(http.MethodPost, "/mcp-relay/result/OpenMemory", strings.NewReader(result))
+		req.Header.Set("Authorization", "Bearer relay")
+		w = httptest.NewRecorder()
+		h.ServeHTTP(w, req)
+		if w.Code != http.StatusOK {
+			t.Fatalf("result status=%d body=%s", w.Code, w.Body.String())
+		}
+
+		select {
+		case w = <-done:
+		case <-time.After(time.Second):
+			t.Fatal("direct endpoint did not complete")
+		}
+		if w.Code != http.StatusOK {
+			t.Fatalf("direct status=%d body=%s", w.Code, w.Body.String())
+		}
+		if strings.Contains(w.Body.String(), instructions) {
+			t.Fatalf("direct endpoint injected GPTAdmin startup data: %s", w.Body.String())
+		}
+		var response map[string]any
+		if err := json.Unmarshal(w.Body.Bytes(), &response); err != nil {
+			t.Fatal(err)
+		}
+		return response["result"].(map[string]any)
+	}
+
+	initialized := proxy(`{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05"}}`, `{"protocolVersion":"2024-11-05","capabilities":{"resources":{}},"serverInfo":{"name":"OpenMemory","version":"1.0"},"instructions":"Upstream only"}`)
+	if initialized["instructions"] != "Upstream only" {
+		t.Fatalf("initialize was not transparent: %v", initialized)
+	}
+	resources := proxy(`{"jsonrpc":"2.0","id":2,"method":"resources/list","params":{}}`, `{"resources":[{"uri":"memory://upstream","name":"Upstream memory"}]}`)
+	if got := resources["resources"].([]any); len(got) != 1 || got[0].(map[string]any)["uri"] != "memory://upstream" {
+		t.Fatalf("resources/list was not transparent: %v", resources)
+	}
+	read := proxy(`{"jsonrpc":"2.0","id":3,"method":"resources/read","params":{"uri":"gptadmin://startup-instructions"}}`, `{"contents":[{"uri":"gptadmin://startup-instructions","mimeType":"text/plain","text":"upstream response"}]}`)
+	if got := read["contents"].([]any)[0].(map[string]any)["text"]; got != "upstream response" {
+		t.Fatalf("resources/read was not transparent: %v", read)
+	}
+}
+
+func TestStartupInstructionsDefaultAndOverrides(t *testing.T) {
+	if got := loadStartupInstructions(Config{}); got != defaultStartupInstructions {
+		t.Fatalf("default instructions=%q", got)
+	}
+
+	configDir := t.TempDir()
+	file := filepath.Join(configDir, "startup_instructions.md")
+	if err := os.WriteFile(file, []byte("# Local runbook\n\nUse the change window."), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if got := loadStartupInstructions(Config{StartupInstructionsFile: file}); got != "# Local runbook\n\nUse the change window." {
+		t.Fatalf("file instructions=%q", got)
+	}
+	if got := loadStartupInstructions(Config{StartupInstructionsFile: file, StartupInstructions: "Use environment guidance."}); got != "Use environment guidance." {
+		t.Fatalf("environment override=%q", got)
+	}
+	if err := os.WriteFile(file, make([]byte, startupInstructionsMaxBytes+1), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if got := loadStartupInstructions(Config{StartupInstructionsFile: file}); got != defaultStartupInstructions {
+		t.Fatalf("oversized file instructions=%q", got)
+	}
+}
+
+func TestFromEnvStartupInstructionsDefaultsToConfigDir(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv("GPTADMIN_ROOT", root)
+	t.Setenv("GPTADMIN_CONFIG_DIR", "")
+	t.Setenv("GPTADMIN_STARTUP_INSTRUCTIONS", "")
+	t.Setenv("GPTADMIN_STARTUP_INSTRUCTIONS_FILE", "")
+	cfg := FromEnv()
+	if want := filepath.Join(root, "config", "startup_instructions.md"); cfg.StartupInstructionsFile != want {
+		t.Fatalf("StartupInstructionsFile=%q, want %q", cfg.StartupInstructionsFile, want)
+	}
+	t.Setenv("GPTADMIN_STARTUP_INSTRUCTIONS", "Environment instructions")
+	if got := FromEnv().StartupInstructions; got != "Environment instructions" {
+		t.Fatalf("StartupInstructions=%q", got)
+	}
+}
+
+func TestStartupInstructionsMCPDelivery(t *testing.T) {
+	instructions := "Use the approved maintenance window."
+	s := New(Config{CtlToken: "ctl", StartupInstructions: instructions, DefaultTimeout: time.Second, PollMaxTimeout: time.Second})
+	h := s.Handler()
+
+	for _, endpoint := range []string{"/mcp", "/server/hub/mcp"} {
+		req := httptest.NewRequest(http.MethodPost, endpoint, strings.NewReader(`{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}`))
+		req.Header.Set("Authorization", "Bearer ctl")
+		w := httptest.NewRecorder()
+		h.ServeHTTP(w, req)
+		if w.Code != http.StatusOK {
+			t.Fatalf("initialize %s status=%d body=%s", endpoint, w.Code, w.Body.String())
+		}
+		var response map[string]any
+		if err := json.Unmarshal(w.Body.Bytes(), &response); err != nil {
+			t.Fatal(err)
+		}
+		result := response["result"].(map[string]any)
+		if got := result["instructions"]; got != instructions {
+			t.Fatalf("initialize %s instructions=%q", endpoint, got)
+		}
+	}
+
+	for _, endpoint := range []string{"/mcp", "/server/hub/mcp"} {
+		req := httptest.NewRequest(http.MethodPost, endpoint, strings.NewReader(`{"jsonrpc":"2.0","id":2,"method":"resources/list","params":{}}`))
+		req.Header.Set("Authorization", "Bearer ctl")
+		w := httptest.NewRecorder()
+		h.ServeHTTP(w, req)
+		if w.Code != http.StatusOK {
+			t.Fatalf("resources/list %s status=%d body=%s", endpoint, w.Code, w.Body.String())
+		}
+		var response map[string]any
+		if err := json.Unmarshal(w.Body.Bytes(), &response); err != nil {
+			t.Fatal(err)
+		}
+		resources := response["result"].(map[string]any)["resources"].([]any)
+		found := false
+		for _, item := range resources {
+			if item.(map[string]any)["uri"] == startupInstructionsResourceURI {
+				found = true
+			}
+		}
+		if !found {
+			t.Fatalf("resources/list %s did not advertise startup instructions: %v", endpoint, resources)
+		}
+	}
+
+	for _, endpoint := range []string{"/mcp", "/server/hub/mcp"} {
+		req := httptest.NewRequest(http.MethodPost, endpoint, strings.NewReader(`{"jsonrpc":"2.0","id":2,"method":"resources/read","params":{"uri":"gptadmin://startup-instructions"}}`))
+		req.Header.Set("Authorization", "Bearer ctl")
+		w := httptest.NewRecorder()
+		h.ServeHTTP(w, req)
+		if w.Code != http.StatusOK {
+			t.Fatalf("resources/read %s status=%d body=%s", endpoint, w.Code, w.Body.String())
+		}
+		var response map[string]any
+		if err := json.Unmarshal(w.Body.Bytes(), &response); err != nil {
+			t.Fatal(err)
+		}
+		contents := response["result"].(map[string]any)["contents"].([]any)
+		content := contents[0].(map[string]any)
+		if content["mimeType"] != "text/markdown" || content["text"] != instructions {
+			t.Fatalf("resources/read %s content=%v", endpoint, content)
+		}
+	}
+}

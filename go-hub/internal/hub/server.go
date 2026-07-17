@@ -53,6 +53,8 @@ type Config struct {
 	FailoverConfigFile         string
 	FailoverStateFile          string
 	FailoverReclaimCommandFile string
+	StartupInstructionsFile    string
+	StartupInstructions        string
 }
 
 func FromEnv() Config {
@@ -86,6 +88,8 @@ func FromEnv() Config {
 		FailoverConfigFile:         env("GPTADMIN_FAILOVER_CONFIG_FILE", filepath.Join(cfgDir, "failover_config.json")),
 		FailoverStateFile:          env("GPTADMIN_FAILOVER_STATE_FILE", filepath.Join(cfgDir, "failover_state.json")),
 		FailoverReclaimCommandFile: env("GPTADMIN_FAILOVER_RECLAIM_COMMAND_FILE", filepath.Join(cfgDir, "failover_reclaim_command.json")),
+		StartupInstructionsFile:    env("GPTADMIN_STARTUP_INSTRUCTIONS_FILE", filepath.Join(cfgDir, "startup_instructions.md")),
+		StartupInstructions:        env("GPTADMIN_STARTUP_INSTRUCTIONS", ""),
 	}
 }
 
@@ -219,6 +223,8 @@ type Server struct {
 	updateStatePath string
 	updateLockPath  string
 	updateLauncher  *UpdateLauncher
+
+	startupInstructions string
 }
 
 func New(cfg Config) *Server {
@@ -235,6 +241,7 @@ func New(cfg Config) *Server {
 		audit:       []auditEvent{},
 	}
 	s.cond = sync.NewCond(&s.mu)
+	s.startupInstructions = loadStartupInstructions(cfg)
 	if err := s.loadRegistryState(); err != nil {
 		log.Printf("registry state load failed path=%s err=%v", s.registryStatePath(), err)
 	}
@@ -3508,7 +3515,12 @@ func (s *Server) agentMCPJSONRPC(r *http.Request, agent Agent, body map[string]a
 	params := mapValue(body["params"])
 	switch method {
 	case "initialize":
-		return map[string]any{"protocolVersion": "2024-11-05", "capabilities": map[string]any{"tools": map[string]any{}, "resources": map[string]any{}, "prompts": map[string]any{}}, "serverInfo": map[string]any{"name": "gptadmin-server-" + agentSlug(agent.AgentID), "version": BuildVersion}}, nil, false
+		if agent.AgentID == "hub" || strings.HasPrefix(agent.AgentID, "shell:") {
+			return map[string]any{"protocolVersion": "2024-11-05", "capabilities": map[string]any{"tools": map[string]any{}, "resources": map[string]any{}, "prompts": map[string]any{}}, "serverInfo": map[string]any{"name": "gptadmin-server-" + agentSlug(agent.AgentID), "version": BuildVersion}, "instructions": s.startupInstructionsText()}, nil, false
+		}
+		jobID := s.enqueueRelay(agent.AgentID, method, params)
+		result, rpcErr := unwrapMCPUpstream(s.waitRelay(jobID, s.cfg.DefaultTimeout))
+		return result, rpcErr, false
 	case "notifications/initialized", "notifications/cancelled":
 		return nil, nil, true
 	case "tools/list":
@@ -3589,9 +3601,15 @@ func (s *Server) agentToolCall(agent Agent, name string, args map[string]any) (a
 
 func (s *Server) agentResourcesList(r *http.Request, agent Agent) (any, any) {
 	if agent.AgentID == "hub" {
-		return appsSDKResourcesList(), nil
+		return s.appsSDKResourcesList(), nil
 	}
-	if strings.HasPrefix(agent.AgentID, "shell:") || !hasCapability(agent, "resources/list") {
+	if strings.HasPrefix(agent.AgentID, "shell:") {
+		return map[string]any{"resources": []map[string]any{
+			{"uri": startupInstructionsResourceURI, "name": "GPTAdmin startup instructions", "mimeType": "text/markdown"},
+			{"uri": "gptadmin://server/" + agentSlug(agent.AgentID), "name": agent.Name + " card", "mimeType": "application/json"},
+		}}, nil
+	}
+	if !hasCapability(agent, "resources/list") {
 		return map[string]any{"resources": []map[string]any{{"uri": "gptadmin://server/" + agentSlug(agent.AgentID), "name": agent.Name + " card", "mimeType": "application/json"}}}, nil
 	}
 	jobID := s.enqueueRelay(agent.AgentID, "resources/list", map[string]any{})
@@ -3602,7 +3620,14 @@ func (s *Server) agentResourceRead(r *http.Request, agent Agent, uri string) (an
 	if agent.AgentID == "hub" {
 		return s.appsSDKResourceRead(r, uri), nil
 	}
-	if strings.HasPrefix(agent.AgentID, "shell:") || strings.HasPrefix(uri, "gptadmin://server/") || strings.HasPrefix(uri, "gptadmin://agent/") || !hasCapability(agent, "resources/read") {
+	if strings.HasPrefix(agent.AgentID, "shell:") {
+		if uri == startupInstructionsResourceURI {
+			return s.startupInstructionsResourceRead(uri), nil
+		}
+		b, _ := json.Marshal(s.agentCard(r, agent))
+		return map[string]any{"contents": []map[string]any{{"uri": uri, "mimeType": "application/json", "text": string(b)}}}, nil
+	}
+	if strings.HasPrefix(uri, "gptadmin://server/") || strings.HasPrefix(uri, "gptadmin://agent/") || !hasCapability(agent, "resources/read") {
 		b, _ := json.Marshal(s.agentCard(r, agent))
 		return map[string]any{"contents": []map[string]any{{"uri": uri, "mimeType": "application/json", "text": string(b)}}}, nil
 	}
@@ -3680,7 +3705,7 @@ func (s *Server) mcpEndpoint(w http.ResponseWriter, r *http.Request) {
 	var rpcErr any
 	switch method {
 	case "initialize":
-		result = map[string]any{"protocolVersion": "2024-11-05", "capabilities": map[string]any{"tools": map[string]any{}, "resources": map[string]any{}}, "serverInfo": map[string]any{"name": "gptadmin-go-hub", "version": BuildVersion}}
+		result = map[string]any{"protocolVersion": "2024-11-05", "capabilities": map[string]any{"tools": map[string]any{}, "resources": map[string]any{}}, "serverInfo": map[string]any{"name": "gptadmin-go-hub", "version": BuildVersion}, "instructions": s.startupInstructionsText()}
 	case "notifications/initialized":
 		w.WriteHeader(http.StatusNoContent)
 		return
@@ -3697,7 +3722,7 @@ func (s *Server) mcpEndpoint(w http.ResponseWriter, r *http.Request) {
 			result = mcpToolResult(s.appsSDKCallForRequest(r, name, args))
 		}
 	case "resources/list":
-		result = appsSDKResourcesList()
+		result = s.appsSDKResourcesList()
 	case "resources/read":
 		uri := firstString(params, "uri")
 		if uri == "" {
@@ -3984,8 +4009,11 @@ func appsSDKTools() []map[string]any {
 	}
 }
 
-func appsSDKResourcesList() map[string]any {
+const startupInstructionsResourceURI = "gptadmin://startup-instructions"
+
+func (s *Server) appsSDKResourcesList() map[string]any {
 	return map[string]any{"resources": []map[string]any{
+		{"uri": startupInstructionsResourceURI, "name": "GPTAdmin startup instructions", "description": "Operational guidance for GPTAdmin system administration; permissions and approvals remain authoritative.", "mimeType": "text/markdown"},
 		{
 			"uri":         "ui://widget/admin-v3.html",
 			"name":        "GPTAdmin dashboard widget",
@@ -4015,6 +4043,9 @@ func appsSDKWidgetMeta() map[string]any {
 }
 
 func (s *Server) appsSDKResourceRead(r *http.Request, uri string) map[string]any {
+	if uri == startupInstructionsResourceURI {
+		return s.startupInstructionsResourceRead(uri)
+	}
 	if uri == "gptadmin://servers" || uri == "gptadmin://agents" {
 		s.mu.Lock()
 		servers := s.publicServersLocked(nil)
@@ -4026,6 +4057,10 @@ func (s *Server) appsSDKResourceRead(r *http.Request, uri string) map[string]any
 		return map[string]any{"contents": []map[string]any{{"uri": uri, "mimeType": "text/plain", "text": "unknown GPTAdmin resource"}}}
 	}
 	return map[string]any{"contents": []map[string]any{{"uri": uri, "mimeType": "text/html;profile=mcp-app", "text": appsSDKWidgetHTML(s.origin(r)), "_meta": appsSDKWidgetMeta()}}}
+}
+
+func (s *Server) startupInstructionsResourceRead(uri string) map[string]any {
+	return map[string]any{"contents": []map[string]any{{"uri": uri, "mimeType": "text/markdown", "text": s.startupInstructionsText()}}}
 }
 
 func appsSDKWidgetHTML(origin string) string {
