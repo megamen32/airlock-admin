@@ -164,10 +164,28 @@ def _command_id(command: str) -> str:
     return Path(shlex.split(command)[0]).name
 
 
+@pytest.fixture(scope="session")
+def default_hub_contract_command(tmp_path_factory: pytest.TempPathFactory) -> str:
+    """Build the default Go Hub once outside each process readiness window."""
+    binary = tmp_path_factory.mktemp("hub-contract") / "gptadmin-hub-contract"
+    subprocess.run(
+        ["go", "build", "-buildvcs=false", "-o", str(binary), "./cmd/gptadmin-hub"],
+        cwd=str(ROOT / "go-hub"),
+        check=True,
+        timeout=120,
+    )
+    return str(binary)
+
+
 @pytest.fixture(params=CONTRACT_COMMANDS, ids=_command_id)
-def hub_contract(request: pytest.FixtureRequest, tmp_path: Path) -> Iterator[HubProcess]:
+def hub_contract(
+    request: pytest.FixtureRequest,
+    tmp_path: Path,
+) -> Iterator[HubProcess]:
     """Start one implementation with isolated state and deterministic credentials."""
     command = str(request.param)
+    if command == DEFAULT_COMMANDS[0]:
+        command = str(request.getfixturevalue("default_hub_contract_command"))
     port = _free_port()
     state_dir = tmp_path / "state"
     log_path = tmp_path / "hub.log"
@@ -208,7 +226,7 @@ def hub_contract(request: pytest.FixtureRequest, tmp_path: Path) -> Iterator[Hub
         process = subprocess.Popen(
             command,
             shell=True,
-            cwd=str(ROOT / "go-hub") if command == DEFAULT_COMMANDS[0] else str(ROOT),
+            cwd=str(ROOT),
             env=env,
             stdout=log,
             stderr=subprocess.STDOUT,

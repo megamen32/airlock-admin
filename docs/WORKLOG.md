@@ -48,6 +48,17 @@ plan is [`PROJECT_PLAN.md`](./PROJECT_PLAN.md).
 
 ## Entries
 
+## 2026-07-17 - Make cold Hub contract startup deterministic - completed
+
+- Milestone: `S0.2`
+- Owner: Codex
+- Scope: Remove first-run Go compilation time from the Hub HTTP contract readiness window in CI.
+- Baseline / red evidence: CI run `29583276807` failed only `test_hub_contract_health_and_auth[go]`; the first `go run` never opened its port within 15 seconds, while all subsequent Hub contract tests passed after the Go cache warmed.
+- Change: The default Go Hub contract command is now built once per test session with `-buildvcs=false`; every default black-box case starts that binary instead of compiling during a 15-second readiness window. Configured external `HUB_CONTRACT_COMMANDS` remain unchanged.
+- Verification: Cold-cache `test_hub_contract_health_and_auth` passed (`1 passed`); Python `104 passed, 2 skipped`; `go test ./...` in `go-hub` and `go-shellmcp` passed.
+- Delivery: Pending commit, push and CI.
+- Next: None.
+
 ## 2026-07-17 - Convert Cloud to a normal private tree - completed
 
 - Milestone: `S0.4`
