@@ -10,6 +10,7 @@ GPT‑Админ — self-hosted MCP hub. Три основные компоне
 
 Дополнительно:
 - `public/admin/` — vanilla-JS SPA админки (без фреймворка). `app.js` `renderAll()` читает `/admin/api/overview`.
+- `admin-ui/` — source новой React+TypeScript+Vite админки. Node используется только на build-time; runtime получает compiled static только после explicit parity gate. До этого `public/admin/` остаётся production.
 - `public/openapi.yaml` — описание API hub.
 - `tools/build.sh` — сборка/релиз: бампит VERSION, инжектит версию в Go через ldflags, пакует tarballs.
 - `deploy/` — install-скрипты (Linux/macOS/Windows), systemd/launchd юниты, nginx setup.
@@ -21,6 +22,9 @@ GPT‑Админ — self-hosted MCP hub. Три основные компоне
 - Каноническая продуктовая философия: [`docs/PHILOSOPHY.md`](docs/PHILOSOPHY.md).
   Новые MCP surfaces должны иметь минимальный стабильный контекст и лениво
   загружать только реально выбранные данные.
+- Границы admin profiles и внешних workspaces определены в
+  [`docs/ADMIN_PROFILES.md`](docs/ADMIN_PROFILES.md). Не записывайте
+  instance-specific machine IDs и пути в публичный репозиторий.
 - Канонический append-only handoff log: [`docs/WORKLOG.md`](docs/WORKLOG.md).
 - Перед самостоятельной реализацией оркестратор явно проверяет: можно ли
   отдать ограниченный срез субагенту по чёткой инструкции. Делегируйте
@@ -83,5 +87,5 @@ python3 cli.py auto-update status
 
 - Go: следовать существующим паттернам `internal/hub` / `internal/server`.
 - Python: f-строки, явное логирование, соответствие окружающему коду.
-- Admin UI: без билд-степа, без фреймворка — редактировать `app.js`/`index.html`/`style.css` напрямую.
+- Admin UI: `admin-ui/` — source новой React+TypeScript+Vite админки. Node используется только на build-time; runtime получает compiled static только после explicit parity gate. До этого `public/admin/` остаётся production.
 - Перед коммитом запускать тесты (см. блок Команды выше).

@@ -224,7 +224,9 @@ type Server struct {
 	updateLockPath  string
 	updateLauncher  *UpdateLauncher
 
-	startupInstructions string
+	instructionMu      sync.RWMutex
+	instructionWriteMu sync.Mutex
+	instructionSet     InstructionSet
 }
 
 func New(cfg Config) *Server {
@@ -241,7 +243,7 @@ func New(cfg Config) *Server {
 		audit:       []auditEvent{},
 	}
 	s.cond = sync.NewCond(&s.mu)
-	s.startupInstructions = loadStartupInstructions(cfg)
+	s.instructionSet = newInstructionSet(cfg)
 	if err := s.loadRegistryState(); err != nil {
 		log.Printf("registry state load failed path=%s err=%v", s.registryStatePath(), err)
 	}
@@ -459,6 +461,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/admin/api/clients/revoke-all", s.requireCtl(s.adminClientsRevokeAll))
 	mux.HandleFunc("/admin/api/clients/", s.requireCtl(s.adminClientDelete))
 	mux.HandleFunc("/admin/api/overview", s.requireCtl(s.adminOverview))
+	mux.HandleFunc("/admin/api/instruction-sets/default", s.requireCtl(s.adminDefaultInstructionSet))
 	mux.HandleFunc("/admin/api/update", s.requireCtl(s.adminTriggerUpdate))
 	mux.HandleFunc("/admin/api/failover/state", s.requireCtl(s.adminFailoverState))
 	mux.HandleFunc("/admin/api/failover/reclaim/accept", s.requireCtl(s.adminFailoverReclaimAccept))
@@ -580,8 +583,8 @@ func requestScheme(r *http.Request) string {
 func withCORS(next http.Handler) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Access-Control-Allow-Origin", "*")
-		w.Header().Set("Access-Control-Allow-Headers", "authorization,content-type,x-ctl-token,x-mcp-relay-token")
-		w.Header().Set("Access-Control-Allow-Methods", "GET,POST,DELETE,OPTIONS")
+		w.Header().Set("Access-Control-Allow-Headers", "authorization,content-type,if-match,x-ctl-token,x-mcp-relay-token")
+		w.Header().Set("Access-Control-Allow-Methods", "GET,POST,PUT,DELETE,OPTIONS")
 		if r.Method == http.MethodOptions {
 			w.WriteHeader(http.StatusNoContent)
 			return
@@ -600,6 +603,9 @@ func (s *Server) healthz(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) requireCtl(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/admin/api/instruction-sets/default" && (r.Method == http.MethodGet || r.Method == http.MethodPut) {
+			w.Header().Set("Cache-Control", "no-store")
+		}
 		if s.cfg.CtlToken != "" && tokenMatches(r, s.cfg.CtlToken) {
 			s.authAudit("ctl_auth_ok", r, map[string]any{"auth_kind": "ctl_token"})
 			next(w, r)

@@ -20,6 +20,43 @@ env:
   OPENSOURCE_PAT: ${{ secrets.OPENSOURCE_PAT }}
 
 jobs:
+  admin-ui-build:
+    # The React UI is build-tested independently while legacy /admin remains
+    # the production runtime until an explicit parity gate is approved.
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: admin-ui/package-lock.json
+
+      - name: Install admin UI dependencies
+        working-directory: admin-ui
+        run: npm ci
+
+      - name: Test admin UI
+        working-directory: admin-ui
+        run: npm test
+
+      - name: Lint admin UI
+        working-directory: admin-ui
+        run: npm run lint
+
+      - name: Build admin UI
+        working-directory: admin-ui
+        run: npm run build -- --base=/admin/
+
+      - name: Verify admin UI asset base
+        working-directory: admin-ui
+        run: |
+          test -s dist/index.html
+          grep -q '/admin/assets/' dist/index.html
+
   failover-e2e:
     # The suite builds its own Go image and needs no repository-hosted service.
     # Keep it separate so HA regressions are visible independently from releases.
@@ -202,6 +239,13 @@ jobs:
         with:
           go-version: stable
           cache-dependency-path: go-shellmcp/go.sum
+
+      - name: Compile every Go Hub package for Windows
+        shell: pwsh
+        run: |
+          Set-Location go-hub
+          go test -run '^$' ./...
+          go build -o ../build/windows/gptadmin-hub.exe ./cmd/gptadmin-hub
 
       - name: Compile every Go ShellMCP package for Windows
         shell: pwsh

@@ -48,6 +48,17 @@ plan is [`PROJECT_PLAN.md`](./PROJECT_PLAN.md).
 
 ## Entries
 
+## 2026-07-17 - Admin profile workspace - active
+
+- Milestone: `S1.3a`
+- Owner: Codex orchestrating bounded Luna workers
+- Scope: Establish the versioned instruction contract and new admin frontend foundation, then carry the first profile through persistence, external machine/workspace references, effective MCP behavior and enforced tool access without copying private repositories into GPTAdmin or Cloud.
+- Baseline / red evidence: The current admin surface has no profile domain, startup instructions are a single restart-loaded file, access is only `full` or `readonly`, and the monolithic UI exposes implementation-oriented auth/tool screens.
+- Change: In progress using disjoint backend-contract and frontend-shell workstreams.
+- Verification: Red tests first; focused Go/frontend tests, full Hub/ShellMCP/Python suites, browser smoke and CI required before completion.
+- Delivery: Pending commits, push, CI and deployment evidence.
+- Next: Land the versioned instruction vertical slice before expanding profile policy.
+
 ## 2026-07-17 - Make cold Hub contract startup deterministic - completed
 
 - Milestone: `S0.2`

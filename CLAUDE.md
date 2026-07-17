@@ -1,11 +1,12 @@
 # CLAUDE.md — gptadmin
 
 ## What this is
-Self-hosted MCP hub. Two Go binaries + one Python CLI + vanilla-JS admin UI.
+Self-hosted MCP hub. Two Go binaries + one Python CLI + legacy vanilla-JS admin UI.
 - `go-hub/` — hub/proxy (stores metadata, auth, routes MCP calls). `BuildVersion` via ldflags.
 - `go-shellmcp/` — shell execution agent (parity port of the old Python `services/shellmcp.py`, deleted in PR #22).
 - `cli.py` — single-file (~3900 lines) Python installer + CLI (`gptadmin setup/update/auto-update/...`). Platform-aware: systemd on Linux, launchd on macOS.
 - `public/admin/` — vanilla JS SPA (no framework). `app.js` `renderAll()` reads `/admin/api/overview`.
+- `admin-ui/` — source for the new React+TypeScript+Vite admin UI. Node is build-time only; runtime receives compiled static only after an explicit parity gate. Until then, `public/admin/` remains production.
 - `tools/build.sh` — build/release: bumps VERSION, Go ldflags inject version, packages tarballs.
 
 ## Plan and multi-agent work
@@ -15,6 +16,9 @@ Self-hosted MCP hub. Two Go binaries + one Python CLI + vanilla-JS admin UI.
 - The canonical product philosophy is [`docs/PHILOSOPHY.md`](docs/PHILOSOPHY.md).
   New MCP surfaces keep a minimal stable context and lazily load only data the
   current task actually selects.
+- Admin profile and external workspace boundaries are defined in
+  [`docs/ADMIN_PROFILES.md`](docs/ADMIN_PROFILES.md). Keep instance-specific
+  machine IDs and paths out of the public repository.
 - The canonical append-only handoff log is [`docs/WORKLOG.md`](docs/WORKLOG.md).
 - Before implementing work directly, the orchestrator explicitly asks whether a
   bounded slice can be delegated to a subagent with clear instructions.
@@ -98,4 +102,4 @@ No C toolchain needed (CGO disabled). Cross-builds run on a plain Linux box.
 ## Style
 - Go: follow existing `internal/hub` / `internal/server` patterns.
 - Python: f-strings, explicit logging, match surrounding code.
-- Admin UI: no build step, no framework — edit `app.js`/`index.html`/`style.css` directly.
+- Admin UI: `admin-ui/` is the source for the new React+TypeScript+Vite admin UI. Node is build-time only; runtime receives compiled static only after an explicit parity gate. Until then, `public/admin/` remains production.
