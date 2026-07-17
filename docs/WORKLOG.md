@@ -393,3 +393,19 @@ plan is [`PROJECT_PLAN.md`](./PROJECT_PLAN.md).
 - Delivery: Pending commit and CI.
 - Next: Apply the same compact/default policy to `listMcpAgents` only if a
   measured client still needs it; do not expand the default tool surface.
+
+## 2026-07-17 - Publish release 127 - active
+
+- Milestone: `S1.3`, `S4.2`
+- Owner: Codex
+- Scope: Publish the committed Hub/client artifacts containing compact
+  `discover` output and explicit detail opt-in.
+- Baseline: `main` was at build `126`; CI builds passed but no new release
+  tag or platform artifacts had been published.
+- Change: Bump `VERSION` to `127`; the release workflow will create `v127`,
+  build all platform artifacts, and sync the public mirror.
+- Verification: Pending release workflow and public artifact checks.
+- Delivery: Active until the tag, GitHub Release and artifact manifest are
+  verified.
+- Next: Wait for `v127` Build, Sync, Release and verify all five artifact
+  families.
