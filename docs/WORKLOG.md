@@ -48,6 +48,17 @@ plan is [`PROJECT_PLAN.md`](./PROJECT_PLAN.md).
 
 ## Entries
 
+## 2026-07-17 - Move private Cloud worktree - completed
+
+- Milestone: `S0.4`
+- Owner: Codex
+- Scope: Move the existing private `gptadmin-hubhub` linked worktree under `private/Cloud` without merging its obsolete branch into `main` or exposing it in the public mirror.
+- Baseline / red evidence: The private Cloud worktree lives beside the repository root under a legacy folder name, while `private/` is already the sanctioned mirror-excluded location for private materials.
+- Change: Renamed and moved the linked worktree from `/home/roomhacker/gptadmin-hubhub` to `private/Cloud` using `git worktree move`. Its private branch, staged files and untracked Cloud document were preserved; no obsolete branch history was merged into `main`. Added a local Git exclusion so the nested worktree does not pollute `main` status.
+- Verification: `git worktree list --porcelain` reports `private/Cloud` on `gptadmin-hubhub`; its Git common directory is the root private repository; its staged/untracked state remains present; root `git check-ignore` matches `private/Cloud`; `.gitpublic/ignore` excludes `private/`.
+- Delivery: Local workspace organization only; no public release.
+- Next: Use `private/Cloud` as the private Cloud workspace; merge only reviewed, current slices into `main`.
+
 ## 2026-07-17 - Consolidate active work on main - completed
 
 - Milestone: `S0.4`
