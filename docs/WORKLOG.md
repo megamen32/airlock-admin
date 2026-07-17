@@ -48,6 +48,17 @@ plan is [`PROJECT_PLAN.md`](./PROJECT_PLAN.md).
 
 ## Entries
 
+## 2026-07-17 - Consolidate active work on main - active
+
+- Milestone: `S0.4`
+- Owner: Codex
+- Scope: Merge the currently verified AI-client and private startup-instruction slice into `main`; classify remaining divergent branches so obsolete implementation history is not reintroduced.
+- Baseline / red evidence: The default workspace is on a feature branch, while `main` contains release `127`; branch choice is ambiguous for subsequent agents.
+- Change: In progress.
+- Verification: Pending merge plus focused full-suite verification.
+- Delivery: Pending commit, push and CI.
+- Next: Merge the verified active slice, then make the primary workspace track `main`.
+
 ## 2026-07-15 - Compact MCP tool names and descriptions - completed
 
 - Milestone: `S4.1`
