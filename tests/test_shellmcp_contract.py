@@ -189,7 +189,9 @@ def _root_contract_command(command: str, tmp_path: Path) -> str:
 
     binary = tmp_path / "shellmcp-contract"
     subprocess.run(
-        ["go", "build", "-o", str(binary), "./cmd/shellmcp-go"],
+        # The executable only exercises the daemon contract.  VCS metadata is
+        # irrelevant and unavailable in some isolated worktree test runners.
+        ["go", "build", "-buildvcs=false", "-o", str(binary), "./cmd/shellmcp-go"],
         cwd=str(ROOT / "go-shellmcp"),
         check=True,
         timeout=120,

@@ -48,16 +48,16 @@ plan is [`PROJECT_PLAN.md`](./PROJECT_PLAN.md).
 
 ## Entries
 
-## 2026-07-17 - Consolidate active work on main - active
+## 2026-07-17 - Consolidate active work on main - completed
 
 - Milestone: `S0.4`
 - Owner: Codex
 - Scope: Merge the currently verified AI-client and private startup-instruction slice into `main`; classify remaining divergent branches so obsolete implementation history is not reintroduced.
 - Baseline / red evidence: The default workspace is on a feature branch, while `main` contains release `127`; branch choice is ambiguous for subsequent agents.
-- Change: In progress.
-- Verification: Pending merge plus focused full-suite verification.
-- Delivery: Pending commit, push and CI.
-- Next: Merge the verified active slice, then make the primary workspace track `main`.
+- Change: Merged `feature/connect-mcp-additional-ai-clients` into `main`, preserving its private startup-instruction source and AI-client support. Classified all other divergent branches as historical, obsolete or backup work: merging them would reintroduce removed Python ShellMCP code or stale Hub rewrites. Made the root-daemon black-box harness deterministic in isolated worktrees by disabling irrelevant Go VCS stamping during its test-only build.
+- Verification: `go test ./...` in `go-hub`; `go test ./...` in `go-shellmcp`; `python3 -m pytest tests/ --ignore=tests/e2e` (`101 passed, 5 skipped`).
+- Delivery: Commits `61c9e23`, `63b6640` and the follow-up test-harness commit; push and CI pending.
+- Next: Work from `main`; retain old branches as explicit history until a separate deletion decision.
 
 ## 2026-07-15 - Compact MCP tool names and descriptions - completed
 
