@@ -38,6 +38,36 @@ func TestListServersUsesHubKind(t *testing.T) {
 	}
 }
 
+func TestDetailedDiscoveryRedactsSensitiveAgentMetadata(t *testing.T) {
+	s := New(Config{CtlToken: "ctl", DefaultTimeout: 1, PollMaxTimeout: 1})
+	s.mu.Lock()
+	s.agents["external"] = &Agent{
+		AgentID: "external",
+		Name:    "External MCP",
+		Kind:    "real_mcp",
+		Status:  "online",
+		Meta: map[string]any{
+			"args":       []any{"--header", "Authorization: Bearer private-test-token"},
+			"public_url": "https://example.test/mcp",
+		},
+	}
+	s.mu.Unlock()
+
+	req := httptest.NewRequest(http.MethodGet, "/mcp-relay/servers?detail=full", nil)
+	req.Header.Set("Authorization", "Bearer ctl")
+	w := httptest.NewRecorder()
+	s.Handler().ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", w.Code, w.Body.String())
+	}
+	if strings.Contains(w.Body.String(), "private-test-token") {
+		t.Fatalf("detailed discovery leaked a credential: %s", w.Body.String())
+	}
+	if !strings.Contains(w.Body.String(), "https://example.test/mcp") {
+		t.Fatalf("detailed discovery lost safe metadata: %s", w.Body.String())
+	}
+}
+
 func TestRelayToolsRoundTrip(t *testing.T) {
 	s := New(Config{CtlToken: "ctl", RelayAgentToken: "relay", DefaultTimeout: 1, PollMaxTimeout: 1})
 	register := []byte(`{"agent_id":"demo","name":"Demo","capabilities":["tools/list","tools/call"]}`)

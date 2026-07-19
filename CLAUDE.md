@@ -24,6 +24,31 @@ Self-hosted MCP hub. Two Go binaries + one Python CLI + legacy vanilla-JS admin 
   bounded slice can be delegated to a subagent with clear instructions.
   Delegate independent diagnosis, tests or isolated edits; retain integration,
   risky decisions, deployment and acceptance in the primary agent.
+- The orchestrator must give each subagent a self-contained, detailed task
+  brief, never a short prompt. The brief includes: milestone goal and user
+  reason; confirmed current state and pre-fix evidence; exact contract and
+  examples; files, symbols and tests to inspect; permitted write scope and
+  other agents' ownership; non-goals, privacy/compatibility constraints and
+  known dirty files; TDD/verification commands and the observable acceptance
+  result. End with the required handoff format: assumptions, changed files,
+  exact test commands and results, risks and one next action. Full context in
+  the prompt is cheaper and more reliable than interrupting an agent for
+  clarification.
+- Do not interrupt a working subagent merely because it has not replied after a
+  minute, has not made a git change, or the orchestrator wants to narrow its
+  task. Give an isolated implementation/TDD slice at least 10 uninterrupted
+  minutes; give repo/runtime reconnaissance or a cross-cutting slice at least
+  15-20 minutes. Do not duplicate its tests, searches or edits in parallel.
+- After two polls without a new phase, one short non-interrupting heartbeat is
+  allowed. Silence is not a blocker: continue waiting for the original budget.
+  After that budget, one read-only discriminating probe is allowed; do not
+  rewrite the task in the middle of its cycle without need.
+- Interrupt or re-scope only when the user explicitly cancels or redirects,
+  there is an ownership conflict or data risk, the agent reports a blocker, or
+  a hard failure is evidenced (a repeated test/build error) and it needs a new
+  contract. If a slice is wider than expected, obtain a normal handoff or a
+  non-interrupting boundary first, then create the next slice; never abort a
+  productive TDD cycle.
 - Before substantial work, read both files, select one milestone and create an
   `active` entry using the worklog template. Before finishing, replace it with
   a factual `completed`, `blocked` or `handed-off` entry containing tests,

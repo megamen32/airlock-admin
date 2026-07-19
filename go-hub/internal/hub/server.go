@@ -181,14 +181,18 @@ type oauthCode struct {
 // persisted, so an operator can revoke or rotate a client without creating a
 // second secret database.
 type managedMCPToken struct {
-	ID         string `json:"id"`
-	ClientID   string `json:"client_id"`
-	TokenKind  string `json:"token_kind,omitempty"`
-	Scope      string `json:"scope"`
-	AccessMode string `json:"access_mode"`
-	IssuedAt   int64  `json:"issued_at"`
-	ExpiresAt  int64  `json:"expires_at"`
-	RevokedAt  int64  `json:"revoked_at,omitempty"`
+	ID           string   `json:"id"`
+	ClientID     string   `json:"client_id"`
+	TokenKind    string   `json:"token_kind,omitempty"`
+	Status       string   `json:"status,omitempty"`
+	RedirectURIs []string `json:"redirect_uris,omitempty"`
+	Scope        string   `json:"scope"`
+	AccessMode   string   `json:"access_mode"`
+	ProfileID    string   `json:"profile_id,omitempty"`
+	IssuedAt     int64    `json:"issued_at"`
+	CreatedAt    int64    `json:"created_at,omitempty"`
+	ExpiresAt    int64    `json:"expires_at"`
+	RevokedAt    int64    `json:"revoked_at,omitempty"`
 }
 
 type managedMCPTokenState struct {
@@ -207,18 +211,20 @@ type idempotencyEntry struct {
 type Server struct {
 	cfg Config
 
-	mu          sync.Mutex
-	cond        *sync.Cond
-	agents      map[string]*Agent
-	relayQueues map[string][]string
-	relayJobs   map[string]*relayJob
-	shellQueues map[string][]string
-	shellJobs   map[string]*shellJob
-	idempotency map[string]*idempotencyEntry
-	oauthCodes  map[string]oauthCode
-	managedMCP  map[string]managedMCPToken
-	audit       []auditEvent
-	failover    FailoverConfig
+	mu             sync.Mutex
+	cond           *sync.Cond
+	agents         map[string]*Agent
+	relayQueues    map[string][]string
+	relayJobs      map[string]*relayJob
+	shellQueues    map[string][]string
+	shellJobs      map[string]*shellJob
+	idempotency    map[string]*idempotencyEntry
+	oauthCodes     map[string]oauthCode
+	managedMCP     map[string]managedMCPToken
+	oauthClients   map[string]oauthClientMetadata
+	accessProfiles map[string]AccessProfile
+	audit          []auditEvent
+	failover       FailoverConfig
 
 	updateStatePath string
 	updateLockPath  string
@@ -231,16 +237,18 @@ type Server struct {
 
 func New(cfg Config) *Server {
 	s := &Server{
-		cfg:         cfg,
-		agents:      map[string]*Agent{},
-		relayQueues: map[string][]string{},
-		relayJobs:   map[string]*relayJob{},
-		shellQueues: map[string][]string{},
-		shellJobs:   map[string]*shellJob{},
-		idempotency: map[string]*idempotencyEntry{},
-		oauthCodes:  map[string]oauthCode{},
-		managedMCP:  map[string]managedMCPToken{},
-		audit:       []auditEvent{},
+		cfg:            cfg,
+		agents:         map[string]*Agent{},
+		relayQueues:    map[string][]string{},
+		relayJobs:      map[string]*relayJob{},
+		shellQueues:    map[string][]string{},
+		shellJobs:      map[string]*shellJob{},
+		idempotency:    map[string]*idempotencyEntry{},
+		oauthCodes:     map[string]oauthCode{},
+		managedMCP:     map[string]managedMCPToken{},
+		oauthClients:   map[string]oauthClientMetadata{},
+		accessProfiles: map[string]AccessProfile{},
+		audit:          []auditEvent{},
 	}
 	s.cond = sync.NewCond(&s.mu)
 	s.instructionSet = newInstructionSet(cfg)
@@ -249,6 +257,12 @@ func New(cfg Config) *Server {
 	}
 	if err := s.loadManagedMCPState(); err != nil {
 		log.Printf("MCP token state load failed path=%s err=%v", s.managedMCPStatePath(), err)
+	}
+	if err := s.loadOAuthClientsState(); err != nil {
+		log.Printf("OAuth client state load failed path=%s err=%v", s.oauthClientsStatePath(), err)
+	}
+	if err := s.loadAccessProfilesState(); err != nil {
+		log.Printf("access profile state load failed path=%s err=%v", s.accessProfilesStatePath(), err)
 	}
 	s.failover = s.loadFailoverConfig()
 	home := os.Getenv("GPTADMIN_HOME")
@@ -454,6 +468,9 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/admin/api/mcp/manage", s.requireCtl(s.adminMCPManage))
 	mux.HandleFunc("/admin/api/mcp/issue-token", s.requireCtl(s.adminMCPIssueToken))
 	mux.HandleFunc("/admin/api/mcp/tokens/", s.requireCtl(s.adminMCPTokenAction))
+	mux.HandleFunc("/admin/api/access-profiles", s.requireCtl(s.adminAccessProfiles))
+	mux.HandleFunc("/admin/api/access-profiles/", s.requireCtl(s.adminAccessProfile))
+	mux.HandleFunc("/admin/api/client-bindings/", s.requireCtl(s.adminClientBinding))
 	mux.HandleFunc("/admin/api/mcp/resources/list", s.requireCtl(s.adminMCPResourcesList))
 	mux.HandleFunc("/admin/api/mcp/resources/read", s.requireCtl(s.adminMCPResourceRead))
 	mux.HandleFunc("/admin/api/auth/rotate-oauth", s.requireCtl(s.adminRotateOAuth))
@@ -606,6 +623,9 @@ func (s *Server) requireCtl(next http.HandlerFunc) http.HandlerFunc {
 		if r.URL.Path == "/admin/api/instruction-sets/default" && (r.Method == http.MethodGet || r.Method == http.MethodPut) {
 			w.Header().Set("Cache-Control", "no-store")
 		}
+		if strings.HasPrefix(r.URL.Path, "/admin/api/access-profiles/") || strings.HasPrefix(r.URL.Path, "/admin/api/client-bindings/") {
+			w.Header().Set("Cache-Control", "no-store")
+		}
 		if s.cfg.CtlToken != "" && tokenMatches(r, s.cfg.CtlToken) {
 			s.authAudit("ctl_auth_ok", r, map[string]any{"auth_kind": "ctl_token"})
 			next(w, r)
@@ -621,6 +641,7 @@ func (s *Server) requireCtl(next http.HandlerFunc) http.HandlerFunc {
 		if claims, err := s.verifyBearerJWTFromRequest(r); err == nil {
 			s.authAudit("ctl_auth_ok", r, map[string]any{"auth_kind": "oauth_jwt", "jwt_claims": claims})
 			*r = *requestWithAuthClaims(r, claims)
+			*r = *s.applyAccessProfileContext(r, claims)
 			if !mcpClientHTTPPathAllowed(r.URL.Path) {
 				detail := "MCP client credentials cannot access the admin API"
 				if requestAccessMode(r) == accessModeReadonly {
@@ -1459,8 +1480,60 @@ func agentAsServer(a Agent) map[string]any {
 		"status":       a.Status,
 		"last_seen":    a.LastSeen,
 		"capabilities": a.Capabilities,
-		"meta":         a.Meta,
+		"meta":         redactPublicMetadata(a.Meta),
 	}
+}
+
+// redactPublicMetadata removes credentials from agent metadata before it is
+// returned by discovery. Agent transport arguments are operator-supplied and
+// can contain authorization headers even when their enclosing key is benign.
+func redactPublicMetadata(value any) any {
+	switch typed := value.(type) {
+	case map[string]any:
+		redacted := make(map[string]any, len(typed))
+		for key, nested := range typed {
+			if isSensitiveMetadataKey(key) {
+				redacted[key] = "<redacted>"
+				continue
+			}
+			redacted[key] = redactPublicMetadata(nested)
+		}
+		return redacted
+	case []any:
+		redacted := make([]any, len(typed))
+		for index, nested := range typed {
+			redacted[index] = redactPublicMetadata(nested)
+		}
+		return redacted
+	case string:
+		if isSensitiveMetadataValue(typed) {
+			return "<redacted>"
+		}
+	}
+	return value
+}
+
+func isSensitiveMetadataKey(key string) bool {
+	lower := strings.ToLower(key)
+	for _, marker := range []string{"token", "secret", "password", "authorization", "credential", "api_key"} {
+		if strings.Contains(lower, marker) {
+			return true
+		}
+	}
+	return false
+}
+
+func isSensitiveMetadataValue(value string) bool {
+	lower := strings.ToLower(value)
+	if strings.Contains(lower, "authorization:") || strings.Contains(lower, "bearer ") {
+		return true
+	}
+	for _, key := range []string{"token", "secret", "password", "api_key"} {
+		if strings.Contains(lower, key+"=") {
+			return true
+		}
+	}
+	return false
 }
 
 func (s *Server) publicAgentsLocked(r *http.Request) []Agent {
@@ -2536,9 +2609,12 @@ func (s *Server) adminClients(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) managedMCPClientsLocked() []managedMCPToken {
-	clients := make([]managedMCPToken, 0, len(s.managedMCP)+1)
+	clients := make([]managedMCPToken, 0, len(s.managedMCP)+len(s.oauthClients)+1)
 	for _, record := range s.managedMCP {
 		clients = append(clients, record)
+	}
+	for clientID, metadata := range s.oauthClients {
+		clients = append(clients, oauthClientInventory(metadata, clientID))
 	}
 	if s.cfg.CtlToken != "" {
 		clients = append(clients, managedMCPToken{
@@ -2968,15 +3044,37 @@ func (s *Server) oauthRegister(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var req map[string]any
-	_ = readJSON(r, &req)
+	if err := readOAuthRegistrationJSON(r, &req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid_client_metadata", "error_description": err.Error()})
+		return
+	}
+	redirectURIs, err := oauthRedirectURIsFromRequest(req["redirect_uris"])
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid_client_metadata", "error_description": err.Error()})
+		return
+	}
 	clientID := "gptadmin-" + newID()
 	clientSecret := newID()
+	s.mu.Lock()
+	if len(s.oauthClients) >= oauthClientsMaxItems {
+		s.mu.Unlock()
+		writeJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "temporarily_unavailable", "error_description": "OAuth client registry is full"})
+		return
+	}
+	s.oauthClients[clientID] = oauthClientMetadata{RedirectURIs: redirectURIs, CreatedAt: time.Now().Unix()}
+	if err := s.saveOAuthClientsStateLocked(); err != nil {
+		delete(s.oauthClients, clientID)
+		s.mu.Unlock()
+		writeJSON(w, http.StatusInternalServerError, map[string]any{"error": "server_error", "error_description": "failed to persist OAuth client metadata"})
+		return
+	}
+	s.mu.Unlock()
 	writeJSON(w, http.StatusCreated, map[string]any{
 		"client_id":                  clientID,
 		"client_secret":              clientSecret,
 		"client_id_issued_at":        time.Now().Unix(),
 		"client_secret_expires_at":   0,
-		"redirect_uris":              req["redirect_uris"],
+		"redirect_uris":              redirectURIs,
 		"grant_types":                []string{"authorization_code"},
 		"response_types":             []string{"code"},
 		"token_endpoint_auth_method": "none",
@@ -3006,6 +3104,10 @@ func (s *Server) oauthAuthorizeGet(w http.ResponseWriter, r *http.Request) {
 	if !s.allowedRedirect(redirectURI) || !s.allowedResource(resource, r) {
 		s.authAudit("oauth_authorize_denied", r, map[string]any{"reason": "invalid redirect_uri or resource", "redirect_uri": redirectURI, "resource": resource, "form": s.formForAudit(r)})
 		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid_request", "error_description": "invalid redirect_uri or resource"})
+		return
+	}
+	if !s.oauthClientAllowsRedirect(q.Get("client_id"), redirectURI) {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid_request", "error_description": "redirect_uri is not registered for client"})
 		return
 	}
 	hidden := ""
@@ -3043,6 +3145,10 @@ func (s *Server) oauthAuthorizePost(w http.ResponseWriter, r *http.Request) {
 	if !s.allowedRedirect(redirectURI) || !s.allowedResource(resource, r) {
 		s.authAudit("oauth_authorize_denied", r, map[string]any{"reason": "invalid redirect_uri or resource", "redirect_uri": redirectURI, "resource": resource, "form": s.formForAudit(r)})
 		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid_request", "error_description": "invalid redirect_uri or resource"})
+		return
+	}
+	if !s.oauthClientAllowsRedirect(r.Form.Get("client_id"), redirectURI) {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid_request", "error_description": "redirect_uri is not registered for client"})
 		return
 	}
 	code := newID()
@@ -3092,7 +3198,11 @@ func (s *Server) oauthToken(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid_grant", "error_description": "PKCE verification failed"})
 		return
 	}
-	token, err := s.signJWT(map[string]any{"sub": "admin", "scope": data.Scope, "client_id": data.ClientID, "iss": s.origin(r), "aud": resource, "resource": resource, "exp": time.Now().Add(12 * time.Hour).Unix(), "iat": time.Now().Unix()})
+	claims := map[string]any{"sub": "admin", "scope": data.Scope, "client_id": data.ClientID, "iss": s.origin(r), "aud": resource, "resource": resource, "exp": time.Now().Add(12 * time.Hour).Unix(), "iat": time.Now().Unix()}
+	if profileID := s.oauthClientProfileID(data.ClientID); profileID != "" {
+		claims["profile_id"] = profileID
+	}
+	token, err := s.signJWT(claims)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error()})
 		return
@@ -4253,6 +4363,7 @@ func (s *Server) mcpAuth(w http.ResponseWriter, r *http.Request) bool {
 		if claims, err := s.verifyJWT(tok); err == nil {
 			s.authAudit("mcp_auth_ok", r, map[string]any{"auth_kind": "oauth_jwt", "jwt_claims": claims})
 			*r = *requestWithAuthClaims(r, claims)
+			*r = *s.applyAccessProfileContext(r, claims)
 			return true
 		} else {
 			s.authAudit("mcp_auth_denied", r, map[string]any{"reason": err.Error(), "jwt_claims_unverified": decodeJWTClaimsUnverified(tok)})
@@ -4390,6 +4501,9 @@ func (s *Server) verifyJWT(token string) (map[string]any, error) {
 		s.mu.Unlock()
 		if known && record.RevokedAt != 0 {
 			return nil, errors.New("token revoked")
+		}
+		if known && record.ProfileID != "" {
+			claims["profile_id"] = record.ProfileID
 		}
 	}
 	return claims, nil

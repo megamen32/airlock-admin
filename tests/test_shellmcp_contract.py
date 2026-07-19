@@ -465,7 +465,7 @@ def test_shellmcp_contract_mcp_protocol_and_tools(shellmcp_contract: ShellmcpPro
     assert initialized.get("protocolVersion")
     assert initialized.get("serverInfo", {}).get("name")
     assert _header(headers, "MCP-Protocol-Version") == initialized["protocolVersion"]
-    assert _header(headers, "Mcp-Session-Id")
+    assert _header(headers, "Mcp-Session-Id") is None
 
     listed, _ = shellmcp_contract.mcp("tools/list", {}, 11)
     tools = listed.get("tools")
@@ -486,8 +486,8 @@ def test_shellmcp_contract_mcp_protocol_and_tools(shellmcp_contract: ShellmcpPro
     assert result.get("stdout") == "airshell_mcp_contract", executed
 
 
-def test_shellmcp_contract_mcp_resources_and_polling(shellmcp_contract: ShellmcpProcess) -> None:
-    """Expose resources and streamable-HTTP polling metadata through `/mcp`."""
+def test_shellmcp_contract_mcp_resources_and_stateless_get(shellmcp_contract: ShellmcpProcess) -> None:
+    """Expose resources and reject a GET stream when the stateless server offers none."""
     resources, _ = shellmcp_contract.mcp("resources/list", {}, 20)
     listed = resources.get("resources")
     assert isinstance(listed, list)
@@ -499,7 +499,7 @@ def test_shellmcp_contract_mcp_resources_and_polling(shellmcp_contract: Shellmcp
     assert contents[0].get("mimeType") == "application/json"
 
     status, descriptor, headers = shellmcp_contract.request("GET", "/mcp?session_id=contract-session")
-    assert status == 200
-    assert descriptor.get("transport", {}).get("post_path") == "/mcp"
+    assert status == 405
+    assert descriptor.get("error")
     assert _header(headers, "MCP-Protocol-Version")
-    assert _header(headers, "Mcp-Session-Id") == "contract-session"
+    assert _header(headers, "Mcp-Session-Id") is None

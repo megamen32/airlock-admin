@@ -67,6 +67,28 @@ def test_update_prefers_explicit_component_flags_over_stale_files():
     assert "if 'INSTALL_SHELLMCP' in env else" in text
 
 
+def test_cleanup_removes_obsolete_shellmcp_primary_override(monkeypatch, tmp_path):
+    """Updates must stop an old drop-in from splitting Hub and Shell credentials."""
+    systemd_dir = tmp_path / "systemd"
+    dropins = systemd_dir / "shellmcp.service.d"
+    dropins.mkdir(parents=True)
+    obsolete = dropins / "90-go-primary.conf"
+    preserved = dropins / "80-spool-readable.conf"
+    obsolete.write_text("[Service]\nEnvironmentFile=/etc/gptadmin/go-shellmcp-primary.env\n")
+    preserved.write_text("[Service]\nExecStartPre=/usr/bin/true\n")
+
+    monkeypatch.setattr(cli, "IS_MACOS", False)
+    monkeypatch.setattr(cli, "SYSTEMD_DIR", systemd_dir)
+    monkeypatch.setattr(cli, "SYSTEMD_SHELLMCP", "shellmcp.service")
+    monkeypatch.setattr(cli, "BIN_DIR", tmp_path / "bin")
+    monkeypatch.setattr(cli, "CLI_PATH", tmp_path / "bin" / "gptadmin")
+
+    cli._cleanup_obsolete_runtime_files()
+
+    assert not obsolete.exists()
+    assert preserved.exists()
+
+
 def test_update_refreshes_automatic_client_registration_without_autoapprove():
     text = CLI.read_text()
     start = text.index("def cmd_update(args):")

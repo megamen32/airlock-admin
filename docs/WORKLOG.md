@@ -48,6 +48,65 @@ plan is [`PROJECT_PLAN.md`](./PROJECT_PLAN.md).
 
 ## Entries
 
+## 2026-07-19 - Audit standalone ShellMCP host completion - completed
+
+- Milestone: `S0.2` standalone ShellMCP contract slice
+- Owner: Codex with bounded implementation audit and lifecycle review workers
+- Scope: Prove and correct the Go ShellMCP standalone child-host contract for
+  stdio, Streamable HTTP, legacy SSE, optional Hub polling, bounded storage and
+  Mac/Linux deployment.
+- Baseline / red evidence: Runtime tests reproduced duplicate stdio ownership,
+  non-functional legacy SSE, non-persistent HTTP sessions, proprietary inbound
+  GET/session behavior, queue cancellation delay, unbounded child stderr and
+  separate disposable-data allowances. Review then reproduced hung-start and
+  stale multi-waiter lifecycle races.
+- Change: Child protocol sessions now have one cancellable, generation-checked
+  owner; remote transports implement persistent/negotiated sessions and legacy
+  SSE; inbound HTTP is stateless Streamable HTTP; queue cancellation is prompt;
+  ShellMCP-owned spill, outbox, audit and backup files share one budget. Public
+  service/HA templates and standalone documentation now use the installed Go
+  binary and opt-in heartbeat policy.
+- Verification: `go test ./...`, focused race suites, `go vet ./...`, five-way
+  cross-build and Linux standalone black-box smoke passed. Final integrated
+  gates passed both Go suites, Python `110 passed, 2 skipped`, React `17 passed`,
+  lint, production build, secret scan and diff check. Linux, Darwin arm64 and
+  HAOS arm64 runtimes use outbound long-poll with heartbeat disabled and no
+  listener; Hub inventory reports their current identities online.
+- Delivery: Integrated into the single repository commit for this worktree.
+  Hub and local ShellMCP were rebuilt and restarted; the authorized Mac binary,
+  CLI and canonical ShellMCP credential were updated over SSH and launchd was
+  restarted; the HAOS add-on options, binary and container were rebuilt through
+  Supervisor. All four services are active and queue authentication is healthy.
+- Next: None.
+
+## 2026-07-17 - Access profiles and enforced client bindings - completed
+
+- Milestone: `S1.3a`
+- Owner: Codex orchestrating bounded Luna workers
+- Scope: Persist versioned access profiles, bind managed JWT/OAuth clients to a
+  profile, filter their effective MCP tools and reject manually constructed
+  forbidden calls. Preserve reference-only external workspaces and the current
+  transitional authentication path.
+- Baseline / red evidence: The delivered instruction set is versioned, but
+  access remains a global `full`/`readonly` claim; no persisted profile binds a
+  client to explicit targets/tools, and the admin Clients/Auth inventory does
+  not provide the complete profile-aware control flow.
+- Change: Added atomic versioned access-profile persistence, profile-aware JWT
+  and OAuth client bindings, allowlisted target/tool enforcement at discovery
+  and execution boundaries, redacted managed-client inventory, and complete
+  React profile/client/auth flows. External workspaces remain reference-only.
+- Verification: Red persistence, inventory, enforcement and UI tests preceded
+  implementation. Final gates passed Hub and ShellMCP Go suites, Python `110
+  passed, 2 skipped`, React `17 passed`, lint, production build, secret scan and
+  diff check; Hub restart retained the profile contract and current agents
+  re-registered successfully.
+- Delivery: Integrated into the same single repository commit. The production
+  Hub binary was rebuilt and `gptadmin-hub.service` restarted active. React
+  remains source-only until its separately documented production parity gate;
+  `public/admin/` remains the served admin UI.
+- Next: Run the explicit React/public-admin parity gate before replacing the
+  production admin bundle.
+
 ## 2026-07-17 - Admin profile instruction workspace - handed-off
 
 - Milestone: `S1.3a`

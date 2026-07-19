@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/megamen32/gptadmin/go-shellmcp/internal/hub"
+	"github.com/megamen32/gptadmin/go-shellmcp/internal/mcpclient"
 	"github.com/megamen32/gptadmin/go-shellmcp/internal/output"
 	"github.com/megamen32/gptadmin/go-shellmcp/internal/supervisor"
 )
@@ -36,6 +37,18 @@ func TestFromEnvUsesWindowsInstallerPollingContract(t *testing.T) {
 	}
 	if cfg.Addr != "127.0.0.1:25900" {
 		t.Fatalf("installer bind config ignored: Addr=%q", cfg.Addr)
+	}
+}
+
+func TestFromEnvDefaultsToLongPollingWithoutInboundListener(t *testing.T) {
+	t.Setenv("SHELL_QUEUE", "")
+	t.Setenv("SHELLMCP_QUEUE", "")
+	t.Setenv("SHELL_MODE", "")
+	t.Setenv("SHELLMCP_MODE", "")
+
+	cfg := FromEnv()
+	if !cfg.QueueEnabled || cfg.Mode != "long_poll" {
+		t.Fatalf("default transport must be long_poll without a listener: %+v", cfg)
 	}
 }
 
@@ -272,6 +285,89 @@ func TestMCPManagePersistsRemoteServerLifecycle(t *testing.T) {
 	}
 }
 
+func TestMCPManageOwnsOneOnDemandStdioSession(t *testing.T) {
+	dir := t.TempDir()
+	counter := filepath.Join(dir, "starts")
+	script := filepath.Join(dir, "child.sh")
+	body := `#!/bin/sh
+echo x >> "$COUNT_FILE"
+instance=$(wc -l < "$COUNT_FILE" | tr -d ' ')
+while IFS= read -r line; do
+ case "$line" in
+  *'"method":"initialize"'*) printf '%s\n' '{"jsonrpc":"2.0","id":1,"result":{"protocolVersion":"2025-03-26","capabilities":{}}}' ;;
+  *'"method":"notifications/initialized"'*) ;;
+  *'"method":"tools/list"'*) printf '%s\n' "{\"jsonrpc\":\"2.0\",\"id\":2,\"result\":{\"tools\":[{\"name\":\"echo-$instance\",\"inputSchema\":{\"type\":\"object\"}}]}}" ;;
+ esac
+done
+`
+	if err := os.WriteFile(script, []byte(body), 0o700); err != nil {
+		t.Fatal(err)
+	}
+
+	s := New(Config{MCPConfig: filepath.Join(dir, "mcp.json"), SpillDir: t.TempDir()})
+	defer s.Close()
+	if _, err := s.mcpManage(map[string]any{"action": "upsert", "config": map[string]any{
+		"ref": "local", "transport": "stdio", "command": script,
+		"env": map[string]any{"COUNT_FILE": counter}, "enabled": false,
+	}}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.mcpManage(map[string]any{"action": "enable", "ref": "local"}); err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(150 * time.Millisecond)
+	if data, err := os.ReadFile(counter); err == nil {
+		t.Fatalf("enable eagerly started an unconnected process: %q", data)
+	} else if !os.IsNotExist(err) {
+		t.Fatal(err)
+	}
+
+	tools, err := s.callMCPTool(context.Background(), "mcp_tools", map[string]any{"ref": "local"})
+	if err != nil || !strings.Contains(fmt.Sprint(tools["structuredContent"]), "echo-1") {
+		t.Fatalf("first tools=%#v err=%v", tools, err)
+	}
+	status, err := s.mcpManage(map[string]any{"action": "status", "ref": "local"})
+	if err != nil || !mcpRunning(t, status) {
+		t.Fatalf("active status=%#v err=%v", status, err)
+	}
+
+	if _, err := s.mcpManage(map[string]any{"action": "restart", "ref": "local"}); err != nil {
+		t.Fatal(err)
+	}
+	tools, err = s.callMCPTool(context.Background(), "mcp_tools", map[string]any{"ref": "local"})
+	if err != nil || !strings.Contains(fmt.Sprint(tools["structuredContent"]), "echo-2") {
+		t.Fatalf("restarted tools=%#v err=%v", tools, err)
+	}
+	data, err := os.ReadFile(counter)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if starts := strings.Count(string(data), "x"); starts != 2 {
+		t.Fatalf("stdio process starts=%d want exactly two sessions; data=%q", starts, data)
+	}
+
+	if _, err := s.mcpManage(map[string]any{"action": "disable", "ref": "local"}); err != nil {
+		t.Fatal(err)
+	}
+	status, err = s.mcpManage(map[string]any{"action": "status", "ref": "local"})
+	if err != nil || mcpRunning(t, status) {
+		t.Fatalf("disabled status=%#v err=%v", status, err)
+	}
+}
+
+func mcpRunning(t *testing.T, response map[string]any) bool {
+	t.Helper()
+	structured, ok := response["structuredContent"].(map[string]any)
+	if !ok {
+		t.Fatalf("structuredContent type=%T", response["structuredContent"])
+	}
+	status, ok := structured["status"].(mcpclient.RuntimeStatus)
+	if !ok {
+		t.Fatalf("runtime status type=%T", structured["status"])
+	}
+	return status.Running
+}
+
 func TestVersionUsesTransportFeatureNames(t *testing.T) {
 	s := New(Config{Token: "t", Name: "unit-host", LogLimit: 8192, ExecTimeout: 5, SpillDir: t.TempDir()})
 	req := httptest.NewRequest(http.MethodGet, "/version", nil)
@@ -281,6 +377,9 @@ func TestVersionUsesTransportFeatureNames(t *testing.T) {
 		t.Fatalf("version status=%d body=%s", rec.Code, rec.Body.String())
 	}
 	body := rec.Body.String()
+	if strings.Contains(body, `"status":"prototype"`) {
+		t.Fatalf("completed Go runtime still advertises itself as prototype: %s", body)
+	}
 	if strings.Contains(body, `"mcp_http"`) || strings.Contains(body, `"mcp_stdio"`) {
 		t.Fatalf("/version exposed ambiguous MCP feature names: %s", body)
 	}
@@ -289,17 +388,16 @@ func TestVersionUsesTransportFeatureNames(t *testing.T) {
 	}
 }
 
-func TestMCPHTTPPollingTransportDescriptor(t *testing.T) {
+func TestMCPHTTPGetDoesNotAdvertiseProprietaryPolling(t *testing.T) {
 	s := New(Config{Token: "t", Name: "unit-host", LogLimit: 8192, ExecTimeout: 5, SpillDir: t.TempDir(), QueueEnabled: true, Mode: "long_poll"})
 	req := httptest.NewRequest(http.MethodGet, "/mcp?sse=1", nil)
 	req.Header.Set("Authorization", "Bearer t")
-	req.Header.Set("Mcp-Session-Id", "session-test")
 	rec := httptest.NewRecorder()
 	s.Handler().ServeHTTP(rec, req)
-	if rec.Code != 200 || !strings.Contains(rec.Body.String(), "streamable-http-poll") || !strings.Contains(rec.Body.String(), "session-test") {
-		t.Fatalf("bad poll descriptor code=%d body=%s", rec.Code, rec.Body.String())
+	if rec.Code != http.StatusMethodNotAllowed || strings.Contains(rec.Body.String(), "streamable-http-poll") {
+		t.Fatalf("GET code=%d body=%s want standards-safe 405", rec.Code, rec.Body.String())
 	}
-	if rec.Header().Get("MCP-Protocol-Version") == "" || rec.Header().Get("Mcp-Session-Id") != "session-test" {
+	if rec.Header().Get("MCP-Protocol-Version") == "" || rec.Header().Get("Mcp-Session-Id") != "" {
 		t.Fatalf("missing MCP transport headers: %#v", rec.Header())
 	}
 }

@@ -49,7 +49,26 @@ func containsString(values []string, want string) bool {
 	return false
 }
 
+func profileAllowsTarget(r *http.Request, target string) bool {
+	profile, bound := AccessProfileFromRequest(r)
+	if !bound {
+		return true
+	}
+	return containsString(profile.AllowedTargets, target)
+}
+
+func profileAllowsTool(r *http.Request, toolName string) bool {
+	profile, bound := AccessProfileFromRequest(r)
+	if !bound {
+		return true
+	}
+	return containsString(profile.AllowedTools, toolName)
+}
+
 func authorizeToolCall(r *http.Request, target, toolName string) error {
+	if !profileAllowsTarget(r, target) || !profileAllowsTool(r, toolName) {
+		return errors.New("access profile denies this target or tool")
+	}
 	if requestAccessMode(r) != accessModeReadonly {
 		return nil
 	}
@@ -66,8 +85,16 @@ func authorizeToolCall(r *http.Request, target, toolName string) error {
 }
 
 func authorizeFacadeCall(r *http.Request, name string, args map[string]any) error {
+	if !profileAllowsTool(r, name) {
+		return errors.New("access profile denies this facade")
+	}
 	if requestAccessMode(r) != accessModeReadonly {
-		return nil
+		switch name {
+		case "execute", "call_mcp_tool", "callMcpTool":
+			return authorizeToolCall(r, firstString(args, "target", "server_id", "agent_id"), firstString(args, "tool", "tool_name", "name"))
+		default:
+			return nil
+		}
 	}
 	switch name {
 	case "ui", "render_gptadmin_dashboard", "renderGptadminDashboard", "discover", "list_mcp_servers", "listMcpServers", "list_mcp_agents", "listMcpAgents", "schema", "list_mcp_tools", "listMcpTools", "inspect", "inspect_system", "inspectSystem", "job", "get_mcp_job", "getMcpJob":
@@ -81,12 +108,18 @@ func authorizeFacadeCall(r *http.Request, name string, args map[string]any) erro
 
 func appsSDKToolsForRequest(r *http.Request) []map[string]any {
 	tools := appsSDKTools()
-	if requestAccessMode(r) != accessModeReadonly {
+	_, bound := AccessProfileFromRequest(r)
+	if !bound && requestAccessMode(r) != accessModeReadonly {
 		return tools
 	}
 	filtered := make([]map[string]any, 0, len(tools))
 	for _, tool := range tools {
-		if authorizeFacadeCall(r, firstString(tool, "name"), nil) == nil {
+		name := firstString(tool, "name")
+		allowed := profileAllowsTool(r, name)
+		if !bound {
+			allowed = authorizeFacadeCall(r, name, nil) == nil
+		}
+		if allowed {
 			filtered = append(filtered, tool)
 		}
 	}
@@ -94,7 +127,8 @@ func appsSDKToolsForRequest(r *http.Request) []map[string]any {
 }
 
 func toolsForRequest(r *http.Request, target string, tools []map[string]any) []map[string]any {
-	if requestAccessMode(r) != accessModeReadonly {
+	_, bound := AccessProfileFromRequest(r)
+	if !bound && requestAccessMode(r) != accessModeReadonly {
 		return tools
 	}
 	filtered := make([]map[string]any, 0, len(tools))

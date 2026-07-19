@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strconv"
 	"strings"
 	"time"
@@ -54,6 +55,7 @@ type Config struct {
 	HubPublicKeyFile         string
 	HubPublicKey             string
 	AuditLog                 string
+	StorageLimitBytes        int64
 	NonceTTL                 time.Duration
 	PreserveFileMetadata     bool
 	PreserveMetadataMaxFiles int
@@ -77,8 +79,13 @@ func FromEnv() Config {
 	hbInt, _ := strconv.Atoi(env("HB_INTERVAL_S", "3600"))
 	qTimeout, _ := strconv.Atoi(env("QUEUE_LONG_POLL_TIMEOUT_S", "55"))
 	mode := env("SHELL_MODE", env("SHELLMCP_MODE", ""))
+	queueDefault := "1"
+	if mode == "webhook" {
+		queueDefault = "0"
+	}
+	queueEnabled := truthy(env("SHELL_QUEUE", env("SHELLMCP_QUEUE", queueDefault)))
 	if mode == "" {
-		if truthy(env("SHELL_QUEUE", env("SHELLMCP_QUEUE", "0"))) {
+		if queueEnabled {
 			mode = "long_poll"
 		} else {
 			mode = "webhook"
@@ -108,7 +115,7 @@ func FromEnv() Config {
 	if sshKeyPath == "" {
 		sshKeyPath = os.Getenv("SSH_KEY")
 	}
-	return Config{Addr: host + ":" + port, Token: env("SHELL_TOKEN", env("SHELLMCP_TOKEN", "srv_secret")), LogLimit: limit, ExecTimeout: timeout, SpillDir: spill, Name: name, BaseURL: baseURL, HubURL: strings.TrimRight(env("HUB_URL", ""), "/"), IdentityDir: env("SHELL_IDENTITY_DIR", env("SHELLMCP_IDENTITY_DIR", "/etc/gptadmin")), HeartbeatEnabled: truthy(env("SHELL_HEARTBEAT", env("SHELLMCP_HEARTBEAT", "0"))), HeartbeatInterval: normalizeHeartbeatInterval(hbInt), QueueEnabled: truthy(env("SHELL_QUEUE", env("SHELLMCP_QUEUE", "0"))), QueueTimeout: qTimeout, Mode: mode, OutboxDir: outbox, DefaultUser: defaultUser, DefaultHome: defaultHome, DefaultCwd: defaultCwd, InspectRoots: inspectRoots, HubPublicKeyFile: env("HUB_PUBLIC_KEY_FILE", filepath.Join(env("SHELL_IDENTITY_DIR", env("SHELLMCP_IDENTITY_DIR", "/etc/gptadmin")), "hub_ed25519.pub")), HubPublicKey: env("HUB_PUBLIC_KEY", ""), AuditLog: auditLogPath, NonceTTL: nonceTTL, PreserveFileMetadata: preserve, PreserveMetadataMaxFiles: preserveMax, MCPConfig: mcpConfig, PollInterval: pollInterval, SSHHost: sshHost, SSHPort: sshPort, SSHUser: sshUser, SSHPassword: sshPassword, SSHKeyPath: sshKeyPath}
+	return Config{Addr: host + ":" + port, Token: env("SHELL_TOKEN", env("SHELLMCP_TOKEN", "srv_secret")), LogLimit: limit, ExecTimeout: timeout, SpillDir: spill, Name: name, BaseURL: baseURL, HubURL: strings.TrimRight(env("HUB_URL", ""), "/"), IdentityDir: env("SHELL_IDENTITY_DIR", env("SHELLMCP_IDENTITY_DIR", "/etc/gptadmin")), HeartbeatEnabled: truthy(env("SHELL_HEARTBEAT", env("SHELLMCP_HEARTBEAT", "0"))), HeartbeatInterval: normalizeHeartbeatInterval(hbInt), QueueEnabled: queueEnabled, QueueTimeout: qTimeout, Mode: mode, OutboxDir: outbox, DefaultUser: defaultUser, DefaultHome: defaultHome, DefaultCwd: defaultCwd, InspectRoots: inspectRoots, HubPublicKeyFile: env("HUB_PUBLIC_KEY_FILE", filepath.Join(env("SHELL_IDENTITY_DIR", env("SHELLMCP_IDENTITY_DIR", "/etc/gptadmin")), "hub_ed25519.pub")), HubPublicKey: env("HUB_PUBLIC_KEY", ""), AuditLog: auditLogPath, NonceTTL: nonceTTL, PreserveFileMetadata: preserve, PreserveMetadataMaxFiles: preserveMax, MCPConfig: mcpConfig, PollInterval: pollInterval, SSHHost: sshHost, SSHPort: sshPort, SSHUser: sshUser, SSHPassword: sshPassword, SSHKeyPath: sshKeyPath}
 }
 
 func splitPathList(value string) []string {
@@ -201,6 +208,7 @@ type Server struct {
 	preserveMax  int
 	sshClient    *sshexec.Client
 	childMCP     *mcpclient.Client
+	storageLimit int64
 }
 
 func New(cfg Config) *Server {
@@ -224,7 +232,13 @@ func New(cfg Config) *Server {
 		hc = hub.New(cfg.HubURL, ident, cfg.Token)
 	}
 
-	auditLog, auditErr := audit.New(cfg.AuditLog)
+	var auditLog *audit.Logger
+	var auditErr error
+	if cfg.StorageLimitBytes > 0 {
+		auditLog, auditErr = audit.NewWithLimit(cfg.AuditLog, cfg.StorageLimitBytes)
+	} else {
+		auditLog, auditErr = audit.New(cfg.AuditLog)
+	}
 	if auditErr != nil {
 		log.Printf("audit logger disabled: %v", auditErr)
 	}
@@ -268,7 +282,13 @@ func New(cfg Config) *Server {
 		}
 	}
 
-	return &Server{
+	childMCP := mcpclient.New()
+	childMCP.SetAgentValidator(func(candidate supervisor.Agent) bool {
+		current, err := mgr.Agent(candidate.Ref)
+		return err == nil && current.Enabled && reflect.DeepEqual(current, candidate)
+	})
+
+	server := &Server{
 		cfg:          cfg,
 		jobs:         job.New(cfg.LogLimit),
 		identity:     ident,
@@ -279,21 +299,51 @@ func New(cfg Config) *Server {
 		preserveMeta: cfg.PreserveFileMetadata,
 		preserveMax:  maxFiles,
 		sshClient:    sshClient,
-		childMCP:     mcpclient.New(),
+		childMCP:     childMCP,
+		storageLimit: cfg.StorageLimitBytes,
 	}
+	if auditLog != nil {
+		auditLog.SetAfterWrite(func() {
+			protected := map[string]bool{}
+			if cfg.AuditLog != "" {
+				protected[cfg.AuditLog] = true
+			}
+			_ = server.enforceStorage(protected)
+		})
+	}
+	return server
 }
 
-// Close releases the audit logger and best-effort stops every supervisor
-// agent. Safe to call multiple times and idempotent w.r.t. nil resources.
+func (s *Server) storageRoots() []string {
+	roots := make([]string, 0, 4)
+	for _, root := range []string{s.cfg.SpillDir, s.cfg.OutboxDir, s.cfg.AuditLog} {
+		if strings.TrimSpace(root) != "" {
+			roots = append(roots, root)
+		}
+	}
+	if s.cfg.DefaultHome != "" || os.Getenv("SHELLMCP_FILE_BACKUP_ROOT") != "" || os.Getenv("GPTADMIN_FILE_BACKUP_ROOT") != "" {
+		roots = append(roots, s.fileBackupRoot())
+	}
+	return roots
+}
+
+func (s *Server) enforceStorage(protected map[string]bool) error {
+	if s.storageLimit > 0 {
+		_, err := storagebudget.EnforceRootsLimit(s.storageRoots(), s.storageLimit, protected)
+		return err
+	}
+	_, err := storagebudget.EnforceRoots(s.storageRoots(), protected)
+	return err
+}
+
+// Close releases server resources and active child MCP protocol sessions.
+// Safe to call multiple times and idempotent w.r.t. nil resources.
 func (s *Server) Close() error {
 	if s.auditLog != nil {
 		_ = s.auditLog.Close()
 	}
 	if s.childMCP != nil {
 		s.childMCP.CloseAll()
-	}
-	if s.supervisor != nil {
-		_ = s.supervisor.KillAll()
 	}
 	if s.sshClient != nil {
 		_ = s.sshClient.Close()
@@ -329,7 +379,6 @@ func (s *Server) ListenAndServeContext(ctx context.Context) error {
 		go s.queueLoop(ctx)
 	}
 	s.startUpdateLoop(ctx)
-	s.startAutoStartAgents()
 	if s.cfg.QueueEnabled {
 		log.Printf("shellmcp-go polling mode name=%s heartbeat=%v queue=%v (no local listener)", s.cfg.Name, s.cfg.HeartbeatEnabled, s.cfg.QueueEnabled)
 		<-ctx.Done()
@@ -411,7 +460,7 @@ func (s *Server) authorized(r *http.Request, body []byte) bool {
 	return true
 }
 func (s *Server) version(w http.ResponseWriter, _ *http.Request) {
-	writeJSON(w, 200, map[string]any{"component": "shellmcp-go", "build_version": parseBuildVersion(BuildVersion), "git_commit": GitCommit, "status": "prototype", "features": []string{"exec", "exec_live", "jobs", "file", "file_backup", "heartbeat", "queue", "real_mcp", "mcp_transport_http", "mcp_transport_stdio"}})
+	writeJSON(w, 200, map[string]any{"component": "shellmcp-go", "build_version": parseBuildVersion(BuildVersion), "git_commit": GitCommit, "status": "ready", "features": []string{"exec", "exec_live", "jobs", "file", "file_backup", "heartbeat", "queue", "real_mcp", "mcp_transport_http", "mcp_transport_stdio"}})
 }
 func (s *Server) systemInfo(w http.ResponseWriter, _ *http.Request) { writeJSON(w, 200, system.Get()) }
 func (s *Server) health(w http.ResponseWriter, _ *http.Request) {
@@ -426,7 +475,7 @@ func (s *Server) capabilities(w http.ResponseWriter, _ *http.Request) {
 		"file_backup":    true,
 		"go_shellmcp":    true,
 		"real_mcp":       true,
-		"mcp_transports": []string{"stdio", "streamable-http-poll"},
+		"mcp_transports": []string{"stdio", "streamable-http"},
 		"build_version":  parseBuildVersion(BuildVersion),
 		"git_commit":     GitCommit,
 		"mcp_agents":     s.mcpAgentsForCapabilities(),
@@ -463,6 +512,7 @@ func (s *Server) applyDefaults(req *shell.Request) {
 // existing local shell.Run path is used. Both branches produce the
 // same shell.Result so the JSON response shape is unchanged.
 func (s *Server) runShell(ctx context.Context, req shell.Request) shell.Result {
+	defer func() { _ = s.enforceStorage(nil) }()
 	if err := shell.ImplicitRootExecutionError(req); err != nil {
 		return shell.Result{ReturnCode: -1, Error: err.Error()}
 	}
@@ -486,6 +536,7 @@ func (s *Server) runShell(ctx context.Context, req shell.Request) shell.Result {
 // shell.RunLive path emits (stdout/stderr "chunk" events + final
 // "exit") so the SSE / NDJSON response shape is unchanged.
 func (s *Server) runShellStream(ctx context.Context, req shell.Request, emit func(shell.Event)) shell.Result {
+	defer func() { _ = s.enforceStorage(nil) }()
 	if err := shell.ImplicitRootExecutionError(req); err != nil {
 		return shell.Result{ReturnCode: -1, Error: err.Error()}
 	}
@@ -763,8 +814,17 @@ func (s *Server) queueLoop(ctx context.Context) {
 		s.flushOutbox(ctx)
 		q, ok, err := s.hub.PollQueue(ctx, s.newBeat(), s.cfg.QueueTimeout)
 		if err != nil {
+			if ctx.Err() != nil {
+				return
+			}
 			log.Printf("queue poll failed: %v", err)
-			time.Sleep(5 * time.Second)
+			retry := time.NewTimer(5 * time.Second)
+			select {
+			case <-ctx.Done():
+				retry.Stop()
+				return
+			case <-retry.C:
+			}
 			continue
 		}
 		if ok {
@@ -838,7 +898,7 @@ func (s *Server) spoolOutbox(jobID string, payload hub.TaskResult, cause error) 
 	}
 	b, _ := json.Marshal(entry)
 	_ = os.WriteFile(path, b, 0o600)
-	_, _ = storagebudget.Enforce(s.cfg.SpillDir, map[string]bool{path: true})
+	_ = s.enforceStorage(nil)
 }
 
 // computeOutboxBackoff returns the wait time for the given attempt number
