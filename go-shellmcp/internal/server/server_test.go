@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -62,6 +63,32 @@ func TestQueueTransportNeverNeedsLocalListener(t *testing.T) {
 	if !New(Config{QueueEnabled: false}).needsLocalListener() {
 		t.Fatal("non-queue transport must retain its local listener")
 	}
+}
+
+func TestServerCloseTerminatesSupervisorChildren(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("uses the POSIX shell available on deployed Linux and macOS hosts")
+	}
+	s := New(Config{MCPConfig: filepath.Join(t.TempDir(), "mcp.json"), SpillDir: t.TempDir()})
+	defer s.supervisor.KillAll()
+	if err := s.supervisor.Upsert(supervisor.Agent{Ref: "slow", Command: "/bin/sh", Args: []string{"-c", "sleep 30"}, Enabled: true}); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.supervisor.Start("slow"); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Close(); err != nil {
+		t.Fatal(err)
+	}
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		status, err := s.supervisor.Status("slow")
+		if err == nil && !status.Running {
+			return
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	t.Fatal("supervisor child remained alive after Server.Close")
 }
 
 func TestQueueShellExecPreservesExplicitRunAsUser(t *testing.T) {

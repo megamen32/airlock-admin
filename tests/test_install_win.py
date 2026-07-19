@@ -4,6 +4,7 @@ from pathlib import Path
 
 
 INSTALLER = Path(__file__).resolve().parents[1] / "deploy" / "install_win.ps1"
+PUBLIC_INSTALLER = Path(__file__).resolve().parents[1] / "public" / "install_win.ps1"
 
 
 def test_windows_installer_writes_canonical_go_shellmcp_environment() -> None:
@@ -16,3 +17,8 @@ def test_windows_installer_writes_canonical_go_shellmcp_environment() -> None:
     assert "$env:SHELLMCP_HOST = '$ShellmcpBind'" in script
     assert "QUEUE_URL=1" not in script
     assert "$env:QUEUE_URL = '1'" not in script
+
+
+def test_public_windows_installer_matches_the_canonical_go_installer() -> None:
+    """The checked-in public installer must not retain a PyInstaller-era contract."""
+    assert PUBLIC_INSTALLER.read_bytes() == INSTALLER.read_bytes()

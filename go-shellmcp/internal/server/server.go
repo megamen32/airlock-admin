@@ -339,16 +339,27 @@ func (s *Server) enforceStorage(protected map[string]bool) error {
 // Close releases server resources and active child MCP protocol sessions.
 // Safe to call multiple times and idempotent w.r.t. nil resources.
 func (s *Server) Close() error {
+	var closeErr error
 	if s.auditLog != nil {
-		_ = s.auditLog.Close()
+		closeErr = s.auditLog.Close()
 	}
 	if s.childMCP != nil {
 		s.childMCP.CloseAll()
 	}
-	if s.sshClient != nil {
-		_ = s.sshClient.Close()
+	// The supervisor owns MCP child processes independently of active client
+	// sessions. Stop them explicitly so a service restart cannot hang until
+	// systemd/launchd escalates the parent process timeout.
+	if s.supervisor != nil {
+		if err := s.supervisor.KillAll(); err != nil && closeErr == nil {
+			closeErr = err
+		}
 	}
-	return nil
+	if s.sshClient != nil {
+		if err := s.sshClient.Close(); err != nil && closeErr == nil {
+			closeErr = err
+		}
+	}
+	return closeErr
 }
 
 func (s *Server) Handler() http.Handler {

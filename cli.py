@@ -150,7 +150,7 @@ else:
         str((USER_HOME / '.local' / 'state' / 'gptadmin' / 'logs') if IS_USER_INSTALL else Path('/var/log/gptadmin'))
     )).expanduser()
     SYSTEMD_HUB   = 'gptadmin-hub.service'
-    SYSTEMD_SHELLMCP = 'gptadmin-shellmcp.service'
+    SYSTEMD_SHELLMCP = 'shellmcp.service'
     SYSTEMD_FRPC  = 'gptadmin-tunnel-frpc.service'
     SYSTEMD_CLOUDFLARED = 'gptadmin-cloudflared.service'
     SYSTEMD_AUTO_UPDATE = 'gptadmin-auto-update.service'
@@ -663,34 +663,16 @@ def install_component_from_pkg(pkg_tgz: Path, component: str):
 # ===== Service management =====
 
 if IS_MACOS:
-    def _mac_python() -> str:
-        candidates = [
-            os.environ.get('GPTADMIN_PYTHON'),
-            '/Library/Frameworks/Python.framework/Versions/3.11/bin/python3',
-            '/opt/homebrew/bin/python3',
-            '/usr/local/bin/python3',
-            sys.executable,
-            '/usr/bin/python3',
-        ]
-        for c in candidates:
-            if c and Path(c).exists():
-                return c
-        return 'python3'
-
     def _plist_path(label: str) -> Path:
         return SERVICES_DIR / f'{label}.plist'
 
     def _wrapper_script(name: str, bin_path: Path) -> Path:
         LOG_DIR.mkdir(parents=True, exist_ok=True)
         script = BIN_DIR / f'run_{name}.sh'
-        if name == 'shellmcp' and not _binary_looks_native(bin_path):
-            exec_line = f'PYTHONPATH={INSTALL_DIR}/client${{PYTHONPATH:+:$PYTHONPATH}} exec {_mac_python()} {bin_path}'
-        else:
-            exec_line = f'exec {bin_path}'
         script.write_text(
             f'#!/bin/sh\n'
             f'set -a; [ -f {ENV_FILE} ] && . {ENV_FILE}; set +a\n'
-            f'{exec_line}\n'
+            f'exec {bin_path}\n'
         )
         os.chmod(script, 0o755)
         return script
@@ -2176,7 +2158,13 @@ def _mcp_go_supervisor_enabled() -> bool:
         or os.environ.get('GPTADMIN_MCP_AGENTS_DIR')
         or env.get('GPTADMIN_MCP_AGENTS_DIR')
     )
-    return bool(config and config.strip())
+    if config and config.strip():
+        return True
+    # Go-only upgrades may predate SHELLMCP_MCP_CONFIG in gptadmin.env. The
+    # installed native binary is authoritative; falling back to standalone
+    # Python relays here recreates duplicate services on every `mcp install`.
+    binary = BIN_DIR / 'shellmcp'
+    return binary.is_file() and _binary_looks_native(binary)
 
 
 def _mcp_slug(name: str) -> str:
@@ -2245,23 +2233,52 @@ def _mcp_write_agent_config(name: str, cfg: dict) -> Path:
 
 
 def _mcp_sync_go_supervisor_config(cfg: dict) -> None:
-    """Make Go ShellMCP own MCP relay children in one aggregate registry."""
+    """Project real MCP children into the aggregate Go ShellMCP registry."""
     agents = []
-    relay = INSTALL_DIR / 'agents' / 'generic_stdio_mcp_relay' / 'generic_stdio_mcp_relay.py'
-    python = sys.executable or 'python3'
     for name, server in sorted((cfg.get('mcpServers') or {}).items()):
         if not server.get('enabled', True):
             continue
-        agent_path = MCP_AGENTS_DIR / f'{_mcp_slug(name)}.json'
-        agents.append({
+        agent = {
             'ref': _mcp_agent_id(name, server),
             'name': str(server.get('name') or name),
-            'command': python,
-            'args': [str(relay), '--agent-config', str(agent_path)],
+            'command': str(server.get('command') or ''),
+            'args': [str(value) for value in server.get('args', [])],
+            'env': {str(key): str(value) for key, value in (server.get('env') or {}).items()},
             'cwd': str(server.get('cwd') or '/'),
+            'user': str(server.get('run_as_user') or server.get('user') or ''),
             'enabled': True,
-        })
+        }
+        if server.get('url'):
+            agent['url'] = str(server['url'])
+        if server.get('headers'):
+            agent['headers'] = {str(key): str(value) for key, value in server['headers'].items()}
+        transport = str(server.get('transport') or '').strip().lower()
+        if transport in {'stdio', 'streamable-http', 'sse'}:
+            agent['transport'] = transport
+        agents.append(agent)
     _json_write(MCP_SUPERVISOR_CONFIG, agents)
+
+
+def _mcp_retire_legacy_relay_services(cfg: dict, names: list[str], backend: str | None = None) -> None:
+    """Stop and remove standalone Python relay services superseded by Go."""
+    if _mcp_manager_exists():
+        for name in names:
+            if name not in (cfg.get('mcpServers') or {}):
+                continue
+            agent_config = MCP_AGENTS_DIR / f'{_mcp_slug(name)}.json'
+            run(_mcp_manager_cmd('uninstall', agent_config, backend), check=False)
+    if IS_MACOS:
+        for unit_path in sorted(SERVICES_DIR.glob('com.gptadmin.mcp.*.plist')):
+            svc_disable_stop(unit_path.stem, unit_path)
+            unit_path.unlink(missing_ok=True)
+    elif os.name != 'nt':
+        removed = False
+        for unit_path in sorted(SYSTEMD_DIR.glob('gptadmin-mcp-*.service')):
+            svc_disable_stop(unit_path.name, unit_path)
+            unit_path.unlink(missing_ok=True)
+            removed = True
+        if removed:
+            svc_daemon_reload()
 
 
 def _mcp_refresh_generated_configs(cfg: dict) -> None:
@@ -2525,8 +2542,18 @@ def cmd_mcp_install(args):
     if not names:
         die('no MCP servers configured')
     if _mcp_go_supervisor_enabled():
+        env_updates = {'SHELLMCP_MCP_CONFIG': str(MCP_SUPERVISOR_CONFIG)}
+        if IS_MACOS:
+            migrated_env = env_read()
+            ensure_shellmcp_default_user(migrated_env)
+            for key in ('SHELLMCP_DEFAULT_USER', 'SHELLMCP_DEFAULT_HOME', 'SHELLMCP_DEFAULT_CWD'):
+                if migrated_env.get(key):
+                    env_updates[key] = migrated_env[key]
+        env_set_many(env_updates)
         _mcp_refresh_generated_configs(cfg)
-        print('ShellMCP supervisor manages MCP relay services; standalone install skipped')
+        _mcp_retire_legacy_relay_services(cfg, names, args.backend)
+        svc_restart(svc_shellmcp_name(), UNIT_PATH_SHELLMCP)
+        print('ShellMCP Go supervisor owns MCP servers; legacy relay services removed')
         return
     for name in names:
         if not (cfg.get('mcpServers') or {}).get(name, {}).get('enabled', True):

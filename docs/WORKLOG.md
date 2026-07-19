@@ -48,6 +48,39 @@ plan is [`PROJECT_PLAN.md`](./PROJECT_PLAN.md).
 
 ## Entries
 
+## 2026-07-19 - Remove Python MCP transport runtimes - handed-off
+
+- Milestone: `S0.2` Go-only ShellMCP runtime
+- Owner: Codex with bounded Mac, Windows and Android audit workers
+- Scope: Replace Python generic MCP relay services with direct Go ShellMCP child
+  ownership, remove production-capable Python ShellMCP launch surfaces, and
+  restore live Linux, Mac, Windows and Android agents.
+- Baseline / red evidence: Server-100 has eleven enabled per-agent systemd
+  services whose effective command is the Python generic relay; ten are active
+  and one failed. The generated Go supervisor registry launches the same Python
+  relay instead of the configured child command. Android is stale with no
+  ShellMCP process; both Windows identities are stale. Mac and server-100 are
+  currently online through Go queue mode with no listener.
+- Change: ShellMCP now writes a direct Go child registry, retires Linux and
+  macOS orphan relay units, uses the canonical service name, persists the Mac
+  ordinary-user identity, terminates child MCP processes during restart, and
+  ships no Python relay in release archives. Stale duplicate CLI and public
+  Windows installer artifacts were removed or synced.
+- Verification: RED regressions covered nested Python relay ownership, legacy
+  unit cleanup, Mac orphan plists/default user, Windows installer drift and
+  long-poll listeners. Both Go suites passed; Python passed `123 passed, 2
+  skipped`. Release builds for ShellMCP, Windows and Android contain no Python
+  runtime. Server-100 exposed all seven enabled child schemas through Go;
+  a restart with a live child completed in the same second; Mac and Android
+  completed real Hub calls with no listener or Python relay.
+- Delivery: Server-100, Mac and Android runtime migrations deployed and
+  restarted. Release build 128 is prepared for the same commit and push.
+- Next: Reinstall one reachable Windows host and record
+  `online -> tools/list -> harmless call` acceptance.
+- Blocker: Both registered Windows hosts remain stale and this environment has
+  no SSH or WinRM route to either host; repository, artifact and CI evidence
+  cannot substitute for a live Windows call.
+
 ## 2026-07-19 - Audit standalone ShellMCP host completion - completed
 
 - Milestone: `S0.2` standalone ShellMCP contract slice

@@ -118,7 +118,6 @@ gptadmin_security.py    # auth, OAuth, token validation
 cli.py                  # `gptadmin` CLI (setup, tunnel, status, logs)
 telegram_logs_bot.py    # optional Telegram alerts
 go-shellmcp/            # primary shell agent (Go) — runs on target machines
-client/                 # legacy Python shell agent (compat)
 public/                 # OpenAPI schema, install scripts, mcp-bridge.user.js
 deploy/                 # install scripts, systemd, nginx configs
 tests/                  # test_hub.py, test_rootd.py
@@ -138,7 +137,7 @@ pip install fastapi uvicorn requests
 CTL_TOKEN=your-token go run ./go-hub/cmd/gptadmin-hub
 
 # agent on a target machine (terminal 2)
-SHELLMCP_TOKEN=agent-token HUB_URL=http://127.0.0.1:25900 python client/shellmcp.py
+SHELLMCP_TOKEN=agent-token HUB_URL=http://127.0.0.1:9001 go run ./go-shellmcp/cmd/shellmcp-go
 
 # smoke test (terminal 3)
 python tests/test_hub.py
@@ -191,4 +190,3 @@ GPTAdmin can be used as a secured gateway in front of any registered MCP server.
 - an OpenAPI Action schema for Custom GPTs: `https://your-hub/server/{slug}/actions/openapi.yaml`.
 
 Use this when a GPT should see only one tool/server, for example OpenMemory, instead of the full GPTAdmin relay surface. The OpenAPI schema is generated automatically from that server's MCP `tools/list` response. See [MCP Proxy Relay](./docs/MCP_PROXY_RELAY.md).
-

@@ -272,11 +272,8 @@ package_hub_platform_binaries() {
 }
 
 copy_support_payloads() {
-  step "Copy generic stdio MCP agents"
+  # Remove artifacts left by pre-Go releases; Python relay code is test/migration-only.
   rm -rf "$ART_DIR/agents"
-  mkdir -p "$ART_DIR/agents"
-  cp -a agents/generic_stdio_mcp_relay "$ART_DIR/agents/"
-
   step "Copy source payloads"
   rm -rf "$ART_DIR/hub_source" "$ART_DIR/client"
   mkdir -p "$ART_DIR/hub_source" "$ART_DIR/client"
@@ -295,7 +292,7 @@ archive_component_hub() {
 archive_component_shellmcp() {
   step "Archive: gptadmin-shellmcp.tar.gz"
   build_go_shellmcp_cross_platforms
-  (cd "$ART_DIR" && tar -czf gptadmin-shellmcp.tar.gz.tmp.$$ shellmcp go-shellmcp cli agents client && mv -f gptadmin-shellmcp.tar.gz.tmp.$$ gptadmin-shellmcp.tar.gz)
+  (cd "$ART_DIR" && tar -czf gptadmin-shellmcp.tar.gz.tmp.$$ shellmcp go-shellmcp cli client && mv -f gptadmin-shellmcp.tar.gz.tmp.$$ gptadmin-shellmcp.tar.gz)
   sha256sum "$ART_DIR/gptadmin-shellmcp.tar.gz" > "$ART_DIR/gptadmin-shellmcp.sha256"
   python3 - <<PY
 import json, pathlib
@@ -304,7 +301,7 @@ pathlib.Path('$ART_DIR/gptadmin-shellmcp.json').write_text(json.dumps({
   'component': 'shellmcp', 'build_version': int('$BUILD_VERSION'), 'build_ts': '$BUILD_TS',
   'git_commit': '$GIT_COMMIT', 'platform': 'linux', 'arch': 'x86_64',
   'artifact_type': 'binary-runtime+source',
-  'runtime_payload': ['go-shellmcp/linux_amd64/shellmcp-go', 'cli', 'agents/generic_stdio_mcp_relay', 'client'],
+  'runtime_payload': ['go-shellmcp/linux_amd64/shellmcp-go', 'cli', 'client'],
   'source_payload': ['client/gptadmin_security.py', 'client/gptadmin_build_info.py'],
   'sha256': sha, 'url': '/gptadmin-shellmcp.tar.gz'
 }, ensure_ascii=False, indent=2) + '\n')
@@ -313,7 +310,7 @@ PY
 }
 archive_all() {
   step "Archive: gptadmin.tar.gz"
-  (cd "$ART_DIR" && tar -czf gptadmin.tar.gz.tmp.$$ shellmcp gptadmin_hub cli agents hub_source client && mv -f gptadmin.tar.gz.tmp.$$ gptadmin.tar.gz)
+  (cd "$ART_DIR" && tar -czf gptadmin.tar.gz.tmp.$$ shellmcp gptadmin_hub cli hub_source client && mv -f gptadmin.tar.gz.tmp.$$ gptadmin.tar.gz)
   echo "built: $ART_DIR/gptadmin.tar.gz"
 }
 
@@ -332,7 +329,7 @@ make_platform_archive() {
     echo "WARN: skip $out: missing $ART_DIR/gptadmin_hub/$hub_tag"
     rm -rf "$tmp"; return 0
   fi
-  for d in cli agents hub_source client; do [[ -d "$ART_DIR/$d" ]] && cp -a "$ART_DIR/$d" "$tmp/"; done
+  for d in cli hub_source client; do [[ -d "$ART_DIR/$d" ]] && cp -a "$ART_DIR/$d" "$tmp/"; done
   if [[ -d "$ART_DIR/go-shellmcp/${platform}_${arch}" ]]; then
     mkdir -p "$tmp/go-shellmcp/${platform}_${arch}" "$tmp/shellmcp/${platform}_${arch}"
     cp -a "$ART_DIR/go-shellmcp/${platform}_${arch}/." "$tmp/go-shellmcp/${platform}_${arch}/"
