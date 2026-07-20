@@ -305,6 +305,9 @@ def env_set_many(upd: dict):
 _PERSISTENT_AUTH_KEYS = frozenset({
     'CTL_TOKEN',
     'SHELLMCP_TOKEN',
+    'SHELL_TOKEN',
+    'ROOTD_TOKEN',
+    'ROOTD_UPDATE_TOKEN',
     'ADMIN_PASSWORD',
     'OAUTH_CLIENT_SECRET',
     'MCP_BRIDGE_KEY',
@@ -631,8 +634,11 @@ def _cleanup_obsolete_runtime_files():
         # leaving Hub and ShellMCP on different token sources after rotation.
         # The canonical unit now reads only gptadmin.env; preserve unrelated
         # drop-ins such as spool permissions and auto-update settings.
-        obsolete_dropin = SYSTEMD_DIR / f'{SYSTEMD_SHELLMCP}.d' / '90-go-primary.conf'
-        obsolete_dropin.unlink(missing_ok=True)
+        dropin_dir = SYSTEMD_DIR / f'{SYSTEMD_SHELLMCP}.d'
+        for obsolete_dropin in dropin_dir.glob('*go-primary*.conf'):
+            # Older installers used different numeric prefixes; any matching
+            # override can replace the canonical gptadmin.env credential.
+            obsolete_dropin.unlink(missing_ok=True)
     for directory in (BIN_DIR, CLI_PATH.parent):
         if not directory.exists():
             continue

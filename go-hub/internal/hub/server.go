@@ -1140,9 +1140,20 @@ func (s *Server) heartbeat(w http.ResponseWriter, r *http.Request) {
 	if transport == "" {
 		transport = "webhook"
 	}
+	identity := shellIdentityFromMap(meta)
 	s.mu.Lock()
-	s.agents[agentID] = &Agent{AgentID: agentID, Name: "Shell: " + name, Kind: "virtual_shell", Transport: transport, Status: "online", LastSeen: now, Capabilities: []string{"shell", "system", "tasks", "logs"}, Meta: meta}
-	s.addAuditLocked("heartbeat", map[string]any{"agent_id": agentID, "transport": transport})
+	approved := s.shellIdentityApprovedLocked(agentID, identity)
+	meta["approved"] = approved
+	status := "online"
+	if !approved {
+		status = "awaiting_approval"
+	}
+	s.agents[agentID] = &Agent{AgentID: agentID, Name: "Shell: " + name, Kind: "virtual_shell", Transport: transport, Status: status, LastSeen: now, Capabilities: []string{"shell", "system", "tasks", "logs"}, Meta: meta}
+	auditName := "heartbeat"
+	if !approved {
+		auditName = "heartbeat_awaiting_approval"
+	}
+	s.addAuditLocked(auditName, map[string]any{"agent_id": agentID, "transport": transport})
 	if err := s.saveRegistryStateLocked(); err != nil {
 		log.Printf("registry state save failed: %v", err)
 	}
@@ -1150,7 +1161,11 @@ func (s *Server) heartbeat(w http.ResponseWriter, r *http.Request) {
 		log.Printf("failover state save failed: %v", err)
 	}
 	s.mu.Unlock()
-	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "agent_id": agentID, "status": "registered"})
+	responseStatus := "registered"
+	if !approved {
+		responseStatus = "awaiting_approval"
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "agent_id": agentID, "status": responseStatus})
 }
 
 func (s *Server) queue(w http.ResponseWriter, r *http.Request) {
@@ -1177,9 +1192,15 @@ func (s *Server) pollShellQueue(w http.ResponseWriter, r *http.Request, name str
 	deadline := time.Now().Add(timeout)
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.touchShellPollLocked(name, r)
+	if !s.touchShellPollLocked(name, r) {
+		writeJSON(w, http.StatusOK, map[string]any{"server_id": "shell:" + name, "status": "awaiting_approval"})
+		return
+	}
 	for {
-		s.touchShellPollLocked(name, r)
+		if !s.touchShellPollLocked(name, r) {
+			writeJSON(w, http.StatusOK, map[string]any{"server_id": "shell:" + name, "status": "awaiting_approval"})
+			return
+		}
 		if q := s.shellQueues[name]; len(q) > 0 {
 			id := q[0]
 			s.shellQueues[name] = q[1:]
@@ -1201,9 +1222,9 @@ func (s *Server) pollShellQueue(w http.ResponseWriter, r *http.Request, name str
 	}
 }
 
-func (s *Server) touchShellPollLocked(name string, r *http.Request) {
+func (s *Server) touchShellPollLocked(name string, r *http.Request) bool {
 	if name == "" {
-		return
+		return false
 	}
 	now := nowFloat()
 	agentID := "shell:" + name
@@ -1228,8 +1249,14 @@ func (s *Server) touchShellPollLocked(name string, r *http.Request) {
 			meta[key] = v
 		}
 	}
+	approved := s.shellIdentityApprovedLocked(agentID, shellIdentityFromMap(meta))
+	meta["approved"] = approved
 	if a := s.agents[agentID]; a != nil {
-		a.Status = "online"
+		if !approved {
+			a.Status = "awaiting_approval"
+		} else {
+			a.Status = "online"
+		}
 		a.LastSeen = now
 		a.Transport = mode
 		if a.Meta == nil {
@@ -1238,16 +1265,53 @@ func (s *Server) touchShellPollLocked(name string, r *http.Request) {
 		for k, v := range meta {
 			a.Meta[k] = v
 		}
-		return
+		return approved
 	}
-	s.agents[agentID] = &Agent{AgentID: agentID, Name: "Shell: " + name, Kind: "virtual_shell", Transport: mode, Status: "online", LastSeen: now, Capabilities: []string{"shell", "system", "tasks", "logs"}, Meta: meta}
-	s.addAuditLocked("queue_poll_register", map[string]any{"agent_id": agentID, "transport": mode})
+	status := "online"
+	auditName := "queue_poll_register"
+	if !approved {
+		status = "awaiting_approval"
+		auditName = "queue_poll_awaiting_approval"
+	}
+	s.agents[agentID] = &Agent{AgentID: agentID, Name: "Shell: " + name, Kind: "virtual_shell", Transport: mode, Status: status, LastSeen: now, Capabilities: []string{"shell", "system", "tasks", "logs"}, Meta: meta}
+	s.addAuditLocked(auditName, map[string]any{"agent_id": agentID, "transport": mode})
 	if err := s.saveRegistryStateLocked(); err != nil {
 		log.Printf("registry state save failed: %v", err)
 	}
 	if err := s.saveFailoverStateBundleLocked(); err != nil {
 		log.Printf("failover state save failed: %v", err)
 	}
+	return approved
+}
+
+func shellIdentityFromMap(values map[string]any) map[string]string {
+	identity := map[string]string{}
+	for _, key := range []string{"server_id", "public_key", "fingerprint"} {
+		if value := strings.TrimSpace(fmt.Sprint(values[key])); value != "" && value != "<nil>" {
+			identity[key] = value
+		}
+	}
+	return identity
+}
+
+func (s *Server) shellIdentityApprovedLocked(agentID string, identity map[string]string) bool {
+	if len(identity) == 0 {
+		return true
+	}
+	agent := s.agents[agentID]
+	if agent == nil {
+		return false
+	}
+	for key, expected := range identity {
+		actual := strings.TrimSpace(fmt.Sprint(agent.Meta[key]))
+		if actual != "" && actual != "<nil>" && actual != expected {
+			return false
+		}
+	}
+	if approved, ok := agent.Meta["approved"].(bool); ok {
+		return approved
+	}
+	return true
 }
 
 func (s *Server) shellQueueResult(w http.ResponseWriter, r *http.Request, name string) {
@@ -1965,9 +2029,44 @@ func (s *Server) callHubTool(name string, args map[string]any) (map[string]any, 
 		agents := s.publicAgentsLocked(nil)
 		return map[string]any{"agents": agents}, http.StatusOK
 	case "pending", "list_pending_servers":
-		return map[string]any{"pending": []any{}, "count": 0}, http.StatusOK
+		pending := make([]map[string]any, 0)
+		for _, agent := range s.agents {
+			if agent != nil && agent.Status == "awaiting_approval" {
+				pending = append(pending, agentAsServer(*agent))
+			}
+		}
+		return map[string]any{"pending": pending, "count": len(pending)}, http.StatusOK
+	case "approve_pending_server":
+		target := firstString(args, "server_id", "agent_id", "name")
+		if target == "" {
+			return map[string]any{"error": "server_id or name is required"}, http.StatusBadRequest
+		}
+		if !strings.HasPrefix(target, "shell:") {
+			target = "shell:" + target
+		}
+		agent := s.agents[target]
+		if agent == nil || agent.Status != "awaiting_approval" {
+			return map[string]any{"error": "pending server not found", "server_id": target}, http.StatusNotFound
+		}
+		agent.Status = "online"
+		agent.LastSeen = nowFloat()
+		if agent.Meta == nil {
+			agent.Meta = map[string]any{}
+		}
+		agent.Meta["approved"] = true
+		s.addAuditLocked("approve_pending_server", map[string]any{"agent_id": target})
+		if err := s.saveRegistryStateLocked(); err != nil {
+			log.Printf("registry state save failed: %v", err)
+		}
+		return map[string]any{"ok": true, "status": "approved", "server_id": target}, http.StatusOK
 	case "hub_status", "status":
-		return map[string]any{"ok": true, "servers": len(s.agents), "relay_jobs": len(s.relayJobs), "shell_jobs": len(s.shellJobs)}, http.StatusOK
+		awaiting := 0
+		for _, agent := range s.agents {
+			if agent != nil && agent.Status == "awaiting_approval" {
+				awaiting++
+			}
+		}
+		return map[string]any{"ok": true, "servers": len(s.agents), "awaiting_approval": awaiting, "relay_jobs": len(s.relayJobs), "shell_jobs": len(s.shellJobs)}, http.StatusOK
 	default:
 		return map[string]any{"error": "unsupported hub tool", "tool": name, "arguments": args}, http.StatusBadRequest
 	}
@@ -2026,6 +2125,7 @@ func hubTools() []map[string]any {
 	return []map[string]any{
 		{"name": "discover", "description": "List registered targets", "inputSchema": map[string]any{"type": "object", "properties": map[string]any{}}},
 		{"name": "pending", "description": "List pending approvals", "inputSchema": map[string]any{"type": "object", "properties": map[string]any{}}},
+		{"name": "approve_pending_server", "description": "Approve one ShellMCP device awaiting enrollment", "inputSchema": map[string]any{"type": "object", "properties": map[string]any{"server_id": map[string]any{"type": "string", "description": "Exact shell:<name> returned by pending"}}, "required": []string{"server_id"}, "additionalProperties": false}},
 		{"name": "status", "description": "Return Hub status", "inputSchema": map[string]any{"type": "object", "properties": map[string]any{}}},
 	}
 }
@@ -2653,7 +2753,7 @@ func (s *Server) adminJobsDataLocked() map[string]any {
 }
 
 func serverStatusCounts(servers []map[string]any) map[string]int {
-	counts := map[string]int{"online": 0, "offline": 0, "stale": 0, "pending": 0}
+	counts := map[string]int{"online": 0, "offline": 0, "stale": 0, "awaiting_approval": 0}
 	for _, srv := range servers {
 		if st, _ := srv["status"].(string); st != "" {
 			counts[st]++
@@ -3931,6 +4031,9 @@ func (s *Server) appsSDKCall(name string, args map[string]any) any {
 		servers := s.publicServersLockedWithDetail(nil, fullDetailRequested(args["detail"]))
 		s.mu.Unlock()
 		return map[string]any{"servers": servers}
+	case "pending", "list_pending_servers", "approve_pending_server":
+		result, _ := s.callHubTool(name, args)
+		return result
 	case "list_mcp_agents", "listMcpAgents":
 		s.mu.Lock()
 		agents := s.publicAgentsLocked(nil)
@@ -4076,6 +4179,16 @@ func appsSDKTools() []map[string]any {
 			"annotations":     map[string]any{"readOnlyHint": true, "destructiveHint": false, "openWorldHint": false},
 			"securitySchemes": readSecurity,
 			"_meta":           readMeta,
+		},
+		{
+			"name":            "approve_pending_server",
+			"title":           "Approve ShellMCP device",
+			"description":     "Approve one ShellMCP device awaiting enrollment. Use the exact server_id returned by discover with detail=full or pending.",
+			"inputSchema":     map[string]any{"type": "object", "properties": map[string]any{"server_id": map[string]any{"type": "string"}}, "required": []string{"server_id"}, "additionalProperties": false},
+			"outputSchema":    map[string]any{"type": "object", "additionalProperties": true},
+			"annotations":     map[string]any{"readOnlyHint": false, "destructiveHint": true, "openWorldHint": false},
+			"securitySchemes": execSecurity,
+			"_meta":           execMeta,
 		},
 		{
 			"name":            "schema",

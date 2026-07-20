@@ -48,6 +48,17 @@ plan is [`PROJECT_PLAN.md`](./PROJECT_PLAN.md).
 
 ## Entries
 
+## 2026-07-20 - Persist ShellMCP auth across updates - completed
+
+- Milestone: `S0.2`
+- Owner: Codex with Sol security review
+- Scope: Installer update auth preservation and legacy systemd ShellMCP overrides
+- Baseline / red evidence: server-88 Go ShellMCP polls returned repeated `401 unauthorized`; effective service environment came from a legacy Go-primary drop-in instead of the canonical Hub environment.
+- Change: Preserve legacy auth aliases during updates; remove all legacy Go-primary systemd overrides; make Linux/Android installers reuse stored credentials; add Hub `awaiting_approval` state and `approve_pending_server` MCP tool that gates queue delivery.
+- Verification: RED tests reproduced both token rewrite and approval bypass. Python `126 passed, 2 skipped`; Go Hub `go test ./...` passed. Server-88 canonical env was repaired, legacy overrides removed, current Go ShellMCP rebuilt and restarted; Hub reports server-88 `online` with fresh `last_seen`. Hub MCP `tools/list` exposes `approve_pending_server`; `pending` call returns a structured empty list.
+- Delivery: Live server-100 Hub and server-88 ShellMCP restarted with locally built binaries. The changes are pushed to `main`.
+- Next: Run CI release verification for the pushed auth/approval lifecycle changes.
+
 ## 2026-07-19 - Remove Python MCP transport runtimes - handed-off
 
 - Milestone: `S0.2` Go-only ShellMCP runtime

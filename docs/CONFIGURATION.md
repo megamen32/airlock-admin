@@ -92,6 +92,17 @@ GPT‑Админ has **three** auth mechanisms — they're different, don't mix 
 
 - Used for: `POST /heartbeat` (agent registration)
 - Each agent has its own `SHELLMCP_TOKEN` — the hub validates it on heartbeat.
+- It is also the credential for authenticated queue polling. A client that
+  cannot authenticate to the Hub must not be auto-approved: queued work can
+  contain sensitive command arguments and results, so an impersonating client
+  must be rejected before it receives tasks.
+- In-place updates preserve this credential and the service always uses the
+  canonical `gptadmin.env`. Explicit token rotation is a separate operation;
+  installing a new binary or restarting a service must not rotate it.
+- A new device identity is reported as `awaiting_approval`, not `offline`.
+  Review it with the Hub MCP `pending` tool and approve exactly one returned
+  `server_id` with `approve_pending_server`; approval is not repeated for each
+  poll or after a normal binary update.
 
 ## OAuth
 

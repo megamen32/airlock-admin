@@ -1482,8 +1482,8 @@ func TestAppsSDKMetadataAndWidget(t *testing.T) {
 			}
 		}
 	}
-	if len(tools) != 6 {
-		t.Fatalf("got %d Apps SDK tools, want 6", len(tools))
+	if len(tools) != 7 {
+		t.Fatalf("got %d Apps SDK tools, want 7", len(tools))
 	}
 	if renderTools != 1 {
 		t.Fatalf("got %d render tools, want 1", renderTools)
@@ -1721,6 +1721,70 @@ func TestPollingShellQueueCarriesGenericMCPToolCall(t *testing.T) {
 	args, _ := job["arguments"].(map[string]any)
 	if args["ref"] != "docs" {
 		t.Fatalf("args=%#v", args)
+	}
+}
+
+func TestUnknownShellIdentityAwaitsApprovalBeforeQueueDelivery(t *testing.T) {
+	s := New(Config{CtlToken: "ctl", ShellToken: "shell", DefaultTimeout: time.Second, PollMaxTimeout: time.Second})
+	heartbeat := httptest.NewRequest(http.MethodPost, "/heartbeat", strings.NewReader(`{"name":"new-host","server_id":"device-1","public_key":"pub-1","fingerprint":"fp-1","mode":"long_poll"}`))
+	heartbeat.Header.Set("Authorization", "Bearer shell")
+	heartbeatRec := httptest.NewRecorder()
+	s.Handler().ServeHTTP(heartbeatRec, heartbeat)
+	if heartbeatRec.Code != http.StatusOK || !strings.Contains(heartbeatRec.Body.String(), `"awaiting_approval"`) {
+		t.Fatalf("heartbeat status=%d body=%s", heartbeatRec.Code, heartbeatRec.Body.String())
+	}
+
+	queued := s.callShellTool("shell:new-host", "shell_exec", map[string]any{"cmd": "printf secret"}, true, time.Second)
+	if queued["status"] != "running" {
+		t.Fatalf("queue result=%#v", queued)
+	}
+	poll := httptest.NewRequest(http.MethodGet, "/queue/new-host?timeout=0&server_id=device-1&public_key=pub-1&fingerprint=fp-1", nil)
+	poll.Header.Set("Authorization", "Bearer shell")
+	pollRec := httptest.NewRecorder()
+	s.Handler().ServeHTTP(pollRec, poll)
+	if pollRec.Code != http.StatusOK || strings.Contains(pollRec.Body.String(), queued["job_id"].(string)) || !strings.Contains(pollRec.Body.String(), `"awaiting_approval"`) {
+		t.Fatalf("pending poll status=%d body=%s", pollRec.Code, pollRec.Body.String())
+	}
+
+	pending, status := s.callHubTool("pending", nil)
+	if status != http.StatusOK || pending["count"] != 1 {
+		t.Fatalf("pending=%#v status=%d", pending, status)
+	}
+	approved, status := s.callHubTool("approve_pending_server", map[string]any{"server_id": "shell:new-host"})
+	if status != http.StatusOK || approved["status"] != "approved" {
+		t.Fatalf("approve=%#v status=%d", approved, status)
+	}
+
+	poll = httptest.NewRequest(http.MethodGet, "/queue/new-host?timeout=0&server_id=device-1&public_key=pub-1&fingerprint=fp-1", nil)
+	poll.Header.Set("Authorization", "Bearer shell")
+	pollRec = httptest.NewRecorder()
+	s.Handler().ServeHTTP(pollRec, poll)
+	if pollRec.Code != http.StatusOK || !strings.Contains(pollRec.Body.String(), `"printf secret"`) {
+		t.Fatalf("approved poll status=%d body=%s", pollRec.Code, pollRec.Body.String())
+	}
+}
+
+func TestHubToolsAdvertisePendingApprovalAction(t *testing.T) {
+	seen := map[string]bool{}
+	for _, tool := range hubTools() {
+		if name, _ := tool["name"].(string); name != "" {
+			seen[name] = true
+		}
+	}
+	if !seen["approve_pending_server"] {
+		t.Fatalf("approve_pending_server missing from %#v", hubTools())
+	}
+}
+
+func TestHubMCPAdvertisesPendingApprovalAction(t *testing.T) {
+	seen := map[string]bool{}
+	for _, tool := range appsSDKTools() {
+		if name, _ := tool["name"].(string); name != "" {
+			seen[name] = true
+		}
+	}
+	if !seen["approve_pending_server"] {
+		t.Fatalf("approve_pending_server missing from Hub MCP tools: %#v", appsSDKTools())
 	}
 }
 

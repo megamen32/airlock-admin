@@ -13,6 +13,9 @@ def test_update_restores_auth_material_if_package_install_rewrites_env(monkeypat
     original = {
         "CTL_TOKEN": "ctl-before",
         "SHELLMCP_TOKEN": "shell-before",
+        "SHELL_TOKEN": "shell-before",
+        "ROOTD_TOKEN": "rootd-before",
+        "ROOTD_UPDATE_TOKEN": "rootd-update-before",
         "ADMIN_PASSWORD": "admin-before",
         "OAUTH_CLIENT_SECRET": "oauth-before",
         "GPTADMIN_CODEX_MCP_BEARER": "jwt-before",
@@ -73,8 +76,10 @@ def test_cleanup_removes_obsolete_shellmcp_primary_override(monkeypatch, tmp_pat
     dropins = systemd_dir / "shellmcp.service.d"
     dropins.mkdir(parents=True)
     obsolete = dropins / "90-go-primary.conf"
+    newer_obsolete = dropins / "95-go-primary.conf"
     preserved = dropins / "80-spool-readable.conf"
     obsolete.write_text("[Service]\nEnvironmentFile=/etc/gptadmin/go-shellmcp-primary.env\n")
+    newer_obsolete.write_text("[Service]\nEnvironmentFile=/etc/gptadmin/go-shellmcp.env\n")
     preserved.write_text("[Service]\nExecStartPre=/usr/bin/true\n")
 
     monkeypatch.setattr(cli, "IS_MACOS", False)
@@ -86,6 +91,7 @@ def test_cleanup_removes_obsolete_shellmcp_primary_override(monkeypatch, tmp_pat
     cli._cleanup_obsolete_runtime_files()
 
     assert not obsolete.exists()
+    assert not newer_obsolete.exists()
     assert preserved.exists()
 
 
