@@ -465,10 +465,15 @@ smoke_linux() {
   step "Smoke test: shellmcp"
   : > "$SHELLMCP_RT_LOG"
   SHELLMCP_PORT="$(pick_port_plus1 25900)"
-  SHELLMCP_TOKEN=testtoken HUB_URL='' PORT="$SHELLMCP_PORT" SHELL_PORT="$SHELLMCP_PORT" SHELLMCP_PORT="$SHELLMCP_PORT" "$SHELLMCP_DIST" >"$SHELLMCP_RT_LOG" 2>&1 &
+  SHELLMCP_TOKEN=testtoken HUB_URL='http://127.0.0.1:1' SHELLMCP_MODE=long_poll SHELLMCP_QUEUE=1 SHELLMCP_HEARTBEAT=0 PORT="$SHELLMCP_PORT" SHELL_PORT="$SHELLMCP_PORT" SHELLMCP_PORT="$SHELLMCP_PORT" "$SHELLMCP_DIST" >"$SHELLMCP_RT_LOG" 2>&1 &
   SHELLMCP_PID=$!
-  wait_for_http "http://127.0.0.1:${SHELLMCP_PORT}/version" 25
-  curl -sS -f "http://127.0.0.1:${SHELLMCP_PORT}/version" | grep -q build_version
+  sleep 2
+  kill -0 "$SHELLMCP_PID"
+  if is_port_busy "$SHELLMCP_PORT"; then
+    echo "ERROR: queue-mode ShellMCP unexpectedly opened :$SHELLMCP_PORT" >&2
+    kill "$SHELLMCP_PID" || true
+    exit 1
+  fi
   kill "$SHELLMCP_PID" || true; SHELLMCP_PID=""
   step "Smoke test: gptadmin_hub"
   : > "$HUB_RT_LOG"

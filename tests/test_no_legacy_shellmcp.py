@@ -31,6 +31,14 @@ def test_release_payload_does_not_ship_the_python_mcp_relay() -> None:
     assert "'agents/generic_stdio_mcp_relay'" not in build
 
 
+def test_linux_smoke_uses_queue_mode_without_shellmcp_listener() -> None:
+    """The release smoke must exercise long-poll mode instead of curling port 25900."""
+    build = (ROOT / "tools" / "build.sh").read_text(encoding="utf-8")
+    smoke = build[build.index("smoke_linux()") : build.index("# Dependency expansion.")]
+    assert "SHELLMCP_QUEUE=1" in smoke
+    assert "wait_for_http \"http://127.0.0.1:${SHELLMCP_PORT}/version\"" not in smoke
+
+
 def test_repository_has_one_canonical_cli_source() -> None:
     """The generated package CLI must not be committed as a stale second source."""
     assert not (ROOT / "cli" / "gptadmin.py").exists()
