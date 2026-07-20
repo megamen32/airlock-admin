@@ -8,8 +8,8 @@ Full environment-variable reference, auth model, and OAuth setup.
 
 | Var | Required | Default | Purpose |
 |-----|----------|---------|---------|
-| `CTL_TOKEN` | **yes** | — | Bearer token for admin API + web panel. Generate with `openssl rand -hex 32`. |
-| `ADMIN_PASSWORD` | for OAuth | — | Password for the `/authorize` HTML form (OAuth flow). |
+| `ADMIN_PASSWORD` | **yes** | — | Password for the `/authorize` HTML form and admin session. |
+| `CTL_TOKEN` | legacy only until 2026-07-27 | — | Deprecated compatibility bearer; do not create or copy it. |
 | `OAUTH_CLIENT_SECRET` | for `/mcp` | — | Signs OAuth bearer tokens. Generate with `openssl rand -hex 32`. |
 | `PUBLIC_ORIGIN` | recommended | — | Public base URL (e.g. `https://your-hub.bezrabotnyi.com`). Used in OAuth + OpenAPI. |
 | `MCP_RESOURCE` | recommended | `$PUBLIC_ORIGIN` | The MCP resource identifier. |
@@ -70,10 +70,10 @@ See [ShellMCP → Environment variables](./SHELLMCP.md#environment-variables).
 
 GPT‑Админ has **three** auth mechanisms — they're different, don't mix them up.
 
-### 1. `CTL_TOKEN` (Bearer)
+### 1. Legacy `CTL_TOKEN` (temporary compatibility only)
 
 - Used for: `/admin`, `/admin/api/*`, `/servers`, `/tasks/*`, artifact endpoints
-- Header: `Authorization: Bearer <CTL_TOKEN>`
+- Header: `Authorization: Bearer <CTL_TOKEN>` (accepted only before the migration deadline)
 - This is the "admin" token. The web panel and Custom GPT actions use it.
 
 ### 2. OAuth bearer (for `/mcp`)
@@ -104,6 +104,14 @@ GPT‑Админ has **three** auth mechanisms — they're different, don't mix 
   `server_id` with `approve_pending_server`; approval is not repeated for each
   poll or after a normal binary update.
 
+## Legacy bearer migration
+
+`CTL_TOKEN` is a deprecated compatibility credential, not a supported setup
+path. The migration deadline is `2026-07-27T00:00:00Z`; the Hub advertises
+this with `Deprecation`/`Sunset` headers and then rejects the bearer. Use the
+AdminPassword OAuth authorization flow or a scoped MCP JWT instead. ShellMCP
+agent credentials are separate and are not affected by this deadline.
+
 ## OAuth
 
 The hub implements OAuth endpoints compatible with the OpenAI SDK OAuth flow.
@@ -132,10 +140,11 @@ In the web panel: `/admin` → **Security** → set `ADMIN_PASSWORD` and generat
 
 ```bash
 # Generate strong values:
-# CTL_TOKEN=$(openssl rand -hex 32)
+# Do not generate CTL_TOKEN on new installations; configure AdminPassword/OAuth instead.
 # OAUTH_CLIENT_SECRET=$(openssl rand -hex 32)
 
-CTL_TOKEN=generate-a-strong-random-token
+ADMIN_PASSWORD=choose-a-password
+OAUTH_CLIENT_SECRET=internal-signing-secret
 ADMIN_PASSWORD=choose-a-strong-password
 OAUTH_CLIENT_SECRET=$(openssl rand -hex 32)
 PUBLIC_ORIGIN=https://your-hub.example.com

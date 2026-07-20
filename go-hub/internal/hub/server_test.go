@@ -356,6 +356,77 @@ func TestLegacyCTLAppearsInClientInventoryWithoutBeingRevocableAsJWT(t *testing.
 	}
 }
 
+func TestLegacyCTLHasSunsetMetadataDuringMigrationWindow(t *testing.T) {
+	s := New(Config{
+		CtlToken:               "legacy-ctl",
+		LegacyCtlTokenDeadline: legacyCtlTokenDeadline,
+		Now:                    func() time.Time { return time.Date(2026, 7, 26, 12, 0, 0, 0, time.UTC) },
+		DefaultTimeout:         time.Second,
+		PollMaxTimeout:         time.Second,
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/admin/api/overview", nil)
+	req.Header.Set("Authorization", "Bearer legacy-ctl")
+	rec := httptest.NewRecorder()
+	s.Handler().ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	if got := rec.Header().Get("Deprecation"); got != "true" {
+		t.Fatalf("Deprecation=%q, want true", got)
+	}
+	if got := rec.Header().Get("Sunset"); got != legacyCtlTokenDeadline.UTC().Format(http.TimeFormat) {
+		t.Fatalf("Sunset=%q, want %q", got, legacyCtlTokenDeadline.UTC().Format(http.TimeFormat))
+	}
+}
+
+func TestLegacyCTLIsRejectedAfterMigrationDeadline(t *testing.T) {
+	s := New(Config{
+		CtlToken:               "legacy-ctl",
+		LegacyCtlTokenDeadline: legacyCtlTokenDeadline,
+		Now:                    func() time.Time { return time.Date(2026, 7, 27, 0, 0, 1, 0, time.UTC) },
+		DefaultTimeout:         time.Second,
+		PollMaxTimeout:         time.Second,
+	})
+
+	adminReq := httptest.NewRequest(http.MethodGet, "/admin/api/overview", nil)
+	adminReq.Header.Set("Authorization", "Bearer legacy-ctl")
+	adminRec := httptest.NewRecorder()
+	s.Handler().ServeHTTP(adminRec, adminReq)
+	if adminRec.Code != http.StatusUnauthorized {
+		t.Fatalf("admin status=%d body=%s", adminRec.Code, adminRec.Body.String())
+	}
+
+	mcpReq := httptest.NewRequest(http.MethodPost, "/mcp", bytes.NewBufferString(`{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}`))
+	mcpReq.Header.Set("Authorization", "Bearer legacy-ctl")
+	mcpRec := httptest.NewRecorder()
+	s.Handler().ServeHTTP(mcpRec, mcpReq)
+	if mcpRec.Code != http.StatusUnauthorized {
+		t.Fatalf("mcp status=%d body=%s", mcpRec.Code, mcpRec.Body.String())
+	}
+}
+
+func TestShellTokenCanDownloadArtifactAfterLegacyDeadline(t *testing.T) {
+	artifactDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(artifactDir, "gptadmin-shellmcp.tar.gz"), []byte("artifact"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	s := New(Config{
+		CtlToken:               "legacy-ctl",
+		ShellToken:             "shell-agent",
+		ArtifactDir:            artifactDir,
+		LegacyCtlTokenDeadline: legacyCtlTokenDeadline,
+		Now:                    func() time.Time { return time.Date(2026, 7, 28, 0, 0, 0, 0, time.UTC) },
+	})
+	req := httptest.NewRequest(http.MethodGet, "/artifacts/shellmcp.json", nil)
+	req.Header.Set("Authorization", "Bearer shell-agent")
+	rec := httptest.NewRecorder()
+	s.Handler().ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+	}
+}
+
 func TestOAuthRotationPersistsWithoutReturningSecret(t *testing.T) {
 	envFile := filepath.Join(t.TempDir(), "gptadmin.env")
 	if err := os.WriteFile(envFile, []byte("OAUTH_CLIENT_SECRET=old-secret\nOTHER=value\n"), 0o600); err != nil {

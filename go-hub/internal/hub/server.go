@@ -29,6 +29,11 @@ import (
 var BuildVersion = "go-dev"
 var GitCommit = "worktree"
 
+// legacyCtlTokenDeadline is the fixed end of the one-week migration window.
+// After this instant only AdminPassword sessions and scoped OAuth JWTs may
+// authenticate human/MCP requests.
+var legacyCtlTokenDeadline = time.Date(2026, 7, 27, 0, 0, 0, 0, time.UTC)
+
 type Config struct {
 	Addr                       string
 	ConfigDir                  string
@@ -49,6 +54,8 @@ type Config struct {
 	OAuthPermissiveResources   bool
 	AuthLogSecrets             bool
 	BridgeKey                  string
+	LegacyCtlTokenDeadline     time.Time
+	Now                        func() time.Time
 	RegistryStateFile          string
 	FailoverConfigFile         string
 	FailoverStateFile          string
@@ -84,6 +91,8 @@ func FromEnv() Config {
 		OAuthPermissiveResources:   truthyString(env("OAUTH_PERMISSIVE_RESOURCES", "0")),
 		AuthLogSecrets:             truthyString(env("AUTH_LOG_SECRETS", "0")),
 		BridgeKey:                  env("MCP_BRIDGE_KEY", env("CTL_TOKEN", "")),
+		LegacyCtlTokenDeadline:     legacyCtlTokenDeadline,
+		Now:                        time.Now,
 		RegistryStateFile:          env("GPTADMIN_REGISTRY_STATE_FILE", filepath.Join(cfgDir, "registry_state.json")),
 		FailoverConfigFile:         env("GPTADMIN_FAILOVER_CONFIG_FILE", filepath.Join(cfgDir, "failover_config.json")),
 		FailoverStateFile:          env("GPTADMIN_FAILOVER_STATE_FILE", filepath.Join(cfgDir, "failover_state.json")),
@@ -111,6 +120,26 @@ func secondsEnv(k string, d int) int {
 func truthyString(v string) bool {
 	v = strings.ToLower(strings.TrimSpace(v))
 	return v == "1" || v == "true" || v == "yes" || v == "on"
+}
+
+func (s *Server) now() time.Time {
+	if s.cfg.Now != nil {
+		return s.cfg.Now().UTC()
+	}
+	return time.Now().UTC()
+}
+
+func (s *Server) legacyCtlTokenAllowed() bool {
+	// Direct in-process constructors are used by compatibility tests and
+	// migration tooling; the production FromEnv path always sets a deadline.
+	return s.cfg.LegacyCtlTokenDeadline.IsZero() || s.now().Before(s.cfg.LegacyCtlTokenDeadline)
+}
+
+func (s *Server) markLegacyCtlToken(w http.ResponseWriter) {
+	w.Header().Set("Deprecation", "true")
+	if !s.cfg.LegacyCtlTokenDeadline.IsZero() {
+		w.Header().Set("Sunset", s.cfg.LegacyCtlTokenDeadline.UTC().Format(http.TimeFormat))
+	}
 }
 
 type Agent struct {
@@ -426,13 +455,13 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/version", s.version)
 	mux.HandleFunc("/healthz", s.healthz)
 	mux.HandleFunc("/actions/openapi.yaml", s.actionsOpenAPI)
-	mux.HandleFunc("/artifacts/shellmcp.json", s.requireCtl(s.shellmcpArtifactManifest))
-	mux.HandleFunc("/artifacts/shellmcp.tar.gz", s.requireCtl(s.shellmcpArtifactDownload))
-	mux.HandleFunc("/artifacts/shellmcp-android-arm64.json", s.requireCtl(s.androidShellmcpArtifactManifest))
-	mux.HandleFunc("/artifacts/shellmcp-android-arm64.bin", s.requireCtl(s.androidShellmcpArtifactDownload))
+	mux.HandleFunc("/artifacts/shellmcp.json", s.requireArtifact(s.shellmcpArtifactManifest))
+	mux.HandleFunc("/artifacts/shellmcp.tar.gz", s.requireArtifact(s.shellmcpArtifactDownload))
+	mux.HandleFunc("/artifacts/shellmcp-android-arm64.json", s.requireArtifact(s.androidShellmcpArtifactManifest))
+	mux.HandleFunc("/artifacts/shellmcp-android-arm64.bin", s.requireArtifact(s.androidShellmcpArtifactDownload))
 	// Legacy rootd artifact aliases: old services still point ROOTD_UPDATE_MANIFEST_URL here.
-	mux.HandleFunc("/artifacts/rootd.json", s.requireCtl(s.shellmcpArtifactManifest))
-	mux.HandleFunc("/artifacts/rootd.tar.gz", s.requireCtl(s.shellmcpArtifactDownload))
+	mux.HandleFunc("/artifacts/rootd.json", s.requireArtifact(s.shellmcpArtifactManifest))
+	mux.HandleFunc("/artifacts/rootd.tar.gz", s.requireArtifact(s.shellmcpArtifactDownload))
 	mux.HandleFunc("/heartbeat", s.requireShell(s.heartbeat))
 	mux.HandleFunc("/servers", s.requireCtl(s.serversList))
 	mux.HandleFunc("/bulk/exec", s.requireCtl(s.bulkExec))
@@ -627,6 +656,12 @@ func (s *Server) requireCtl(next http.HandlerFunc) http.HandlerFunc {
 			w.Header().Set("Cache-Control", "no-store")
 		}
 		if s.cfg.CtlToken != "" && tokenMatches(r, s.cfg.CtlToken) {
+			s.markLegacyCtlToken(w)
+			if !s.legacyCtlTokenAllowed() {
+				s.authAudit("ctl_auth_denied", r, map[string]any{"reason": "legacy ctl token migration deadline passed"})
+				s.writeCtlUnauthorized(w, r)
+				return
+			}
 			s.authAudit("ctl_auth_ok", r, map[string]any{"auth_kind": "ctl_token"})
 			next(w, r)
 			return
@@ -665,6 +700,18 @@ func (s *Server) requireRelay(w http.ResponseWriter, r *http.Request) bool {
 	}
 	writeJSON(w, http.StatusUnauthorized, map[string]any{"detail": "unauthorized"})
 	return false
+}
+
+func (s *Server) requireArtifact(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		// ShellMCP updates use the agent-bound credential, so they remain
+		// possible after the human CLI bearer migration deadline.
+		if s.cfg.ShellToken != "" && tokenMatches(r, s.cfg.ShellToken) && (s.cfg.ShellToken != s.cfg.CtlToken || s.legacyCtlTokenAllowed()) {
+			next(w, r)
+			return
+		}
+		s.requireCtl(next)(w, r)
+	}
 }
 
 func (s *Server) requireShell(next http.HandlerFunc) http.HandlerFunc {
@@ -2716,7 +2763,7 @@ func (s *Server) managedMCPClientsLocked() []managedMCPToken {
 	for clientID, metadata := range s.oauthClients {
 		clients = append(clients, oauthClientInventory(metadata, clientID))
 	}
-	if s.cfg.CtlToken != "" {
+	if s.cfg.CtlToken != "" && s.legacyCtlTokenAllowed() {
 		clients = append(clients, managedMCPToken{
 			ID:         "legacy-ctl",
 			ClientID:   "legacy-ctl",
@@ -3958,13 +4005,22 @@ func (s *Server) mcpEndpoint(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, resp)
 }
 
+func (s *Server) bridgeKeyMatches(key string) bool {
+	if s.cfg.BridgeKey == "" || key != s.cfg.BridgeKey {
+		return false
+	}
+	// The default bridge key is the legacy CTL bearer. A separately configured
+	// bridge credential remains valid after the migration deadline.
+	return s.cfg.BridgeKey != s.cfg.CtlToken || s.legacyCtlTokenAllowed()
+}
+
 func (s *Server) mcpPrompt(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 	if r.Method == http.MethodOptions {
 		w.WriteHeader(http.StatusNoContent)
 		return
 	}
-	if s.cfg.BridgeKey != "" && r.URL.Query().Get("key") != s.cfg.BridgeKey {
+	if !s.bridgeKeyMatches(r.URL.Query().Get("key")) {
 		writeJSON(w, http.StatusUnauthorized, map[string]any{"error": "unauthorized"})
 		return
 	}
@@ -3992,7 +4048,7 @@ func (s *Server) mcpPromptCall(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusNoContent)
 		return
 	}
-	if s.cfg.BridgeKey != "" && r.URL.Query().Get("key") != s.cfg.BridgeKey {
+	if !s.bridgeKeyMatches(r.URL.Query().Get("key")) {
 		writeJSON(w, http.StatusUnauthorized, map[string]any{"error": "unauthorized"})
 		return
 	}
@@ -4470,6 +4526,13 @@ func (s *Server) mcpAuth(w http.ResponseWriter, r *http.Request) bool {
 	if strings.HasPrefix(strings.ToLower(auth), "bearer ") {
 		tok := strings.TrimSpace(auth[7:])
 		if s.cfg.CtlToken != "" && tok == s.cfg.CtlToken {
+			s.markLegacyCtlToken(w)
+			if !s.legacyCtlTokenAllowed() {
+				s.authAudit("mcp_auth_denied", r, map[string]any{"reason": "legacy ctl token migration deadline passed"})
+				w.Header().Set("WWW-Authenticate", `Bearer resource_metadata="`+s.origin(r)+`/.well-known/oauth-protected-resource", scope="gptadmin.read gptadmin.exec"`)
+				writeJSON(w, http.StatusUnauthorized, map[string]any{"error": "legacy token expired; use OAuth connection"})
+				return false
+			}
 			s.authAudit("mcp_auth_ok", r, map[string]any{"auth_kind": "ctl_token"})
 			return true
 		}
@@ -4506,7 +4569,7 @@ func (s *Server) writeCtlUnauthorized(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) adminPasswordOK(v string) bool {
 	secret := s.cfg.AdminPassword
-	if secret == "" {
+	if secret == "" && s.legacyCtlTokenAllowed() {
 		secret = s.cfg.CtlToken
 	}
 	return secret != "" && hmac.Equal([]byte(v), []byte(secret))

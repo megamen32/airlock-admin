@@ -26,6 +26,11 @@ try:
 except Exception:
     tomllib = None
 
+# Fixed one-week migration window for the legacy administrator bearer. New
+# installs no longer create it; existing installations are handled by the Hub
+# until this date and must migrate to AdminPassword/OAuth before then.
+LEGACY_CTL_TOKEN_DEADLINE = '2026-07-27'
+
 # ===== Platform =====
 IS_MACOS = sys.platform == 'darwin'
 
@@ -1741,79 +1746,7 @@ def maybe_autoapprove_local_shellmcp(env: dict, install_hub: bool, install_shell
     if flag in {'0', 'false', 'no', 'off'}:
         print('Local ShellMCP auto-approve skipped: GPTADMIN_AUTO_APPROVE_LOCAL_SHELLMCP=0')
         return
-    token = env.get('CTL_TOKEN') or ''
-    hub_port = env.get('HUB_PORT', '9001')
-    if not token:
-        print('WARNING: Local ShellMCP auto-approve skipped: CTL_TOKEN is empty', file=sys.stderr)
-        return
-    # launchd may report the service as loaded before the hub process actually
-    # accepts connections. Re-check here so auto-approve does not race first
-    # registration and leave the local ShellMCP pending with 401 queue polls.
-    health_env = dict(env)
-    health_env.setdefault('HUB_PORT', hub_port or '9001')
-    wait_local_hub_health(health_env, timeout_s=180)
-
-    base = f'http://127.0.0.1:{hub_port}'
-    headers = ['-H', f'Authorization: Bearer {token}', '-H', 'Content-Type: application/json']
-
-    def curl_json(path: str, payload: dict | None = None) -> dict:
-        cmd = ['curl', '-fsS', '--max-time', '10', *headers]
-        if payload is not None:
-            cmd += ['-d', json.dumps(payload, separators=(',', ':'))]
-        cmd.append(base + path)
-        res = subprocess.run(cmd, text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-        if res.returncode != 0:
-            raise RuntimeError((res.stderr or res.stdout or f'curl rc={res.returncode}').strip())
-        return json.loads(res.stdout or '{}')
-
-    expected_identity = _load_local_shellmcp_identity(env, timeout_s=60)
-    if not expected_identity:
-        print('WARNING: Local ShellMCP auto-approve skipped: local shellmcp identity did not appear', file=sys.stderr)
-        return
-
-    last_err = ''
-    for attempt in range(1, 31):
-        try:
-            data = curl_json('/servers')
-            pending = data.get('pending') or []
-            servers = data.get('servers') or []
-            for x in servers:
-                if not isinstance(x, dict):
-                    continue
-                if _server_active_matches_local_shell_identity(x, expected_identity):
-                    print('Local ShellMCP auto-approve: already active')
-                    return
-            approved = []
-            mismatched = []
-            for item in pending:
-                if not isinstance(item, dict):
-                    continue
-                name = str(item.get('name') or '')
-                if not name:
-                    continue
-                if not _server_matches_local_shell_identity(item, expected_identity):
-                    mismatched.append(name)
-                    continue
-                payload = {'target': 'hub', 'tool_name': 'approve_pending_server', 'arguments': {'name': name}, 'timeout': 30}
-                res = curl_json('/mcp-relay/call', payload)
-                if _approve_pending_response_ok(res):
-                    approved.append(name)
-            if approved:
-                for _ in range(10):
-                    data2 = curl_json('/servers')
-                    for x in data2.get('servers') or []:
-                        if _server_active_matches_local_shell_identity(x, expected_identity):
-                            print('Local ShellMCP auto-approved: ' + ', '.join(approved))
-                            return
-                    time.sleep(1)
-                print('Local ShellMCP auto-approved: ' + ', '.join(approved))
-                return
-            if mismatched:
-                last_err = 'pending server(s) did not match local shellmcp identity: ' + ', '.join(mismatched)
-        except Exception as e:
-            last_err = str(e)
-        time.sleep(2)
-    print('WARNING: Local ShellMCP auto-approve did not complete' + (f': {last_err}' if last_err else ''), file=sys.stderr)
+    print('Local ShellMCP awaits approval; use Hub MCP pending -> approve_pending_server.')
 
 def setup_interactive(args):
     need_root()
@@ -1847,7 +1780,6 @@ def setup_interactive(args):
 
     env = env_read()
 
-    env.setdefault('CTL_TOKEN', gen_hex())
     env.setdefault('SHELLMCP_TOKEN', gen_hex())
     env.setdefault('ADMIN_PASSWORD', gen_hex())
     env.setdefault('OAUTH_CLIENT_SECRET', gen_hex(32))
@@ -1861,7 +1793,7 @@ def setup_interactive(args):
         ensure_shellmcp_default_user(env)
         ensure_shellmcp_identity_env(env)
         env.setdefault('SHELLMCP_UPDATE_INTERVAL_S', '3600')
-        env.setdefault('SHELLMCP_UPDATE_TOKEN', env.get('CTL_TOKEN', ''))
+        env.setdefault('SHELLMCP_UPDATE_TOKEN', env.get('SHELLMCP_TOKEN', ''))
         env.setdefault('SHELLMCP_UPDATE_MANIFEST_URL', (env.get('HUB_URL') or env.get('HUB_PUBLIC_URL') or 'https://gptadmin.bezrabotnyi.com').rstrip('/') + '/artifacts/shellmcp.json')
         env.setdefault('SHELLMCP_SERVICE_NAME', svc_shellmcp_name())
         env.setdefault('SHELLMCP_SERVICE_SCOPE', INSTALL_SCOPE)
@@ -1958,7 +1890,7 @@ def setup_interactive(args):
     if install_shellmcp:
         hub_for_update = (env.get('HUB_PUBLIC_URL') or env.get('HUB_URL') or 'https://gptadmin.bezrabotnyi.com').rstrip('/')
         env['SHELLMCP_UPDATE_MANIFEST_URL'] = hub_for_update + '/artifacts/shellmcp.json'
-        env['SHELLMCP_UPDATE_TOKEN'] = env.get('SHELLMCP_UPDATE_TOKEN') or env.get('CTL_TOKEN', '')
+        env['SHELLMCP_UPDATE_TOKEN'] = env.get('SHELLMCP_UPDATE_TOKEN') or env.get('SHELLMCP_TOKEN', '')
         env['SHELLMCP_SERVICE_NAME'] = svc_shellmcp_name()
         env['SHELLMCP_SERVICE_SCOPE'] = INSTALL_SCOPE
 
@@ -2061,7 +1993,7 @@ def setup_interactive(args):
             env['QUEUE_URL'] = local_hub.rstrip('/') + '/queue'
             env['SHELLMCP_URL'] = ''
             env['SHELLMCP_UPDATE_MANIFEST_URL'] = public_url.rstrip('/') + '/artifacts/shellmcp.json'
-            env['SHELLMCP_UPDATE_TOKEN'] = env.get('SHELLMCP_UPDATE_TOKEN') or env.get('CTL_TOKEN', '')
+            env['SHELLMCP_UPDATE_TOKEN'] = env.get('SHELLMCP_UPDATE_TOKEN') or env.get('SHELLMCP_TOKEN', '')
         else:
             env['HUB_URL'] = public_url
         sync_oauth_origin_env(env)
@@ -2077,7 +2009,7 @@ def setup_interactive(args):
     print('\n=== Готово ===')
     if install_hub:
         print(f"Hub URL: {env.get('HUB_PUBLIC_URL', '—')}")
-        print(f"API-Ключ (Bearer): {env['CTL_TOKEN']}")
+        print(f"Подключение: AdminPassword/OAuth (legacy bearer migration deadline {LEGACY_CTL_TOKEN_DEADLINE})")
     if install_shellmcp and not install_hub:
         print(f"HUB_URL для ShellMCP: {env.get('HUB_URL', '—')}")
     if install_shellmcp:
@@ -2104,9 +2036,9 @@ def setup_interactive(args):
 
 3) Выберите импорт по URL: https://became.bezrabotnyi.com/api.json
 
-4) Заменитие в "servers": "url": на свой Hub URL {env.get('HUB_PUBLIC_URL') or env.get('HUB_URL', '—')}
+4) Замените в "servers": "url": на свой Hub URL {env.get('HUB_PUBLIC_URL') or env.get('HUB_URL', '—')}
 
-5) В разделе «Аутентификация» выберите тип API ключ, Bearer и вставьте ключ {env['CTL_TOKEN']}
+5) Завершите OAuth-подключение через страницу Hub; bearer-копирование больше не используется.
 ---------------------''')
 
 # ===== Commands =====
@@ -3013,12 +2945,14 @@ def cmd_doctor(_):
                 issues += 1
     # Check config
     env = env_read()
-    ctl = env.get('CTL_TOKEN', '')
-    if ctl:
-        print_ok(f'CTL_TOKEN is set ({len(ctl)} chars)')
+    admin_password = env.get('ADMIN_PASSWORD', '')
+    if admin_password:
+        print_ok('AdminPassword is configured')
     else:
-        print_err('CTL_TOKEN is not set')
+        print_err('AdminPassword is not configured')
         issues += 1
+    if env.get('CTL_TOKEN'):
+        print_warn(f'Legacy Hub bearer is present; migrate to AdminPassword/OAuth by {LEGACY_CTL_TOKEN_DEADLINE}.')
     hub_url = env.get('HUB_URL', env.get('PUBLIC_ORIGIN', ''))
     if hub_url:
         print_ok(f'Hub URL: {hub_url}')
@@ -3210,8 +3144,6 @@ def cmd_tokens(args):
     env = env_read()
     show_shell = getattr(args, 'show_shellmcp', False) if hasattr(args, 'show_shellmcp') else False
     print_header('GPTAdmin Tokens')
-    ctl = env.get('CTL_TOKEN', '')
-    print(f'  {c_dim("CTL_TOKEN")}     {c_green(ctl) if ctl else c_red("(not set)")}')
     print(f'  {c_dim("HUB_URL")}       {env.get("HUB_URL", env.get("PUBLIC_ORIGIN", c_dim("(not set)")))}')
     # MCP bearer tokens
     for k in sorted(env):
@@ -3228,30 +3160,28 @@ def cmd_tokens(args):
         print(f'  {c_dim("SHELLMCP_TOKEN")} {c_yellow("(hidden, use --show-shellmcp to reveal)")}')
     # MCP_BRIDGE_KEY
     bridge = env.get('MCP_BRIDGE_KEY', '')
-    if bridge and bridge != ctl:
+    if bridge and bridge != env.get('CTL_TOKEN', ''):
         print(f'  {c_dim("MCP_BRIDGE_KEY")} {c_green(bridge[:16] + "...")}')
     print()
+    if env.get('CTL_TOKEN'):
+        print_warn(f'Legacy Hub bearer is hidden and expires on {LEGACY_CTL_TOKEN_DEADLINE}; migrate to AdminPassword/OAuth.')
     print(c_dim('  Issue new MCP token:  gptadmin token issue <name>'))
-    print(c_dim('  Rotate tokens:        gptadmin token rotate [hub|shellmcp|mcp]'))
+    print(c_dim('  Rotate tokens:        gptadmin token rotate [shellmcp]'))
 
 def cmd_rotate(args):
     need_root()
     which = args.which
     if which in ('shellmcp', 'shell', 'shell-mcp'):
         which = 'shellmcp'
-    if which not in ('hub', 'shellmcp'):
-        die('unknown token target. Use: hub or shellmcp')
-    newtok = gen_hex()
     if which == 'hub':
-        env_set_many({'CTL_TOKEN': newtok})
-        if UNIT_PATH_HUB.exists():
-            svc_restart(svc_hub_name(), UNIT_PATH_HUB)
-        print(f'New hub CTL_TOKEN: {newtok}')
-    else:
-        env_set_many({'SHELLMCP_TOKEN': newtok})
-        if UNIT_PATH_SHELLMCP.exists():
-            svc_restart(svc_shellmcp_name(), UNIT_PATH_SHELLMCP)
-        print('ShellMCP token rotated (значение не выводится).')
+        die(f'legacy Hub bearer rotation is removed; use AdminPassword/OAuth (deadline {LEGACY_CTL_TOKEN_DEADLINE})')
+    if which not in ('hub', 'shellmcp'):
+        die('unknown token target. Use: shellmcp')
+    newtok = gen_hex()
+    env_set_many({'SHELLMCP_TOKEN': newtok})
+    if UNIT_PATH_SHELLMCP.exists():
+        svc_restart(svc_shellmcp_name(), UNIT_PATH_SHELLMCP)
+    print('ShellMCP token rotated (значение не выводится).')
 
 def cmd_port(args):
     need_root()
@@ -3725,7 +3655,6 @@ def cmd_update(args):
     if not install_hub and not install_shellmcp:
         die('No installed components detected. Use --hub and/or --shellmcp, or run: gptadmin setup')
 
-    env.setdefault('CTL_TOKEN', gen_hex())
     env.setdefault('SHELLMCP_TOKEN', gen_hex())
     env.setdefault('ADMIN_PASSWORD', gen_hex())
     env.setdefault('OAUTH_CLIENT_SECRET', gen_hex(32))
@@ -3742,7 +3671,7 @@ def cmd_update(args):
         env.setdefault('SHELLMCP_AUTO_UPDATE', '1')
         hub_for_update = (env.get('HUB_PUBLIC_URL') or env.get('HUB_URL') or 'https://gptadmin.bezrabotnyi.com').rstrip('/')
         env['SHELLMCP_UPDATE_MANIFEST_URL'] = hub_for_update + '/artifacts/shellmcp.json'
-        env['SHELLMCP_UPDATE_TOKEN'] = env.get('SHELLMCP_UPDATE_TOKEN') or env.get('CTL_TOKEN', '')
+        env['SHELLMCP_UPDATE_TOKEN'] = env.get('SHELLMCP_UPDATE_TOKEN') or env.get('SHELLMCP_TOKEN', '')
         env['SHELLMCP_SERVICE_NAME'] = svc_shellmcp_name()
         env['SHELLMCP_SERVICE_SCOPE'] = INSTALL_SCOPE
     sync_oauth_origin_env(env)

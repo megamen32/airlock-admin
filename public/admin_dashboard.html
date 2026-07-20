@@ -563,10 +563,6 @@ button{height:32px;padding:0 12px;font-size:13px;border-radius:var(--radius-sm);
 <header class="topbar">
   <button class="mobileMenu" onclick="toggleSidebar()">☰</button>
   <b id="viewTitle" class="topbar-title">Обзор</b>
-  <form class="tokenForm" onsubmit="saveToken();return false" style="display:contents">
-    <input id="token" class="token" type="password" placeholder="optional CTL_TOKEN" autocomplete="off" spellcheck="false">
-    <button class="btn-primary" type="submit">Сохранить</button>
-  </form>
   <button class="btn-secondary" onclick="refreshAll()">Обновить</button>
       <button class="btn-secondary" onclick="location.href='/admin/logout'">Выйти</button>
   <label class="auto-toggle"><input type="checkbox" id="autoRefresh" checked><span class="toggle-slider"></span>auto</label>
@@ -593,12 +589,11 @@ button{height:32px;padding:0 12px;font-size:13px;border-radius:var(--radius-sm);
 <section id="view-resources" class="view"><div class="card"><h2>MCP resources</h2><div class="row"><select id="resourceTarget"></select><button onclick="listResources()">resources/list</button><input id="resourceUri" style="min-width:360px" placeholder="resource://..."><button onclick="readResource()">resources/read</button></div><pre id="resourceResult">—</pre></div></section>
 <section id="view-mcpmanage" class="view"><div class="grid"><section class="card span8"><h2>MCP менеджер</h2><div class="row"><select id="mcpHost"></select><button onclick="listManagedMcp()">список</button><button onclick="statusManagedMcp()">статус всех</button><label class="small"><input type="checkbox" id="mcpKeepService"> keep service при remove</label></div><div id="managedMcp" style="margin-top:10px"></div></section><section class="card span4"><h2>Добавить MCP</h2><label class="muted">Имя</label><input id="mcpName" placeholder="my-mcp" style="width:100%"><label class="muted">Server ID (опц.)</label><input id="mcpAgentId" placeholder="MyMcpAgent" style="width:100%"><label class="muted">Remote URL</label><input id="mcpUrl" placeholder="https://.../mcp или http://127.0.0.1:..." style="width:100%"><div class="muted small">Или local stdio command:</div><input id="mcpCommand" placeholder="npx / python3 / node" style="width:100%"><label class="muted">Args (JSON array)</label><textarea id="mcpArgs" style="min-height:80px">[]</textarea><label class="muted">Env (JSON object)</label><textarea id="mcpEnv" style="min-height:80px">{}</textarea><div class="row"><input id="mcpRunAs" placeholder="run_as_user" style="width:140px"><select id="mcpBackend"><option value="">backend auto</option><option>systemd</option><option>launchd</option><option>windows-task</option></select><select id="mcpStdio"><option value="">stdio auto</option><option>auto</option><option>ndjson</option><option>jsonl</option><option>framed</option><option>content-length</option></select></div><div class="row"><label class="small"><input type="checkbox" id="mcpInstall" checked> install/start</label><label class="small"><input type="checkbox" id="mcpForce"> force</label><label class="small"><input type="checkbox" id="mcpDisabled"> disabled</label></div><button onclick="addManagedMcp()">добавить MCP</button><pre id="mcpManageResult">—</pre></section></div></section>
 <section id="view-security" class="view"><div class="card">
-  <h2>Tokens & Auth Management</h2>
-  <p class="muted">Управление CTL_TOKEN, ADMIN_PASSWORD, OAUTH_CLIENT_SECRET и MCP bearer-токенами. Чтение и запись через shell_exec на hub-сервере.</p>
+  <h2>Connections & Auth Management</h2>
+  <p class="muted">Управление AdminPassword, OAuth и MCP-подключениями. Чтение и запись через shell_exec на hub-сервере.</p>
 
   <div class="row" style="margin:12px 0">
     <button onclick="loadSecurityEnv()">↻ Обновить</button>
-    <button onclick="rotateCtlToken()" style="border-color:var(--warn);color:var(--warn)">↻ Ротировать CTL_TOKEN</button>
     <button onclick="rotateOAuth()" style="border-color:var(--warn);color:var(--warn)">↻ Ротировать OAUTH_CLIENT_SECRET</button>
   </div>
 
@@ -610,7 +605,6 @@ button{height:32px;padding:0 12px;font-size:13px;border-radius:var(--radius-sm);
     <h3 style="font-size:13px;margin-bottom:8px">Установить новое значение</h3>
     <div class="row">
       <select id="secEnvKey" style="min-width:220px">
-        <option value="CTL_TOKEN">CTL_TOKEN</option>
         <option value="ADMIN_PASSWORD">ADMIN_PASSWORD</option>
         <option value="OAUTH_CLIENT_SECRET">OAUTH_CLIENT_SECRET</option>
         <option value="MCP_BRIDGE_KEY">MCP_BRIDGE_KEY</option>
@@ -662,7 +656,7 @@ button{height:32px;padding:0 12px;font-size:13px;border-radius:var(--radius-sm);
 </div>
 <script>
 const $=(id)=>document.getElementById(id);let state=null,currentView=localStorage.getItem('gptadmin_view')||'overview';
-function token(){return $('token').value.trim()||localStorage.getItem('gptadmin_ctl_token')||''}function saveToken(){localStorage.setItem('gptadmin_ctl_token',$('token').value.trim());refreshAll()}function hdr(){return {'Authorization':'Bearer '+token(),'Content-Type':'application/json'}}function esc(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}function cls(s){return String(s||'').replace(/[^a-zA-Z0-9_-]/g,'_')}function displayKind(kind){return kind==='virtual_hub'?'hub':kind}function toggleSidebar(){ $('sidebar').classList.toggle('open') }
+function hdr(){return {'Content-Type':'application/json'}}function esc(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}function cls(s){return String(s||'').replace(/[^a-zA-Z0-9_-]/g,'_')}function displayKind(kind){return kind==='virtual_hub'?'hub':kind}function toggleSidebar(){ $('sidebar').classList.toggle('open') }
 async function api(path,opts={}){const r=await fetch(path,{...opts,headers:{...hdr(),...(opts.headers||{})}});const t=await r.text();let j;try{j=JSON.parse(t)}catch{j={text:t}}if(!r.ok)throw new Error((j&&j.detail)||j.error||t||r.status);return j}
 function asTable(rows,cols){if(!rows||!rows.length)return '<p class="muted">пусто</p>';return '<table><thead><tr>'+cols.map(c=>'<th>'+esc(c[0])+'</th>').join('')+'</tr></thead><tbody>'+rows.map(r=>'<tr>'+cols.map(c=>'<td>'+c[1](r)+'</td>').join('')+'</tr>').join('')+'</tbody></table>'}
 function compactTime(ts){if(!ts)return '—';const numeric=typeof ts==='number'?ts:Number(ts);const value=Number.isFinite(numeric)&&String(ts).trim()!==''?(numeric<1e12?numeric*1000:numeric):ts;const d=new Date(value);if(Number.isNaN(d.getTime()))return ts;return d.toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit',second:'2-digit'})}
@@ -1016,7 +1010,7 @@ async function addManagedMcp(){try{const p=mcpPayloadBase('add');p.name=$('mcpNa
 
 async function getJob(){try{const id=$('jobId').value.trim();const j=await api('/mcp-relay/job/'+encodeURIComponent(id)+'?verbose=true&include_raw=true');$('result').textContent=JSON.stringify(j,null,2);refreshAll()}catch(e){$('result').textContent='ERR '+e.message}}
 function formatArgs(){try{$('args').value=JSON.stringify(JSON.parse($('args').value||'{}'),null,2)}catch(e){$('result').textContent='Bad JSON: '+e.message}}
-$('token').value=localStorage.getItem('gptadmin_ctl_token')||'';initMaxActiveIpsInput();showView(currentView);refreshAll();setInterval(()=>{if($('autoRefresh').checked)refreshAll()},15000);
+initMaxActiveIpsInput();showView(currentView);refreshAll();setInterval(()=>{if($('autoRefresh').checked)refreshAll()},15000);
 
 // ===== Security management =====
 async function loadSecurityEnv(){
@@ -1078,14 +1072,6 @@ async function setEnvVar(){
       alert('Ошибка: '+out);
     }
   }catch(e){alert('ERR '+e.message)}
-}
-
-async function rotateCtlToken(){
-  if(!confirm('Сгенерировать новый CTL_TOKEN? Старый перестанет работать!'))return;
-  const newToken=Array.from(crypto.getRandomValues(new Uint8Array(32)),b=>b.toString(16).padStart(2,'0')).join('');
-  $('secEnvKey').value='CTL_TOKEN';
-  $('secEnvVal').value=newToken;
-  alert('Новый CTL_TOKEN сгенерирован. Нажмите «Установить» чтобы применить, затем перезапустите хаб.\n\nВНИМАНИЕ: после рестарта старый токен перестанет работать!');
 }
 
 async function rotateOAuth(){

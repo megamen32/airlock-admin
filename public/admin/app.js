@@ -3,7 +3,7 @@
    ═══════════════════════════════════════════════════════════════ */
 
 const $=(id)=>document.getElementById(id);let state=null,currentView=localStorage.getItem('gptadmin_view')||'overview',updateStartedFromBuild=null;
-function token(){const input=$('token');return (input?.value||'').trim()||localStorage.getItem('gptadmin_ctl_token')||''}function saveToken(){const input=$('token');if(!input)return;localStorage.setItem('gptadmin_ctl_token',input.value.trim());refreshAll()}function hdr(){const h={'Content-Type':'application/json'};const t=token();if(t)h.Authorization='Bearer '+t;return h}function esc(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}function cls(s){return String(s||'').replace(/[^a-zA-Z0-9_-]/g,'_')}function displayKind(kind){return kind==='virtual_hub'?'hub':kind}function toggleSidebar(){ $('sidebar').classList.toggle('open') }
+function hdr(){return {'Content-Type':'application/json'}}function esc(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}function cls(s){return String(s||'').replace(/[^a-zA-Z0-9_-]/g,'_')}function displayKind(kind){return kind==='virtual_hub'?'hub':kind}function toggleSidebar(){ $('sidebar').classList.toggle('open') }
 async function api(path,opts={}){const r=await fetch(path,{...opts,headers:{...hdr(),...(opts.headers||{})}});const t=await r.text();let j;try{j=JSON.parse(t)}catch{j={text:t}}if(!r.ok)throw new Error((j&&j.detail)||j.error||t||r.status);return j}
 function asTable(rows,cols){if(!rows||!rows.length)return '<p class="muted">пусто</p>';return '<table><thead><tr>'+cols.map(c=>'<th>'+esc(c[0])+'</th>').join('')+'</tr></thead><tbody>'+rows.map(r=>'<tr>'+cols.map(c=>'<td>'+c[1](r)+'</td>').join('')+'</tr>').join('')+'</tbody></table>'}
 function compactTime(ts){if(!ts)return '—';const numeric=typeof ts==='number'?ts:Number(ts);const value=Number.isFinite(numeric)&&String(ts).trim()!==''?(numeric<1e12?numeric*1000:numeric):ts;const d=new Date(value);if(Number.isNaN(d.getTime()))return ts;return d.toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit',second:'2-digit'})}
@@ -400,7 +400,7 @@ async function addManagedMcp(){try{const p=mcpPayloadBase('add');p.name=$('mcpNa
 
 async function getJob(){try{const id=$('jobId').value.trim();const j=await api('/mcp-relay/job/'+encodeURIComponent(id)+'?verbose=true&include_raw=true');$('result').textContent=JSON.stringify(j,null,2);refreshAll()}catch(e){$('result').textContent='ERR '+e.message}}
 function formatArgs(){try{$('args').value=JSON.stringify(JSON.parse($('args').value||'{}'),null,2)}catch(e){$('result').textContent='Bad JSON: '+e.message}}
-const topTokenInput=$('token');if(topTokenInput)topTokenInput.value=localStorage.getItem('gptadmin_ctl_token')||'';initMaxActiveIpsInput();showView(currentView);loadFailover().catch(()=>{});refreshAll();setInterval(()=>{if($('autoRefresh').checked)refreshAll()},15000);
+initMaxActiveIpsInput();showView(currentView);loadFailover().catch(()=>{});refreshAll();setInterval(()=>{if($('autoRefresh').checked)refreshAll()},15000);
 
 // ===== Security management =====
 async function loadSecurityEnv(){
@@ -451,14 +451,6 @@ function setShellHeartbeatFromPanel(enabled){
   $('secEnvKey').value='SHELLMCP_HEARTBEAT';
   $('secEnvVal').value=enabled?'1':'0';
   setEnvVar();
-}
-
-async function rotateCtlToken(){
-  if(!confirm('Сгенерировать новый CTL_TOKEN? Старый перестанет работать!'))return;
-  const newToken=Array.from(crypto.getRandomValues(new Uint8Array(32)),b=>b.toString(16).padStart(2,'0')).join('');
-  $('secEnvKey').value='CTL_TOKEN';
-  $('secEnvVal').value=newToken;
-  alert('Новый CTL_TOKEN сгенерирован. Нажмите «Установить» чтобы применить, затем перезапустите хаб.\n\nВНИМАНИЕ: после рестарта старый токен перестанет работать!');
 }
 
 async function rotateOAuth(){

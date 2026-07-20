@@ -63,7 +63,9 @@ curl -s https://became.bezrabotnyi.com/install.sh | bash
 iwr -UseBasicParsing https://became.bezrabotnyi.com/install_win.ps1 | iex
 ```
 
-The installer prints your **Hub URL** and **CTL_TOKEN** — keep them.
+The installer prints your **Hub URL** and opens the connection flow. Do not
+copy a legacy bearer token; existing installations must migrate to
+AdminPassword/OAuth by `2026-07-27`.
 
 ```bash
 # 2. Connect your AI — pick one adapter:
@@ -134,7 +136,7 @@ python3 -m venv .venv && source .venv/bin/activate
 pip install fastapi uvicorn requests
 
 # hub (terminal 1)
-CTL_TOKEN=your-token go run ./go-hub/cmd/gptadmin-hub
+ADMIN_PASSWORD=choose-a-password OAUTH_CLIENT_SECRET=internal-signing-secret go run ./go-hub/cmd/gptadmin-hub
 
 # agent on a target machine (terminal 2)
 SHELLMCP_TOKEN=agent-token HUB_URL=http://127.0.0.1:9001 go run ./go-shellmcp/cmd/shellmcp-go

@@ -48,6 +48,17 @@ plan is [`PROJECT_PLAN.md`](./PROJECT_PLAN.md).
 
 ## Entries
 
+## 2026-07-20 - Retire legacy CLI token - completed
+
+- Milestone: `S0.5`
+- Owner: Codex
+- Scope: Legacy `CTL_TOKEN` compatibility window, Go Hub enforcement, CLI/admin messaging and migration deadline.
+- Baseline / red evidence: `CTL_TOKEN` remained accepted by Hub admin/MCP auth and was exposed by CLI token/doctor/setup messaging; no recorded cutoff date existed.
+- Change: Set the fixed 2026-07-27 UTC cutoff; legacy bearer auth now emits deprecation metadata before the cutoff and is rejected afterwards. New setup/update flows do not generate or print it, CLI rotation is removed, Admin UI uses session/OAuth flows, and ShellMCP artifacts use the agent credential after the cutoff.
+- Verification: RED tests covered pre/post-deadline Hub auth, ShellMCP artifact access, CLI output/rotation/setup and Admin UI controls. Python `130 passed, 2 skipped`; Go Hub and Go ShellMCP suites passed; local Hub rebuilt, restarted and reports `go-dev/worktree`.
+- Delivery: Changes are included in the pushed `main` commit.
+- Next: Complete the final legacy credential removal and migration audit after the 2026-07-27 deadline.
+
 ## 2026-07-20 - Persist ShellMCP auth across updates - completed
 
 - Milestone: `S0.2`

@@ -133,12 +133,12 @@
 
       <!-- Security -->
       <section id="view-security" class="view"><div class="card">
-        <h2>Токены и Auth</h2>
-        <p class="muted small">Подробная инструкция по Bearer CTL, JWT, OAuth, `openapi.yaml` и подключению как ChatGPT app: <a href="https://became.bezrabotnyi.com/#/docs" target="_blank" rel="noreferrer">became.bezrabotnyi.com/#/docs</a>.</p>
-        <div class="row" style="margin:12px 0"><button class="btn-secondary" onclick="loadSecurityEnv()">↻ Обновить</button><button class="cancelBtn" onclick="rotateCtlToken()">↻ Ротировать CTL_TOKEN</button><button class="cancelBtn" onclick="rotateOAuth()">↻ Ротировать OAUTH_SECRET</button></div>
+        <h2>Подключения и Auth</h2>
+        <p class="muted small">Подключения управляются через AdminPassword и OAuth. Подробности: <a href="https://became.bezrabotnyi.com/#/docs" target="_blank" rel="noreferrer">became.bezrabotnyi.com/#/docs</a>.</p>
+        <div class="row" style="margin:12px 0"><button class="btn-secondary" onclick="loadSecurityEnv()">↻ Обновить</button><button class="cancelBtn" onclick="rotateOAuth()">↻ Ротировать OAUTH_SECRET</button></div>
         <div id="securityEnv" class="stackList"><p class="muted">Нажмите «Обновить»</p></div>
         <div style="margin-top:16px"><h2 style="font-size:13px">Установить значение</h2>
-          <div class="row"><select id="secEnvKey"><option>CTL_TOKEN</option><option>ADMIN_PASSWORD</option><option>OAUTH_CLIENT_SECRET</option><option>MCP_BRIDGE_KEY</option><option>HUB_URL</option><option>PUBLIC_ORIGIN</option><option>MCP_RESOURCE</option><option>SHELLMCP_HEARTBEAT</option><option value="_custom">— своя —</option></select><input id="secEnvVal" placeholder="новое значение" style="min-width:280px"><button onclick="setEnvVar()">Установить</button></div>
+          <div class="row"><select id="secEnvKey"><option>ADMIN_PASSWORD</option><option>OAUTH_CLIENT_SECRET</option><option>MCP_BRIDGE_KEY</option><option>HUB_URL</option><option>PUBLIC_ORIGIN</option><option>MCP_RESOURCE</option><option>SHELLMCP_HEARTBEAT</option><option value="_custom">— своя —</option></select><input id="secEnvVal" placeholder="новое значение" style="min-width:280px"><button onclick="setEnvVar()">Установить</button></div>
           <div class="row"><label class="small"><input type="checkbox" id="shellHeartbeatEnabled" onchange="setShellHeartbeatFromPanel(this.checked)"> ShellMCP heartbeat</label><span class="muted small">по умолчанию выключен</span></div>
           <p class="muted small">Long-poll и webhook сами обновляют active. Включайте heartbeat только при отдельной диагностической необходимости.</p>
         </div>

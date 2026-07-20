@@ -39,3 +39,10 @@ def test_admin_oauth_rotation_uses_hub_endpoint_without_client_side_secret_gener
     script = (ROOT / "public" / "admin" / "app.js").read_text()
     assert "/admin/api/auth/rotate-oauth" in script
     assert "crypto.getRandomValues" not in script[script.index("async function rotateOAuth") : script.index("async function issueMcpTokenFromPanel")]
+
+
+def test_admin_ui_does_not_offer_legacy_ctl_bearer_controls():
+    html = (ROOT / "public" / "admin" / "index.html").read_text()
+    script = (ROOT / "public" / "admin" / "app.js").read_text()
+    assert "CTL_TOKEN" not in html
+    assert "CTL_TOKEN" not in script
