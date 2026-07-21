@@ -518,6 +518,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/admin/api/clients", s.requireCtl(s.adminClients))
 	mux.HandleFunc("/admin/login", s.adminLogin)
 	mux.HandleFunc("/admin/logout", s.adminLogout)
+	mux.HandleFunc("/admin/legacy/", s.adminLegacyStatic)
 	mux.HandleFunc("/admin/", s.adminStatic)
 	mux.HandleFunc("/admin", s.adminIndex)
 	return withCORS(mux)
@@ -2835,6 +2836,24 @@ func (s *Server) adminStatic(w http.ResponseWriter, r *http.Request) {
 	}
 	root := filepath.Join(s.cfg.PublicDir, "admin")
 	fs := http.StripPrefix("/admin/", http.FileServer(http.Dir(root)))
+	fs.ServeHTTP(w, r)
+}
+
+// adminLegacyStatic keeps the operational console available while the React
+// policy console owns the primary /admin/ entrypoint. It deliberately shares
+// the admin session gate and API origin with the primary UI so legacy tools do
+// not require a second credential or a hidden bearer token.
+func (s *Server) adminLegacyStatic(w http.ResponseWriter, r *http.Request) {
+	if !s.adminSessionValid(r) {
+		if wantsHTML(r) || strings.HasPrefix(r.URL.Path, "/admin/legacy/") {
+			s.renderAdminLogin(w, r, "")
+			return
+		}
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+	root := filepath.Join(s.cfg.PublicDir, "admin-legacy")
+	fs := http.StripPrefix("/admin/legacy/", http.FileServer(http.Dir(root)))
 	fs.ServeHTTP(w, r)
 }
 

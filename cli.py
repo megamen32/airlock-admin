@@ -506,6 +506,29 @@ def _copy_pkg_runtime_payloads(tdp: Path):
         if client_dst.exists():
             shutil.rmtree(client_dst, ignore_errors=True)
         shutil.copytree(client_src, client_dst)
+    public_src = tdp / 'public'
+    admin_src = public_src / 'admin'
+    if admin_src.exists():
+        public_dst = INSTALL_DIR / 'public'
+        public_dst.mkdir(parents=True, exist_ok=True)
+        admin_dst = public_dst / 'admin'
+        staged_admin = public_dst / '.admin-react.new'
+        if staged_admin.exists():
+            shutil.rmtree(staged_admin, ignore_errors=True)
+        shutil.copytree(admin_src, staged_admin)
+        if admin_dst.exists():
+            shutil.rmtree(admin_dst, ignore_errors=True)
+        os.replace(staged_admin, admin_dst)
+        legacy_src = public_src / 'admin-legacy'
+        if legacy_src.exists():
+            legacy_dst = public_dst / 'admin-legacy'
+            staged_legacy = public_dst / '.admin-legacy.new'
+            if staged_legacy.exists():
+                shutil.rmtree(staged_legacy, ignore_errors=True)
+            shutil.copytree(legacy_src, staged_legacy)
+            if legacy_dst.exists():
+                shutil.rmtree(legacy_dst, ignore_errors=True)
+            os.replace(staged_legacy, legacy_dst)
 
 
 def _arch_tag() -> str:

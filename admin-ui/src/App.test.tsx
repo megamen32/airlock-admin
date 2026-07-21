@@ -126,6 +126,7 @@ describe("Profiles / Instructions", () => {
     expect(screen.getByRole("link", { name: "Профили" })).toHaveAttribute("href", "#profiles");
     expect(screen.getByRole("link", { name: "Клиенты" })).toHaveAttribute("href", "#clients");
     expect(screen.getByRole("link", { name: "Авторизация" })).toHaveAttribute("href", "#auth");
+    expect(screen.getByRole("link", { name: "Операции и MCP" })).toHaveAttribute("href", "/admin/legacy/");
     expect(screen.getByRole("link", { name: "Выйти" })).toHaveAttribute("href", "/admin/logout");
 
     await userEvent.tab();
@@ -136,6 +137,8 @@ describe("Profiles / Instructions", () => {
     expect(screen.getByRole("link", { name: "Клиенты" })).toHaveFocus();
     await userEvent.tab();
     expect(screen.getByRole("link", { name: "Авторизация" })).toHaveFocus();
+    await userEvent.tab();
+    expect(screen.getByRole("link", { name: "Операции и MCP" })).toHaveFocus();
     await userEvent.tab();
     expect(screen.getByRole("link", { name: "Выйти" })).toHaveFocus();
   });

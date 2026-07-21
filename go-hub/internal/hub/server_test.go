@@ -890,6 +890,56 @@ func TestAdminPasswordLoginCookieProtectsStaticAndAPI(t *testing.T) {
 	}
 }
 
+func TestAdminLegacyStaticKeepsOperationsAvailableAfterReactCutover(t *testing.T) {
+	tmp := t.TempDir()
+	for _, name := range []string{"admin", "admin-legacy"} {
+		if err := os.MkdirAll(filepath.Join(tmp, name), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.WriteFile(filepath.Join(tmp, "admin", "index.html"), []byte("react-admin"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(tmp, "admin-legacy", "index.html"), []byte("legacy-operations"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	s := New(Config{CtlToken: "ctl", AdminPassword: "pw", PublicDir: tmp, DefaultTimeout: time.Second, PollMaxTimeout: time.Second})
+	h := s.Handler()
+	req := httptest.NewRequest(http.MethodGet, "/admin/legacy/", nil)
+	req.Header.Set("Accept", "text/html")
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, req)
+	if w.Code != http.StatusOK || !strings.Contains(w.Body.String(), "Введите admin-пароль") {
+		t.Fatalf("legacy admin should use the shared login gate: status=%d body=%s", w.Code, w.Body.String())
+	}
+
+	login := httptest.NewRequest(http.MethodPost, "/admin/login", strings.NewReader("password=pw&next=%2Fadmin%2Flegacy%2F"))
+	login.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	loginResponse := httptest.NewRecorder()
+	h.ServeHTTP(loginResponse, login)
+	if loginResponse.Code != http.StatusFound {
+		t.Fatalf("legacy admin login status=%d body=%s", loginResponse.Code, loginResponse.Body.String())
+	}
+	var session *http.Cookie
+	for _, cookie := range loginResponse.Result().Cookies() {
+		if cookie.Name == adminSessionCookieName {
+			session = cookie
+			break
+		}
+	}
+	if session == nil {
+		t.Fatal("legacy admin login did not set a session cookie")
+	}
+	req = httptest.NewRequest(http.MethodGet, "/admin/legacy/", nil)
+	req.AddCookie(session)
+	w = httptest.NewRecorder()
+	h.ServeHTTP(w, req)
+	if w.Code != http.StatusOK || !strings.Contains(w.Body.String(), "legacy-operations") {
+		t.Fatalf("legacy operations static page status=%d body=%s", w.Code, w.Body.String())
+	}
+}
+
 func TestAuthPagesExplainAdminPasswordAndBearerOptions(t *testing.T) {
 	s := New(Config{
 		CtlToken:                 "test-secret-not-for-production",

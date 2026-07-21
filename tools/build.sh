@@ -110,6 +110,7 @@ need python3; need tar; need grep; need sed; need awk; need sha256sum
 want_any hub shellmcp all smoke && need curl
 want_any windows android && need go
 want windows && need zip
+want_any all hub platform && need npm
 
 build_version() {
   step "Bump build version"
@@ -184,6 +185,16 @@ build_cli() {
   chmod 755 "$ART_DIR/cli/gptadmin.py"
   (cd "$ART_DIR" && tar -czf gptadmin-cli.tar.gz.tmp.$$ cli && mv -f gptadmin-cli.tar.gz.tmp.$$ gptadmin-cli.tar.gz)
   echo "built: $ART_DIR/gptadmin-cli.tar.gz"
+}
+
+build_admin_ui() {
+  step "Build React admin UI"
+  (cd admin-ui && npm ci && npm run build -- --base=/admin/)
+  [[ -s admin-ui/dist/index.html ]] || { echo "ERROR: missing admin-ui/dist/index.html"; exit 1; }
+  grep -q '/admin/assets/' admin-ui/dist/index.html || {
+    echo "ERROR: React admin UI was built without the /admin/ asset base" >&2
+    exit 1
+  }
 }
 
 fingerprint() {
@@ -283,10 +294,21 @@ copy_support_payloads() {
   find "$ART_DIR/hub_source" "$ART_DIR/client" \( -name '__pycache__' -o -name '*.pyc' -o -name '*.bak*' \) -print0 | xargs -0 -r rm -rf
 }
 
+copy_admin_static_payloads() {
+  [[ -s admin-ui/dist/index.html ]] || { echo "ERROR: admin-ui/dist is not built"; exit 1; }
+  rm -rf "$ART_DIR/public"
+  mkdir -p "$ART_DIR/public"
+  cp -a public/. "$ART_DIR/public/"
+  rm -rf "$ART_DIR/public/admin" "$ART_DIR/public/admin-legacy"
+  cp -a public/admin "$ART_DIR/public/admin-legacy"
+  cp -a admin-ui/dist "$ART_DIR/public/admin"
+  echo "packaged React admin at $ART_DIR/public/admin; legacy console at $ART_DIR/public/admin-legacy"
+}
+
 archive_component_cli() { build_cli; }
 archive_component_hub() {
   step "Archive: gptadmin-hub.tar.gz"
-  (cd "$ART_DIR" && tar -czf gptadmin-hub.tar.gz.tmp.$$ gptadmin_hub hub_source cli && mv -f gptadmin-hub.tar.gz.tmp.$$ gptadmin-hub.tar.gz)
+  (cd "$ART_DIR" && tar -czf gptadmin-hub.tar.gz.tmp.$$ gptadmin_hub hub_source cli public && mv -f gptadmin-hub.tar.gz.tmp.$$ gptadmin-hub.tar.gz)
   echo "built: $ART_DIR/gptadmin-hub.tar.gz"
 }
 archive_component_shellmcp() {
@@ -310,7 +332,7 @@ PY
 }
 archive_all() {
   step "Archive: gptadmin.tar.gz"
-  (cd "$ART_DIR" && tar -czf gptadmin.tar.gz.tmp.$$ shellmcp gptadmin_hub cli hub_source client && mv -f gptadmin.tar.gz.tmp.$$ gptadmin.tar.gz)
+  (cd "$ART_DIR" && tar -czf gptadmin.tar.gz.tmp.$$ shellmcp gptadmin_hub cli hub_source client public && mv -f gptadmin.tar.gz.tmp.$$ gptadmin.tar.gz)
   echo "built: $ART_DIR/gptadmin.tar.gz"
 }
 
@@ -329,7 +351,7 @@ make_platform_archive() {
     echo "WARN: skip $out: missing $ART_DIR/gptadmin_hub/$hub_tag"
     rm -rf "$tmp"; return 0
   fi
-  for d in cli hub_source client; do [[ -d "$ART_DIR/$d" ]] && cp -a "$ART_DIR/$d" "$tmp/"; done
+  for d in cli hub_source client public; do [[ -d "$ART_DIR/$d" ]] && cp -a "$ART_DIR/$d" "$tmp/"; done
   if [[ -d "$ART_DIR/go-shellmcp/${platform}_${arch}" ]]; then
     mkdir -p "$tmp/go-shellmcp/${platform}_${arch}" "$tmp/shellmcp/${platform}_${arch}"
     cp -a "$ART_DIR/go-shellmcp/${platform}_${arch}/." "$tmp/go-shellmcp/${platform}_${arch}/"
@@ -490,10 +512,12 @@ smoke_linux() {
 # Dependency expansion.
 if want all; then
   build_cli
+  build_admin_ui
   build_hub_linux
   build_hub_cross_platforms
   package_hub_platform_binaries
   copy_support_payloads
+  copy_admin_static_payloads
   archive_component_cli
   archive_component_hub
   archive_component_shellmcp
@@ -505,8 +529,8 @@ if want all; then
 else
   want cli && build_cli
   if want shellmcp; then build_cli; copy_support_payloads; archive_component_shellmcp; fi
-  if want hub; then build_cli; build_hub_linux; build_hub_cross_platforms; package_hub_platform_binaries; copy_support_payloads; archive_component_hub; fi
-  if want platform; then build_cli; build_hub_cross_platforms; package_hub_platform_binaries; copy_support_payloads; archive_platforms; fi
+  if want hub; then build_cli; build_admin_ui; build_hub_linux; build_hub_cross_platforms; package_hub_platform_binaries; copy_support_payloads; copy_admin_static_payloads; archive_component_hub; fi
+  if want platform; then build_cli; build_admin_ui; build_hub_cross_platforms; package_hub_platform_binaries; copy_support_payloads; copy_admin_static_payloads; archive_platforms; fi
   want windows && build_windows_shellmcp
   want android && build_android_shellmcp
   want smoke && smoke_linux

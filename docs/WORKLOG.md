@@ -621,3 +621,32 @@ plan is [`PROJECT_PLAN.md`](./PROJECT_PLAN.md).
 - Delivery: Pending commit and CI.
 - Next: Publish this feature slice only after review; do not include it in the
   already-running `v127` release.
+## 2026-07-21 - Promote React admin with legacy operations bridge - completed
+
+- Milestone: `S1.4`, `S2.2`
+- Owner: Codex
+- Scope: Make the React admin console the primary `/admin/` surface while
+  retaining the complete operational/MCP console at `/admin/legacy/`.
+- Baseline / red evidence: The effective `/opt/gptadmin/public/admin` bundle
+  differed from the repository React artifact; the React UI did not expose the
+  legacy overview, tools/resources manager, jobs/audit, update or failover
+  views.
+- Change: Added the authenticated `/admin/legacy/` static route, packaged the
+  React bundle plus an explicit `admin-legacy` fallback into Hub packages,
+  taught CLI updates to install both static trees atomically, and exposed a
+  visible `Операции и MCP` link from the React sidebar. Added TDD coverage for
+  the route and release/install contracts.
+- Verification: React tests `17 passed`, lint and `/admin/` base build passed;
+  Python tests `132 passed, 2 skipped`; Go Hub tests `go test ./...` passed;
+  browser smoke after admin login showed React instructions/profiles and the
+  legacy tools/resources/MCP manager/jobs/audit/failover surface. Hub service
+  is active. Deployment backup: `/opt/gptadmin/backups/admin-ui/20260721T050252Z`
+  (Hub/static) and `/opt/gptadmin/backups/admin-ui/20260721T050913Z`
+  (post-link static bundle).
+- Security: The password used for browser smoke was accidentally included in
+  tool output. At the user's direction the original `ADMIN_PASSWORD` was
+  restored immediately; no replacement value was retained or committed.
+- Delivery: Source changes are committed locally; the live static switch and
+  release-ldflags Hub binary are active and reversible from the listed
+  backups.
+- Next: Push the integrated commit and keep the existing admin password stable.
