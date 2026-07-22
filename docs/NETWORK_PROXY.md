@@ -12,13 +12,13 @@ The data plane is separate from ShellMCP queues and heartbeat traffic. Build the
 relay and edge binaries from their respective modules:
 
 ```bash
-cd go-proxyrelay
-go build -o ../trash/generated/network-tunnel-relay ./cmd/proxyrelay
-
-cd ../go-shellmcp
-go build -o ../trash/generated/network-tunnel-proxy ./cmd/networkproxy
-go build -o ../trash/generated/network-tunnel-agent ./cmd/networkproxy-agent
+tools/build.sh network-tunnel
+# build/gptadmin-network-tunnel.tar.gz
 ```
+
+The archive contains Linux relay/ticket/connector/agent binaries and Android
+arm64 connector/agent binaries under `network-tunnel/linux_amd64/` and
+`network-tunnel/android_arm64/`.
 
 Create one random relay key with mode `0600`, run the relay on a private
 address. When the Hub is the issuer, point both components at that same file

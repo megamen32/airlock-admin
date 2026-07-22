@@ -513,16 +513,20 @@ smoke_linux() {
 
 build_network_tunnel() {
   step "Build Network Tunnel vertical slice"
-  local dist="$ART_DIR/network-tunnel/linux_amd64"
-  mkdir -p "$dist"
-  (cd go-proxyrelay && go build -trimpath -o "../$dist/gptadmin-network-tunnel-relay" ./cmd/proxyrelay)
-  (cd go-proxyrelay && go build -trimpath -o "../$dist/gptadmin-network-tunnel-ticket" ./cmd/networkticket)
-  (cd go-shellmcp && go build -trimpath -o "../$dist/gptadmin-network-tunnel-proxy" ./cmd/networkproxy)
-  (cd go-shellmcp && go build -trimpath -o "../$dist/gptadmin-network-tunnel-agent" ./cmd/networkproxy-agent)
-  cp docs/NETWORK_PROXY.md "$dist/NETWORK_PROXY.md"
-  (cd "$ART_DIR" && tar -czf gptadmin-network-tunnel-linux-amd64.tar.gz.tmp.$$ "network-tunnel/linux_amd64" && mv -f gptadmin-network-tunnel-linux-amd64.tar.gz.tmp.$$ gptadmin-network-tunnel-linux-amd64.tar.gz)
-  sha256sum "$ART_DIR/gptadmin-network-tunnel-linux-amd64.tar.gz" > "$ART_DIR/gptadmin-network-tunnel-linux-amd64.sha256"
-  echo "built: $ART_DIR/gptadmin-network-tunnel-linux-amd64.tar.gz"
+  local linux_dist="$ART_DIR/network-tunnel/linux_amd64"
+  local android_dist="$ART_DIR/network-tunnel/android_arm64"
+  mkdir -p "$linux_dist" "$android_dist"
+  (cd go-proxyrelay && go build -trimpath -o "../$linux_dist/gptadmin-network-tunnel-relay" ./cmd/proxyrelay)
+  (cd go-proxyrelay && go build -trimpath -o "../$linux_dist/gptadmin-network-tunnel-ticket" ./cmd/networkticket)
+  (cd go-shellmcp && go build -trimpath -o "../$linux_dist/gptadmin-network-tunnel-proxy" ./cmd/networkproxy)
+  (cd go-shellmcp && go build -trimpath -o "../$linux_dist/gptadmin-network-tunnel-agent" ./cmd/networkproxy-agent)
+  (cd go-shellmcp && GOOS=android GOARCH=arm64 go build -trimpath -o "../$android_dist/gptadmin-network-tunnel-proxy" ./cmd/networkproxy)
+  (cd go-shellmcp && GOOS=android GOARCH=arm64 go build -trimpath -o "../$android_dist/gptadmin-network-tunnel-agent" ./cmd/networkproxy-agent)
+  cp docs/NETWORK_PROXY.md "$linux_dist/NETWORK_PROXY.md"
+  cp docs/NETWORK_PROXY.md "$android_dist/NETWORK_PROXY.md"
+  (cd "$ART_DIR" && tar -czf gptadmin-network-tunnel.tar.gz.tmp.$$ "network-tunnel" && mv -f gptadmin-network-tunnel.tar.gz.tmp.$$ gptadmin-network-tunnel.tar.gz)
+  sha256sum "$ART_DIR/gptadmin-network-tunnel.tar.gz" > "$ART_DIR/gptadmin-network-tunnel.sha256"
+  echo "built: $ART_DIR/gptadmin-network-tunnel.tar.gz"
 }
 
 # Dependency expansion.
