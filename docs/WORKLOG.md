@@ -48,6 +48,27 @@ plan is [`PROJECT_PLAN.md`](./PROJECT_PLAN.md).
 
 ## Entries
 
+## 2026-07-22 - Edge proxy policy and dialer core - completed
+
+- Milestone: `S0.2` Go-only ShellMCP runtime
+- Owner: Codex
+- Scope: Add the isolated `go-shellmcp/internal/networkproxy` policy and
+  dialer core only; no queue/heartbeat, transport, offer-client, agent, CLI or
+  deployment changes.
+- Baseline / red evidence: `cd go-shellmcp && go test ./internal/networkproxy`
+  failed because the desired policy, resolver and dialer contract was undefined.
+- Change: Added scope-aware target policy, local resolution with all-answer
+  validation and numeric-IP pinning, plus bounded TCP connections enforcing
+  dial timeout, total bytes and connection lifetime. No ShellMCP loop,
+  transport, current proxy PoC, CLI or deployment code changed.
+- Verification: Focused RED then GREEN passed; `go test ./...`,
+  `go test -race ./internal/networkproxy`, and `go vet ./...` all passed from
+  `go-shellmcp`.
+- Delivery: Commit `ad68358` (`Add edge proxy policy and dialer core`);
+  detailed handoff is `.superpowers/sdd/task-4a-report.md`.
+- Next: Add the separately scoped signed-offer client and agent activation
+  flow that supplies this package's local Policy and Limits.
+
 ## 2026-07-20 - Retire legacy CLI token - completed
 
 - Milestone: `S0.5`
