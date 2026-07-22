@@ -48,6 +48,25 @@ plan is [`PROJECT_PLAN.md`](./PROJECT_PLAN.md).
 
 ## Entries
 
+## 2026-07-22 - Network Tunnel runnable vertical slice - completed
+
+- Milestone: `S0.2` isolated Network Tunnel data plane
+- Owner: Codex with bounded relay-daemon implementation worker
+- Scope: Public blackbox coverage, WSS relay daemon, controlled ticket issuer,
+  edge offer runner, loopback HTTP CONNECT/SOCKS5 connector, and operator
+  instructions. ShellMCP queues and heartbeat remain untouched.
+- Baseline / red evidence: The relay core had tests but no runnable daemon or
+  external edge connector path; no blackbox test covered a local proxy request.
+- Change: Added `go-proxyrelay/cmd/proxyrelay` and `networkticket`, edge
+  `networkproxy` and `networkproxy-agent` commands, bounded WebSocket stream
+  adapter, local connector, and blackbox tests for relay and local CONNECT.
+  The static ticket issuer is explicitly bring-up-only; dynamic Hub issuance
+  and the AI-facing MCP surface remain a follow-up.
+- Verification: `go test ./...`, `go vet ./...`, and `go build` passed in both
+  `go-proxyrelay` and `go-shellmcp`; both `./blackbox` suites passed.
+- Delivery: Pending commit in this working tree; no deployment performed.
+- Next: Perform one consolidated review after the runnable slice is committed.
+
 ## 2026-07-22 - Edge proxy policy and dialer core - completed
 
 - Milestone: `S0.2` Go-only ShellMCP runtime

@@ -1,9 +1,55 @@
 # Network Tunnel protocol contract
 
-> **Status:** Version 1 is a design contract, not an implemented service. It
-> does not add a Hub API route, a listener, a relay process, an MCP tool, or a
-> deployment unit. Until an implementation passes its security gates, GPTAdmin
-> provides no Network Tunnel capability.
+> **Status:** The v1 contract is now backed by a runnable vertical slice: an
+> isolated WSS relay, an edge offer runner, and a loopback HTTP CONNECT/SOCKS5
+> TCP connector. Hub-issued dynamic grants and the AI-facing MCP surface remain
+> the next integration stage; the static ticket flow below is for controlled
+> bring-up and blackbox testing only.
+
+## Runnable vertical slice
+
+The data plane is separate from ShellMCP queues and heartbeat traffic. Build the
+relay and edge binaries from their respective modules:
+
+```bash
+cd go-proxyrelay
+go build -o ../trash/generated/network-tunnel-relay ./cmd/proxyrelay
+
+cd ../go-shellmcp
+go build -o ../trash/generated/network-tunnel-proxy ./cmd/networkproxy
+go build -o ../trash/generated/network-tunnel-agent ./cmd/networkproxy-agent
+```
+
+Create one random relay key with mode `0600`, run the relay on a private
+address, and issue two short-lived role-bound tickets with the relay's local
+ticket issuer. The client ticket goes to `network-tunnel-proxy`; the agent
+ticket is embedded as `relay_ticket` in the signed offer consumed by
+`network-tunnel-agent`. Each ticket is one-use and each TCP connection needs a
+fresh pair of tickets.
+
+For a controlled bring-up, the local issuer is `go-proxyrelay/cmd/networkticket`:
+
+```bash
+cd go-proxyrelay
+go build -o ../trash/generated/network-tunnel-ticket ./cmd/networkticket
+./../trash/generated/network-tunnel-ticket -key-file relay.key -role client \
+  -stream-id demo-1 -target 192.168.2.50:80 -output client.ticket
+./../trash/generated/network-tunnel-ticket -key-file relay.key -role agent \
+  -stream-id demo-1 -target 192.168.2.50:80 -output agent.ticket
+```
+
+The issuer is deliberately a bring-up tool, not a replacement for Hub policy
+or approval. It must run only on the operator's private admin host.
+
+The connector binds loopback by default on `127.0.0.1:3126`; it accepts only
+the exact target bound into its ticket. Use HTTP `CONNECT` or SOCKS5 TCP
+`CONNECT`. UDP, transparent proxying, and public listener binds remain outside
+v1. The blackbox coverage is:
+
+```bash
+cd go-proxyrelay && go test ./blackbox -count=1
+cd ../go-shellmcp && go test ./blackbox -count=1
+```
 
 ## Purpose and boundary
 
