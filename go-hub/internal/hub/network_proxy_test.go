@@ -646,3 +646,237 @@ func TestNetworkProxyHubToolSchemasAreRegistered(t *testing.T) {
 		}
 	}
 }
+
+func allowNetworkAccessTools(t *testing.T, s *Server, profileID string) {
+	t.Helper()
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	profile := s.accessProfiles[profileID]
+	profile.AllowedTools = append(profile.AllowedTools,
+		"network_access_plan",
+		"network_access_enable",
+		"network_access_status",
+		"network_access_disable",
+	)
+	s.accessProfiles[profileID] = profile
+}
+
+func networkProxyMCPResponse(t *testing.T, rec *httptest.ResponseRecorder) map[string]any {
+	t.Helper()
+	if rec.Code < http.StatusOK || rec.Code >= http.StatusMultipleChoices {
+		t.Fatalf("MCP status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	var response struct {
+		Response map[string]any `json:"response"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &response); err != nil {
+		t.Fatalf("decode MCP response: %v", err)
+	}
+	return response.Response
+}
+
+func decodeNetworkProxyCapability(t *testing.T, raw any) NetworkProxyCapability {
+	t.Helper()
+	b, err := json.Marshal(raw)
+	if err != nil {
+		t.Fatalf("marshal capability: %v", err)
+	}
+	var capability NetworkProxyCapability
+	if err := json.Unmarshal(b, &capability); err != nil {
+		t.Fatalf("decode capability: %v", err)
+	}
+	return capability
+}
+
+func TestNetworkAccessAliasesAreRegisteredWithSafeSchemas(t *testing.T) {
+	want := map[string]bool{
+		"network_access_plan":    false,
+		"network_access_enable":  false,
+		"network_access_status":  false,
+		"network_access_disable": false,
+	}
+	for _, tool := range hubTools() {
+		name, _ := tool["name"].(string)
+		if _, ok := want[name]; !ok {
+			continue
+		}
+		want[name] = true
+		description, _ := tool["description"].(string)
+		lower := strings.ToLower(description)
+		for _, phrase := range []string{"lan", "internet_egress", "bounded tcp", "no udp"} {
+			if !strings.Contains(lower, phrase) {
+				t.Errorf("tool %q description missing %q: %q", name, phrase, description)
+			}
+		}
+		schema := mapValue(tool["inputSchema"])
+		required := map[string]bool{}
+		switch requiredValues := schema["required"].(type) {
+		case []string:
+			for _, value := range requiredValues {
+				required[value] = true
+			}
+		case []any:
+			for _, item := range requiredValues {
+				if value, ok := item.(string); ok {
+					required[value] = true
+				}
+			}
+		}
+		switch name {
+		case "network_access_plan":
+			if !required["policy"] {
+				t.Errorf("tool %q must require policy", name)
+			}
+		case "network_access_enable", "network_access_disable":
+			if !required["explicit_confirm"] {
+				t.Errorf("tool %q must require explicit_confirm", name)
+			}
+			if !strings.Contains(lower, "explicit_confirm") {
+				t.Errorf("tool %q description must explain explicit_confirm", name)
+			}
+		}
+	}
+	for name, found := range want {
+		if !found {
+			t.Errorf("Hub tool %q is not registered", name)
+		}
+	}
+}
+
+func TestNetworkAccessAliasesUseTheExistingCapabilityFlow(t *testing.T) {
+	clock := &proxyTestClock{now: time.Date(2026, 7, 22, 12, 0, 0, 0, time.UTC)}
+	s := newNetworkProxyTestServer(t, clock)
+	allowNetworkAccessTools(t, s, "proxy-profile")
+
+	planned := networkProxyMCPCall(t, s, "proxy-profile", "network_access_plan", map[string]any{
+		"policy": testNetworkProxyPolicy(),
+	})
+	if planned.Code != http.StatusCreated {
+		t.Fatalf("plan status=%d body=%s", planned.Code, planned.Body.String())
+	}
+	plannedResponse := networkProxyMCPResponse(t, planned)
+	capability := decodeNetworkProxyCapability(t, plannedResponse["capability"])
+	if capability.State != "pending" {
+		t.Fatalf("plan state=%q, want pending; plan must not auto-enable", capability.State)
+	}
+
+	enabled := networkProxyMCPCall(t, s, "proxy-profile", "network_access_enable", map[string]any{
+		"capability_id":    capability.CapabilityID,
+		"explicit_confirm": true,
+	})
+	if enabled.Code != http.StatusOK {
+		t.Fatalf("enable status=%d body=%s", enabled.Code, enabled.Body.String())
+	}
+	enabledCapability := decodeNetworkProxyCapability(t, networkProxyMCPResponse(t, enabled)["capability"])
+	if enabledCapability.State != "active" {
+		t.Fatalf("enable state=%q, want active", enabledCapability.State)
+	}
+
+	status := networkProxyMCPCall(t, s, "proxy-profile", "network_access_status", map[string]any{
+		"capability_id": capability.CapabilityID,
+	})
+	if status.Code != http.StatusOK {
+		t.Fatalf("status status=%d body=%s", status.Code, status.Body.String())
+	}
+	if got := decodeNetworkProxyCapability(t, networkProxyMCPResponse(t, status)["capability"]); got.State != "active" {
+		t.Fatalf("status state=%q, want active", got.State)
+	}
+
+	disabled := networkProxyMCPCall(t, s, "proxy-profile", "network_access_disable", map[string]any{
+		"capability_id":    capability.CapabilityID,
+		"explicit_confirm": true,
+	})
+	if disabled.Code != http.StatusOK {
+		t.Fatalf("disable status=%d body=%s", disabled.Code, disabled.Body.String())
+	}
+	if got := decodeNetworkProxyCapability(t, networkProxyMCPResponse(t, disabled)["capability"]); got.State != "draining" {
+		t.Fatalf("disable state=%q, want draining", got.State)
+	}
+}
+
+func TestNetworkAccessEnableAndDisableRequireExplicitConfirmation(t *testing.T) {
+	clock := &proxyTestClock{now: time.Date(2026, 7, 22, 12, 0, 0, 0, time.UTC)}
+	s := newNetworkProxyTestServer(t, clock)
+	allowNetworkAccessTools(t, s, "proxy-profile")
+	capability := requestProxyCapabilityHTTP(t, s, testNetworkProxyPolicy())
+
+	withoutEnableConfirmation := networkProxyMCPCall(t, s, "proxy-profile", "network_access_enable", map[string]any{
+		"capability_id": capability.CapabilityID,
+	})
+	if withoutEnableConfirmation.Code != http.StatusBadRequest {
+		t.Fatalf("enable without confirmation status=%d body=%s", withoutEnableConfirmation.Code, withoutEnableConfirmation.Body.String())
+	}
+	if current, err := s.networkProxy.Status(capability.CapabilityID); err != nil || current.State != "pending" {
+		t.Fatalf("enable without confirmation mutated capability: state=%q err=%v", current.State, err)
+	}
+
+	confirmed := networkProxyMCPCall(t, s, "proxy-profile", "network_access_enable", map[string]any{
+		"capability_id": capability.CapabilityID, "explicit_confirm": true,
+	})
+	if confirmed.Code != http.StatusOK {
+		t.Fatalf("enable status=%d body=%s", confirmed.Code, confirmed.Body.String())
+	}
+	withoutDisableConfirmation := networkProxyMCPCall(t, s, "proxy-profile", "network_access_disable", map[string]any{
+		"capability_id": capability.CapabilityID, "explicit_confirm": false,
+	})
+	if withoutDisableConfirmation.Code != http.StatusBadRequest {
+		t.Fatalf("disable without confirmation status=%d body=%s", withoutDisableConfirmation.Code, withoutDisableConfirmation.Body.String())
+	}
+	if current, err := s.networkProxy.Status(capability.CapabilityID); err != nil || current.State != "active" {
+		t.Fatalf("disable without confirmation mutated capability: state=%q err=%v", current.State, err)
+	}
+}
+
+func TestNetworkAccessAliasesDenyCrossProfileOperations(t *testing.T) {
+	clock := &proxyTestClock{now: time.Date(2026, 7, 22, 12, 0, 0, 0, time.UTC)}
+	s := newNetworkProxyTestServer(t, clock)
+	allowNetworkAccessTools(t, s, "proxy-profile")
+	allowNetworkAccessTools(t, s, "other-profile")
+	capability := requestProxyCapabilityHTTP(t, s, testNetworkProxyPolicy())
+
+	for _, testCase := range []struct {
+		name string
+		args map[string]any
+	}{
+		{name: "enable", args: map[string]any{"capability_id": capability.CapabilityID, "explicit_confirm": true}},
+		{name: "status", args: map[string]any{"capability_id": capability.CapabilityID}},
+		{name: "disable", args: map[string]any{"capability_id": capability.CapabilityID, "explicit_confirm": true}},
+	} {
+		t.Run(testCase.name, func(t *testing.T) {
+			rec := networkProxyMCPCall(t, s, "other-profile", "network_access_"+testCase.name, testCase.args)
+			if rec.Code != http.StatusForbidden {
+				t.Fatalf("cross-profile %s status=%d body=%s", testCase.name, rec.Code, rec.Body.String())
+			}
+		})
+	}
+}
+
+func TestNetworkAccessAliasesDoNotTouchCommandQueuesOrHeartbeat(t *testing.T) {
+	clock := &proxyTestClock{now: time.Date(2026, 7, 22, 12, 0, 0, 0, time.UTC)}
+	s := newNetworkProxyTestServer(t, clock)
+	allowNetworkAccessTools(t, s, "proxy-profile")
+	planned := networkProxyMCPCall(t, s, "proxy-profile", "network_access_plan", map[string]any{"policy": testNetworkProxyPolicy()})
+	capability := decodeNetworkProxyCapability(t, networkProxyMCPResponse(t, planned)["capability"])
+	for _, call := range []struct {
+		name string
+		args map[string]any
+	}{
+		{name: "network_access_enable", args: map[string]any{"capability_id": capability.CapabilityID, "explicit_confirm": true}},
+		{name: "network_access_status", args: map[string]any{"capability_id": capability.CapabilityID}},
+		{name: "network_access_disable", args: map[string]any{"capability_id": capability.CapabilityID, "explicit_confirm": true}},
+	} {
+		rec := networkProxyMCPCall(t, s, "proxy-profile", call.name, call.args)
+		if rec.Code < http.StatusOK || rec.Code >= http.StatusMultipleChoices {
+			t.Fatalf("%s status=%d body=%s", call.name, rec.Code, rec.Body.String())
+		}
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if len(s.relayJobs) != 0 || len(s.relayQueues) != 0 || len(s.shellJobs) != 0 || len(s.shellQueues) != 0 {
+		t.Fatalf("network access aliases touched command state: relay_jobs=%d relay_queues=%d shell_jobs=%d shell_queues=%d", len(s.relayJobs), len(s.relayQueues), len(s.shellJobs), len(s.shellQueues))
+	}
+	if got := s.agents["shell:proxy-1"].LastSeen; got != 0 {
+		t.Fatalf("network access aliases reused heartbeat liveness: last_seen=%v", got)
+	}
+}

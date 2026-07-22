@@ -2089,7 +2089,7 @@ func (s *Server) callHubTool(name string, args map[string]any) (map[string]any, 
 }
 
 func (s *Server) callHubToolForRequest(r *http.Request, name string, args map[string]any) (map[string]any, int) {
-	if strings.HasPrefix(name, "network_proxy_") {
+	if isNetworkProxyHubTool(name) {
 		return s.callNetworkProxyTool(AccessProfileIDFromRequest(r), name, args)
 	}
 	s.mu.Lock()

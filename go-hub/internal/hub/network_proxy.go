@@ -703,6 +703,41 @@ func (s *Server) networkProxyPolicyAuthorized(profileID, toolName string, policy
 		agent != nil && agent.Meta != nil && truthyAny(agent.Meta["approved"])
 }
 
+func isNetworkProxyHubTool(name string) bool {
+	return strings.HasPrefix(name, "network_proxy_") || strings.HasPrefix(name, "network_access_")
+}
+
+func networkAccessCanonicalTool(name string) (string, bool) {
+	switch name {
+	case "network_access_plan":
+		return "network_proxy_request", true
+	case "network_access_enable":
+		return "network_proxy_approve", true
+	case "network_access_status":
+		return "network_proxy_status", true
+	case "network_access_disable":
+		return "network_proxy_revoke", true
+	default:
+		return "", false
+	}
+}
+
+func (s *Server) networkAccessAliasAuthorized(profileID, alias, canonical string) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	profile, found := s.accessProfiles[strings.TrimSpace(profileID)]
+	return found && profile.AccessMode == accessModeFull &&
+		containsString(profile.AllowedTools, alias) && containsString(profile.AllowedTools, canonical)
+}
+
+func requireNetworkAccessConfirmation(args map[string]any) error {
+	confirmed, ok := args["explicit_confirm"].(bool)
+	if !ok || !confirmed {
+		return fmt.Errorf("%w: explicit_confirm must be true", ErrNetworkProxyInvalid)
+	}
+	return nil
+}
+
 func (s *Server) approveNetworkProxyCapability(capabilityID string) (NetworkProxyCapability, error) {
 	return s.approveNetworkProxyCapabilityForProfile("", capabilityID)
 }
@@ -981,6 +1016,10 @@ func (s *Server) callNetworkProxyTool(callerProfileID, name string, args map[str
 	if callerProfileID == "" {
 		return map[string]any{"error": ErrNetworkProxyUnauthorized.Error()}, http.StatusForbidden
 	}
+	canonical, alias := networkAccessCanonicalTool(name)
+	if alias && !s.networkAccessAliasAuthorized(callerProfileID, name, canonical) {
+		return map[string]any{"error": ErrNetworkProxyUnauthorized.Error()}, http.StatusForbidden
+	}
 	switch name {
 	case "network_proxy_request":
 		policy, err := networkProxyPolicyFromArgs(args)
@@ -995,7 +1034,26 @@ func (s *Server) callNetworkProxyTool(callerProfileID, name string, args map[str
 			return map[string]any{"error": err.Error()}, networkProxyErrorStatus(err)
 		}
 		return map[string]any{"capability": capability}, http.StatusCreated
+	case "network_access_plan":
+		policy, err := networkProxyPolicyFromArgs(args)
+		if err != nil {
+			return map[string]any{"error": err.Error()}, networkProxyErrorStatus(err)
+		}
+		capability, err := s.requestNetworkProxyCapability(callerProfileID, policy)
+		if err != nil {
+			return map[string]any{"error": err.Error()}, networkProxyErrorStatus(err)
+		}
+		return map[string]any{"capability": capability}, http.StatusCreated
 	case "network_proxy_approve":
+		capability, err := s.approveNetworkProxyCapabilityForProfile(callerProfileID, firstString(args, "capability_id"))
+		if err != nil {
+			return map[string]any{"error": err.Error()}, networkProxyErrorStatus(err)
+		}
+		return map[string]any{"capability": capability}, http.StatusOK
+	case "network_access_enable":
+		if err := requireNetworkAccessConfirmation(args); err != nil {
+			return map[string]any{"error": err.Error()}, networkProxyErrorStatus(err)
+		}
 		capability, err := s.approveNetworkProxyCapabilityForProfile(callerProfileID, firstString(args, "capability_id"))
 		if err != nil {
 			return map[string]any{"error": err.Error()}, networkProxyErrorStatus(err)
@@ -1019,7 +1077,22 @@ func (s *Server) callNetworkProxyTool(callerProfileID, name string, args map[str
 			return map[string]any{"error": err.Error()}, networkProxyErrorStatus(err)
 		}
 		return map[string]any{"capability": capability}, http.StatusOK
+	case "network_access_status":
+		capability, err := s.statusNetworkProxyCapabilityForProfile(callerProfileID, firstString(args, "capability_id"))
+		if err != nil {
+			return map[string]any{"error": err.Error()}, networkProxyErrorStatus(err)
+		}
+		return map[string]any{"capability": capability}, http.StatusOK
 	case "network_proxy_revoke":
+		capability, err := s.revokeNetworkProxyCapabilityForProfile(callerProfileID, firstString(args, "capability_id"))
+		if err != nil {
+			return map[string]any{"error": err.Error()}, networkProxyErrorStatus(err)
+		}
+		return map[string]any{"capability": capability}, http.StatusOK
+	case "network_access_disable":
+		if err := requireNetworkAccessConfirmation(args); err != nil {
+			return map[string]any{"error": err.Error()}, networkProxyErrorStatus(err)
+		}
 		capability, err := s.revokeNetworkProxyCapabilityForProfile(callerProfileID, firstString(args, "capability_id"))
 		if err != nil {
 			return map[string]any{"error": err.Error()}, networkProxyErrorStatus(err)
@@ -1070,5 +1143,9 @@ func networkProxyHubTools() []map[string]any {
 		{"name": "network_proxy_open", "description": "Atomically consume one role-bound stream grant", "inputSchema": map[string]any{"type": "object", "properties": map[string]any{"token": map[string]any{"type": "string"}, "role": map[string]any{"type": "string", "enum": []string{"client", "agent"}}}, "required": []string{"token", "role"}, "additionalProperties": false}},
 		{"name": "network_proxy_status", "description": "Read capability state without touching agent liveness", "inputSchema": map[string]any{"type": "object", "properties": map[string]any{"capability_id": capabilityID}, "required": []string{"capability_id"}, "additionalProperties": false}},
 		{"name": "network_proxy_revoke", "description": "Stop new grants and drain a capability", "inputSchema": map[string]any{"type": "object", "properties": map[string]any{"capability_id": capabilityID}, "required": []string{"capability_id"}, "additionalProperties": false}},
+		{"name": "network_access_plan", "description": "Plan a Network Tunnel capability for lan or internet_egress. The policy permits bounded TCP only; no UDP. Planning does not enable access.", "inputSchema": map[string]any{"type": "object", "properties": map[string]any{"policy": policy}, "required": []string{"policy"}, "additionalProperties": false}},
+		{"name": "network_access_enable", "description": "Enable a planned Network Tunnel for lan or internet_egress after explicit confirmation. Set explicit_confirm=true. Streams are bounded TCP only; no UDP.", "inputSchema": map[string]any{"type": "object", "properties": map[string]any{"capability_id": capabilityID, "explicit_confirm": map[string]any{"type": "boolean", "description": "Must be true to enable access"}}, "required": []string{"capability_id", "explicit_confirm"}, "additionalProperties": false}},
+		{"name": "network_access_status", "description": "Read the status of a Network Tunnel for lan or internet_egress. It reports bounded TCP-only access; no UDP.", "inputSchema": map[string]any{"type": "object", "properties": map[string]any{"capability_id": capabilityID}, "required": []string{"capability_id"}, "additionalProperties": false}},
+		{"name": "network_access_disable", "description": "Disable a Network Tunnel for lan or internet_egress after explicit confirmation. Set explicit_confirm=true. This controls bounded TCP only; no UDP.", "inputSchema": map[string]any{"type": "object", "properties": map[string]any{"capability_id": capabilityID, "explicit_confirm": map[string]any{"type": "boolean", "description": "Must be true to disable access"}}, "required": []string{"capability_id", "explicit_confirm"}, "additionalProperties": false}},
 	}
 }
