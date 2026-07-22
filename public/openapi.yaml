@@ -7,6 +7,10 @@ info:
 
     Shell hosts and MCP services are exposed as GPTAdmin servers with ids like shell:<server_name>.
     The hub itself is exposed as target "hub" for registry and approval tools.
+
+    Network Tunnel v1 is a documented future protocol contract only. This API does not expose
+    proxy streams, offers, tickets, or SOCKS/HTTP endpoints; see docs/NETWORK_PROXY.md and
+    docs/NETWORK_PROXY_THREAT_MODEL.md. Do not infer Network Tunnel support from this schema.
 servers:
   - url: https://u-f1102930.t.gptadmin.bezrabotnyi.com
 security:

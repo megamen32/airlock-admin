@@ -18,6 +18,25 @@ The current `S1.3a` slice implements the versioned default instruction set.
 Profile persistence, bindings and policy enforcement remain exit-gate work and
 must not be represented as active until their black-box tests pass.
 
+## Network Tunnel capability boundary
+
+The future Network Tunnel is an opt-in capability, not a consequence of
+selecting a ShellMCP target. A profile that does not explicitly allow it grants
+no network access. When policy enforcement is implemented, a Network Tunnel
+allowance must identify the selected `agent_id`, exactly one mode (`lan` or
+`internet_egress`), finite target CIDRs and TCP ports, the fixed v1 protocol
+set, a finite lease, and finite stream limits. It must require the normal
+approval policy before activation.
+
+Profile policy must not expose raw proxy credentials, a generic
+`connect(host, port)` permission, or an unrestricted network scope to MCP
+clients. `lan` and `internet_egress` have separate approval and audit
+boundaries; neither is a fallback for the other. Revoking an applicable
+profile permission must revoke the capability and reset its streams when the
+Network Tunnel exists. The current profile runtime does not implement this
+capability; the normative protocol is documented in
+[`NETWORK_PROXY.md`](./NETWORK_PROXY.md).
+
 ## External workspace reference
 
 An infrastructure workspace remains an independent source of truth. GPTAdmin
