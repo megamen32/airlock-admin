@@ -101,7 +101,7 @@ revocation; the MCP process does not mint unrestricted credentials.
 **Deliverable:** Document capability fields (`agent_id`, `mode`, `target_cidrs`, `target_ports`, `protocols`, `lease`, `limits`), state machines, grant claims (`capability_id`, `stream_id`, `agent_id`, `target`, `role`, `exp`, `jti`, protocol version), and the following transport semantics:
 
 - webhook sends only a signed `offer_id`, timestamp and nonce; the agent opens the outbound data session;
-- pull uses a dedicated `/proxy-agent/v1/offers` long-poll and never `/queue/{server}`;
+- pull uses a dedicated `/proxy-agent/offers` long-poll and never `/queue/{server}`;
 - a client or agent reconnect can obtain new offers, but cannot resume an old TCP stream;
 - `tcp=true`, `udp=false`, `socks5_connect=true`, `socks5_udp_associate=false`, `tun=false`;
 - restart fails closed for active capabilities; persisted policy is not a live credential.

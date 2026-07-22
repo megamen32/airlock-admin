@@ -44,7 +44,9 @@ or approval. It must run only on the operator's private admin host.
 The connector binds loopback by default on `127.0.0.1:3126`; it accepts only
 the exact target bound into its ticket. Use HTTP `CONNECT` or SOCKS5 TCP
 `CONNECT`. UDP, transparent proxying, and public listener binds remain outside
-v1. The blackbox coverage is:
+v1. The edge runner supports the controlled `file` bring-up mode plus signed
+`pull` and `webhook` offer sources; both delivered modes converge on the same
+`OfferConsumer` and data-plane activation path. The blackbox coverage is:
 
 ```bash
 cd go-proxyrelay && go test ./blackbox -count=1
@@ -148,7 +150,7 @@ and nonce uniqueness, then opens an outbound control/data session; no inbound
 agent listener is required.
 
 An agent pulls offers only through the dedicated long-poll route
-`/proxy-agent/v1/offers`. This route is reserved by the contract for the future
+`/proxy-agent/offers`. This route is reserved by the contract for the future
 Network Tunnel and is never `/queue/{server}`. A webhook notification may wake
 the agent to pull; it cannot substitute for the pull response or deliver a
 data stream.
