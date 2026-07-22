@@ -704,3 +704,27 @@ plan is [`PROJECT_PLAN.md`](./PROJECT_PLAN.md).
   file are active; selected LAN port is recorded in
   `/etc/gptadmin/android-4g-proxy.env`. Source changes are uncommitted.
 - Next: Use a TUN/tun2socks design only if LAN UDP is required.
+
+## 2026-07-22 - Hub Network Tunnel controller - completed
+
+- Milestone: `S2.2`
+- Owner: Codex
+- Scope: Implement only the Hub network proxy capability controller, dedicated
+  proxy-control HTTP routes and Hub tools covered by
+  `go-hub/internal/hub/network_proxy_test.go`; do not touch command/relay/shell
+  queues, execution, heartbeat liveness, relay sockets, agents/connectors,
+  child MCP servers or deployment.
+- Baseline / red evidence: Focused RED first failed on the incomplete controller
+  wiring and then on missing OpenAPI contract entries.
+- Change: Added the Hub-side capability controller with explicit `lan` and
+  `internet_egress` scopes, finite leases, profile/agent authorization,
+  target-bound one-time client/agent grants, revoke signalling, fail-closed
+  persistence and dedicated proxy-control routes/tools. The command queues and
+  heartbeat liveness remain untouched.
+- Verification: `cd go-hub && go test ./internal/hub -run 'Proxy|Network' -count=1`
+  and `cd go-hub && go test ./...` passed. `public/openapi.yaml` parsed and
+  included all proxy-control paths/schemas; `git diff --check` passed.
+- Delivery: Commit `383af8b` (`feat: add Hub Network Tunnel controller`); no
+  push, relay deployment or external proxy data-plane in scope.
+- Next: Implement the isolated proxy relay and edge-agent transport; keep the
+  controller API as the only control-plane dependency.
