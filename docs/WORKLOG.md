@@ -48,6 +48,26 @@ plan is [`PROJECT_PLAN.md`](./PROJECT_PLAN.md).
 
 ## Entries
 
+## 2026-07-22 - External relay acceptance - completed
+
+- Milestone: `S0.2` Network Tunnel external data-plane proof
+- Owner: Codex
+- Scope: Ephemeral external relay/agent/client run through `vpn2`, using a
+  free loopback connector port and a public Internet target.
+- Baseline / red evidence: Existing `192.168.2.100:3126` was unreachable from
+  `vpn2`; direct `vpn2` egress worked, confirming the old LAN proxy was not an
+  external endpoint. A first test port was also rejected because it belonged
+  to an unrelated ADB forward.
+- Change: Re-ran on free `127.0.0.1:3137` with fresh one-time tickets. The
+  connector reached the remote relay, the remote agent dialed `1.1.1.1:80`,
+  and the target returned `HTTP/1.1 405 Method Not Allowed`; temporary remote
+  processes, SSH forwarding and local ports were removed.
+- Verification: External process-level path passed; repository Go test/race/
+  vet suites remain green.
+- Delivery: Acceptance evidence is ephemeral and contains no credentials.
+- Next: Configure the shared relay key and revoke URL on the live Hub/relay,
+  then run Android 4G and LAN-camera acceptance.
+
 ## 2026-07-22 - Relay revoke signaling - completed
 
 - Milestone: `S0.2` Network Tunnel kill path
