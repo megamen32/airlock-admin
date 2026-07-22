@@ -48,6 +48,21 @@ plan is [`PROJECT_PLAN.md`](./PROJECT_PLAN.md).
 
 ## Entries
 
+## 2026-07-22 - Android DNS/offer contract correction - completed
+
+- Milestone: `S0.2` Network Tunnel Android edge reliability
+- Owner: Codex
+- Scope: Stable offer JSON limits and explicit Android DNS fallback discovered
+  during the live LTE acceptance.
+- Change: Added snake_case JSON tags to edge `Limits` and `RunOfferWithDNS`,
+  exposed as `-dns-server` with `1.1.1.1:53` default for delivered offers.
+- Verification: Full Hub, relay and edge `go test`, race and vet suites passed;
+  the corrected Android LTE run returned `HTTP/1.1 200 Connection Established`
+  and target `HTTP/2 520` over `rmnet4`.
+- Delivery: Commit `a7f00e0`.
+- Next: No code blocker for the v1 vertical slice; live Hub/relay key
+  configuration is an operational rollout step.
+
 ## 2026-07-22 - Android LTE Network Tunnel acceptance - completed
 
 - Milestone: `S0.2` Network Tunnel Android/4G proof
