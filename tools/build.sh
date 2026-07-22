@@ -37,6 +37,7 @@ Targets:
   platform   Package install convenience bundles: build/gptadmin-<os>-<arch>.tar.gz
   windows    Cross-build Windows ShellMCP and public/gptadmin-win.zip
   android    Cross-build Android/Termux ShellMCP and build/gptadmin-android-arm64.tar.gz
+  network-tunnel Build the isolated Network Tunnel relay, ticket issuer and edge binaries
   smoke      Smoke-test existing Linux hub+shellmcp binaries
   clean      Remove build/ and .buildcache before selected targets
   help       Show this help
@@ -109,6 +110,7 @@ step "Check tooling"
 need python3; need tar; need grep; need sed; need awk; need sha256sum
 want_any hub shellmcp all smoke && need curl
 want_any windows android && need go
+want network-tunnel && need go
 want windows && need zip
 want_any all hub platform && need npm
 
@@ -509,6 +511,20 @@ smoke_linux() {
   kill "$HUB_PID" || true; HUB_PID=""
 }
 
+build_network_tunnel() {
+  step "Build Network Tunnel vertical slice"
+  local dist="$ART_DIR/network-tunnel/linux_amd64"
+  mkdir -p "$dist"
+  (cd go-proxyrelay && go build -trimpath -o "../$dist/gptadmin-network-tunnel-relay" ./cmd/proxyrelay)
+  (cd go-proxyrelay && go build -trimpath -o "../$dist/gptadmin-network-tunnel-ticket" ./cmd/networkticket)
+  (cd go-shellmcp && go build -trimpath -o "../$dist/gptadmin-network-tunnel-proxy" ./cmd/networkproxy)
+  (cd go-shellmcp && go build -trimpath -o "../$dist/gptadmin-network-tunnel-agent" ./cmd/networkproxy-agent)
+  cp docs/NETWORK_PROXY.md "$dist/NETWORK_PROXY.md"
+  (cd "$ART_DIR" && tar -czf gptadmin-network-tunnel-linux-amd64.tar.gz.tmp.$$ "network-tunnel/linux_amd64" && mv -f gptadmin-network-tunnel-linux-amd64.tar.gz.tmp.$$ gptadmin-network-tunnel-linux-amd64.tar.gz)
+  sha256sum "$ART_DIR/gptadmin-network-tunnel-linux-amd64.tar.gz" > "$ART_DIR/gptadmin-network-tunnel-linux-amd64.sha256"
+  echo "built: $ART_DIR/gptadmin-network-tunnel-linux-amd64.tar.gz"
+}
+
 # Dependency expansion.
 if want all; then
   build_cli
@@ -525,6 +541,7 @@ if want all; then
   archive_platforms
   build_windows_shellmcp
   build_android_shellmcp
+  build_network_tunnel
   smoke_linux
 else
   want cli && build_cli
@@ -533,6 +550,7 @@ else
   if want platform; then build_cli; build_admin_ui; build_hub_cross_platforms; package_hub_platform_binaries; copy_support_payloads; copy_admin_static_payloads; archive_platforms; fi
   want windows && build_windows_shellmcp
   want android && build_android_shellmcp
+  want network-tunnel && build_network_tunnel
   want smoke && smoke_linux
 fi
 
