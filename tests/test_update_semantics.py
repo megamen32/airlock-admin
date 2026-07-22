@@ -70,6 +70,24 @@ def test_update_prefers_explicit_component_flags_over_stale_files():
     assert "if 'INSTALL_SHELLMCP' in env else" in text
 
 
+def test_sync_oauth_origin_repairs_stale_internal_fallback_when_frp_is_enabled():
+    """FRP installs must not publish a loopback/private Hub origin after update."""
+    env = {
+        "FRP_ENABLE": "true",
+        "FRP_SUBDOMAIN": "u-f1102930",
+        "FRP_DOMAIN": "t.gptadmin.bezrabotnyi.com",
+        "HUB_PUBLIC_URL": "http://95.165.165.65:9001",
+        "HUB_URL": "http://127.0.0.1:9001",
+    }
+
+    cli.sync_oauth_origin_env(env)
+
+    expected = "https://u-f1102930.t.gptadmin.bezrabotnyi.com"
+    assert env["HUB_PUBLIC_URL"] == expected
+    assert env["PUBLIC_ORIGIN"] == expected
+    assert env["MCP_RESOURCE"] == expected
+
+
 def test_cleanup_removes_obsolete_shellmcp_primary_override(monkeypatch, tmp_path):
     """Updates must stop an old drop-in from splitting Hub and Shell credentials."""
     systemd_dir = tmp_path / "systemd"

@@ -1660,6 +1660,14 @@ def sync_oauth_origin_env(env: dict) -> None:
     the wrong authorization server/password.
     """
     public = (env.get('HUB_PUBLIC_URL') or env.get('HUB_URL') or '').rstrip('/')
+    if env.get('FRP_ENABLE', '').lower() == 'true':
+        subdomain = str(env.get('FRP_SUBDOMAIN') or '').strip().strip('.')
+        domain = str(env.get('FRP_DOMAIN') or '').strip().strip('.')
+        if subdomain and domain:
+            # Older FRP installs could retain a private HUB_PUBLIC_URL after
+            # an update. The tunnel's deterministic public name is canonical.
+            public = f'https://{subdomain}.{domain}'
+            env['HUB_PUBLIC_URL'] = public
     if not public:
         return
     env['PUBLIC_ORIGIN'] = public

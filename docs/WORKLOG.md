@@ -650,3 +650,57 @@ plan is [`PROJECT_PLAN.md`](./PROJECT_PLAN.md).
   release-ldflags Hub binary are active and reversible from the listed
   backups.
 - Next: Push the integrated commit and keep the existing admin password stable.
+
+## 2026-07-22 - Repair outbound ShellMCP polling and FRP origin - completed
+
+- Milestone: `S0.2`
+- Owner: Codex
+- Scope: External Custom GPT relay, FRP origin migration, and ShellMCP agents on
+  `roomhacker-server-100`, `roomhacker-server-88`, and `server-44`.
+- Baseline / red evidence: Server-100 root ShellMCP rejected ordinary commands
+  without `SHELLMCP_DEFAULT_USER`; server-44 ran an older listener build with
+  `queue=false` and then returned queue `401 unauthorized`; live FRP installs
+  could retain a private `HUB_PUBLIC_URL` after update. The new origin regression
+  test failed before the code change.
+- Change: `sync_oauth_origin_env()` now derives the canonical HTTPS origin from
+  enabled FRP settings, preventing private-origin drift. Live server-100 env was
+  repaired with the external origin and `roomhacker` default user. Server-44 was
+  migrated to the working Go ShellMCP binary, canonical shared token, outbound
+  long-poll queue, and heartbeat disabled; server-88 was aligned to the same
+  queue/heartbeat policy. Existing per-host identities were preserved.
+- Verification: Focused Python `30 passed`; full Python `133 passed, 2 skipped`;
+  Go Hub and Go ShellMCP `go test ./...` passed. External Custom GPT OpenAPI
+  returned HTTP 200; relay inventory showed 29 records and 100/88/44 online;
+  authenticated `hostname && uptime` completed with returncode 0 on all three.
+  All three ShellMCP services are active and recent logs show no queue 401 or
+  heartbeat failure.
+- Delivery: Live runtime changes applied and restarted; server-44 binary backup
+  retained at `/opt/gptadmin/bin/rootd-go.bak.codex-20260722`. Source changes in
+  `cli.py` and `tests/test_update_semantics.py` remain uncommitted locally.
+- Next: Commit the source regression fix when publication is requested.
+
+## 2026-07-22 - Share Android 4G as a dual LAN proxy - completed
+
+- Milestone: `S0.2`
+- Owner: Codex
+- Scope: Android S21 4G egress, ADB transport, and LAN proxy exposure from
+  `roomhacker-server-100`.
+- Baseline / red evidence: Android shell traffic could ping over `rmnet4`, but
+  the existing ShellMCP queue route to the private Hub address was unreachable;
+  no proxy daemon existed and LAN port 3126 was free. The first proxy smoke
+  returned 502 because Android shell DNS was empty.
+- Change: Added a TDD-tested Go proxy supporting SOCKS5 CONNECT and HTTP
+  CONNECT on one TCP listener, with explicit DNS fallback for Android. Added a
+  systemd bridge that keeps the Android process alive through ADB, forwards an
+  internal port, and selects a free LAN port from 3126 downward. The live
+  service is enabled on the LAN bind address with port 3126; heartbeat is not
+  involved. UDP is explicitly unsupported because ADB forward is TCP-only.
+- Verification: Proxy unit tests passed; full Go ShellMCP `go test ./...`,
+  Android arm64 build, `bash -n`, and `git diff --check` passed. Internal ADB
+  tests returned HTTP 200 through both protocols. From a LAN client, HTTP
+  CONNECT and SOCKS5 both returned HTTP 200; both produced the same masked
+  mobile egress while direct server egress was different.
+- Delivery: Live Android binary, ADB forward, LAN systemd service, and state
+  file are active; selected LAN port is recorded in
+  `/etc/gptadmin/android-4g-proxy.env`. Source changes are uncommitted.
+- Next: Use a TUN/tun2socks design only if LAN UDP is required.
