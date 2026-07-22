@@ -48,6 +48,29 @@ plan is [`PROJECT_PLAN.md`](./PROJECT_PLAN.md).
 
 ## Entries
 
+## 2026-07-23 - Windows ShellMCP polling remediation and proactive bug register - handed-off
+
+- Milestone: `S0.3` Windows runtime acceptance and operational hygiene
+- Owner: Codex
+- Scope: BeyondInfinity Windows polling agent; `AGENTS.md`, `CLAUDE.md`,
+  `docs/BUGS.md`; no credential rotation.
+- Baseline / red evidence: The exact runtime artifact
+  `C:\ProgramData\gptadmin\rootd-25900.log` records HTTP 401 responses for
+  queue/heartbeat and stale temporary certifi-path failures.
+- Change: Added the project bug register and proactive remediation rule; added
+  a Windows installer fallback for standard-user Startup launches; replaced
+  the active BeyondInfinity user runtime with the current Go ShellMCP binary
+  while preserving its existing identity and Hub credential.
+- Verification: Authenticated queue probe returned HTTP 200 with `{}`; the
+  active Windows log records current Go polling mode with no new 401, certifi,
+  or unauthorized entries. Focused Python tests passed 11 tests and Go server
+  tests passed.
+- Delivery: Pending commit. The old privileged legacy task remains inaccessible
+  to the SSH user and needs one elevated cleanup action.
+- Next: From an elevated Windows session, disable/remove the old `gptadmin-rootd`
+  task and run one post-restart check; then close the remaining legacy-runtime
+  entry in `docs/BUGS.md`.
+
 ## 2026-07-22 - Windows Network Tunnel packaging - completed
 
 - Milestone: `S0.2` Network Tunnel platform coverage

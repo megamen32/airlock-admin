@@ -64,6 +64,15 @@ GPT‑Админ — self-hosted MCP hub. Три основные компоне
   regression test или точное pre-fix evidence, затем реализацию и focused/full
   verification. Не отмечайте milestone/stage завершённым без его exit gate.
 - Не записывайте в worklog токены, приватные URL, customer data или raw logs.
+- **Проактивная работа с багами:** при любом найденном баге или неожиданном
+  поведении немедленно добавьте запись в [`docs/BUGS.md`](docs/BUGS.md) с
+  immutable evidence path/ID, подтверждённым фактом, гипотезой root cause,
+  статусом и следующим действием. Не записывайте секреты или raw logs.
+  Сразу после завершения текущей цели разберите все actionable открытые записи
+  и исправьте их до handoff; не откладывайте известный исправимый баг без
+  явного внешнего blocker. Закрывайте запись только после focused
+  verification, а для behavior changes сначала фиксируйте pre-fix evidence или
+  failing regression test.
 - При конфликтующей активной области другого агента не редактируйте те же
   файлы/рантайм без явной координации. `AGENTS.md` и `CLAUDE.md` должны
   содержать одинаковые правила этой секции.

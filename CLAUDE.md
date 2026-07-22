@@ -57,6 +57,14 @@ Self-hosted MCP hub. Two Go binaries + one Python CLI + legacy vanilla-JS admin 
   pre-fix evidence before implementation, then focused and full verification.
   Do not mark a milestone or stage complete without its listed exit gate.
 - Never record tokens, private URLs, customer data or raw logs in the worklog.
+- **Proactive bug handling:** whenever a bug or unexpected behavior is found,
+  immediately add an entry to [`docs/BUGS.md`](docs/BUGS.md) with an immutable
+  evidence path or ID, confirmed facts, a root-cause hypothesis, status, and
+  one next action. Never record secrets or raw logs. As soon as the current
+  goal is complete, process every actionable open entry and fix it before
+  handoff; do not defer a known fixable bug without an explicit external
+  blocker. Close entries only after focused verification, and for behavior
+  changes record pre-fix evidence or a failing regression test first.
 - Do not edit files or runtime surfaces owned by another active agent without
   explicit coordination. Keep this section aligned with `AGENTS.md`.
 - Product-surface vocabulary is **Hub**, **MCP clients** and **Tunnel**. Do not
