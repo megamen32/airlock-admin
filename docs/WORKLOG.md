@@ -48,6 +48,24 @@ plan is [`PROJECT_PLAN.md`](./PROJECT_PLAN.md).
 
 ## Entries
 
+## 2026-07-22 - Hub relay-ticket binding - completed
+
+- Milestone: `S0.2` Network Tunnel grant/data-plane binding
+- Owner: Codex
+- Scope: Bind Hub-issued stream grants to the isolated relay ticket format with
+  a dedicated key file, without reusing ShellMCP or OAuth credentials.
+- Baseline / red evidence: Hub grants were opaque random strings and could not
+  authenticate to the WSS relay, which accepts `gpr1` role-bound tickets.
+- Change: When `GPTADMIN_NETWORK_PROXY_RELAY_KEY_FILE` is configured, Hub
+  grants carry signed `gpr1` claims with role, target, stream, agent, profile,
+  expiry and finite limits. Existing no-key controller tests retain opaque
+  fallback behavior for compatibility.
+- Verification: Relay-compatible ticket regression passed; full Hub tests and
+  vet passed.
+- Delivery: Commit `1f627ae`.
+- Next: Wire relay revocation/control signaling and run external-network
+  acceptance with the shared key configured on Hub and relay.
+
 ## 2026-07-22 - Semantic Network Access surface - completed
 
 - Milestone: `S0.2` Network Tunnel control and packaging
