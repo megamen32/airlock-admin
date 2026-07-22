@@ -41,6 +41,8 @@ type streamPair struct {
 	maxQueue     atomic.Int64
 	bytes        atomic.Int64
 	lastActivity atomic.Int64
+	bandwidthMu  sync.Mutex
+	nextWriteAt  time.Time
 }
 
 func newStreamPair(claims ticket.Claims, client, agent frameConn, audit AuditFunc, onStop func()) *streamPair {
@@ -175,7 +177,19 @@ func (p *streamPair) pace(ctx context.Context, frame Frame) bool {
 	if delay <= 0 {
 		return true
 	}
-	timer := time.NewTimer(delay)
+	// Reserve one shared schedule for both directions. Separate writer
+	// goroutines must not double the advertised per-stream bandwidth.
+	p.bandwidthMu.Lock()
+	now := time.Now()
+	start := now
+	if p.nextWriteAt.After(start) {
+		start = p.nextWriteAt
+	}
+	finish := start.Add(delay)
+	p.nextWriteAt = finish
+	p.bandwidthMu.Unlock()
+
+	timer := time.NewTimer(time.Until(finish))
 	defer timer.Stop()
 	select {
 	case <-ctx.Done():

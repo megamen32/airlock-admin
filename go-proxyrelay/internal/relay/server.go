@@ -219,6 +219,9 @@ func (s *Server) authenticate(connection *websocket.Conn, role string) (*relayPe
 		maxFrameBytes: claims.Limits.MaxFrameBytes,
 		writeTimeout:  s.config.WriteTimeout,
 	}
+	// The handshake uses the process-wide limit; after authentication narrow
+	// the transport reader to the signed per-stream frame budget.
+	connection.SetReadLimit(claims.Limits.MaxFrameBytes + 1)
 	return &relayPeer{role: role, conn: connection, frame: frameConnection}, claims, nil
 }
 
