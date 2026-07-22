@@ -48,6 +48,22 @@ plan is [`PROJECT_PLAN.md`](./PROJECT_PLAN.md).
 
 ## Entries
 
+## 2026-07-22 - Relay revoke signaling - completed
+
+- Milestone: `S0.2` Network Tunnel kill path
+- Owner: Codex
+- Scope: Dedicated Hub-to-relay signed revoke control request.
+- Baseline / red evidence: Hub capability revoke changed Hub state but had no
+  configured path to reset matching relay sessions.
+- Change: Added optional relay revoke URL and asynchronous signed
+  `/v1/control/revoke` delivery using the same dedicated relay key; ShellMCP
+  control credentials and stream payloads remain out of band.
+- Verification: Regression test captured the signed revoke request; Hub proxy
+  focused/full tests and vet passed before delivery.
+- Delivery: Commit `739f8fa`.
+- Next: Run the external-network acceptance matrix with shared key and revoke
+  URL configured; then perform one consolidated review.
+
 ## 2026-07-22 - Hub relay-ticket binding - completed
 
 - Milestone: `S0.2` Network Tunnel grant/data-plane binding
