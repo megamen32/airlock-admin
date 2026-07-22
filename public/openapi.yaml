@@ -8,9 +8,9 @@ info:
     Shell hosts and MCP services are exposed as GPTAdmin servers with ids like shell:<server_name>.
     The hub itself is exposed as target "hub" for registry and approval tools.
 
-    Network Tunnel v1 is a documented future protocol contract only. This API does not expose
-    proxy streams, offers, tickets, or SOCKS/HTTP endpoints; see docs/NETWORK_PROXY.md and
-    docs/NETWORK_PROXY_THREAT_MODEL.md. Do not infer Network Tunnel support from this schema.
+    Network Tunnel v1 exposes bounded control operations only. Raw proxy streams, offers and
+    SOCKS/HTTP data endpoints remain separate; see docs/NETWORK_PROXY.md and
+    docs/NETWORK_PROXY_THREAT_MODEL.md.
 servers:
   - url: https://u-f1102930.t.gptadmin.bezrabotnyi.com
 security:
@@ -100,12 +100,230 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Job"
+  /proxy-control/v1/request:
+    post:
+      operationId: networkProxyRequest
+      summary: Request a bounded Network Tunnel capability
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [profile_id, policy]
+              properties:
+                profile_id:
+                  type: string
+                policy:
+                  $ref: "#/components/schemas/NetworkProxyPolicy"
+      responses:
+        "201":
+          description: Pending capability
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [capability]
+                properties:
+                  capability:
+                    $ref: "#/components/schemas/NetworkProxyCapability"
+  /proxy-control/v1/approve:
+    post:
+      operationId: networkProxyApprove
+      summary: Approve a pending Network Tunnel capability
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [capability_id]
+              properties:
+                capability_id:
+                  type: string
+      responses:
+        "200":
+          description: Active capability
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  capability:
+                    $ref: "#/components/schemas/NetworkProxyCapability"
+  /proxy-control/v1/issue:
+    post:
+      operationId: networkProxyIssue
+      summary: Issue one client and one agent stream grant
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [capability_id, target]
+              properties:
+                capability_id:
+                  type: string
+                target:
+                  type: string
+                  description: IP address and port permitted by the capability
+      responses:
+        "200":
+          description: Short-lived role-bound grants
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  client_grant:
+                    $ref: "#/components/schemas/ProxyStreamGrant"
+                  agent_grant:
+                    $ref: "#/components/schemas/ProxyStreamGrant"
+  /proxy-control/v1/open:
+    post:
+      operationId: networkProxyOpen
+      summary: Consume a one-time stream grant
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [token, role]
+              properties:
+                token:
+                  type: string
+                role:
+                  type: string
+                  enum: [client, agent]
+      responses:
+        "200":
+          description: Consumed grant metadata without the bearer token
+  /proxy-control/v1/status:
+    get:
+      operationId: networkProxyStatus
+      summary: Read Network Tunnel capability state
+      parameters:
+        - name: capability_id
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Capability state
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  capability:
+                    $ref: "#/components/schemas/NetworkProxyCapability"
+  /proxy-control/v1/revoke:
+    post:
+      operationId: networkProxyRevoke
+      summary: Revoke and drain a Network Tunnel capability
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [capability_id]
+              properties:
+                capability_id:
+                  type: string
+      responses:
+        "200":
+          description: Draining capability
 components:
   securitySchemes:
     bearerAuth:
       type: http
       scheme: bearer
   schemas:
+    NetworkProxyPolicy:
+      type: object
+      additionalProperties: false
+      required: [scope, agent_id, mode, target_cidrs, target_ports, max_streams, max_bytes, lease]
+      properties:
+        scope:
+          type: string
+          enum: [lan, internet_egress]
+        agent_id:
+          type: string
+        mode:
+          type: string
+          enum: [webhook, pull, auto]
+        target_cidrs:
+          type: array
+          items:
+            type: string
+        target_ports:
+          type: array
+          items:
+            type: integer
+            minimum: 1
+            maximum: 65535
+        max_streams:
+          type: integer
+          minimum: 1
+        max_bytes:
+          type: integer
+          minimum: 1
+        lease:
+          type: integer
+          minimum: 1
+          description: Lease duration in nanoseconds in the Go JSON contract
+    NetworkProxyCapability:
+      type: object
+      additionalProperties: false
+      required: [capability_id, profile_id, policy, state, requested_at, streams_issued]
+      properties:
+        capability_id:
+          type: string
+        profile_id:
+          type: string
+        policy:
+          $ref: "#/components/schemas/NetworkProxyPolicy"
+        state:
+          type: string
+          enum: [pending, active, expired, draining, revoked]
+        requested_at:
+          type: string
+          format: date-time
+        approved_at:
+          type: string
+          format: date-time
+        expires_at:
+          type: string
+          format: date-time
+        streams_issued:
+          type: integer
+          minimum: 0
+    ProxyStreamGrant:
+      type: object
+      additionalProperties: false
+      required: [capability_id, stream_id, agent_id, target, role, token, expires_at]
+      properties:
+        capability_id:
+          type: string
+        stream_id:
+          type: string
+        agent_id:
+          type: string
+        target:
+          type: string
+        role:
+          type: string
+          enum: [client, agent]
+        token:
+          type: string
+          writeOnly: true
+        expires_at:
+          type: string
+          format: date-time
     DiscoverResponse:
       type: object
       additionalProperties: false
@@ -122,7 +340,7 @@ components:
       properties:
         server_id:
           type: string
-                  description: Target id to use in schema and execute.
+          description: Target id to use in schema and execute.
         name:
           type: string
         kind:

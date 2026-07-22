@@ -62,6 +62,7 @@ type Config struct {
 	FailoverReclaimCommandFile string
 	StartupInstructionsFile    string
 	StartupInstructions        string
+	NetworkProxyStateFile      string
 }
 
 func FromEnv() Config {
@@ -99,6 +100,7 @@ func FromEnv() Config {
 		FailoverReclaimCommandFile: env("GPTADMIN_FAILOVER_RECLAIM_COMMAND_FILE", filepath.Join(cfgDir, "failover_reclaim_command.json")),
 		StartupInstructionsFile:    env("GPTADMIN_STARTUP_INSTRUCTIONS_FILE", filepath.Join(cfgDir, "startup_instructions.md")),
 		StartupInstructions:        env("GPTADMIN_STARTUP_INSTRUCTIONS", ""),
+		NetworkProxyStateFile:      env("GPTADMIN_NETWORK_PROXY_STATE_FILE", filepath.Join(cfgDir, "network_proxy_state.json")),
 	}
 }
 
@@ -258,6 +260,7 @@ type Server struct {
 	updateStatePath string
 	updateLockPath  string
 	updateLauncher  *UpdateLauncher
+	networkProxy    *NetworkProxyController
 
 	instructionMu      sync.RWMutex
 	instructionWriteMu sync.Mutex
@@ -280,6 +283,16 @@ func New(cfg Config) *Server {
 		audit:          []auditEvent{},
 	}
 	s.cond = sync.NewCond(&s.mu)
+	networkProxyStatePath := cfg.NetworkProxyStateFile
+	if networkProxyStatePath == "" && cfg.ConfigDir != "" {
+		networkProxyStatePath = filepath.Join(cfg.ConfigDir, "network_proxy_state.json")
+	}
+	networkProxy, err := NewNetworkProxyController(networkProxyStatePath, cfg.Now, nil)
+	if err != nil {
+		log.Printf("network proxy state load failed path=%s err=%v", networkProxyStatePath, err)
+		networkProxy = newUnavailableNetworkProxyController(cfg.Now, err)
+	}
+	s.networkProxy = networkProxy
 	s.instructionSet = newInstructionSet(cfg)
 	if err := s.loadRegistryState(); err != nil {
 		log.Printf("registry state load failed path=%s err=%v", s.registryStatePath(), err)
@@ -494,6 +507,12 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/agent/", s.agentMCPEndpoint)
 	mux.HandleFunc("/mcp-prompt/prompt", s.mcpPrompt)
 	mux.HandleFunc("/mcp-prompt/call", s.mcpPromptCall)
+	mux.HandleFunc("/proxy-control/v1/request", s.requireCtl(s.networkProxyRequestHTTP))
+	mux.HandleFunc("/proxy-control/v1/approve", s.requireCtl(s.networkProxyApproveHTTP))
+	mux.HandleFunc("/proxy-control/v1/issue", s.requireCtl(s.networkProxyIssueHTTP))
+	mux.HandleFunc("/proxy-control/v1/open", s.requireCtl(s.networkProxyOpenHTTP))
+	mux.HandleFunc("/proxy-control/v1/status", s.requireCtl(s.networkProxyStatusHTTP))
+	mux.HandleFunc("/proxy-control/v1/revoke", s.requireCtl(s.networkProxyRevokeHTTP))
 	mux.HandleFunc("/admin/api/mcp/manage", s.requireCtl(s.adminMCPManage))
 	mux.HandleFunc("/admin/api/mcp/issue-token", s.requireCtl(s.adminMCPIssueToken))
 	mux.HandleFunc("/admin/api/mcp/tokens/", s.requireCtl(s.adminMCPTokenAction))
@@ -1793,7 +1812,7 @@ const (
 func (s *Server) executeMCPTool(r *http.Request, target, toolName string, args map[string]any, background bool, timeout time.Duration, key string) (map[string]any, int) {
 	operation := func() (map[string]any, int) {
 		if target == "hub" {
-			resp, status := s.callHubTool(toolName, args)
+			resp, status := s.callHubToolForRequest(r, toolName, args)
 			return map[string]any{"server_id": target, "status": "completed", "response": resp}, status
 		}
 		if strings.HasPrefix(target, "shell:") {
@@ -2066,6 +2085,13 @@ func shellJobResponse(job *shellJob) map[string]any {
 }
 
 func (s *Server) callHubTool(name string, args map[string]any) (map[string]any, int) {
+	return s.callHubToolForRequest(nil, name, args)
+}
+
+func (s *Server) callHubToolForRequest(r *http.Request, name string, args map[string]any) (map[string]any, int) {
+	if strings.HasPrefix(name, "network_proxy_") {
+		return s.callNetworkProxyTool(AccessProfileIDFromRequest(r), name, args)
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.addAuditLocked("hub_tool", map[string]any{"tool": name})
@@ -2170,12 +2196,13 @@ func (s *Server) callShellTool(target, toolName string, args map[string]any, bac
 }
 
 func hubTools() []map[string]any {
-	return []map[string]any{
+	tools := []map[string]any{
 		{"name": "discover", "description": "List registered targets", "inputSchema": map[string]any{"type": "object", "properties": map[string]any{}}},
 		{"name": "pending", "description": "List pending approvals", "inputSchema": map[string]any{"type": "object", "properties": map[string]any{}}},
 		{"name": "approve_pending_server", "description": "Approve one ShellMCP device awaiting enrollment", "inputSchema": map[string]any{"type": "object", "properties": map[string]any{"server_id": map[string]any{"type": "string", "description": "Exact shell:<name> returned by pending"}}, "required": []string{"server_id"}, "additionalProperties": false}},
 		{"name": "status", "description": "Return Hub status", "inputSchema": map[string]any{"type": "object", "properties": map[string]any{}}},
 	}
+	return append(tools, networkProxyHubTools()...)
 }
 
 func shellTools() []map[string]any {
@@ -4107,7 +4134,7 @@ func (s *Server) appsSDKCall(name string, args map[string]any) any {
 		s.mu.Unlock()
 		return map[string]any{"servers": servers}
 	case "pending", "list_pending_servers", "approve_pending_server":
-		result, _ := s.callHubTool(name, args)
+		result, _ := s.callHubToolForRequest(nil, name, args)
 		return result
 	case "list_mcp_agents", "listMcpAgents":
 		s.mu.Lock()
