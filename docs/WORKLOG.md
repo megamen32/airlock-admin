@@ -719,13 +719,15 @@ plan is [`PROJECT_PLAN.md`](./PROJECT_PLAN.md).
 - Change: Added the Hub-side capability controller with explicit `lan` and
   `internet_egress` scopes, finite leases, profile/agent authorization,
   target-bound one-time client/agent grants, revoke signalling, fail-closed
-  persistence and dedicated proxy-control routes/tools. The command queues and
-  heartbeat liveness remain untouched.
+  persistence and dedicated proxy-control routes/tools. Internet egress also
+  rejects CGNAT, TEST-NET, benchmark, documentation and reserved ranges. The
+  command queues and heartbeat liveness remain untouched.
 - Verification: `cd go-hub && go test ./internal/hub -run 'Proxy|Network' -count=1`
   and `cd go-hub && go test ./...` passed. `public/openapi.yaml` parsed and
   included all proxy-control paths/schemas; `git diff --check` passed.
-- Delivery: Commit `383af8b` (`feat: add Hub Network Tunnel controller`); no
-  push, relay deployment or external proxy data-plane in scope.
+- Delivery: Commits `383af8b` (`feat: add Hub Network Tunnel controller`) and
+  the follow-up reserved-range security fix; no push, relay deployment or
+  external proxy data-plane in scope.
 - Next: Implement the isolated proxy relay and edge-agent transport; keep the
   controller API as the only control-plane dependency.
 ## 2026-07-22 - Normalize unscoped OAuth client inventory - completed
@@ -742,6 +744,9 @@ plan is [`PROJECT_PLAN.md`](./PROJECT_PLAN.md).
 - Verification: React `18 passed`, lint/build passed; Go `go test ./...`
   passed; focused red/green tests cover both the old response and the new
   serialization contract.
-- Delivery: Pending commit, live binary/static publish and push.
-- Next: Deploy the commit and verify the authenticated Clients screen with an
-  OAuth inventory row.
+- Delivery: Commit `0b921c7` is deployed with build `128`; live Hub inventory
+  now omits the empty OAuth mode and the service is active.
+- Verification: Authenticated local API smoke returned seven clients, with the
+  OAuth row's `access_mode` omitted and managed/legacy rows retaining valid
+  modes. Existing admin password was not changed.
+- Next: Push the integrated commit and keep the existing admin password stable.

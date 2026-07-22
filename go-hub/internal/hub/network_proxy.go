@@ -569,7 +569,20 @@ func internetEgressAddressDenied(addr netip.Addr) bool {
 	if !addr.IsValid() || !addr.IsGlobalUnicast() || addr.IsPrivate() || addr.IsLoopback() || addr.IsLinkLocalUnicast() || addr.IsLinkLocalMulticast() || addr.IsMulticast() || addr.IsUnspecified() {
 		return true
 	}
-	for _, raw := range []string{"100.100.100.200/32", "192.0.0.192/32", "fd00:ec2::254/128"} {
+	for _, raw := range []string{
+		"0.0.0.0/8",          // "this" network
+		"100.64.0.0/10",      // carrier-grade NAT
+		"100.100.100.200/32", // cloud metadata
+		"192.0.0.0/24",       // IETF protocol assignments
+		"192.0.0.192/32",     // cloud metadata
+		"192.0.2.0/24",       // TEST-NET-1
+		"198.18.0.0/15",      // benchmarking
+		"198.51.100.0/24",    // TEST-NET-2
+		"203.0.113.0/24",     // TEST-NET-3
+		"240.0.0.0/4",        // reserved/future use
+		"fd00:ec2::254/128",  // cloud metadata
+		"2001:db8::/32",      // IPv6 documentation
+	} {
 		if netip.MustParsePrefix(raw).Contains(addr) {
 			return true
 		}
