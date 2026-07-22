@@ -18,7 +18,8 @@ tools/build.sh network-tunnel
 
 The archive contains Linux relay/ticket/connector/agent binaries and Android
 arm64 connector/agent binaries under `network-tunnel/linux_amd64/` and
-`network-tunnel/android_arm64/`.
+`network-tunnel/android_arm64/`, plus Windows amd64 `.exe` binaries under
+`network-tunnel/windows_amd64/`.
 
 Create one random relay key with mode `0600`, run the relay on a private
 address. When the Hub is the issuer, point both components at that same file

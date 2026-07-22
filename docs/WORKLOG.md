@@ -48,6 +48,22 @@ plan is [`PROJECT_PLAN.md`](./PROJECT_PLAN.md).
 
 ## Entries
 
+## 2026-07-22 - Windows Network Tunnel packaging - completed
+
+- Milestone: `S0.2` Network Tunnel platform coverage
+- Owner: Codex
+- Scope: Windows amd64 relay, ticket issuer, connector and agent binaries.
+- Baseline / red evidence: The Network Tunnel archive contained only Linux and
+  Android variants; Windows cross-builds were not packaged.
+- Change: Added Windows `.exe` cross-builds to `tools/build.sh network-tunnel`
+  and documented the archive layout.
+- Verification: All four Windows targets cross-compiled successfully and the
+  archive contains `network-tunnel/windows_amd64/*.exe`; Linux/Android
+  packaging remains green.
+- Delivery: Commit pending with this packaging change.
+- Next: Windows runtime smoke requires a Windows host; no Windows host is
+  available in this workspace.
+
 ## 2026-07-22 - Android DNS/offer contract correction - completed
 
 - Milestone: `S0.2` Network Tunnel Android edge reliability

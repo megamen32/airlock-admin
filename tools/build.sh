@@ -515,15 +515,21 @@ build_network_tunnel() {
   step "Build Network Tunnel vertical slice"
   local linux_dist="$ART_DIR/network-tunnel/linux_amd64"
   local android_dist="$ART_DIR/network-tunnel/android_arm64"
-  mkdir -p "$linux_dist" "$android_dist"
+  local windows_dist="$ART_DIR/network-tunnel/windows_amd64"
+  mkdir -p "$linux_dist" "$android_dist" "$windows_dist"
   (cd go-proxyrelay && go build -trimpath -o "../$linux_dist/gptadmin-network-tunnel-relay" ./cmd/proxyrelay)
   (cd go-proxyrelay && go build -trimpath -o "../$linux_dist/gptadmin-network-tunnel-ticket" ./cmd/networkticket)
   (cd go-shellmcp && go build -trimpath -o "../$linux_dist/gptadmin-network-tunnel-proxy" ./cmd/networkproxy)
   (cd go-shellmcp && go build -trimpath -o "../$linux_dist/gptadmin-network-tunnel-agent" ./cmd/networkproxy-agent)
   (cd go-shellmcp && GOOS=android GOARCH=arm64 go build -trimpath -o "../$android_dist/gptadmin-network-tunnel-proxy" ./cmd/networkproxy)
   (cd go-shellmcp && GOOS=android GOARCH=arm64 go build -trimpath -o "../$android_dist/gptadmin-network-tunnel-agent" ./cmd/networkproxy-agent)
+  (cd go-proxyrelay && GOOS=windows GOARCH=amd64 go build -trimpath -o "../$windows_dist/gptadmin-network-tunnel-relay.exe" ./cmd/proxyrelay)
+  (cd go-proxyrelay && GOOS=windows GOARCH=amd64 go build -trimpath -o "../$windows_dist/gptadmin-network-tunnel-ticket.exe" ./cmd/networkticket)
+  (cd go-shellmcp && GOOS=windows GOARCH=amd64 go build -trimpath -o "../$windows_dist/gptadmin-network-tunnel-proxy.exe" ./cmd/networkproxy)
+  (cd go-shellmcp && GOOS=windows GOARCH=amd64 go build -trimpath -o "../$windows_dist/gptadmin-network-tunnel-agent.exe" ./cmd/networkproxy-agent)
   cp docs/NETWORK_PROXY.md "$linux_dist/NETWORK_PROXY.md"
   cp docs/NETWORK_PROXY.md "$android_dist/NETWORK_PROXY.md"
+  cp docs/NETWORK_PROXY.md "$windows_dist/NETWORK_PROXY.md"
   (cd "$ART_DIR" && tar -czf gptadmin-network-tunnel.tar.gz.tmp.$$ "network-tunnel" && mv -f gptadmin-network-tunnel.tar.gz.tmp.$$ gptadmin-network-tunnel.tar.gz)
   sha256sum "$ART_DIR/gptadmin-network-tunnel.tar.gz" > "$ART_DIR/gptadmin-network-tunnel.sha256"
   echo "built: $ART_DIR/gptadmin-network-tunnel.tar.gz"
