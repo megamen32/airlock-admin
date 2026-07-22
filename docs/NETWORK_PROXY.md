@@ -28,6 +28,10 @@ using `GPTADMIN_NETWORK_PROXY_RELAY_KEY_FILE` for the Hub and
 signed offer consumed by `network-tunnel-agent`. Each ticket is one-use and
 each TCP connection needs a fresh pair of tickets.
 
+Set `GPTADMIN_NETWORK_PROXY_RELAY_REVOKE_URL` on the Hub to the relay base URL
+to deliver signed capability revocations to `/v1/control/revoke`; this control
+request carries metadata only and never shares the ShellMCP control token.
+
 For a controlled bring-up, the local issuer is `go-proxyrelay/cmd/networkticket`:
 
 ```bash

@@ -148,6 +148,14 @@ func (c *NetworkProxyController) SetRelayKey(key []byte) {
 	c.relayKey = append([]byte(nil), key...)
 }
 
+// SetOnRevoke installs the isolated relay control callback before capabilities
+// are served. It never carries stream bytes or ShellMCP commands.
+func (c *NetworkProxyController) SetOnRevoke(onRevoke func(string)) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.onRevoke = onRevoke
+}
+
 func (c *NetworkProxyController) load() (bool, error) {
 	if c.statePath == "" {
 		return false, nil
@@ -706,6 +714,31 @@ type networkProxyRelayClaims struct {
 	ExpiresAt       int64                   `json:"exp"`
 	JTI             string                  `json:"jti"`
 	Limits          networkProxyRelayLimits `json:"limits"`
+}
+
+func signNetworkProxyRevocation(key []byte, capabilityID string, expiresAt time.Time) (string, error) {
+	if len(key) < 32 || strings.TrimSpace(capabilityID) == "" {
+		return "", ErrNetworkProxyInvalid
+	}
+	jtiBytes := make([]byte, 16)
+	if _, err := rand.Read(jtiBytes); err != nil {
+		return "", err
+	}
+	claims := struct {
+		Kind         string `json:"kind"`
+		CapabilityID string `json:"capability_id"`
+		ExpiresAt    int64  `json:"exp"`
+		JTI          string `json:"jti"`
+	}{"revoke", strings.TrimSpace(capabilityID), expiresAt.UTC().Unix(), base64.RawURLEncoding.EncodeToString(jtiBytes)}
+	payload, err := json.Marshal(claims)
+	if err != nil {
+		return "", err
+	}
+	encoded := base64.RawURLEncoding.EncodeToString(payload)
+	signed := "gpr1." + encoded
+	mac := hmac.New(sha256.New, key)
+	_, _ = mac.Write([]byte(signed))
+	return signed + "." + base64.RawURLEncoding.EncodeToString(mac.Sum(nil)), nil
 }
 
 func proxyTokenDigest(token string) string {

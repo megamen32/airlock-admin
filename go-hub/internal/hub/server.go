@@ -64,6 +64,7 @@ type Config struct {
 	StartupInstructions        string
 	NetworkProxyStateFile      string
 	NetworkProxyRelayKeyFile   string
+	NetworkProxyRelayRevokeURL string
 }
 
 func FromEnv() Config {
@@ -103,6 +104,7 @@ func FromEnv() Config {
 		StartupInstructions:        env("GPTADMIN_STARTUP_INSTRUCTIONS", ""),
 		NetworkProxyStateFile:      env("GPTADMIN_NETWORK_PROXY_STATE_FILE", filepath.Join(cfgDir, "network_proxy_state.json")),
 		NetworkProxyRelayKeyFile:   env("GPTADMIN_NETWORK_PROXY_RELAY_KEY_FILE", ""),
+		NetworkProxyRelayRevokeURL: strings.TrimRight(env("GPTADMIN_NETWORK_PROXY_RELAY_REVOKE_URL", ""), "/"),
 	}
 }
 
@@ -304,6 +306,13 @@ func New(cfg Config) *Server {
 			log.Printf("network proxy relay key rejected path=%s: key must contain at least 32 bytes", cfg.NetworkProxyRelayKeyFile)
 		} else {
 			networkProxy.SetRelayKey(key)
+			if cfg.NetworkProxyRelayRevokeURL != "" {
+				relayKey := append([]byte(nil), key...)
+				relayURL := cfg.NetworkProxyRelayRevokeURL
+				networkProxy.SetOnRevoke(func(capabilityID string) {
+					go s.sendNetworkProxyRelayRevoke(relayURL, relayKey, capabilityID)
+				})
+			}
 		}
 	}
 	s.instructionSet = newInstructionSet(cfg)
@@ -329,6 +338,33 @@ func New(cfg Config) *Server {
 	s.updateLockPath = home + "/update.lock"
 	s.updateLauncher = DefaultUpdateLauncher()
 	return s
+}
+
+func (s *Server) sendNetworkProxyRelayRevoke(relayURL string, key []byte, capabilityID string) {
+	ticket, err := signNetworkProxyRevocation(key, capabilityID, time.Now().UTC().Add(30*time.Second))
+	if err != nil {
+		log.Printf("network proxy relay revoke ticket failed capability=%s err=%v", capabilityID, err)
+		return
+	}
+	body, err := json.Marshal(map[string]string{"ticket": ticket})
+	if err != nil {
+		return
+	}
+	request, err := http.NewRequest(http.MethodPost, relayURL+"/v1/control/revoke", bytes.NewReader(body))
+	if err != nil {
+		log.Printf("network proxy relay revoke request failed capability=%s err=%v", capabilityID, err)
+		return
+	}
+	request.Header.Set("Content-Type", "application/json")
+	response, err := (&http.Client{Timeout: 5 * time.Second}).Do(request)
+	if err != nil {
+		log.Printf("network proxy relay revoke delivery failed capability=%s err=%v", capabilityID, err)
+		return
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusNoContent {
+		log.Printf("network proxy relay revoke rejected capability=%s status=%d", capabilityID, response.StatusCode)
+	}
 }
 
 func (s *Server) managedMCPStatePath() string {
