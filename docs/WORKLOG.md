@@ -48,6 +48,26 @@ plan is [`PROJECT_PLAN.md`](./PROJECT_PLAN.md).
 
 ## Entries
 
+## 2026-07-22 - Semantic Network Access surface - completed
+
+- Milestone: `S0.2` Network Tunnel control and packaging
+- Owner: Codex with bounded Hub MCP implementation worker
+- Scope: AI-friendly semantic aliases, release packaging target and final
+  focused/full Hub verification.
+- Baseline / red evidence: The Hub exposed only low-level `network_proxy_*`
+  operations; semantic calls returned `unsupported hub tool` and the new
+  binaries were not included in the build workflow.
+- Change: Added `network_access_plan`, `network_access_enable`,
+  `network_access_status`, and `network_access_disable` with explicit
+  confirmation for enable/disable, preserved profile ACLs, and added the
+  `network-tunnel` build target producing a separate Linux archive.
+- Verification: Hub proxy/network focused tests, full Go Hub tests and vet
+  passed; `tools/build.sh network-tunnel` produced the archive; relay and edge
+  race suites remain green from the preceding vertical-slice delivery.
+- Delivery: Commits `347b2dc` (semantic MCP surface) and `be61cea` (packaging).
+- Next: Deploy the relay/agent binaries in a controlled external-network
+  acceptance test, then run one consolidated review.
+
 ## 2026-07-22 - Network Tunnel runnable vertical slice - completed
 
 - Milestone: `S0.2` isolated Network Tunnel data plane
