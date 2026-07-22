@@ -39,10 +39,10 @@ Self-hosted MCP hub. Two Go binaries + one Python CLI + legacy vanilla-JS admin 
   task. Give an isolated implementation/TDD slice at least 10 uninterrupted
   minutes; give repo/runtime reconnaissance or a cross-cutting slice at least
   15-20 minutes. Do not duplicate its tests, searches or edits in parallel.
-- After two polls without a new phase, one short non-interrupting heartbeat is
-  allowed. Silence is not a blocker: continue waiting for the original budget.
-  After that budget, one read-only discriminating probe is allowed; do not
-  rewrite the task in the middle of its cycle without need.
+- Use a real blocking wait for a working subagent for as long as the original
+  assignment needs. Do not ask for heartbeats or repeatedly poll merely because
+  the agent is quiet; silence is not a blocker. Do not rewrite the task in the
+  middle of its cycle without need.
 - Interrupt or re-scope only when the user explicitly cancels or redirects,
   there is an ownership conflict or data risk, the agent reports a blocker, or
   a hard failure is evidenced (a repeated test/build error) and it needs a new
