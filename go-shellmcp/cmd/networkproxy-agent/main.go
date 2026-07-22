@@ -25,6 +25,7 @@ func main() {
 	agentID := flag.String("agent-id", "", "registered proxy agent ID for signed offers")
 	maxSkew := flag.Duration("max-skew", 2*time.Minute, "maximum signed offer clock skew")
 	nonceTTL := flag.Duration("nonce-ttl", 10*time.Minute, "signed offer nonce retention")
+	dnsServer := flag.String("dns-server", "1.1.1.1:53", "UDP DNS endpoint for edge target resolution; empty uses system DNS")
 	flag.Parse()
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
@@ -41,11 +42,11 @@ func main() {
 		if err := json.Unmarshal(body, &offer); err != nil {
 			log.Fatalf("decode offer: %v", err)
 		}
-		if err := networkproxy.RunOffer(ctx, offer); err != nil && ctx.Err() == nil {
+		if err := networkproxy.RunOfferWithDNS(ctx, offer, *dnsServer); err != nil && ctx.Err() == nil {
 			log.Fatalf("run network tunnel offer: %v", err)
 		}
 	case "pull", "webhook":
-		if err := runDeliveredOffers(ctx, *mode, *offersURL, *webhookListen, *hubPublicKeyFile, *agentID, *maxSkew, *nonceTTL); err != nil && ctx.Err() == nil {
+		if err := runDeliveredOffers(ctx, *mode, *offersURL, *webhookListen, *hubPublicKeyFile, *agentID, *maxSkew, *nonceTTL, *dnsServer); err != nil && ctx.Err() == nil {
 			log.Fatalf("run network tunnel offers: %v", err)
 		}
 	default:
@@ -53,7 +54,7 @@ func main() {
 	}
 }
 
-func runDeliveredOffers(ctx context.Context, mode, offersURL, webhookListen, publicKeyFile, agentID string, maxSkew, nonceTTL time.Duration) error {
+func runDeliveredOffers(ctx context.Context, mode, offersURL, webhookListen, publicKeyFile, agentID string, maxSkew, nonceTTL time.Duration, dnsServer string) error {
 	if offersURL == "" && mode == "pull" || publicKeyFile == "" || agentID == "" || maxSkew <= 0 || nonceTTL <= 0 {
 		return networkproxy.ErrOfferInvalid
 	}
@@ -88,7 +89,9 @@ func runDeliveredOffers(ctx context.Context, mode, offersURL, webhookListen, pub
 		}()
 		defer server.Shutdown(context.Background())
 	}
-	return (networkproxy.OfferConsumer{}).Run(ctx, source, networkproxy.RunOffer)
+	return (networkproxy.OfferConsumer{}).Run(ctx, source, func(offerCtx context.Context, offer networkproxy.Offer) error {
+		return networkproxy.RunOfferWithDNS(offerCtx, offer, dnsServer)
+	})
 }
 
 type offerChannelSource struct {

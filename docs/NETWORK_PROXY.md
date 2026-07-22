@@ -58,6 +58,11 @@ cd go-proxyrelay && go test ./blackbox -count=1
 cd ../go-shellmcp && go test ./blackbox -count=1
 ```
 
+On Android, pass `-dns-server 1.1.1.1:53` when the carrier's libc resolver is
+an unavailable localhost stub. The edge log should show the cellular interface
+address during a live acceptance; target policy still resolves and validates
+every returned address before dialing.
+
 ## Purpose and boundary
 
 The Network Tunnel is a future, capability-scoped TCP path for an approved MCP

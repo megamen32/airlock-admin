@@ -48,6 +48,24 @@ plan is [`PROJECT_PLAN.md`](./PROJECT_PLAN.md).
 
 ## Entries
 
+## 2026-07-22 - Android LTE Network Tunnel acceptance - completed
+
+- Milestone: `S0.2` Network Tunnel Android/4G proof
+- Owner: Codex
+- Scope: Android arm64 edge binary, public relay on `vpn2`, local connector,
+  hostname target and explicit cellular DNS fallback.
+- Baseline / red evidence: Android rejected snake_case offer limits, then could
+  not resolve the target or relay hostname through its localhost DNS stub.
+- Change: Added stable JSON tags for edge limits and `-dns-server` resolution
+  through an explicit UDP endpoint; rebuilt the Android package.
+- Verification: Agent on `R5CR702SRFP` logged a cellular `rmnet4` source
+  (`10.186.8.46`), local connector returned `HTTP/1.1 200 Connection
+  Established`, and the public target returned `HTTP/2 520` through the
+  Android path. Temporary device/relay processes and files were removed.
+- Delivery: Code commit pending with the next focused test run; acceptance
+  evidence is ephemeral and contains no credentials.
+- Next: Commit the DNS/JSON fix and run the final all-module race/vet pass.
+
 ## 2026-07-22 - External relay acceptance - completed
 
 - Milestone: `S0.2` Network Tunnel external data-plane proof

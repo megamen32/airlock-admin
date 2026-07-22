@@ -18,6 +18,16 @@ import (
 	"github.com/megamen32/gptadmin/go-shellmcp/internal/security"
 )
 
+func TestOfferLimitsUseStableSnakeCaseJSONNames(t *testing.T) {
+	raw, err := json.Marshal(Limits{DialTimeoutSeconds: 10, MaxBytes: 100, ConnectionLifetimeSeconds: 60})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(raw) != `{"dial_timeout_seconds":10,"max_bytes":100,"connection_lifetime_seconds":60}` {
+		t.Fatalf("limits JSON = %s", raw)
+	}
+}
+
 func TestPullAndWebhookUseIdenticalVerification(t *testing.T) {
 	t.Parallel()
 

@@ -21,9 +21,9 @@ type DialContextFunc interface {
 
 // Limits is the local representation of signed offer or ticket constraints.
 type Limits struct {
-	DialTimeoutSeconds        int
-	MaxBytes                  int64
-	ConnectionLifetimeSeconds int
+	DialTimeoutSeconds        int   `json:"dial_timeout_seconds"`
+	MaxBytes                  int64 `json:"max_bytes"`
+	ConnectionLifetimeSeconds int   `json:"connection_lifetime_seconds"`
 }
 
 // Dialer resolves, validates and pins destinations before creating limited TCP connections.

@@ -271,6 +271,13 @@ func (streamDeadlineError) Temporary() bool { return true }
 // RunOffer activates the LAN or internet-egress target from one verified offer.
 // It uses the edge dialer for target enforcement and the relay only for bytes.
 func RunOffer(ctx context.Context, offer Offer) error {
+	return RunOfferWithDNS(ctx, offer, "")
+}
+
+// RunOfferWithDNS activates one offer and optionally resolves targets through
+// an explicit UDP DNS endpoint. Android builds use this when libc DNS points
+// at an unavailable localhost stub while the cellular network is healthy.
+func RunOfferWithDNS(ctx context.Context, offer Offer, dnsServer string) error {
 	if err := offer.Validate(time.Now()); err != nil {
 		return err
 	}
@@ -278,10 +285,19 @@ func RunOffer(ctx context.Context, offer Offer) error {
 	if err != nil {
 		return err
 	}
+	resolver := &net.Resolver{PreferGo: true}
+	if dnsServer != "" {
+		if _, _, splitErr := net.SplitHostPort(dnsServer); splitErr != nil {
+			dnsServer = net.JoinHostPort(dnsServer, "53")
+		}
+		resolver.Dial = func(resolveCtx context.Context, _, _ string) (net.Conn, error) {
+			return (&net.Dialer{}).DialContext(resolveCtx, "udp", dnsServer)
+		}
+	}
 	dialer, err := NewDialer(
 		Policy{Scope: offer.Scope, ApprovedLANCIDRs: offer.AllowedCIDRs, AllowedPorts: offer.AllowedPorts},
 		offer.Limits,
-		&net.Resolver{PreferGo: true},
+		resolver,
 		&net.Dialer{},
 	)
 	if err != nil {
