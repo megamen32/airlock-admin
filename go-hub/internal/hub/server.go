@@ -218,7 +218,7 @@ type managedMCPToken struct {
 	Status       string   `json:"status,omitempty"`
 	RedirectURIs []string `json:"redirect_uris,omitempty"`
 	Scope        string   `json:"scope"`
-	AccessMode   string   `json:"access_mode"`
+	AccessMode   string   `json:"access_mode,omitempty"`
 	ProfileID    string   `json:"profile_id,omitempty"`
 	IssuedAt     int64    `json:"issued_at"`
 	CreatedAt    int64    `json:"created_at,omitempty"`

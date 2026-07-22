@@ -728,3 +728,20 @@ plan is [`PROJECT_PLAN.md`](./PROJECT_PLAN.md).
   push, relay deployment or external proxy data-plane in scope.
 - Next: Implement the isolated proxy relay and edge-agent transport; keep the
   controller API as the only control-plane dependency.
+## 2026-07-22 - Normalize unscoped OAuth client inventory - completed
+
+- Milestone: `S1.4`
+- Owner: Codex
+- Scope: Keep the React Clients inventory usable when OAuth registrations are
+  present alongside managed MCP clients.
+- Baseline / red evidence: `oauthClientInventory()` emitted
+  `access_mode:""` for OAuth registrations; React rejected that value and
+  showed `Сервер вернул некорректный режим доступа клиента.`.
+- Change: Hub omits `access_mode` for unscoped OAuth inventory rows and the UI
+  normalizes the legacy empty-string response to `null`.
+- Verification: React `18 passed`, lint/build passed; Go `go test ./...`
+  passed; focused red/green tests cover both the old response and the new
+  serialization contract.
+- Delivery: Pending commit, live binary/static publish and push.
+- Next: Deploy the commit and verify the authenticated Clients screen with an
+  OAuth inventory row.

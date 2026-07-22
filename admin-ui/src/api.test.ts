@@ -141,6 +141,24 @@ describe("admin API contracts", () => {
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
+  it("treats an OAuth inventory record without access_mode as unscoped", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(jsonResponse({ clients: [{
+      id: "oauth-1",
+      client_id: "oauth-app",
+      token_kind: "oauth",
+      status: "registered",
+      access_mode: "",
+      redirect_uris: [],
+      created_at: 123,
+    }] }));
+
+    await expect(getClients()).resolves.toEqual([expect.objectContaining({
+      id: "oauth-1",
+      token_kind: "oauth",
+      access_mode: null,
+    })]);
+  });
+
   it("surfaces HTTP errors, including stale profile writes, without persisting response bodies", async () => {
     vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(JSON.stringify({ access_token: "must-not-be-stored" }), { status: 412 }));
 

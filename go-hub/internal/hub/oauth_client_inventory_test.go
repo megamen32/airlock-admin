@@ -65,6 +65,9 @@ func TestDynamicOAuthClientInventorySurvivesRestartAndBindsIssuedToken(t *testin
 	if _, exposed := client["client_secret"]; exposed {
 		t.Fatalf("client inventory exposed client_secret: %v", client)
 	}
+	if _, present := client["access_mode"]; present {
+		t.Fatalf("unscoped OAuth inventory must omit access_mode: %v", client)
+	}
 
 	profilePath := "/admin/api/access-profiles/oauth-profile"
 	profile := oauthInventoryRequest(t, restarted, http.MethodPut, profilePath, cfg.CtlToken, map[string]any{

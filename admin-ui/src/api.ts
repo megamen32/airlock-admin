@@ -192,7 +192,13 @@ function parseClient(body: unknown): ClientInventoryItem {
     ? value.id === "legacy-ctl" || value.client_id === "legacy-ctl" ? "legacy_ctl" : "managed_jwt"
     : value.token_kind;
   if (typeof tokenKind !== "string") throw new ApiError(502, "Сервер вернул некорректный тип клиента.");
-  const accessMode = value.access_mode === undefined ? null : value.access_mode;
+  // OAuth registrations do not carry a Shell/MCP access policy. Older Hub
+  // builds serialized that absence as an empty string; treat it like the
+  // contract's null value so one legacy record cannot break the whole client
+  // inventory screen.
+  const accessMode = value.access_mode === undefined || value.access_mode === null || (tokenKind === "oauth" && value.access_mode === "")
+    ? null
+    : value.access_mode;
   if (accessMode !== null && accessMode !== "full" && accessMode !== "readonly") {
     throw new ApiError(502, "Сервер вернул некорректный режим доступа клиента.");
   }
