@@ -63,6 +63,7 @@ type Config struct {
 	StartupInstructionsFile    string
 	StartupInstructions        string
 	NetworkProxyStateFile      string
+	NetworkProxyRelayKeyFile   string
 }
 
 func FromEnv() Config {
@@ -101,6 +102,7 @@ func FromEnv() Config {
 		StartupInstructionsFile:    env("GPTADMIN_STARTUP_INSTRUCTIONS_FILE", filepath.Join(cfgDir, "startup_instructions.md")),
 		StartupInstructions:        env("GPTADMIN_STARTUP_INSTRUCTIONS", ""),
 		NetworkProxyStateFile:      env("GPTADMIN_NETWORK_PROXY_STATE_FILE", filepath.Join(cfgDir, "network_proxy_state.json")),
+		NetworkProxyRelayKeyFile:   env("GPTADMIN_NETWORK_PROXY_RELAY_KEY_FILE", ""),
 	}
 }
 
@@ -293,6 +295,17 @@ func New(cfg Config) *Server {
 		networkProxy = newUnavailableNetworkProxyController(cfg.Now, err)
 	}
 	s.networkProxy = networkProxy
+	if cfg.NetworkProxyRelayKeyFile != "" {
+		key, keyErr := os.ReadFile(cfg.NetworkProxyRelayKeyFile)
+		key = []byte(strings.TrimRight(string(key), " \t\r\n"))
+		if keyErr != nil {
+			log.Printf("network proxy relay key load failed path=%s err=%v", cfg.NetworkProxyRelayKeyFile, keyErr)
+		} else if len(key) < 32 {
+			log.Printf("network proxy relay key rejected path=%s: key must contain at least 32 bytes", cfg.NetworkProxyRelayKeyFile)
+		} else {
+			networkProxy.SetRelayKey(key)
+		}
+	}
 	s.instructionSet = newInstructionSet(cfg)
 	if err := s.loadRegistryState(); err != nil {
 		log.Printf("registry state load failed path=%s err=%v", s.registryStatePath(), err)

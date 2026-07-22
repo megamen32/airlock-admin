@@ -1,6 +1,7 @@
 package hub
 
 import (
+	"crypto/hmac"
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/base64"
@@ -98,6 +99,7 @@ type NetworkProxyController struct {
 	onRevoke     func(capabilityID string)
 	capabilities map[string]NetworkProxyCapability
 	grants       map[string]*networkProxyGrantRecord
+	relayKey     []byte
 	unavailable  error
 }
 
@@ -136,6 +138,14 @@ func newUnavailableNetworkProxyController(now func() time.Time, cause error) *Ne
 		grants:       map[string]*networkProxyGrantRecord{},
 		unavailable:  cause,
 	}
+}
+
+// SetRelayKey enables issuance of relay-compatible, role-bound stream tickets.
+// The key is separate from every Hub, ShellMCP, OAuth, and admin credential.
+func (c *NetworkProxyController) SetRelayKey(key []byte) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.relayKey = append([]byte(nil), key...)
 }
 
 func (c *NetworkProxyController) load() (bool, error) {
@@ -304,12 +314,12 @@ func (c *NetworkProxyController) IssueStreamGrants(capabilityID, target string) 
 	if capability.ExpiresAt.Before(expiresAt) {
 		expiresAt = capability.ExpiresAt
 	}
-	clientGrant, clientRecord, err := newProxyStreamGrant(capability, streamID, canonicalTarget, "client", expiresAt)
+	clientGrant, clientRecord, err := c.newProxyStreamGrant(capability, streamID, canonicalTarget, "client", expiresAt)
 	if err != nil {
 		c.mu.Unlock()
 		return ProxyStreamGrant{}, ProxyStreamGrant{}, err
 	}
-	agentGrant, agentRecord, err := newProxyStreamGrant(capability, streamID, canonicalTarget, "agent", expiresAt)
+	agentGrant, agentRecord, err := c.newProxyStreamGrant(capability, streamID, canonicalTarget, "agent", expiresAt)
 	if err != nil {
 		c.mu.Unlock()
 		return ProxyStreamGrant{}, ProxyStreamGrant{}, err
@@ -618,10 +628,45 @@ func isNetworkProxyBroadcast(addr netip.Addr, rawPrefixes []string) bool {
 	return false
 }
 
-func newProxyStreamGrant(capability NetworkProxyCapability, streamID, target, role string, expiresAt time.Time) (ProxyStreamGrant, *networkProxyGrantRecord, error) {
+func (c *NetworkProxyController) newProxyStreamGrant(capability NetworkProxyCapability, streamID, target, role string, expiresAt time.Time) (ProxyStreamGrant, *networkProxyGrantRecord, error) {
 	tokenBytes := make([]byte, 32)
 	if _, err := rand.Read(tokenBytes); err != nil {
 		return ProxyStreamGrant{}, nil, err
+	}
+	token := base64.RawURLEncoding.EncodeToString(tokenBytes)
+	if len(c.relayKey) >= 32 {
+		jtiBytes := make([]byte, 16)
+		if _, err := rand.Read(jtiBytes); err != nil {
+			return ProxyStreamGrant{}, nil, err
+		}
+		jti := base64.RawURLEncoding.EncodeToString(jtiBytes)
+		lifetime := int(expiresAt.Sub(c.now().UTC()).Seconds())
+		if lifetime < 1 {
+			lifetime = 1
+		}
+		if lifetime > 24*60*60 {
+			lifetime = 24 * 60 * 60
+		}
+		claims := networkProxyRelayClaims{
+			Kind: "stream", ProtocolVersion: 1, CapabilityID: capability.CapabilityID,
+			StreamID: streamID, ProfileID: capability.ProfileID, AgentID: capability.Policy.AgentID,
+			Target: target, Role: role, ExpiresAt: expiresAt.UTC().Unix(), JTI: jti,
+			Limits: networkProxyRelayLimits{
+				MaxFrameBytes: 32 * 1024, MaxPendingFrames: 16, DialTimeoutSeconds: 10,
+				IdleTimeoutSeconds: lifetime, MaxStreamLifetimeSeconds: lifetime,
+				MaxBytes: capability.Policy.MaxBytes, MaxStreamsPerAgent: capability.Policy.MaxStreams,
+				MaxStreamsPerProfile: capability.Policy.MaxStreams,
+			},
+		}
+		payload, err := json.Marshal(claims)
+		if err != nil {
+			return ProxyStreamGrant{}, nil, err
+		}
+		encoded := base64.RawURLEncoding.EncodeToString(payload)
+		signed := "gpr1." + encoded
+		mac := hmac.New(sha256.New, c.relayKey)
+		_, _ = mac.Write([]byte(signed))
+		token = signed + "." + base64.RawURLEncoding.EncodeToString(mac.Sum(nil))
 	}
 	grant := ProxyStreamGrant{
 		CapabilityID: capability.CapabilityID,
@@ -629,12 +674,38 @@ func newProxyStreamGrant(capability NetworkProxyCapability, streamID, target, ro
 		AgentID:      capability.Policy.AgentID,
 		Target:       target,
 		Role:         role,
-		Token:        base64.RawURLEncoding.EncodeToString(tokenBytes),
+		Token:        token,
 		ExpiresAt:    expiresAt,
 	}
 	// The digest of the opaque token is the replay identifier. Keeping a
 	// separate JTI would create a second, unused replay contract.
 	return grant, &networkProxyGrantRecord{Grant: grant}, nil
+}
+
+type networkProxyRelayLimits struct {
+	MaxFrameBytes            int64 `json:"max_frame_bytes"`
+	MaxPendingFrames         int   `json:"max_pending_frames"`
+	DialTimeoutSeconds       int   `json:"dial_timeout_seconds"`
+	IdleTimeoutSeconds       int   `json:"idle_timeout_seconds"`
+	MaxStreamLifetimeSeconds int   `json:"max_stream_lifetime_seconds"`
+	MaxBytes                 int64 `json:"max_bytes"`
+	BandwidthBytesPerSecond  int64 `json:"bandwidth_bytes_per_second,omitempty"`
+	MaxStreamsPerAgent       int   `json:"max_streams_per_agent"`
+	MaxStreamsPerProfile     int   `json:"max_streams_per_profile"`
+}
+
+type networkProxyRelayClaims struct {
+	Kind            string                  `json:"kind"`
+	ProtocolVersion int                     `json:"protocol_version"`
+	CapabilityID    string                  `json:"capability_id"`
+	StreamID        string                  `json:"stream_id"`
+	ProfileID       string                  `json:"profile_id"`
+	AgentID         string                  `json:"agent_id"`
+	Target          string                  `json:"target"`
+	Role            string                  `json:"role"`
+	ExpiresAt       int64                   `json:"exp"`
+	JTI             string                  `json:"jti"`
+	Limits          networkProxyRelayLimits `json:"limits"`
 }
 
 func proxyTokenDigest(token string) string {

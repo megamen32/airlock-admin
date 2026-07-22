@@ -21,11 +21,12 @@ go build -o ../trash/generated/network-tunnel-agent ./cmd/networkproxy-agent
 ```
 
 Create one random relay key with mode `0600`, run the relay on a private
-address, and issue two short-lived role-bound tickets with the relay's local
-ticket issuer. The client ticket goes to `network-tunnel-proxy`; the agent
-ticket is embedded as `relay_ticket` in the signed offer consumed by
-`network-tunnel-agent`. Each ticket is one-use and each TCP connection needs a
-fresh pair of tickets.
+address. When the Hub is the issuer, point both components at that same file
+using `GPTADMIN_NETWORK_PROXY_RELAY_KEY_FILE` for the Hub and
+`NETWORK_TUNNEL_RELAY_KEY_FILE` for the relay. The client ticket goes to
+`network-tunnel-proxy`; the agent ticket is embedded as `relay_ticket` in the
+signed offer consumed by `network-tunnel-agent`. Each ticket is one-use and
+each TCP connection needs a fresh pair of tickets.
 
 For a controlled bring-up, the local issuer is `go-proxyrelay/cmd/networkticket`:
 
