@@ -212,7 +212,7 @@ func TestNetworkProxyScopesAreExplicitAndIsolateDestinations(t *testing.T) {
 
 	internetPolicy, err := networkProxyPolicyFromArgs(map[string]any{
 		"scope": "internet_egress", "agent_id": "shell:proxy-1", "mode": "pull",
-		"target_cidrs": []string{"0.0.0.0/0"}, "target_ports": []int{443},
+		"target_cidrs": []string{"0.0.0.0/0", "::/0"}, "target_ports": []int{443},
 		"max_streams": 20, "max_bytes": 1 << 20, "lease": time.Minute,
 	})
 	if err != nil {
@@ -233,8 +233,13 @@ func TestNetworkProxyScopesAreExplicitAndIsolateDestinations(t *testing.T) {
 		"100.64.0.1:443",
 		"192.0.2.1:443",
 		"198.18.0.1:443",
+		"198.51.100.1:443",
 		"203.0.113.1:443",
 		"240.0.0.1:443",
+		"[::ffff:100.64.0.1]:443",
+		"[::ffff:192.0.2.1]:443",
+		"[::ffff:198.51.100.1]:443",
+		"[2001:db8::1]:443",
 		"224.0.0.1:443",
 		"255.255.255.255:443",
 	} {

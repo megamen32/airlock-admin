@@ -529,6 +529,12 @@ func allowedNetworkProxyTarget(policy NetworkProxyPolicy, target string) (string
 	if err != nil {
 		return "", ErrNetworkProxyTargetDenied
 	}
+	// Treat IPv4-mapped IPv6 literals as their IPv4 address before applying
+	// CIDR and reserved-range policy; otherwise ::ffff:100.64.0.1 can bypass
+	// an IPv4 egress deny-list under an IPv6 catch-all prefix.
+	if addr.Is4In6() {
+		addr = addr.Unmap()
+	}
 	port, err := strconv.Atoi(rawPort)
 	if err != nil || !containsInt(policy.TargetPorts, port) {
 		return "", ErrNetworkProxyTargetDenied

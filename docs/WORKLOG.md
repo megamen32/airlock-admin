@@ -720,14 +720,15 @@ plan is [`PROJECT_PLAN.md`](./PROJECT_PLAN.md).
   `internet_egress` scopes, finite leases, profile/agent authorization,
   target-bound one-time client/agent grants, revoke signalling, fail-closed
   persistence and dedicated proxy-control routes/tools. Internet egress also
-  rejects CGNAT, TEST-NET, benchmark, documentation and reserved ranges. The
-  command queues and heartbeat liveness remain untouched.
+  rejects CGNAT, TEST-NET, benchmark, documentation and reserved ranges, and
+  normalizes IPv4-mapped IPv6 literals before policy checks. The command queues
+  and heartbeat liveness remain untouched.
 - Verification: `cd go-hub && go test ./internal/hub -run 'Proxy|Network' -count=1`
   and `cd go-hub && go test ./...` passed. `public/openapi.yaml` parsed and
   included all proxy-control paths/schemas; `git diff --check` passed.
-- Delivery: Commits `383af8b` (`feat: add Hub Network Tunnel controller`) and
-  the follow-up reserved-range security fix; no push, relay deployment or
-  external proxy data-plane in scope.
+- Delivery: Commits `383af8b` (`feat: add Hub Network Tunnel controller`),
+  `848cd9a` (reserved-range security fix) and the IPv4-mapped IPv6 policy fix;
+  no push, relay deployment or external proxy data-plane in scope.
 - Next: Implement the isolated proxy relay and edge-agent transport; keep the
   controller API as the only control-plane dependency.
 ## 2026-07-22 - Normalize unscoped OAuth client inventory - completed
