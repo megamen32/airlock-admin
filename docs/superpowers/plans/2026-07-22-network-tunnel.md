@@ -1,6 +1,9 @@
 # Network Tunnel Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use `subagent-driven-development` for implementation, with a review gate after every phase.
+> **For agentic workers:** Use `subagent-driven-development` when delegation is
+> useful. Let delegated work run to its normal handoff; do not add per-phase
+> polling or review gates. Run one consolidated review after the runnable
+> vertical slice is complete.
 
 **Goal:** Give an explicitly approved ShellMCP agent temporary, audited TCP access to selected networks behind NAT/4G through separate webhook or pull delivery, without using the ShellMCP command channel for proxy bytes.
 

@@ -1,8 +1,8 @@
 # Network Tunnel threat model
 
-> **Status:** This is the security contract for a future Network Tunnel v1.
-> The controls below are requirements for a later implementation, not claims
-> about the current Hub or ShellMCP runtime.
+> **Status:** This is the security contract for Network Tunnel v1. The isolated
+> relay and edge vertical slice are implemented; profile/MCP integration must
+> continue to satisfy these controls.
 
 ## Security objective
 

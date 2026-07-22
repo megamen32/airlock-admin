@@ -33,8 +33,10 @@ Profile policy must not expose raw proxy credentials, a generic
 clients. `lan` and `internet_egress` have separate approval and audit
 boundaries; neither is a fallback for the other. Revoking an applicable
 profile permission must revoke the capability and reset its streams when the
-Network Tunnel exists. The current profile runtime does not implement this
-capability; the normative protocol is documented in
+Network Tunnel exists. The Hub controller and isolated data-plane vertical
+slice now implement the core contract; profile persistence and the semantic
+`network-access` MCP facade remain integration work. The normative protocol is
+documented in
 [`NETWORK_PROXY.md`](./NETWORK_PROXY.md).
 
 ## External workspace reference
