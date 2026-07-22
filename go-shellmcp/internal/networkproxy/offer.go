@@ -10,6 +10,7 @@ import (
 	"net/netip"
 	"net/url"
 	"strings"
+	"sync"
 	"time"
 
 	"encoding/json"
@@ -21,6 +22,7 @@ const (
 	timestampHeader = "X-GPTAdmin-Timestamp"
 	nonceHeader     = "X-GPTAdmin-Nonce"
 	signatureHeader = "X-GPTAdmin-Signature"
+	offerPath       = "/proxy-agent/offers"
 )
 
 var (
@@ -180,7 +182,7 @@ func NewPullOfferSource(client *http.Client, offersURL string, verifier *SignedO
 		return nil, ErrOfferInvalid
 	}
 	endpoint, err := url.ParseRequestURI(offersURL)
-	if err != nil || endpoint.Scheme == "" || endpoint.Host == "" || endpoint.Path == "" {
+	if err != nil || endpoint.Scheme == "" || endpoint.Host == "" || endpoint.Path != offerPath {
 		return nil, fmt.Errorf("%w: offers URL", ErrOfferInvalid)
 	}
 	return &PullOfferSource{client: client, offersURL: endpoint, verifier: verifier, maxBodyBytes: maxBodyBytes}, nil
@@ -207,7 +209,7 @@ func (s *PullOfferSource) Next(ctx context.Context) (Offer, error) {
 	if err != nil {
 		return Offer{}, err
 	}
-	return s.verifier.Verify(request.Method, s.offersURL.EscapedPath(), response.Header, body)
+	return s.verifier.Verify(request.Method, s.offersURL.Path, response.Header, body)
 }
 
 // WebhookOfferHandler returns an offer-only HTTP handler and bounded delivery channel.
@@ -216,10 +218,15 @@ func WebhookOfferHandler(verifier *SignedOfferVerifier, capacity int, maxBodyByt
 		return nil, nil, ErrOfferInvalid
 	}
 	delivered := make(chan Offer, capacity)
+	var deliveryMu sync.Mutex
 	handler := http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		if request.Method != http.MethodPost {
 			writer.Header().Set("Allow", http.MethodPost)
 			http.Error(writer, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		if request.URL.Path != offerPath {
+			http.NotFound(writer, request)
 			return
 		}
 		body, err := readOfferBody(http.MaxBytesReader(writer, request.Body, maxBodyBytes), maxBodyBytes)
@@ -231,17 +238,22 @@ func WebhookOfferHandler(verifier *SignedOfferVerifier, capacity int, maxBodyByt
 			http.Error(writer, "invalid offer", status)
 			return
 		}
-		offer, err := verifier.Verify(request.Method, request.URL.EscapedPath(), request.Header, body)
+		// Reserve queue capacity before nonce consumption. A full queue must
+		// return 429 without burning a valid offer's replay nonce so the sender
+		// can retry after the consumer drains it.
+		deliveryMu.Lock()
+		defer deliveryMu.Unlock()
+		if len(delivered) == cap(delivered) {
+			http.Error(writer, "offer delivery queue is full", http.StatusTooManyRequests)
+			return
+		}
+		offer, err := verifier.Verify(request.Method, request.URL.Path, request.Header, body)
 		if err != nil {
 			http.Error(writer, "invalid offer", http.StatusUnauthorized)
 			return
 		}
-		select {
-		case delivered <- offer:
-			writer.WriteHeader(http.StatusAccepted)
-		default:
-			http.Error(writer, "offer delivery queue is full", http.StatusTooManyRequests)
-		}
+		delivered <- offer
+		writer.WriteHeader(http.StatusAccepted)
 	})
 	return handler, delivered, nil
 }

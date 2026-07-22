@@ -179,6 +179,62 @@ func TestWebhookOfferHandlerRejectsOversizedAndOverflow(t *testing.T) {
 	}
 }
 
+func TestOfferDeliveryUsesOnlyDedicatedOffersPath(t *testing.T) {
+	publicKey, _ := testOfferKey(t)
+	verifier := testVerifier(t, publicKey, "agent-1")
+	client := &http.Client{}
+	if _, err := NewPullOfferSource(client, "https://hub.example/queue/agent-1", verifier, 4096); !errors.Is(err, ErrOfferInvalid) {
+		t.Fatalf("queue endpoint error = %v, want ErrOfferInvalid", err)
+	}
+	handler, _, err := WebhookOfferHandler(verifier, 1, 4096)
+	if err != nil {
+		t.Fatal(err)
+	}
+	recorder := httptest.NewRecorder()
+	handler.ServeHTTP(recorder, httptest.NewRequest(http.MethodPost, "/queue/agent-1", nil))
+	if recorder.Code != http.StatusNotFound {
+		t.Fatalf("webhook control-path status = %d, want %d", recorder.Code, http.StatusNotFound)
+	}
+}
+
+func TestWebhookOverflowDoesNotConsumeOfferNonce(t *testing.T) {
+	publicKey, privateKey := testOfferKey(t)
+	offer := testOffer(time.Now())
+	handler, delivered, err := WebhookOfferHandler(testVerifier(t, publicKey, offer.AgentID), 1, 4096)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	blocker := offer
+	blocker.Nonce = "blocker"
+	blockerBody := testOfferBody(t, blocker)
+	blockerRequest := httptest.NewRequest(http.MethodPost, "/proxy-agent/offers", strings.NewReader(string(blockerBody)))
+	writeSignedOfferHeaders(blockerRequest.Header, privateKey, http.MethodPost, blockerRequest.URL.Path, blockerBody, blocker.Nonce)
+	blockerResponse := httptest.NewRecorder()
+	handler.ServeHTTP(blockerResponse, blockerRequest)
+	if blockerResponse.Code != http.StatusAccepted {
+		t.Fatalf("blocker status = %d, want %d", blockerResponse.Code, http.StatusAccepted)
+	}
+
+	retry := offer
+	retry.Nonce = "retry-after-overflow"
+	retryBody := testOfferBody(t, retry)
+	makeRetry := func() *httptest.ResponseRecorder {
+		req := httptest.NewRequest(http.MethodPost, "/proxy-agent/offers", strings.NewReader(string(retryBody)))
+		writeSignedOfferHeaders(req.Header, privateKey, http.MethodPost, req.URL.Path, retryBody, retry.Nonce)
+		recorder := httptest.NewRecorder()
+		handler.ServeHTTP(recorder, req)
+		return recorder
+	}
+	if response := makeRetry(); response.Code != http.StatusTooManyRequests {
+		t.Fatalf("overflow status = %d, want %d", response.Code, http.StatusTooManyRequests)
+	}
+	<-delivered
+	if response := makeRetry(); response.Code != http.StatusAccepted {
+		t.Fatalf("retry status = %d, want %d", response.Code, http.StatusAccepted)
+	}
+}
+
 func TestOfferConsumerStopsOnCancellationWithoutRetry(t *testing.T) {
 	t.Parallel()
 
