@@ -651,6 +651,27 @@ plan is [`PROJECT_PLAN.md`](./PROJECT_PLAN.md).
   backups.
 - Next: Push the integrated commit and keep the existing admin password stable.
 
+## 2026-07-22 - Isolated Network Tunnel proxy relay - completed
+
+- Milestone: `S2.2`
+- Owner: Codex
+- Scope: Create the separate `go-proxyrelay` core and ticket verifier without
+  modifying Hub or ShellMCP transport, queues, jobs or service lifecycle.
+- Baseline / red evidence: The relay regression suite first failed because the
+  production relay and ticket packages were absent. A follow-up RED caught
+  per-direction bandwidth doubling for one stream.
+- Change: Added signed role-bound tickets, replay cache, bounded WSS pairing,
+  FIN/RESET forwarding, capability revoke, per-agent/profile limits, byte,
+  frame, queue, idle, lifetime and shared bandwidth limits, and metadata-only
+  audit logging. The relay is an isolated module with no Hub/ShellMCP imports.
+- Verification: `cd go-proxyrelay && go test ./internal/relay -count=1`,
+  `go test ./...`, `go test -race ./...`, `go vet ./...` and the local TCP echo
+  integration test passed.
+- Delivery: Commit `4752e06` (`feat: add isolated bounded proxy relay`); no
+  push, public listener deployment or edge-agent dialer in this slice.
+- Next: Implement the edge proxy agent and enforce target dial timeout/ACL at
+  the LAN side before adding service packaging.
+
 ## 2026-07-22 - Repair outbound ShellMCP polling and FRP origin - completed
 
 - Milestone: `S0.2`
