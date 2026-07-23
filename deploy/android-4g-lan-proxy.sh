@@ -11,6 +11,8 @@ ANDROID_PROXY_PORT="${ANDROID_PROXY_PORT:-3126}"
 ADB_FORWARD_PORT="${ADB_FORWARD_PORT:-3127}"
 PORT_STATE="${PORT_STATE:-/etc/gptadmin/android-4g-proxy.env}"
 LAN_BIND="${LAN_BIND:-$(ip -4 -o addr show scope global | awk '$4 ~ /^192\.168\.2\./ {sub(/\/.*$/, "", $4); print $4; exit}')}"
+LAN_PROXY_ALLOWED_CIDRS="${LAN_PROXY_ALLOWED_CIDRS:-192.168.2.0/24}"
+LAN_PROXY_FIREWALL="${LAN_PROXY_FIREWALL:-1}"
 
 log() { printf '[%s] %s\n' "$(date -Is)" "$*"; }
 adb() { sudo -u "$ADB_USER" env HOME="$ADB_HOME" "$ADB_BIN" -s "$SERIAL" "$@"; }
@@ -57,6 +59,20 @@ write_state() {
     mv -f "$tmp" "$PORT_STATE"
 }
 
+configure_firewall() {
+    local port="$1"
+    [[ "$LAN_PROXY_FIREWALL" == "1" || "$LAN_PROXY_FIREWALL" == "true" || "$LAN_PROXY_FIREWALL" == "yes" ]] || return 0
+    command -v ufw >/dev/null 2>&1 || return 0
+    ufw status 2>/dev/null | grep -q '^Status: active' || return 0
+
+    local cidr
+    for cidr in $LAN_PROXY_ALLOWED_CIDRS; do
+        if ! ufw status 2>/dev/null | awk -v port="${port}/tcp" -v cidr="$cidr" '$1 == port && index($0, cidr) { found = 1 } END { exit !found }'; then
+            ufw allow from "$cidr" to any port "$port" proto tcp comment 'gptadmin Android 4G proxy' >/dev/null
+        fi
+    done
+}
+
 ensure_android_proxy() {
     [[ -n "$SERIAL" ]] || { log 'ANDROID_ADB_SERIAL is not configured'; return 1; }
     [[ -n "$LAN_BIND" ]] || { log 'LAN_BIND could not be detected'; return 1; }
@@ -72,6 +88,7 @@ ensure_android_proxy() {
 main() {
     local port
     port="$(choose_port)"
+    configure_firewall "$port"
     write_state "$port"
     log "sharing Android 4G proxy on ${LAN_BIND}:$port; protocols=socks5,http-connect transport=tcp-only"
     while true; do

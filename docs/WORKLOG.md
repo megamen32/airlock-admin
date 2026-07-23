@@ -48,6 +48,25 @@ plan is [`PROJECT_PLAN.md`](./PROJECT_PLAN.md).
 
 ## Entries
 
+## 2026-07-23 - Restore Android 4G LAN proxy reachability - completed
+
+- Milestone: `S0.2` Android 4G proxy external-client acceptance
+- Owner: Codex
+- Scope: `android-4g-lan-proxy.service`, LAN firewall rules, Mac SOCKS5/HTTP
+  smoke; no public Internet bind.
+- Baseline / red evidence: The service listened on `192.168.2.100:3126` and
+  passed a server-local proxy smoke, but the Mac TCP connection stalled; UFW
+  had default-deny input and no TCP/3126 allow rule.
+- Change: Added idempotent private-LAN UFW rules to the deployment script and
+  applied the TCP/3126 rules on the live host without exposing a public bind.
+- Verification: Service is active after restart; an external Windows LAN client
+  returned the mobile egress through both SOCKS5 and HTTP CONNECT, while direct
+  egress differed. `python3 -m pytest -q tests/test_android_4g_lan_proxy.py`,
+  `bash -n deploy/android-4g-lan-proxy.sh`, and `git diff --check` passed.
+- Delivery: Live script hash matches the repository source; firewall rules and
+  service state are active on the target host. Commit pending.
+- Next: Mac retries `socks5h://<lan-host>:<port>` or HTTP CONNECT.
+
 ## 2026-07-23 - Windows ShellMCP polling remediation and proactive bug register - handed-off
 
 - Milestone: `S0.3` Windows runtime acceptance and operational hygiene

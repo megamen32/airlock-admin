@@ -12,6 +12,19 @@ Rules:
 - At the end of the current goal, resolve every actionable open entry before
   final handoff, unless a concrete external blocker is recorded.
 
+## 2026-07-23 - ANDROID-LAN-PROXY-FW-20260723 - LAN proxy blocked by host firewall - fixed
+
+- Component: `android-4g-lan-proxy.service` on roomhacker-server-100.
+- First observed: 2026-07-23.
+- Symptom / evidence: Runtime probe `mac-curl-3126-20260723` stalled connecting to the LAN listener. The service was listening on `192.168.2.100:3126`, and a server-local proxy request completed successfully, while the UFW user rules had no TCP/3126 allow entry and the INPUT policy was deny.
+- Root cause: The deployment created the LAN listener but did not install a matching UFW allow rule.
+- Fix / verification: Added UFW TCP rules limited to the private LAN ranges and
+  made the deployment script install the matching rule idempotently for the
+  selected port. An external Windows LAN client returned the same mobile IPv6
+  through both SOCKS5 and HTTP CONNECT, while direct egress returned a different
+  address; the service remained active after restart.
+- Next action: Have the Mac retry the exact command; no code-side blocker remains.
+
 ## Entry format
 
 ```text
