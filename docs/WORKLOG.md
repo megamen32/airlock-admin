@@ -48,6 +48,18 @@ plan is [`PROJECT_PLAN.md`](./PROJECT_PLAN.md).
 
 ## Entries
 
+## 2026-07-23 - Public HAOS app installation and acceptance - handed-off
+
+- Milestone: `S3.4`
+- Owner: `Codex` → next operator/agent
+- Scope: Migrate the existing HAOS standby from the local operator-built app to the public Home Assistant Apps repository, preserve `/data`, and perform fresh install plus physical failover acceptance.
+- Baseline / evidence: Public repository `https://github.com/megamen32/gptadmin-haos-addons` is public at `cb8b4f2`; package `ghcr.io/megamen32/gptadmin-haos-hub-standby:1.0.5` is public and anonymous ARM64 pull passed with digest `sha256:aea6ee350052c90b2ace1de5cb66d2171dd3faeed1383b42df5f10229676de6d`. Live HAOS remains on the previously verified operator deployment `1.0.4`; no migration has been performed.
+- Handoff plan: (1) add the public repository URL in HAOS Apps and confirm the `gptadmin_hub_standby` app resolves to `1.0.5`; (2) back up current Supervisor options and `/data` before touching the existing app; (3) configure only `AdminPassword`, public Hub URL, Tunnel/failover endpoints and rank/threshold options, letting the app generate internal credentials; (4) verify container state, Hub `:9001`, fallback proxy `:9101`, and generated runtime state without printing secrets; (5) stop only `gptadmin-hub.service` on `server-100`, verify primary FRP binding plus public `/healthz` and `/version` takeover, restore Hub, and verify signed reclaim; (6) keep the old local add-on source backup until the public app passes the drill.
+- Release handoff: Merge draft PR `https://github.com/megamen32/gptadmin/pull/23` before relying on the main-branch release workflow. Configure `HAOS_ADDONS_REPO_TOKEN` only if automatic synchronization to the public Apps repository is desired; otherwise run the allowlist exporter and review its diff for each release.
+- Verification already complete: `13` focused public/failover tests, Go Hub and Go ShellMCP tests, YAML/secret/path scan, ARM64 image build, public package visibility and anonymous pull.
+- Delivery: Source branch `codex/haos-addon-public` and public Apps repository are pushed; existing credentials and live HAOS runtime were not changed.
+- Next: Perform the guarded HAOS migration and fresh physical failover drill; do not delete the old local add-on backup until both promotion and reclaim pass.
+
 ## 2026-07-23 - HAOS Apps distribution repository - completed
 
 - Milestone: `S3.4`
