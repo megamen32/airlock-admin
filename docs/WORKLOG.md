@@ -64,7 +64,7 @@ plan is [`PROJECT_PLAN.md`](./PROJECT_PLAN.md).
   egress differed. `python3 -m pytest -q tests/test_android_4g_lan_proxy.py`,
   `bash -n deploy/android-4g-lan-proxy.sh`, and `git diff --check` passed.
 - Delivery: Live script hash matches the repository source; firewall rules and
-  service state are active on the target host. Commit pending.
+  service state are active on the target host. Commit `11e4857` on `main`.
 - Next: Mac retries `socks5h://<lan-host>:<port>` or HTTP CONNECT.
 
 ## 2026-07-23 - Windows ShellMCP polling remediation and proactive bug register - handed-off
