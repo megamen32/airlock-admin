@@ -48,6 +48,28 @@ plan is [`PROJECT_PLAN.md`](./PROJECT_PLAN.md).
 
 ## Entries
 
+## 2026-07-23 - HAOS Apps distribution repository - active
+
+- Milestone: `S3.4`
+- Owner: `Codex`
+- Scope: Sanitized Home Assistant Apps repository, public Supervisor options, internal credential generation, ARM64 image packaging and GitHub publication; preserve the existing live HAOS deployment.
+- Baseline / red evidence: The current add-on source is an operator-generated context only: it has no root `repository.yaml`, no public `config.yaml`, and its Dockerfile requires generated binaries and instance state. Public export contract initially failed at test collection because the generator/exporter did not exist.
+- Change: Added failing/green contract tests, secret-free failover bundle generation, persistent internal credential generation, public app metadata/templates and an allowlist exporter. Remaining work is image build, remote repository publication and final remote verification.
+- Verification: Focused public-distribution tests currently pass `6`; existing physical failover tests remain green from the prior completed entry.
+- Delivery: No external repository has been published yet; existing credentials and live deployment are unchanged.
+- Next: Build the sanitized ARM64 image context, create `megamen32/gptadmin-haos-addons`, publish the initial tree/image, and verify the remote contract.
+
+## 2026-07-23 - Physical Hub failover repair - completed
+
+- Milestone: `S3.4`
+- Owner: `Codex`
+- Scope: Physical `server-100` Hub failure path, HAOS standby, watchdog, fallback proxy and FRP ingress; repository tests/docs and live verification.
+- Baseline / red evidence: Runtime artifact `failover-runtime-20260723-01` shows `gptadmin-hub-watchdog.timer=bad`, no active physical failover proxy/tunnel path, HAOS `:9001` healthy but `:9101` refused, and Docker-only failover coverage is insufficient for the reported outage.
+- Change: Added the HAOS systemd-free watchdog/proxy runtime, ARM64 FRP packaging and credential handoff, one valid FRP config/process per endpoint, secret-safe signed reclaim verification, watchdog pipe lifecycle fix, reclaim cooldown reset, primary FRP `BindsTo=gptadmin-hub.service`, deployment version/update flow, regression tests and failover documentation.
+- Verification: `python3 -m pytest -q tests/test_haos_failover_runtime.py tests/test_failover_unit_contract.py` passed `7`; Go Hub tests passed during HAOS package build; Docker failover black-box scenarios passed; `frpc verify` passed for all three ARM64 failover configs. Live drill stopped only Hub on `server-100`, systemd stopped FRP, HAOS promoted and public `/healthz`/`/version` returned `200`; primary restart produced automatic `reclaimed_primary`, fallback FRP exited, and public returned primary build `128`. Final HAOS app is `1.0.4` started.
+- Delivery: Live HAOS deployment completed; existing credentials preserved and not printed.
+- Next: Run the separate second-physical-fallback drill required by S3.4.
+
 ## 2026-07-23 - Restore Android 4G LAN proxy reachability - completed
 
 - Milestone: `S0.2` Android 4G proxy external-client acceptance

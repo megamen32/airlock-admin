@@ -1061,6 +1061,7 @@ WantedBy={LINUX_WANTED_BY}
 
     FRPC_UNIT_TPL = """[Unit]
 Description=FRP client for GPTAdmin
+BindsTo=gptadmin-hub.service
 After=network-online.target gptadmin-hub.service
 Wants=network-online.target
 
