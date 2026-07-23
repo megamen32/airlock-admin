@@ -48,16 +48,16 @@ plan is [`PROJECT_PLAN.md`](./PROJECT_PLAN.md).
 
 ## Entries
 
-## 2026-07-23 - HAOS Apps distribution repository - active
+## 2026-07-23 - HAOS Apps distribution repository - handed-off
 
 - Milestone: `S3.4`
 - Owner: `Codex`
 - Scope: Sanitized Home Assistant Apps repository, public Supervisor options, internal credential generation, ARM64 image packaging and GitHub publication; preserve the existing live HAOS deployment.
 - Baseline / red evidence: The current add-on source is an operator-generated context only: it has no root `repository.yaml`, no public `config.yaml`, and its Dockerfile requires generated binaries and instance state. Public export contract initially failed at test collection because the generator/exporter did not exist.
-- Change: Added failing/green contract tests, secret-free failover bundle generation, persistent internal credential generation, public app metadata/templates and an allowlist exporter. Remaining work is image build, remote repository publication and final remote verification.
-- Verification: Focused public-distribution tests currently pass `6`; existing physical failover tests remain green from the prior completed entry.
-- Delivery: No external repository has been published yet; existing credentials and live deployment are unchanged.
-- Next: Build the sanitized ARM64 image context, create `megamen32/gptadmin-haos-addons`, publish the initial tree/image, and verify the remote contract.
+- Change: Added failing/green contract tests, secret-free failover bundle generation, persistent internal credential generation, public app metadata/templates, an allowlist exporter, a GHCR publication workflow and a draft integration PR.
+- Verification: Focused public-distribution and failover tests pass `13`; Go Hub and Go ShellMCP tests pass; public repository YAML and secret/path scan pass; local ARM64 image build completes.
+- Delivery: Public repository `https://github.com/megamen32/gptadmin-haos-addons` is published at commit `f6a6089`; source branch `codex/haos-addon-public` is pushed at commit `9d8a427`; draft PR `#23` is open. GHCR push is handed off because the authenticated GitHub token lacks `write:packages`; no credentials were published and the live HAOS deployment is unchanged.
+- Next: Approve the pending GitHub device authorization with `write:packages`, then push the already-built `ghcr.io/megamen32/gptadmin-haos-hub-standby:1.0.5`, make the package public, and run one fresh Supervisor install check.
 
 ## 2026-07-23 - Physical Hub failover repair - completed
 
