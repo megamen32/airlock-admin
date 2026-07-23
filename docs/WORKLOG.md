@@ -65,7 +65,7 @@ plan is [`PROJECT_PLAN.md`](./PROJECT_PLAN.md).
   active Windows log records current Go polling mode with no new 401, certifi,
   or unauthorized entries. Focused Python tests passed 11 tests and Go server
   tests passed.
-- Delivery: Commit `e0860fc` on `main`. The old privileged legacy task remains
+- Delivery: Commits `e0860fc`, `b4ac1af`, and `2180a8e` on `main`. The old privileged legacy task remains
   inaccessible to the SSH user and needs one elevated cleanup action.
 - Next: From an elevated Windows session, disable/remove the old `gptadmin-rootd`
   task and run one post-restart check; then close the remaining legacy-runtime
