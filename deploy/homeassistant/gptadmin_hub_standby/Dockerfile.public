@@ -7,7 +7,8 @@ ARG BUILD_ARCH=aarch64
 LABEL \
   io.hass.version="$BUILD_VERSION" \
   io.hass.type="app" \
-  io.hass.arch="$BUILD_ARCH"
+  io.hass.arch="$BUILD_ARCH" \
+  org.opencontainers.image.source="https://github.com/megamen32/gptadmin-haos-addons"
 
 RUN apk add --no-cache bash ca-certificates jq python3 tzdata
 
