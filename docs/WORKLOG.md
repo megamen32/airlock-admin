@@ -2645,3 +2645,13 @@ plan is [`PROJECT_PLAN.md`](./PROJECT_PLAN.md).
 - Verification: completion matrix has 63 rows with command/evidence metadata; real installed `codex`, `claude` and `opencode` disposable-Hub handshake passes (`1 passed in 18.53s`); focused secure secret-ingress tests pass; current server-100 probe reports Hub `inactive`, Tunnel `failed`, health `000`, and server-88 reports ShellMCP `inactive`, health `000`.
 - Delivery: Local proxy, endpoints, hooks, MCP forwarding, file sharing, profiles, security policy, secret ingress and client-CLI evidence are green. The repeated runtime observation remains `LIVE-RUNTIME-INACTIVE-20260724`; no deployment or restart was performed.
 - Next: Use an explicitly authorized deployment session to restore the supported release, then run the existing live acceptance runner through the public Tunnel and named clients.
+
+## 2026-07-24 - Canonical runtime contract diagnosis - handed off
+
+- Milestone: `S1.1`, `S0.1`
+- Owner: Codex
+- Scope: Reconcile the expected external service names with the actual read-only systemd and port state before any deployment action.
+- Evidence: `trash/logs/live-runtime-canonical-unit-rerun-20260724.md` and BUG `LIVE-RUNTIME-INACTIVE-20260724`.
+- Confirmed: server-100 has an inactive Hub, a stale/unattributed `:9001` listener and Tunnel `router config conflict`; server-88 lacks the expected user unit, while the root `shellmcp.service` is active but polls its queue with HTTP 401 and exposes no expected listener.
+- Delivery: Corrected the BUG record so it no longer mislabels server-88's canonical system service as inactive; no remote state was changed.
+- Next: Deployment owner must reconcile units/artifacts/auth and rerun the authenticated live acceptance runner.

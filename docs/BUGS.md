@@ -549,14 +549,14 @@ Rules:
 - Status: fixed.
 - Next action: Keep browser extension OAuth callback and message-origin checks in the client acceptance gate.
 
-## 2026-07-24 - LIVE-RUNTIME-INACTIVE-20260724 - Known live Hub and ShellMCP runtimes are inactive - open
+## 2026-07-24 - LIVE-RUNTIME-INACTIVE-20260724 - Known live Hub and ShellMCP runtimes are unavailable - open
 
-- Component: `roomhacker-server-100` Hub/Tunnel and `roomhacker-server-88` user ShellMCP runtime.
-- First observed: 2026-07-24, read-only SSH smoke; immutable evidence `trash/logs/live-runtime-smoke-20260724.md` and direct-IP rerun `trash/logs/live-runtime-smoke-20260724-rerun.md`.
-- Confirmed fact: Server-100 Hub `:9001` health/version were unreachable with Hub inactive and Tunnel failed; server-88 `:25900` health/version were unreachable with user ShellMCP inactive in both probes.
-- Root-cause hypothesis: The known deployment services are stopped or failed; this is external runtime state, not a source-test failure.
+- Component: `roomhacker-server-100` Hub/Tunnel and `roomhacker-server-88` ShellMCP deployment contract.
+- First observed: 2026-07-24, read-only SSH smoke; immutable evidence `trash/logs/live-runtime-smoke-20260724.md`, `trash/logs/live-runtime-smoke-20260724-rerun.md`, and canonical-unit rerun `trash/logs/live-runtime-canonical-unit-rerun-20260724.md`.
+- Confirmed fact: Server-100 Hub `:9001` health/version remain unreachable with the Hub unit inactive and a stale/unattributed listener; Tunnel is failed with `router config conflict`. Server-88's expected user unit is absent, while the root `shellmcp.service` is active but has no expected listener and repeatedly receives queue-poll `401 unauthorized` responses.
+- Root-cause hypothesis: External deployment drift has split the expected unit/artifact contract and invalidated the Hub/Tunnel/ShellMCP credentials or routing configuration; this is not a source-test failure.
 - Status: open.
-- Next action: In an explicitly authorized deployment session, inspect service logs and restore the supported current release on both hosts, then rerun authenticated endpoint/proxy/MCP/file/profile smoke.
+- Next action: In an explicitly authorized deployment session, reconcile the canonical units and supported artifacts/configuration, repair Tunnel router ownership and auth, then rerun authenticated endpoint/proxy/MCP/file/profile smoke.
 
 ## 2026-07-24 - SUPPLY-CHAIN-MUTABLE-ACTIONS-20260724 - Release workflows used mutable action tags - fixed
 
