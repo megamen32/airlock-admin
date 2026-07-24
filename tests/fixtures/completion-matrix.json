@@ -124,6 +124,11 @@
       "evidence": "authenticated ShellMCP operational metrics expose bounded runtime state without credentials or host identity"
     },
     {
+      "id": "observability-documentation",
+      "command": "python3 -m pytest tests/test_docs_product_contract.py -q",
+      "evidence": "canonical observability page documents request correlation, bounded metrics, OTLP redaction and external evidence boundaries"
+    },
+    {
       "id": "request-trace-correlation",
       "command": "cd go-hub && go test ./internal/hub -run 'TestRequestTraceID|TestTraceParent' -count=1",
       "evidence": "bounded X-Request-ID and W3C traceparent correlation joins MCP policy, queued job and result audit without payloads"

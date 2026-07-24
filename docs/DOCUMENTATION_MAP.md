@@ -14,6 +14,7 @@ must update the relevant section here and the [Changelog](../CHANGELOG.md).
 | Integration control contract | [Integration control](./INTEGRATION_CONTROL_CONTRACT.md) | Current discover/schema/execute mapping, policy and retry semantics |
 | Admin profiles | [Admin profiles](./ADMIN_PROFILES.md) | Instructions, targets, tools, client bindings and private references |
 | Network proxy and Tunnel | [Network proxy](./NETWORK_PROXY.md) | Grants, tickets, revoke and data-plane threat model |
+| Observability | [Observability](./OBSERVABILITY.md) | Request correlation, bounded metrics, OTLP export and evidence boundary |
 | Security policies | [Security](./SECURITY_DOCS.md) and [Auth simplification](./AUTH_SIMPLIFICATION.md) | AdminPassword, OAuth, MFA, policy and audit boundaries |
 | File sharing and recovery | [File backups](./FILE_BACKUPS.md) and [Backup/restore](./BACKUP_RESTORE.md) | Managed roots, backup metadata, restore and cleanup |
 | Reference deployments | [Deployment blueprints](./DEPLOYMENT_BLUEPRINTS.md) | Small-team, home-lab and production trade-offs/runbooks |

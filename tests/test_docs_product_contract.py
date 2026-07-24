@@ -20,6 +20,7 @@ def test_documentation_map_names_one_canonical_page_per_supported_surface() -> N
         "chatgpt custom gpt",
         "profiles",
         "network proxy",
+        "observability",
         "security",
         "deployment blueprints",
         "live acceptance",

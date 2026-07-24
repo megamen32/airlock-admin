@@ -2485,3 +2485,14 @@ plan is [`PROJECT_PLAN.md`](./PROJECT_PLAN.md).
 - Verification: `python3 -m pytest tests/test_golden_paths.py tests/test_real_mcp_clients.py -q` passes (`3 passed`); no client test was skipped.
 - Delivery: Local installed-client evidence only; ChatGPT/browser, native macOS/Windows/Android, public Tunnel and external OAuth evidence remain separate.
 - Next: Attach the same canonical manifest and first-tool probe to authorized external client/runtime sessions.
+
+## 2026-07-24 - Canonical observability contract - completed locally
+
+- Milestone: `S3.1`, `S5.3`
+- Owner: Codex
+- Scope: Document Hub request correlation, ShellMCP propagation, ProxyRelay bounded metrics and optional OTLP export.
+- Baseline / red evidence: The telemetry implementation and focused tests existed, but the documentation map had no canonical observability page; the docs contract failed on the missing surface.
+- Change: Added `docs/OBSERVABILITY.md`, linked it from `docs/DOCUMENTATION_MAP.md`, and registered its link/contract check in the completion matrix.
+- Verification: RED then GREEN `python3 -m pytest tests/test_docs_product_contract.py -q` (`4 passed`); Hub trace/OTLP, ShellMCP propagation and ProxyRelay process gates also pass.
+- Delivery: Local documentation and redaction evidence only; retained production OTLP trace, collector availability and cross-host relay span remain external.
+- Next: Capture an authorized collector/runtime artifact before closing the full S3.1 exit gate.
