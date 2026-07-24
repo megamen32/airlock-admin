@@ -548,3 +548,12 @@ Rules:
 - Fix / verification: Added same-origin `/connect/callback` OAuth handoff, PKCE client registration/exchange in the extension, and OAuth JSON-RPC calls to `/mcp`; removed manual key storage and legacy prompt endpoints. Hub focused OAuth regression, `pytest -q tests/test_browser_extension_oauth.py` (`2 passed`) and `node --check public/mcp-bridge.user.js` pass.
 - Status: fixed.
 - Next action: Keep browser extension OAuth callback and message-origin checks in the client acceptance gate.
+
+## 2026-07-24 - LIVE-RUNTIME-INACTIVE-20260724 - Known live Hub and ShellMCP runtimes are inactive - open
+
+- Component: `roomhacker-server-100` Hub/Tunnel and `roomhacker-server-88` user ShellMCP runtime.
+- First observed: 2026-07-24, read-only SSH smoke; immutable evidence `trash/logs/live-runtime-smoke-20260724.md`.
+- Confirmed fact: Server-100 Hub `:9001` health/version were unreachable with Hub inactive and Tunnel failed; server-88 `:25900` health/version were unreachable with user ShellMCP inactive.
+- Root-cause hypothesis: The known deployment services are stopped or failed; this is external runtime state, not a source-test failure.
+- Status: open.
+- Next action: In an explicitly authorized deployment session, inspect service logs and restore the supported current release on both hosts, then rerun authenticated endpoint/proxy/MCP/file/profile smoke.

@@ -2342,3 +2342,14 @@ plan is [`PROJECT_PLAN.md`](./PROJECT_PLAN.md).
 - Verification: Clone `/tmp/gptadmin-clean-oauth-KaynGY` passed Hub `go test ./...`, browser/product contracts `11 passed`, completion matrix `12 passed`, userscript `node --check`, and `bash tests/e2e/failover/run.sh` with all scenarios passed.
 - Delivery: Local evidence only; no push, deploy or external-host claim.
 - Next: Obtain real client/host, tagged CI, collector and physical fallback evidence before declaring the 1.0 gate complete.
+
+## 2026-07-24 - Live runtime acceptance blocker - open
+
+- Milestone: `S1.1`, `S3.4`
+- Owner: Codex / deployment owner
+- Scope: Read-only runtime probes for server-100 Hub/Tunnel and server-88 ShellMCP.
+- Baseline / red evidence: `trash/logs/live-runtime-smoke-20260724.md` records server-100 Hub `:9001` unreachable with Hub inactive/Tunnel failed and server-88 `:25900` unreachable with user ShellMCP inactive.
+- Change: No runtime mutation; preserved external state and kept local source acceptance separate.
+- Verification: SSH `BatchMode` probes completed without credentials or service changes.
+- Delivery: External blocker; no deploy or push from this branch.
+- Next: Authorized deployment session must restore the supported current release and rerun endpoint/proxy/MCP/file/profile smoke.
