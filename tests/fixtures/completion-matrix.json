@@ -132,6 +132,11 @@
       "id": "remote-secret-ingress",
       "command": "cd go-hub && go test ./internal/hub -run 'Test(Secret(Store|Ingress)|MCPSecret|ShellExecResolvesSecret|ReadonlyMCP)' -count=1 && cd .. && python3 -m pytest tests/test_secret_ingress_contract.py -q",
       "evidence": "encrypted one-time browser input, owner/TTL checks, MCP metadata-only status, server-side secret_env injection, readonly denial and response redaction"
+    },
+    {
+      "id": "mcp-capability-catalog",
+      "command": "python3 -m pytest tests/test_mcp_catalog.py -q",
+      "evidence": "curated MCP definitions expose provenance, scopes, network needs and risk before activation; catalog-bound installs require explicit acceptance"
     }
   ],
   "file_sharing": [

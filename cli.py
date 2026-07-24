@@ -133,6 +133,40 @@ MCP_RELAY = MCP_RUNTIME_DIR / 'generic_stdio_mcp_relay.py'
 STARTUP_INSTRUCTIONS_FILE = ETC_DIR / 'startup_instructions.md'
 STARTUP_INSTRUCTIONS_MAX_BYTES = 16 * 1024
 
+MCP_CAPABILITY_CATALOG_VERSION = 'gptadmin-capabilities/v1'
+MCP_CAPABILITY_CATALOG = (
+    {
+        'id': 'gptadmin-safe-demo',
+        'version': '1.0.0',
+        'provenance': 'bundled:gptadmin-hub',
+        'scopes': ['gptadmin.read'],
+        'network_needs': [],
+        'risk_level': 'low',
+        'maintenance_owner': 'GPTAdmin',
+        'tools': ['demo'],
+    },
+    {
+        'id': 'gptadmin-readonly-inspection',
+        'version': '1.0.0',
+        'provenance': 'bundled:gptadmin-shellmcp',
+        'scopes': ['gptadmin.inspect'],
+        'network_needs': [],
+        'risk_level': 'medium',
+        'maintenance_owner': 'GPTAdmin',
+        'tools': ['system_inspect', 'inspect'],
+    },
+    {
+        'id': 'gptadmin-network-tunnel',
+        'version': '1.0.0',
+        'provenance': 'bundled:gptadmin-network-proxy',
+        'scopes': ['gptadmin.network'],
+        'network_needs': ['explicit finite LAN or internet-egress target policy'],
+        'risk_level': 'high',
+        'maintenance_owner': 'GPTAdmin',
+        'tools': ['network_proxy_request', 'network_proxy_issue'],
+    },
+)
+
 if IS_MACOS:
     SERVICES_DIR = USER_HOME / 'Library' / 'LaunchAgents' if IS_USER_INSTALL else Path('/Library/LaunchDaemons')
     LOG_DIR = USER_HOME / 'Library' / 'Logs' / 'gptadmin' if IS_USER_INSTALL else Path('/var/log/gptadmin')
@@ -2362,7 +2396,41 @@ def cmd_mcp_list(args):
         cmd = spec.get('command', '')
         argv = ' '.join(str(x) for x in spec.get('args', []))
         fmt = spec.get('stdio_format', spec.get('transport', 'auto'))
-        print(f"{name}\t{'enabled' if enabled else 'disabled'}\t{fmt}\t{cmd} {argv}")
+        catalog = spec.get('catalog_id', '')
+        catalog_text = f'\t{catalog}' if catalog else ''
+        print(f"{name}\t{'enabled' if enabled else 'disabled'}\t{fmt}{catalog_text}\t{cmd} {argv}")
+
+
+def _mcp_catalog_payload() -> dict:
+    """Return the immutable bundled capability catalog without secrets."""
+    return {
+        'catalog_version': MCP_CAPABILITY_CATALOG_VERSION,
+        'source': 'GPTAdmin bundled capability catalog',
+        'definitions': [dict(item) for item in MCP_CAPABILITY_CATALOG],
+    }
+
+
+def _mcp_catalog_definition(catalog_id: str) -> dict | None:
+    """Return one catalog definition by ID, or ``None`` for an uncurated server."""
+    if not catalog_id:
+        return None
+    for definition in MCP_CAPABILITY_CATALOG:
+        if definition['id'] == catalog_id:
+            return dict(definition)
+    die(f'unknown MCP capability catalog id: {catalog_id}')
+
+
+def cmd_mcp_catalog(args):
+    """Display curated capabilities before an operator activates one."""
+    payload = _mcp_catalog_payload()
+    if getattr(args, 'json', False):
+        print(json.dumps(payload, ensure_ascii=False, indent=2))
+        return
+    print(f"Catalog: {payload['catalog_version']} ({payload['source']})")
+    for definition in payload['definitions']:
+        print(f"{definition['id']}\t{definition['version']}\t{definition['risk_level']}\t{definition['provenance']}")
+        print(f"  scopes={','.join(definition['scopes'])} tools={','.join(definition['tools'])}")
+        print(f"  network_needs={'; '.join(definition['network_needs']) or 'none'} owner={definition['maintenance_owner']}")
 
 
 
@@ -2389,6 +2457,7 @@ def _mcp_extract_tail_options(args):
         '--agent-id': 'agent_id',
         '--run-as-user': 'run_as_user',
         '--hub-url': 'hub_url',
+        '--catalog-id': 'catalog_id',
     }
     while i < len(tail):
         item = tail[i]
@@ -2414,6 +2483,10 @@ def _mcp_extract_tail_options(args):
             args.install = True
             i += 1
             continue
+        if item == '--accept-capability':
+            args.accept_capability = True
+            i += 1
+            continue
         if item == '--status':
             args.status = True
             i += 1
@@ -2426,6 +2499,13 @@ def _mcp_extract_tail_options(args):
 def cmd_mcp_add(args):
     need_root()
     _mcp_extract_tail_options(args)
+    catalog_id = getattr(args, 'catalog_id', None) or ''
+    catalog_definition = _mcp_catalog_definition(catalog_id)
+    if catalog_definition:
+        print('Curated capability requested:')
+        print(json.dumps(catalog_definition, ensure_ascii=False, indent=2))
+        if getattr(args, 'install', False) and not getattr(args, 'accept_capability', False):
+            die('curated MCP activation requires --accept-capability after reviewing the catalog definition')
     cfg = _mcp_config()
     servers = cfg.setdefault('mcpServers', {})
     if args.name in servers and not args.force:
@@ -2466,6 +2546,10 @@ def cmd_mcp_add(args):
         servers[args.name]['run_as_user'] = args.run_as_user
     if args.hub_url:
         cfg.setdefault('gptadmin', {})['hub_url'] = args.hub_url.rstrip('/')
+    if catalog_definition:
+        servers[args.name]['catalog_id'] = catalog_definition['id']
+        servers[args.name]['catalog_version'] = catalog_definition['version']
+        servers[args.name]['catalog_provenance'] = catalog_definition['provenance']
     _mcp_save(cfg)
     agent_config = _mcp_write_agent_config(args.name, cfg)
     _mcp_sync_go_supervisor_config(cfg)
@@ -5046,6 +5130,10 @@ def main():
     ap_mcp_connect.add_argument('--fresh', action='store_true')
     ap_mcp_connect.set_defaults(func=cmd_mcp_connect)
 
+    ap_mcp_catalog = mcp_sub.add_parser('catalog', help='Показать атрибутированный каталог MCP capability')
+    ap_mcp_catalog.add_argument('--json', action='store_true')
+    ap_mcp_catalog.set_defaults(func=cmd_mcp_catalog)
+
     ap_mcp_add = mcp_sub.add_parser('add', help='Добавить MCP-сервер (стиль Claude/Codex)')
     ap_mcp_add.add_argument('name')
     ap_mcp_add.add_argument('command', nargs='?', help='Command, e.g. npx')
@@ -5057,6 +5145,8 @@ def main():
     ap_mcp_add.add_argument('--agent-id')
     ap_mcp_add.add_argument('--run-as-user')
     ap_mcp_add.add_argument('--hub-url')
+    ap_mcp_add.add_argument('--catalog-id', help='Bind this server to a curated capability definition')
+    ap_mcp_add.add_argument('--accept-capability', action='store_true', help='Acknowledge the displayed catalog scope/risk before install')
     ap_mcp_add.add_argument('--disabled', action='store_true')
     ap_mcp_add.add_argument('--force', action='store_true')
     ap_mcp_add.add_argument('--install', action='store_true', help='Сразу установить и запустить relay service')

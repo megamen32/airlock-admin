@@ -48,6 +48,16 @@ plan is [`PROJECT_PLAN.md`](./PROJECT_PLAN.md).
 
 ## Entries
 
+## 2026-07-24 - Curated MCP capability catalog - active
+
+- Milestone: `S4.2`
+- Owner: `Codex`
+- Scope: Add a bundled, attributed capability catalog and require explicit operator acknowledgement before catalog-bound MCP activation; preserve arbitrary private MCP entries without false provenance.
+- Baseline / red evidence: `tests/test_mcp_catalog.py` first failed because no catalog command or catalog-bound install guard existed; `mcp add --install` proceeded directly to service activation.
+- Intended verification: Catalog metadata tests, existing MCP relay setup tests, CLI compile, completion matrix and full Python suite.
+- Delivery: No commit yet; preserve the unrelated untracked remote-secret-ingress plan.
+- Next: Complete the catalog docs/tests, verify no credential leakage, then replace this active entry with delivery identity and keep signed/public catalog attestation open.
+
 ## 2026-07-24 - Admin passkey enrollment UI - completed
 
 - Milestone: `S2.1a`
