@@ -1,11 +1,14 @@
 package hub
 
 import (
+	"crypto/aes"
+	"crypto/cipher"
 	"crypto/hmac"
 	"crypto/rand"
 	"crypto/sha1"
 	"crypto/sha256"
 	"encoding/base32"
+	"encoding/base64"
 	"encoding/binary"
 	"encoding/hex"
 	"encoding/json"
@@ -35,6 +38,15 @@ type securitySettings struct {
 	UpdatedAt          time.Time `json:"updated_at"`
 }
 
+type persistedSecuritySettings struct {
+	Preset             string    `json:"preset"`
+	EncryptedTOTP      string    `json:"totp_secret_ciphertext,omitempty"`
+	LegacyTOTP         string    `json:"totp_secret,omitempty"`
+	MFAEnrolledAt      time.Time `json:"mfa_enrolled_at,omitempty"`
+	RecoveryCodeHashes []string  `json:"recovery_code_hashes,omitempty"`
+	UpdatedAt          time.Time `json:"updated_at"`
+}
+
 func defaultSecuritySettings() securitySettings {
 	return securitySettings{Preset: securityPresetWorkingDefault}
 }
@@ -48,7 +60,7 @@ func validateSecurityPreset(preset string) error {
 	}
 }
 
-func loadSecuritySettings(path string) (securitySettings, error) {
+func loadSecuritySettings(path, key string) (securitySettings, error) {
 	state := defaultSecuritySettings()
 	if path == "" {
 		return state, nil
@@ -63,8 +75,19 @@ func loadSecuritySettings(path string) (securitySettings, error) {
 	if len(data) > securityStateMaxBytes {
 		return state, errors.New("security settings file is too large")
 	}
-	if err := json.Unmarshal(data, &state); err != nil {
+	var persisted persistedSecuritySettings
+	if err := json.Unmarshal(data, &persisted); err != nil {
 		return defaultSecuritySettings(), fmt.Errorf("decode security settings: %w", err)
+	}
+	state = securitySettings{Preset: persisted.Preset, MFAEnrolledAt: persisted.MFAEnrolledAt, RecoveryCodeHashes: persisted.RecoveryCodeHashes, UpdatedAt: persisted.UpdatedAt}
+	if persisted.EncryptedTOTP != "" {
+		secret, err := decryptSecuritySecret(persisted.EncryptedTOTP, key)
+		if err != nil {
+			return defaultSecuritySettings(), fmt.Errorf("decrypt TOTP secret: %w", err)
+		}
+		state.TOTPSecret = secret
+	} else {
+		state.TOTPSecret = persisted.LegacyTOTP
 	}
 	if state.Preset == "" {
 		state.Preset = securityPresetWorkingDefault
@@ -81,7 +104,7 @@ func loadSecuritySettings(path string) (securitySettings, error) {
 	return state, nil
 }
 
-func saveSecuritySettings(path string, state securitySettings) error {
+func saveSecuritySettings(path string, state securitySettings, key string) error {
 	if path == "" {
 		return nil
 	}
@@ -91,7 +114,15 @@ func saveSecuritySettings(path string, state securitySettings) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		return err
 	}
-	data, err := json.Marshal(state)
+	encrypted, err := encryptSecuritySecret(state.TOTPSecret, key)
+	if err != nil {
+		return err
+	}
+	persisted := persistedSecuritySettings{
+		Preset: state.Preset, EncryptedTOTP: encrypted, MFAEnrolledAt: state.MFAEnrolledAt,
+		RecoveryCodeHashes: state.RecoveryCodeHashes, UpdatedAt: state.UpdatedAt,
+	}
+	data, err := json.Marshal(persisted)
 	if err != nil {
 		return err
 	}
@@ -113,6 +144,55 @@ func saveSecuritySettings(path string, state securitySettings) error {
 		return err
 	}
 	return os.Rename(tmpName, path)
+}
+
+func securityCipherKey(key string) []byte {
+	digest := sha256.Sum256([]byte("gptadmin-security-state:" + key))
+	return digest[:]
+}
+
+func encryptSecuritySecret(secret, key string) (string, error) {
+	if secret == "" {
+		return "", nil
+	}
+	block, err := aes.NewCipher(securityCipherKey(key))
+	if err != nil {
+		return "", err
+	}
+	gcm, err := cipher.NewGCM(block)
+	if err != nil {
+		return "", err
+	}
+	nonce := make([]byte, gcm.NonceSize())
+	if _, err := rand.Read(nonce); err != nil {
+		return "", err
+	}
+	ciphertext := gcm.Seal(nonce, nonce, []byte(secret), nil)
+	return base64.RawStdEncoding.EncodeToString(ciphertext), nil
+}
+
+func decryptSecuritySecret(encoded, key string) (string, error) {
+	data, err := base64.RawStdEncoding.DecodeString(encoded)
+	if err != nil {
+		return "", err
+	}
+	block, err := aes.NewCipher(securityCipherKey(key))
+	if err != nil {
+		return "", err
+	}
+	gcm, err := cipher.NewGCM(block)
+	if err != nil {
+		return "", err
+	}
+	if len(data) < gcm.NonceSize() {
+		return "", errors.New("encrypted TOTP secret is truncated")
+	}
+	nonce, ciphertext := data[:gcm.NonceSize()], data[gcm.NonceSize():]
+	plaintext, err := gcm.Open(nil, nonce, ciphertext, nil)
+	if err != nil {
+		return "", errors.New("encrypted TOTP secret authentication failed")
+	}
+	return string(plaintext), nil
 }
 
 func generateTOTPSecret() (string, error) {
@@ -201,7 +281,11 @@ func (s *Server) securityPublicSnapshot() map[string]any {
 }
 
 func (s *Server) persistSecurity(state securitySettings) error {
-	return saveSecuritySettings(s.securityPath, state)
+	return saveSecuritySettings(s.securityPath, state, s.securityKey())
+}
+
+func (s *Server) securityKey() string {
+	return firstNonEmpty(s.cfg.AdminPassword, s.cfg.OAuthClientSecret, s.cfg.CtlToken, "gptadmin-security-state")
 }
 
 func (s *Server) adminSecurityPreset(w http.ResponseWriter, r *http.Request) {

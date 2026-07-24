@@ -84,6 +84,13 @@ func TestSecurityPresetAndTOTPFailClosedUntilEnrollment(t *testing.T) {
 	if info.Mode().Perm() != 0o600 {
 		t.Fatalf("security state mode=%o, want 0600", info.Mode().Perm())
 	}
+	stateBytes, err := os.ReadFile(filepath.Join(configDir, securityStateFilename))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(stateBytes), enrollment.Secret) || !strings.Contains(string(stateBytes), "totp_secret_ciphertext") {
+		t.Fatalf("security state did not encrypt TOTP secret: %s", stateBytes)
+	}
 	locked = request(s, http.MethodPut, "/admin/api/security/preset", "ctl", `{"preset":"locked_down"}`)
 	if locked.Code != http.StatusOK {
 		t.Fatalf("locked preset with MFA status=%d body=%s", locked.Code, locked.Body.String())

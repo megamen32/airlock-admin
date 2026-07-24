@@ -1138,22 +1138,25 @@ plan is [`PROJECT_PLAN.md`](./PROJECT_PLAN.md).
 
 - Milestone: `S2.1a`
 - Owner: `Codex`
-- Scope: Extend the TOTP fallback with one-time recovery codes, hashed at rest
-  and consumed on successful verification or locked admin login.
-- Baseline / red evidence: TOTP enrollment had no recovery-code contract;
-  losing the authenticator would leave the locked admin session with no tested
+- Scope: Extend the TOTP fallback with one-time recovery codes, hashed at rest,
+  and encrypt the internal TOTP secret before persistence.
+- Baseline / red evidence: TOTP enrollment had no recovery-code contract and
+  the internal TOTP secret was plaintext in the restrictive state file; losing
+  the authenticator would leave the locked admin session with no tested
   recovery path.
 - Change: Generate recovery codes once during enrollment, return them
   only in that explicit enrollment response, persist hashes only and consume a
-  matching hash atomically.
+  matching hash atomically. Encrypt the TOTP seed with AES-GCM derived from the
+  existing AdminPassword/internal secret before writing the restrictive state
+  file; legacy plaintext is accepted only for migration reads.
 - Verification: Hub full/race/vet pass; ShellMCP and ProxyRelay race/vet pass;
   Python `169 passed, 2 skipped`; completion matrix `11 passed`; recovery
   enrollment, re-use rejection and locked login consumption are covered by
   `TestSecurityPresetAndTOTPFailClosedUntilEnrollment`.
 - Delivery: Pending integration commit on `codex/haos-addon-public`; no deploy
   or push. The unrelated untracked remote-secret plan remains preserved.
-- Next: implement passkey/OIDC external verification and encrypt the internal
-  MFA secret store before claiming the full S2.1a exit gate.
+- Next: implement passkey/OIDC external verification before claiming the full
+  S2.1a exit gate.
 
 ## 2026-07-22 - Isolated Network Tunnel proxy relay - completed
 
