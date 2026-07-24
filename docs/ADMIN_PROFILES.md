@@ -16,11 +16,13 @@ A persisted profile will contain:
 - client bindings;
 - zero or more external workspace references.
 
-The current `S1.3a` slice implements the versioned `default` instruction set.
-Profiles reject other instruction-set IDs until a named instruction-set CRUD
-surface exists, so a stored reference can never silently select a document
-that runtime initialization ignores. Updates to the default set affect
-subsequent MCP initialization without restarting Hub.
+The Hub provides a versioned `default` instruction set plus named instruction
+sets through the authenticated `/admin/api/instruction-sets` CRUD surface.
+Profiles may reference an existing named set; unknown references are rejected
+and an instruction set cannot be deleted while a profile uses it. Updates to a
+selected set affect subsequent MCP initialization and the startup resource
+without restarting Hub. Instruction text remains guidance only: permissions,
+approvals and authentication are authoritative.
 
 ## Network Tunnel capability boundary
 

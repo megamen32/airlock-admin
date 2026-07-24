@@ -18,6 +18,8 @@ import (
 
 const instructionSetPath = "/admin/api/instruction-sets/default"
 
+const namedInstructionSetPath = "/admin/api/instruction-sets/ops"
+
 type instructionSetResponse struct {
 	ID        string     `json:"id"`
 	Content   string     `json:"content"`
@@ -126,6 +128,77 @@ func TestDefaultInstructionSetHTTPContract(t *testing.T) {
 	}
 	if w.Header().Get("ETag") == "" {
 		t.Fatal("GET did not return ETag")
+	}
+}
+
+func TestNamedInstructionSetCRUDAndProfileInitialize(t *testing.T) {
+	s, cfg := instructionSetServer(t)
+	missingProfile := accessProfileTestRequest(t, s, http.MethodPut, "/admin/api/access-profiles/missing", map[string]any{
+		"id":                 "missing",
+		"instruction_set_id": "does-not-exist",
+		"access_mode":        accessModeFull,
+		"approval_mode":      approvalModeBoundedAutonomous,
+	}, map[string]string{"If-Match": "*"})
+	if missingProfile.Code != http.StatusNotFound {
+		t.Fatalf("missing instruction-set profile status=%d body=%s, want %d", missingProfile.Code, missingProfile.Body.String(), http.StatusNotFound)
+	}
+	content := "Operate only inside the approved maintenance window."
+	body, err := json.Marshal(map[string]string{"content": content})
+	if err != nil {
+		t.Fatal(err)
+	}
+	created := instructionSetRequest(t, s, http.MethodPut, namedInstructionSetPath, body, "*")
+	if created.Code != http.StatusOK {
+		t.Fatalf("named PUT status=%d body=%s", created.Code, created.Body.String())
+	}
+	if got := decodeInstructionSet(t, created); got.ID != "ops" || got.Content != content || got.Version == "" {
+		t.Fatalf("created named instruction set=%+v", got)
+	}
+	stateInfo, err := os.Stat(filepath.Join(cfg.ConfigDir, instructionSetsStateFilename))
+	if err != nil {
+		t.Fatalf("named instruction state was not persisted: %v", err)
+	}
+	if stateInfo.Mode().Perm() != 0o600 {
+		t.Fatalf("named instruction state mode=%o, want 0600", stateInfo.Mode().Perm())
+	}
+
+	profileBody := map[string]any{
+		"id":                 "ops",
+		"name":               "Operations",
+		"instruction_set_id": "ops",
+		"access_mode":        accessModeFull,
+		"approval_mode":      approvalModeBoundedAutonomous,
+	}
+	profile := accessProfileTestRequest(t, s, http.MethodPut, "/admin/api/access-profiles/ops", profileBody, map[string]string{"If-Match": "*"})
+	if profile.Code != http.StatusOK {
+		t.Fatalf("profile PUT status=%d body=%s", profile.Code, profile.Body.String())
+	}
+
+	initialize := func(server *Server) map[string]any {
+		req := httptest.NewRequest(http.MethodPost, "/mcp", strings.NewReader(`{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}`))
+		req = requestWithAccessProfile(req, AccessProfile{ID: "ops", InstructionSetID: "ops"})
+		result, rpcErr, noContent := server.agentMCPJSONRPC(req, Agent{AgentID: "hub"}, map[string]any{"method": "initialize", "params": map[string]any{}})
+		if rpcErr != nil || noContent {
+			t.Fatalf("profile initialize result=%v error=%v no_content=%v", result, rpcErr, noContent)
+		}
+		return result.(map[string]any)
+	}
+	if got := initialize(s)["instructions"]; got != content {
+		t.Fatalf("profile instructions=%q, want %q", got, content)
+	}
+
+	restarted := New(cfg)
+	loaded := instructionSetRequest(t, restarted, http.MethodGet, namedInstructionSetPath, nil, "")
+	if loaded.Code != http.StatusOK || decodeInstructionSet(t, loaded).Content != content {
+		t.Fatalf("named instruction set did not survive restart: status=%d body=%s", loaded.Code, loaded.Body.String())
+	}
+	if got := initialize(restarted)["instructions"]; got != content {
+		t.Fatalf("restarted profile instructions=%q, want %q", got, content)
+	}
+
+	deletedWhileBound := instructionSetRequest(t, restarted, http.MethodDelete, namedInstructionSetPath, nil, "")
+	if deletedWhileBound.Code != http.StatusConflict {
+		t.Fatalf("bound DELETE status=%d body=%s, want %d", deletedWhileBound.Code, deletedWhileBound.Body.String(), http.StatusConflict)
 	}
 }
 

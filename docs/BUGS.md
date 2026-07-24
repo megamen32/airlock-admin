@@ -32,6 +32,16 @@ Rules:
 - Status: fixed.
 - Next action: Retain the setup health gate in the from-scratch installer acceptance run.
 
+## 2026-07-24 - PROFILE-INSTRUCTION-IGNORED-20260724 - Profile instruction reference was not applied - fixed
+
+- Component: `go-hub/internal/hub` access profiles and MCP initialization.
+- First observed: 2026-07-24, RED regression `TestNamedInstructionSetCRUDAndProfileInitialize`; the named instruction-set PUT returned 404 and profile-bound initialize had no runtime selection path.
+- Confirmed fact: Profiles persisted `instruction_set_id`, but only the default instruction document existed and Hub initialize/resource responses always used the global default text.
+- Root cause: The profile schema was added ahead of named instruction-set CRUD; normalization rejected every non-default ID and request dispatch ignored the profile context.
+- Fix / verification: Added authenticated persistent named instruction-set CRUD with atomic `0600` state, profile reference validation, request-scoped initialize/resource selection and restart coverage. Focused named-profile tests and full Hub package pass.
+- Status: fixed.
+- Next action: Retain the named profile flow in the profiles acceptance matrix and public API documentation.
+
 ## 2026-07-24 - INSTALL-QUICKSTART-INTERNAL-AUTH-20260724 - Installer help exposed legacy credential name - fixed
 
 - Component: `deploy/install.sh` post-install quickstart.

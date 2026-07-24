@@ -48,6 +48,17 @@ plan is [`PROJECT_PLAN.md`](./PROJECT_PLAN.md).
 
 ## Entries
 
+## 2026-07-24 - Named profile instruction sets - completed
+
+- Milestone: `S1.3a`
+- Owner: `Codex`
+- Scope: Make profile-selected instruction sets real at runtime: authenticated CRUD, persistence, ETag concurrency, profile validation, MCP initialize/resource selection and restart behavior.
+- Baseline / red evidence: `TestNamedInstructionSetCRUDAndProfileInitialize` first failed with `404 page not found`; existing profile normalization rejected all non-default references and `agentMCPJSONRPC` always returned global startup instructions.
+- Change: Added `instruction_sets_state.json` with atomic restrictive writes, named instruction-set collection/item endpoints, reference checks and delete protection; MCP Hub/Shell initialize and startup resource now use the bound profile snapshot.
+- Verification: Focused named-profile tests pass; `go test ./internal/hub -count=1` passes after updating the obsolete default-only normalization assertion.
+- Delivery: Pending current linear integration commit; no push, deployment or merge. Preserve the unrelated untracked remote-secret-ingress plan.
+- Next: Run the full Go race/vet and completion matrix, then record the immutable delivery commit.
+
 ## 2026-07-24 - S1.1 plan status correction - completed
 
 - Milestone: `S1.1`

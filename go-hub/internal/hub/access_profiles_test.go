@@ -428,15 +428,15 @@ func accessProfileTestRequest(t *testing.T, server *Server, method, path string,
 	return w
 }
 
-func TestAccessProfileRejectsUnsupportedInstructionSet(t *testing.T) {
-	_, err := normalizeAccessProfile(AccessProfile{
+func TestAccessProfileNormalizesNamedInstructionSetReference(t *testing.T) {
+	normalized, err := normalizeAccessProfile(AccessProfile{
 		ID:               "ops",
 		InstructionSetID: "custom-operator-v2",
 		AccessMode:       accessModeFull,
 		Version:          1,
 	})
-	if err == nil || !strings.Contains(err.Error(), "instruction_set_id") {
-		t.Fatalf("normalizeAccessProfile error = %v, want unsupported instruction_set_id", err)
+	if err != nil || normalized.InstructionSetID != "custom-operator-v2" {
+		t.Fatalf("normalizeAccessProfile=(%+v, %v), want named instruction set reference", normalized, err)
 	}
 	_, err = normalizeAccessProfile(AccessProfile{
 		ID: "ops", AccessMode: accessModeFull, ApprovalMode: "unsafe", Version: 1,

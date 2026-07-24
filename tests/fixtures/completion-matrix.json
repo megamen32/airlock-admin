@@ -149,8 +149,8 @@
   "profiles": [
     {
       "id": "admin-access-profile",
-      "command": "cd go-hub && go test ./internal/hub -run 'TestManagedClientAccessProfile|TestAccessProfileCASInventoryAndAuthContext|TestAccessProfileSharedConfigRefreshAndWorkspacePersistence|TestAccessProfileRejectsUnsupportedInstructionSet' -count=1",
-      "evidence": "profile persistence, live refresh, bindings and effective tool filtering"
+      "command": "cd go-hub && go test ./internal/hub -run 'TestManagedClientAccessProfile|TestAccessProfileCASInventoryAndAuthContext|TestAccessProfileSharedConfigRefreshAndWorkspacePersistence|TestAccessProfileNormalizesNamedInstructionSetReference|TestNamedInstructionSetCRUDAndProfileInitialize' -count=1",
+      "evidence": "profile persistence, named instruction-set CRUD, live MCP initialize refresh, bindings and effective tool filtering"
     }
   ],
   "security_policies": [

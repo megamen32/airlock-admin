@@ -164,6 +164,11 @@ func (s *Server) loadAccessProfilesState() error {
 	if err != nil {
 		return err
 	}
+	for id, profile := range profiles {
+		if !s.instructionSetExists(profile.InstructionSetID) {
+			return fmt.Errorf("access profile %q references missing instruction set %q", id, profile.InstructionSetID)
+		}
+	}
 	s.mu.Lock()
 	s.accessProfiles = profiles
 	s.mu.Unlock()
@@ -398,9 +403,6 @@ func normalizeAccessProfile(profile AccessProfile) (AccessProfile, error) {
 	if instructionSetID == "" {
 		instructionSetID = defaultInstructionSetID
 	}
-	if instructionSetID != defaultInstructionSetID {
-		return AccessProfile{}, fmt.Errorf("instruction_set_id %q is not supported; use %q", instructionSetID, defaultInstructionSetID)
-	}
 	if profile.AccessMode != accessModeFull && profile.AccessMode != accessModeReadonly {
 		return AccessProfile{}, errors.New("access_mode must be full or readonly")
 	}
@@ -545,6 +547,10 @@ func (s *Server) adminAccessProfile(w http.ResponseWriter, r *http.Request) {
 		})
 		if err != nil {
 			writeJSON(w, http.StatusBadRequest, map[string]any{"detail": err.Error()})
+			return
+		}
+		if !s.instructionSetExists(candidate.InstructionSetID) {
+			writeJSON(w, http.StatusNotFound, map[string]any{"detail": "instruction set not found"})
 			return
 		}
 		var saved AccessProfile

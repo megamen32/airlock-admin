@@ -33,6 +33,7 @@ Full environment-variable reference, auth model, and OAuth setup.
 | `BACKGROUND_TASK_TTL` | 3600 | How long completed background jobs are kept (seconds) |
 | `GPTADMIN_STARTUP_INSTRUCTIONS_FILE` | `$GPTADMIN_CONFIG_DIR/startup_instructions.md` | Optional local Markdown startup instructions for MCP clients. |
 | `GPTADMIN_STARTUP_INSTRUCTIONS` | — | Optional environment override for startup instructions; takes precedence over the file. |
+| `GPTADMIN_INSTRUCTION_SETS_STATE_FILE` | `$GPTADMIN_CONFIG_DIR/instruction_sets_state.json` | Restrictive state file for named profile instruction sets. |
 | `GPTADMIN_WEBHOOK_CONFIG_FILE` | `$GPTADMIN_CONFIG_DIR/webhooks.json` | Operator-owned universal webhook route definitions. |
 | `GPTADMIN_WEBHOOK_STATE_FILE` | `$GPTADMIN_CONFIG_DIR/webhook_state.json` | Durable webhook jobs and replay keys; written with mode `0600`. |
 
@@ -50,6 +51,13 @@ The same content is available to clients that ignore `initialize.instructions`
 via MCP `resources/read` at `gptadmin://startup-instructions`. Startup
 instructions are operational guidance, **not** a security boundary: configured
 permissions and approvals still control access and execution.
+
+Named profile instruction sets are managed through the authenticated Hub
+endpoints `GET /admin/api/instruction-sets` and
+`GET|PUT|DELETE /admin/api/instruction-sets/{id}`. `PUT` requires `If-Match`
+(`*` for create); a set cannot be deleted while an access profile references
+it. The selected profile set is returned on the next MCP `initialize` and
+startup-resource read without restarting Hub.
 
 Manage the file without exposing its contents accidentally:
 

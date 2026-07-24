@@ -68,6 +68,7 @@ type Config struct {
 	FailoverReclaimCommandFile string
 	StartupInstructionsFile    string
 	StartupInstructions        string
+	InstructionSetsStateFile   string
 	NetworkProxyStateFile      string
 	NetworkProxyRelayKeyFile   string
 	NetworkProxyRelayRevokeURL string
@@ -128,6 +129,7 @@ func FromEnv() Config {
 		FailoverReclaimCommandFile: env("GPTADMIN_FAILOVER_RECLAIM_COMMAND_FILE", filepath.Join(cfgDir, "failover_reclaim_command.json")),
 		StartupInstructionsFile:    env("GPTADMIN_STARTUP_INSTRUCTIONS_FILE", filepath.Join(cfgDir, "startup_instructions.md")),
 		StartupInstructions:        env("GPTADMIN_STARTUP_INSTRUCTIONS", ""),
+		InstructionSetsStateFile:   env("GPTADMIN_INSTRUCTION_SETS_STATE_FILE", filepath.Join(cfgDir, "instruction_sets_state.json")),
 		NetworkProxyStateFile:      env("GPTADMIN_NETWORK_PROXY_STATE_FILE", filepath.Join(cfgDir, "network_proxy_state.json")),
 		NetworkProxyRelayKeyFile:   env("GPTADMIN_NETWORK_PROXY_RELAY_KEY_FILE", ""),
 		NetworkProxyRelayRevokeURL: strings.TrimRight(env("GPTADMIN_NETWORK_PROXY_RELAY_REVOKE_URL", ""), "/"),
@@ -363,6 +365,8 @@ type Server struct {
 	instructionMu      sync.RWMutex
 	instructionWriteMu sync.Mutex
 	instructionSet     InstructionSet
+	instructionSetsMu  sync.RWMutex
+	instructionSets    map[string]InstructionSet
 }
 
 func New(cfg Config) *Server {
@@ -438,6 +442,7 @@ func New(cfg Config) *Server {
 		webhookRoutes:     webhookRouteMap(webhookRoutes),
 		webhookJobs:       map[string]*webhookJob{},
 		webhookDeliveries: map[string]*webhookDelivery{},
+		instructionSets:   map[string]InstructionSet{},
 	}
 	if cfg.ConfigDir != "" || cfg.SecretStoreDir != "" || cfg.SecretStoreKeyFile != "" || cfg.SecretIngressStateFile != "" {
 		if cfg.SecretStoreDir == "" {
@@ -490,6 +495,9 @@ func New(cfg Config) *Server {
 		}
 	}
 	s.instructionSet = newInstructionSet(cfg)
+	if err := s.loadInstructionSetsState(); err != nil {
+		log.Printf("instruction sets state load failed path=%s err=%v", s.instructionSetsStatePath(), err)
+	}
 	if err := s.loadRegistryState(); err != nil {
 		log.Printf("registry state load failed path=%s err=%v", s.registryStatePath(), err)
 	}
@@ -782,6 +790,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/admin/api/clients/", s.requireCtl(s.adminClientDelete))
 	mux.HandleFunc("/admin/api/overview", s.requireCtl(s.adminOverview))
 	mux.HandleFunc("/admin/api/instruction-sets/default", s.requireCtl(s.adminDefaultInstructionSet))
+	mux.HandleFunc("/admin/api/instruction-sets", s.requireCtl(s.adminInstructionSets))
+	mux.HandleFunc("/admin/api/instruction-sets/", s.requireCtl(s.adminInstructionSet))
 	mux.HandleFunc("/admin/api/update", s.requireCtl(s.adminTriggerUpdate))
 	mux.HandleFunc("/admin/api/failover/state", s.requireCtl(s.adminFailoverState))
 	mux.HandleFunc("/admin/api/failover/reclaim/accept", s.requireCtl(s.adminFailoverReclaimAccept))
@@ -927,6 +937,9 @@ func (s *Server) healthz(w http.ResponseWriter, r *http.Request) {
 func (s *Server) requireCtl(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/admin/api/instruction-sets/default" && (r.Method == http.MethodGet || r.Method == http.MethodPut) {
+			w.Header().Set("Cache-Control", "no-store")
+		}
+		if strings.HasPrefix(r.URL.Path, "/admin/api/instruction-sets/") {
 			w.Header().Set("Cache-Control", "no-store")
 		}
 		if strings.HasPrefix(r.URL.Path, "/admin/api/access-profiles/") || strings.HasPrefix(r.URL.Path, "/admin/api/client-bindings/") {
@@ -4912,7 +4925,7 @@ func (s *Server) agentMCPJSONRPC(r *http.Request, agent Agent, body map[string]a
 	switch method {
 	case "initialize":
 		if agent.AgentID == "hub" || strings.HasPrefix(agent.AgentID, "shell:") {
-			return map[string]any{"protocolVersion": "2024-11-05", "capabilities": map[string]any{"tools": map[string]any{}, "resources": map[string]any{}, "prompts": map[string]any{}}, "serverInfo": map[string]any{"name": "gptadmin-server-" + agentSlug(agent.AgentID), "version": BuildVersion}, "instructions": s.startupInstructionsText()}, nil, false
+			return map[string]any{"protocolVersion": "2024-11-05", "capabilities": map[string]any{"tools": map[string]any{}, "resources": map[string]any{}, "prompts": map[string]any{}}, "serverInfo": map[string]any{"name": "gptadmin-server-" + agentSlug(agent.AgentID), "version": BuildVersion}, "instructions": s.startupInstructionsTextForRequest(r)}, nil, false
 		}
 		jobID := s.enqueueRelay(agent.AgentID, method, params)
 		result, rpcErr := unwrapMCPUpstream(s.waitRelay(jobID, s.cfg.DefaultTimeout))
@@ -5025,7 +5038,7 @@ func (s *Server) agentResourceRead(r *http.Request, agent Agent, uri string) (an
 	}
 	if strings.HasPrefix(agent.AgentID, "shell:") {
 		if uri == startupInstructionsResourceURI {
-			return s.startupInstructionsResourceRead(uri), nil
+			return s.startupInstructionsResourceRead(r, uri), nil
 		}
 		b, _ := json.Marshal(s.agentCard(r, agent))
 		return map[string]any{"contents": []map[string]any{{"uri": uri, "mimeType": "application/json", "text": string(b)}}}, nil
@@ -5108,7 +5121,7 @@ func (s *Server) mcpEndpoint(w http.ResponseWriter, r *http.Request) {
 	var rpcErr any
 	switch method {
 	case "initialize":
-		result = map[string]any{"protocolVersion": "2024-11-05", "capabilities": map[string]any{"tools": map[string]any{}, "resources": map[string]any{}}, "serverInfo": map[string]any{"name": "gptadmin-go-hub", "version": BuildVersion}, "instructions": s.startupInstructionsText()}
+		result = map[string]any{"protocolVersion": "2024-11-05", "capabilities": map[string]any{"tools": map[string]any{}, "resources": map[string]any{}}, "serverInfo": map[string]any{"name": "gptadmin-go-hub", "version": BuildVersion}, "instructions": s.startupInstructionsTextForRequest(r)}
 	case "notifications/initialized":
 		w.WriteHeader(http.StatusNoContent)
 		return
@@ -5511,7 +5524,7 @@ func appsSDKWidgetMeta() map[string]any {
 
 func (s *Server) appsSDKResourceRead(r *http.Request, uri string) map[string]any {
 	if uri == startupInstructionsResourceURI {
-		return s.startupInstructionsResourceRead(uri)
+		return s.startupInstructionsResourceRead(r, uri)
 	}
 	if uri == "gptadmin://servers" || uri == "gptadmin://agents" {
 		s.mu.Lock()
@@ -5526,8 +5539,8 @@ func (s *Server) appsSDKResourceRead(r *http.Request, uri string) map[string]any
 	return map[string]any{"contents": []map[string]any{{"uri": uri, "mimeType": "text/html;profile=mcp-app", "text": appsSDKWidgetHTML(s.origin(r)), "_meta": appsSDKWidgetMeta()}}}
 }
 
-func (s *Server) startupInstructionsResourceRead(uri string) map[string]any {
-	return map[string]any{"contents": []map[string]any{{"uri": uri, "mimeType": "text/markdown", "text": s.startupInstructionsText()}}}
+func (s *Server) startupInstructionsResourceRead(r *http.Request, uri string) map[string]any {
+	return map[string]any{"contents": []map[string]any{{"uri": uri, "mimeType": "text/markdown", "text": s.startupInstructionsTextForRequest(r)}}}
 }
 
 func appsSDKWidgetHTML(origin string) string {
