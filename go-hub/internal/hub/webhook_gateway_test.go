@@ -95,7 +95,7 @@ func TestWebhookGatewayRendersJSONAndDispatchesConfiguredShell(t *testing.T) {
 		s.mu.Lock()
 		var rendered *shellJob
 		for _, job := range s.shellJobs {
-			if job.Cmd == `printf '%s:%s' 'gptadmin' '42'` && job.Cwd == "/srv/project" {
+			if job.Cmd == `printf '%s:%s' "$GPTADMIN_WEBHOOK_VALUE_0" "$GPTADMIN_WEBHOOK_VALUE_1"` && job.Env["GPTADMIN_WEBHOOK_VALUE_0"] == "gptadmin" && job.Env["GPTADMIN_WEBHOOK_VALUE_1"] == "42" && job.Cwd == "/srv/project" {
 				copy := *job
 				rendered = &copy
 				break
@@ -108,6 +108,38 @@ func TestWebhookGatewayRendersJSONAndDispatchesConfiguredShell(t *testing.T) {
 		time.Sleep(5 * time.Millisecond)
 	}
 	t.Fatalf("shell job %q was not dispatched", jobID)
+}
+
+func TestWebhookShellTemplateValuesCannotBecomeShellSource(t *testing.T) {
+	s := New(Config{WebhookRoutes: []WebhookRoute{{
+		ID:    "unsafe",
+		Token: "webhook-token",
+		Action: WebhookAction{
+			Kind:         "shell",
+			Target:       "shell:runner",
+			ApprovalMode: approvalModeBoundedAutonomous,
+			Command:      `printf '%s' '{{event.value}}'`,
+		},
+	}}})
+	s.mu.Lock()
+	s.agents["shell:runner"] = &Agent{AgentID: "shell:runner", Status: "online"}
+	s.mu.Unlock()
+	payload := `'; touch /tmp/webhook-should-not-execute; echo '`
+	if _, err := s.dispatchWebhookAction(s.webhookRoutes["unsafe"].Action, map[string]any{"value": payload}); err != nil {
+		t.Fatalf("safe webhook rendering rejected event: %v", err)
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, job := range s.shellJobs {
+		if strings.Contains(job.Cmd, payload) {
+			t.Fatalf("webhook event value was interpolated into shell source: %q", job.Cmd)
+		}
+		if len(job.Env) == 0 || job.Env["GPTADMIN_WEBHOOK_VALUE_0"] != payload {
+			t.Fatalf("webhook event value was not isolated as data: cmd=%q env=%#v", job.Cmd, job.Env)
+		}
+		return
+	}
+	t.Fatal("webhook shell action did not create a job")
 }
 
 func TestWebhookGatewayIdempotencyReturnsOriginalJob(t *testing.T) {

@@ -150,6 +150,57 @@ func TestDynamicOAuthClientInventorySurvivesRestartAndBindsIssuedToken(t *testin
 	}
 }
 
+func TestCanonicalOAuthEndpointsRequirePKCEAndBindClient(t *testing.T) {
+	cfg := Config{
+		AdminPassword:            "admin-password",
+		OAuthClientSecret:        "oauth-signing-secret",
+		PublicOrigin:             "https://hub.example",
+		MCPResource:              "https://hub.example",
+		OAuthPermissiveRedirects: true,
+		OAuthPermissiveResources: true,
+	}
+	s := New(cfg)
+
+	metadata := oauthInventoryRequestBody(t, s, http.MethodGet, "/.well-known/oauth-authorization-server", "", "", "")
+	if metadata.Code != http.StatusOK || !strings.Contains(metadata.Body.String(), `"authorization_endpoint":"https://hub.example/oauth/authorize"`) || !strings.Contains(metadata.Body.String(), `"token_endpoint":"https://hub.example/oauth/token"`) {
+		t.Fatalf("OAuth metadata did not advertise canonical endpoints: status=%d body=%s", metadata.Code, metadata.Body.String())
+	}
+
+	redirectURI := "https://client.example/callback"
+	base := url.Values{
+		"client_id":    {"client-a"},
+		"redirect_uri": {redirectURI},
+		"resource":     {cfg.MCPResource},
+		"scope":        {"gptadmin.read"},
+		"password":     {cfg.AdminPassword},
+	}
+	missingPKCE := oauthInventoryRequestBody(t, s, http.MethodPost, "/oauth/authorize", "", base.Encode(), "application/x-www-form-urlencoded")
+	if missingPKCE.Code != http.StatusBadRequest || !strings.Contains(missingPKCE.Body.String(), "PKCE") {
+		t.Fatalf("authorization without PKCE was accepted: status=%d body=%s", missingPKCE.Code, missingPKCE.Body.String())
+	}
+
+	verifier := "canonical-oauth-pkce-verifier"
+	base.Set("code_challenge", oauthInventoryPKCE(verifier))
+	base.Set("code_challenge_method", "S256")
+	authorized := oauthInventoryRequestBody(t, s, http.MethodPost, "/oauth/authorize", "", base.Encode(), "application/x-www-form-urlencoded")
+	if authorized.Code != http.StatusFound {
+		t.Fatalf("canonical authorization status=%d body=%s", authorized.Code, authorized.Body.String())
+	}
+	code := oauthInventoryRedirectCode(t, authorized.Header().Get("Location"))
+	wrongClient := url.Values{
+		"grant_type":    {"authorization_code"},
+		"code":          {code},
+		"client_id":     {"client-b"},
+		"redirect_uri":  {"https://other.example/callback"},
+		"resource":      {cfg.MCPResource},
+		"code_verifier": {verifier},
+	}
+	token := oauthInventoryRequestBody(t, s, http.MethodPost, "/oauth/token", "", wrongClient.Encode(), "application/x-www-form-urlencoded")
+	if token.Code != http.StatusBadRequest || !strings.Contains(token.Body.String(), "client or redirect") {
+		t.Fatalf("authorization code was not bound to client and redirect: status=%d body=%s", token.Code, token.Body.String())
+	}
+}
+
 func oauthInventoryRequest(t *testing.T, server *Server, method, path, token string, body any) *httptest.ResponseRecorder {
 	t.Helper()
 	if body == nil {

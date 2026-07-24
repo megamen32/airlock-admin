@@ -403,7 +403,7 @@ func (s *Server) dispatchWebhookAction(action WebhookAction, event any) (map[str
 	}
 	switch action.Kind {
 	case "shell":
-		command, err := renderWebhookString(action.Command, event)
+		command, commandEnv, err := renderWebhookShellCommand(action.Command, event)
 		if err != nil {
 			return nil, err
 		}
@@ -412,7 +412,7 @@ func (s *Server) dispatchWebhookAction(action WebhookAction, event any) (map[str
 			return nil, err
 		}
 		policyRequest := requestWithAutomationProfile(nil, "webhook", action.Target, "shell_exec", action.ApprovalMode)
-		result, status := s.executeMCPTool(policyRequest, action.Target, "shell_exec", map[string]any{"cmd": command, "cwd": cwd}, false, timeout, "")
+		result, status := s.executeMCPTool(policyRequest, action.Target, "shell_exec", map[string]any{"cmd": command, "cwd": cwd, "env": commandEnv}, false, timeout, "")
 		if status >= http.StatusBadRequest {
 			return nil, fmt.Errorf("webhook shell action failed policy with status %d: %v", status, result)
 		}
@@ -520,6 +520,51 @@ func renderWebhookString(template string, event any) (string, error) {
 		template = template[end+2:]
 	}
 	return out.String(), nil
+}
+
+func renderWebhookShellCommand(template string, event any) (string, map[string]any, error) {
+	// Render event values through environment data, never as shell source text.
+	env := map[string]any{}
+	var out strings.Builder
+	valueIndex := 0
+	for len(template) > 0 {
+		start := strings.Index(template, "{{")
+		if start < 0 {
+			out.WriteString(template)
+			break
+		}
+		prefix := template[:start]
+		rest := template[start+2:]
+		end := strings.Index(rest, "}}")
+		if end < 0 {
+			return "", nil, errors.New("webhook template has an unclosed placeholder")
+		}
+		path := strings.TrimSpace(rest[:end])
+		value, ok := lookupWebhookValue(event, path)
+		if !ok {
+			return "", nil, fmt.Errorf("webhook template path %q was not found", path)
+		}
+		variable := fmt.Sprintf("GPTADMIN_WEBHOOK_VALUE_%d", valueIndex)
+		valueIndex++
+		if object, ok := value.(map[string]any); ok {
+			encoded, err := json.Marshal(object)
+			if err != nil {
+				return "", nil, err
+			}
+			env[variable] = string(encoded)
+		} else {
+			env[variable] = fmt.Sprint(value)
+		}
+		suffix := rest[end+2:]
+		if (strings.HasSuffix(prefix, "'") && strings.HasPrefix(suffix, "'")) || (strings.HasSuffix(prefix, `"`) && strings.HasPrefix(suffix, `"`)) {
+			prefix = prefix[:len(prefix)-1]
+			suffix = suffix[1:]
+		}
+		out.WriteString(prefix)
+		out.WriteString(`"$` + variable + `"`)
+		template = suffix
+	}
+	return out.String(), env, nil
 }
 
 func lookupWebhookValue(event any, path string) (any, bool) {

@@ -9,7 +9,7 @@ for details:
 
 1. **`CTL_TOKEN`** (Bearer) — admin API + web panel
 2. **OAuth bearer** — `/mcp` endpoint (for MCP clients)
-3. **`ADMIN_PASSWORD`** — the `/authorize` form inside OAuth flow
+3. **`ADMIN_PASSWORD`** — the `/oauth/authorize` form inside OAuth flow
 
 Plus `SHELLMCP_TOKEN` for agent → hub registration.
 

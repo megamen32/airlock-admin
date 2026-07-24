@@ -111,8 +111,8 @@ curl -sS https://<your-hub>/.well-known/oauth-authorization-server
 ```json
 {
   "issuer": "https://<your-hub>",
-  "authorization_endpoint": "https://<your-hub>/authorize",
-  "token_endpoint": "https://<your-hub>/token",
+  "authorization_endpoint": "https://<your-hub>/oauth/authorize",
+  "token_endpoint": "https://<your-hub>/oauth/token",
   "response_types_supported": ["code"],
   "grant_types_supported": ["authorization_code"],
   "code_challenge_methods_supported": ["S256"],
@@ -144,7 +144,7 @@ Clients that support [RFC 8414](https://www.rfc-editor.org/rfc/rfc8414) / [RFC 9
 - `gptadmin.read` — list servers / tools, read resources, read jobs.
 - `gptadmin.exec` — execute tools (`execute`), enqueue jobs.
 
-The hub's `/authorize` page lists the requested scopes; the user types the admin password to consent.
+The hub's `/oauth/authorize` page lists the requested scopes; the user types the admin password to consent.
 
 ### Endpoints
 
@@ -153,9 +153,9 @@ The hub's `/authorize` page lists the requested scopes; the user types the admin
 | `/.well-known/oauth-authorization-server` | `GET` | RFC 8414 issuer metadata. |
 | `/.well-known/oauth-protected-resource` | `GET` | RFC 9728 resource metadata. |
 | `/register` | `POST` | Dynamic Client Registration — returns `client_id = "chatgpt-dynamic"`. |
-| `/authorize` | `GET` | Renders the consent page (open in browser). |
-| `/authorize` | `POST` | Submits the consent form (`password` = admin password). |
-| `/token` | `POST` | Exchanges `code` + `code_verifier` for a JWT `access_token`. |
+| `/oauth/authorize` | `GET` | Renders the consent page (open in browser). |
+| `/oauth/authorize` | `POST` | Submits the consent form (`password` = admin password). |
+| `/oauth/token` | `POST` | Exchanges `code` + `code_verifier` for a JWT `access_token`. |
 
 ### Flow
 
@@ -164,10 +164,10 @@ The hub's `/authorize` page lists the requested scopes; the user types the admin
 2. Client `POST /register` with `redirect_uris` (e.g.
    `https://chatgpt.com/connector/oauth/...` or
    `http://127.0.0.1:<port>/callback` for local CLI clients) → receives `client_id`.
-3. Browser opens `GET /authorize?response_type=code&client_id=...&redirect_uri=...&code_challenge=...&code_challenge_method=S256&resource=<hub>&scope=gptadmin.read+gptadmin.exec`.
+3. Browser opens `GET /oauth/authorize?response_type=code&client_id=...&redirect_uri=...&code_challenge=...&code_challenge_method=S256&resource=<hub>&scope=gptadmin.read+gptadmin.exec`.
 4. User reviews scopes → types admin password → submits.
 5. Hub 302s to `redirect_uri?code=...&state=...`.
-6. Client `POST /token` with `code`, `code_verifier`, `redirect_uri`, `client_id` → `access_token` (JWT) → store in MCP config.
+6. Client `POST /oauth/token` with `code`, `code_verifier`, `redirect_uri`, `client_id` → `access_token` (JWT) → store in MCP config.
 7. Every `/mcp` call: `Authorization: Bearer <access_token>`.
 
 ### JWT shape
@@ -184,12 +184,12 @@ The hub's `/authorize` page lists the requested scopes; the user types the admin
 }
 ```
 
-> **Redirect URI allow-list.** `/authorize` accepts only `https://chatgpt.com/.../connector/oauth/...` and `*.chatgpt.com` by default. For other clients, configure the Go hub OAuth redirect allow-list.
+> **Redirect URI allow-list.** `/oauth/authorize` accepts only `https://chatgpt.com/.../connector/oauth/...` and `*.chatgpt.com` by default. For other clients, configure the Go hub OAuth redirect allow-list.
 
 ### Troubleshooting
 
 - **`invalid_request: invalid redirect_uri`** — not on the allow-list. Use the canonical `https://chatgpt.com/connector/oauth/...` or relax the allow-list on the hub.
-- **`invalid_grant` at `/token`** — `code_verifier` doesn't match `code_challenge`, or the 5-minute code window elapsed. Re-run `/authorize`.
+- **`invalid_grant` at `/oauth/token`** — `code_verifier` doesn't match `code_challenge`, the client/redirect binding does not match, or the 5-minute code window elapsed. Re-run `/oauth/authorize`.
 - **"expired" on every call** — JWT TTL is 12 h. Most MCP clients re-trigger the flow silently.
 - **Revoke everything** — admin dashboard at `https://<your-hub>/admin` → **Security → Revoke all** rotates `OAUTH_CLIENT_SECRET` and kills every live JWT.
 

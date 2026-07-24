@@ -745,6 +745,10 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/register", s.oauthRegister)
 	mux.HandleFunc("/authorize", s.oauthAuthorize)
 	mux.HandleFunc("/token", s.oauthToken)
+	// Canonical OAuth paths are namespaced; root aliases remain for clients
+	// pinned to the pre-contract endpoint names during the migration window.
+	mux.HandleFunc("/oauth/authorize", s.oauthAuthorize)
+	mux.HandleFunc("/oauth/token", s.oauthToken)
 	mux.HandleFunc("/mcp", s.mcpEndpoint)
 	mux.HandleFunc("/connect", s.connectionPage)
 	mux.HandleFunc("/connect.json", s.connectionPage)
@@ -2036,6 +2040,16 @@ func (s *Server) mcpRelayResult(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusNotFound, map[string]any{"detail": "unknown job"})
 		return
 	}
+	if job.AgentID != agentID {
+		s.mu.Unlock()
+		writeJSON(w, http.StatusForbidden, map[string]any{"detail": "relay result does not belong to this agent"})
+		return
+	}
+	if job.Status == "completed" || job.Status == "failed" {
+		s.mu.Unlock()
+		writeJSON(w, http.StatusConflict, map[string]any{"detail": "relay job already has a terminal result"})
+		return
+	}
 	job.DoneAt = nowFloat()
 	job.Result = res.Result
 	if res.OK != nil && !*res.OK {
@@ -2250,6 +2264,11 @@ func (s *Server) mcpRelayTools(w http.ResponseWriter, r *http.Request) {
 	}
 	var req map[string]any
 	_ = readJSON(r, &req)
+	if err := authorizeFacadeCall(r, "schema", req); err != nil {
+		s.auditToolDecision(r, firstString(req, "target", "server_id", "agent_id"), "schema", req, "deny", err.Error(), nil, http.StatusForbidden)
+		writeJSON(w, http.StatusForbidden, map[string]any{"detail": err.Error()})
+		return
+	}
 	target := firstString(req, "target", "server_id", "agent_id")
 	selectedTarget, status, detail := s.selectMCPRelayTarget(target)
 	if status != http.StatusOK {
@@ -4314,8 +4333,8 @@ func (s *Server) oauthAuthorizationServer(w http.ResponseWriter, r *http.Request
 	origin := s.origin(r)
 	writeJSON(w, http.StatusOK, map[string]any{
 		"issuer":                                origin,
-		"authorization_endpoint":                origin + "/authorize",
-		"token_endpoint":                        origin + "/token",
+		"authorization_endpoint":                origin + "/oauth/authorize",
+		"token_endpoint":                        origin + "/oauth/token",
 		"registration_endpoint":                 origin + "/register",
 		"response_types_supported":              []string{"code"},
 		"grant_types_supported":                 []string{"authorization_code"},
@@ -4397,6 +4416,10 @@ func (s *Server) oauthAuthorizeGet(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid_request", "error_description": "redirect_uri is not registered for client"})
 		return
 	}
+	if strings.TrimSpace(q.Get("code_challenge")) == "" || q.Get("code_challenge_method") != "S256" {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid_request", "error_description": "PKCE S256 is required"})
+		return
+	}
 	hidden := ""
 	for _, k := range []string{"client_id", "redirect_uri", "state", "scope", "code_challenge", "code_challenge_method", "resource"} {
 		v := q.Get(k)
@@ -4409,7 +4432,7 @@ func (s *Server) oauthAuthorizeGet(w http.ResponseWriter, r *http.Request) {
 	if scope == "" {
 		scope = "gptadmin.read gptadmin.exec"
 	}
-	page := `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Authorize GPTAdmin MCP</title><style>body{font-family:system-ui,sans-serif;background:#070a12;color:#e5eefc;display:grid;place-items:center;min-height:100vh;margin:0}.card{max-width:560px;padding:28px;border:1px solid #1e293b;border-radius:24px;background:#0f1623}.hint{margin:16px 0;padding:12px 14px;border-radius:16px;background:rgba(56,189,248,.08);border:1px solid rgba(56,189,248,.18);color:#cbd5e1;line-height:1.45}.hint code{color:#fff}input,button{width:100%;box-sizing:border-box;padding:14px;border-radius:14px;margin-top:10px}input{background:#111827;color:#fff;border:1px solid #334155}button{border:0;background:linear-gradient(135deg,#7c3aed,#06b6d4);color:#fff;font-weight:800}.muted{color:#94a3b8;word-break:break-all}</style></head><body><main class="card"><h1>Authorize GPTAdmin MCP</h1><p class="muted">Client: ` + html.EscapeString(q.Get("client_id")) + `</p><p class="muted">Resource: ` + html.EscapeString(resource) + `</p><p>Scopes: ` + html.EscapeString(scope) + `</p><div class="hint">Эта страница выпускает Bearer JWT для MCP/Custom GPT. Используйте OAuth или готовый Bearer JWT, выпущенный через Hub; credential values никогда не показываются на этой странице.</div><form method="POST" action="/authorize">` + hidden + `<label>Admin password</label><input type="password" name="password" autofocus required autocomplete="current-password"><button type="submit">Authorize</button></form></main></body></html>`
+	page := `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Authorize GPTAdmin MCP</title><style>body{font-family:system-ui,sans-serif;background:#070a12;color:#e5eefc;display:grid;place-items:center;min-height:100vh;margin:0}.card{max-width:560px;padding:28px;border:1px solid #1e293b;border-radius:24px;background:#0f1623}.hint{margin:16px 0;padding:12px 14px;border-radius:16px;background:rgba(56,189,248,.08);border:1px solid rgba(56,189,248,.18);color:#cbd5e1;line-height:1.45}.hint code{color:#fff}input,button{width:100%;box-sizing:border-box;padding:14px;border-radius:14px;margin-top:10px}input{background:#111827;color:#fff;border:1px solid #334155}button{border:0;background:linear-gradient(135deg,#7c3aed,#06b6d4);color:#fff;font-weight:800}.muted{color:#94a3b8;word-break:break-all}</style></head><body><main class="card"><h1>Authorize GPTAdmin MCP</h1><p class="muted">Client: ` + html.EscapeString(q.Get("client_id")) + `</p><p class="muted">Resource: ` + html.EscapeString(resource) + `</p><p>Scopes: ` + html.EscapeString(scope) + `</p><div class="hint">Эта страница выпускает Bearer JWT для MCP/Custom GPT. Используйте OAuth или готовый Bearer JWT, выпущенный через Hub; credential values никогда не показываются на этой странице.</div><form method="POST" action="/oauth/authorize">` + hidden + `<label>Admin password</label><input type="password" name="password" autofocus required autocomplete="current-password"><button type="submit">Authorize</button></form></main></body></html>`
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	_, _ = w.Write([]byte(page))
 }
@@ -4436,6 +4459,10 @@ func (s *Server) oauthAuthorizePost(w http.ResponseWriter, r *http.Request) {
 	}
 	if !s.oauthClientAllowsRedirect(r.Form.Get("client_id"), redirectURI) {
 		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid_request", "error_description": "redirect_uri is not registered for client"})
+		return
+	}
+	if strings.TrimSpace(r.Form.Get("code_challenge")) == "" || r.Form.Get("code_challenge_method") != "S256" {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid_request", "error_description": "PKCE S256 is required"})
 		return
 	}
 	code := newID()
@@ -4478,6 +4505,11 @@ func (s *Server) oauthToken(w http.ResponseWriter, r *http.Request) {
 	if !ok || time.Since(data.Created) > 5*time.Minute || !s.allowedResource(resource, r) || strings.TrimRight(data.Resource, "/") != resource {
 		s.authAudit("oauth_token_denied", r, map[string]any{"reason": "code not found, expired, or resource mismatch", "resource": resource, "stored_resource": data.Resource, "code_found": ok, "form": s.formForAudit(r)})
 		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid_grant", "error_description": "code not found, expired, or resource mismatch"})
+		return
+	}
+	if r.Form.Get("client_id") != data.ClientID || r.Form.Get("redirect_uri") != data.RedirectURI {
+		s.authAudit("oauth_token_denied", r, map[string]any{"reason": "client or redirect mismatch", "client_id": data.ClientID, "form": s.formForAudit(r)})
+		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid_grant", "error_description": "client or redirect mismatch"})
 		return
 	}
 	if data.Challenge != "" && !pkceOK(r.Form.Get("code_verifier"), data.Challenge) {
@@ -5330,6 +5362,34 @@ func (s *Server) appsSDKCallForRequest(r *http.Request, name string, args map[st
 		result, _ := s.callHubToolForRequest(r, name, args)
 		return result
 	}
+	if name == "schema" || name == "list_mcp_tools" || name == "listMcpTools" {
+		if err := authorizeFacadeCall(r, name, args); err != nil {
+			return map[string]any{"server_id": firstString(args, "target", "server_id", "agent_id"), "status": "failed", "error": err.Error()}
+		}
+		requestedTarget := firstString(args, "target", "server_id", "agent_id")
+		if requestAccessMode(r) == accessModeReadonly && requestedTarget != "hub" && !strings.HasPrefix(requestedTarget, "shell:") {
+			return map[string]any{"server_id": requestedTarget, "status": "completed", "response": map[string]any{"tools": []map[string]any{}}}
+		}
+		return s.appsSDKSchemaForRequest(r, args)
+	}
+	if name == "inspect" || name == "inspect_system" || name == "inspectSystem" {
+		if err := authorizeFacadeCall(r, name, args); err != nil {
+			return map[string]any{"server_id": firstString(args, "target", "server_id", "agent_id"), "status": "failed", "error": err.Error()}
+		}
+		target := firstString(args, "target", "server_id", "agent_id")
+		selectedTarget, status, detail := s.selectMCPRelayTarget(target)
+		if status != http.StatusOK {
+			return map[string]any{"server_id": target, "status": "failed", "error": map[string]any{"status_code": status, "message": detail}}
+		}
+		if !strings.HasPrefix(selectedTarget, "shell:") {
+			return map[string]any{"server_id": selectedTarget, "status": "failed", "error": "system inspection requires a shell:* target"}
+		}
+		response, responseStatus := s.executeMCPTool(r, selectedTarget, "system_inspect", toolArgsFromTopLevel(args), false, s.cfg.DefaultTimeout, "")
+		if responseStatus >= http.StatusBadRequest {
+			return map[string]any{"server_id": selectedTarget, "status": "failed", "error": response}
+		}
+		return response
+	}
 	if requestAccessMode(r) == accessModeReadonly && (name == "schema" || name == "list_mcp_tools" || name == "listMcpTools") {
 		target := firstString(args, "target", "server_id", "agent_id")
 		if target != "hub" && !strings.HasPrefix(target, "shell:") {
@@ -5356,6 +5416,30 @@ func (s *Server) appsSDKCallForRequest(r *http.Request, name string, args map[st
 		response["tools"] = toolsForRequest(r, target, raw)
 	}
 	return payload
+}
+
+func (s *Server) appsSDKSchemaForRequest(r *http.Request, args map[string]any) any {
+	target := firstString(args, "target", "server_id", "agent_id")
+	selectedTarget, status, detail := s.selectMCPRelayTarget(target)
+	if status != http.StatusOK {
+		return map[string]any{"server_id": target, "status": "failed", "error": map[string]any{"status_code": status, "message": detail}}
+	}
+	target = selectedTarget
+	var result map[string]any
+	if target == "hub" {
+		result = map[string]any{"server_id": target, "status": "completed", "response": map[string]any{"tools": hubTools()}}
+	} else if strings.HasPrefix(target, "shell:") {
+		result = map[string]any{"server_id": target, "status": "completed", "response": map[string]any{"tools": shellTools()}}
+	} else {
+		jobID := s.enqueueRelay(target, "tools/list", map[string]any{})
+		result = s.waitRelay(jobID, s.cfg.DefaultTimeout)
+	}
+	if response, ok := result["response"].(map[string]any); ok {
+		if raw, ok := response["tools"].([]map[string]any); ok {
+			response["tools"] = toolsForRequest(r, target, raw)
+		}
+	}
+	return result
 }
 
 func (s *Server) appsSDKCallMCP(r *http.Request, name string, args map[string]any) any {

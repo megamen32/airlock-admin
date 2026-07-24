@@ -65,12 +65,12 @@ By default it listens on `0.0.0.0:25900`. Change with `--port` or `HUB_PORT`.
 | `GET /servers` | Bearer `CTL_TOKEN` | List registered agents |
 | `GET /api.json` | none | OpenAPI schema (for Custom GPT import) |
 | `GET /openapi.yaml` | none | OpenAPI YAML |
-| `POST /authorize` | `ADMIN_PASSWORD` form | OAuth authorize endpoint |
+| `POST /oauth/authorize` | `ADMIN_PASSWORD` form | Canonical OAuth authorize endpoint |
 | `POST /webhooks/v1/{route}` | Route token or HMAC signature | Universal event ingress |
 | `GET /webhook-jobs/{job_id}` | Same route credential | Read webhook job status/result |
 | `GET/POST /webhook-routes` | Hub control auth | List or create route definitions without returning secrets |
 | `PUT/DELETE /webhook-routes/{route}` | Hub control auth | Replace or remove an operator-owned route |
-| `POST /oauth/token` | client credentials | OAuth token endpoint |
+| `POST /oauth/token` | client credentials | Canonical OAuth token endpoint |
 | `GET/POST /secret-input/{token}` | One-time browser token | Enter a secret value once; responses never include it |
 
 See [API Reference](./API_REFERENCE.md) for full details.
@@ -93,7 +93,7 @@ See [Configuration](./CONFIGURATION.md) for the full list. The essentials:
 | Var | Required | Default | Purpose |
 |-----|----------|---------|---------|
 | `CTL_TOKEN` | yes | — | Bearer token for admin API + panel |
-| `ADMIN_PASSWORD` | for OAuth | — | Password for the `/authorize` form |
+| `ADMIN_PASSWORD` | for OAuth | — | Password for the `/oauth/authorize` form |
 | `OAUTH_CLIENT_SECRET` | for `/mcp` | — | Signs OAuth bearer tokens |
 | `PUBLIC_ORIGIN` | recommended | — | Public base URL (for OAuth, OpenAPI) |
 | `HUB_PORT` | no | 25900 | Listen port |

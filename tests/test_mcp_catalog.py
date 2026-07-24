@@ -18,6 +18,9 @@ def test_mcp_catalog_is_attributed_and_machine_readable(monkeypatch: pytest.Monk
     assert payload["catalog_version"]
     assert payload["source"]
     assert payload["definitions"]
+    assert payload["signature"]["algorithm"] == "Ed25519"
+    assert payload["signature"]["verified"] is True
+    assert payload["catalog_digest_sha256"]
     for definition in payload["definitions"]:
         assert definition["id"]
         assert definition["version"]
@@ -26,6 +29,16 @@ def test_mcp_catalog_is_attributed_and_machine_readable(monkeypatch: pytest.Monk
         assert "network_needs" in definition
         assert definition["risk_level"] in {"low", "medium", "high"}
         assert definition["maintenance_owner"]
+
+
+def test_catalog_signature_rejects_tampered_definition() -> None:
+    """The bundled activation boundary must fail closed if catalog metadata changes."""
+
+    payload = cli._mcp_catalog_payload()
+    tampered = json.loads(json.dumps(payload))
+    tampered["definitions"][0]["risk_level"] = "high"
+    with pytest.raises(ValueError, match="catalog signature"):
+        cli._verify_mcp_catalog_payload(tampered)
 
 
 def test_curated_mcp_install_requires_explicit_capability_acceptance(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:

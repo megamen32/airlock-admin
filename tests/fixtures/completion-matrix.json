@@ -18,6 +18,11 @@
   ],
   "endpoints": [
     {
+      "id": "oauth-canonical-pkce",
+      "command": "cd go-hub && go test ./internal/hub -run 'TestCanonicalOAuthEndpointsRequirePKCEAndBindClient' -count=1",
+      "evidence": "canonical /oauth authorization and token discovery, mandatory PKCE S256, and authorization-code client/redirect binding"
+    },
+    {
       "id": "hub-http-contract",
       "command": "python3 -m pytest tests/test_hub_contract.py -q",
       "evidence": "health/version/auth/OpenAPI/MCP endpoint behavior"
@@ -141,7 +146,7 @@
     {
       "id": "mcp-extension-conformance",
       "command": "python3 -m pytest tests/test_extension_sdk.py -q",
-      "evidence": "third-party-shaped MCP extension manifests validate against a stable schema without executing untrusted entrypoints"
+      "evidence": "third-party-shaped manifest and stdio lifecycle validate, then discover -> schema -> execute crosses a live Hub and generic relay"
     }
   ],
   "file_sharing": [
@@ -159,6 +164,11 @@
       "id": "managed-file-backup",
       "command": "cd go-shellmcp && go test ./internal/server -run 'TestMCPFileBackupBackupListRestoreCleanup' -count=1",
       "evidence": "MCP file_backup create/list/restore/cleanup contract"
+    },
+    {
+      "id": "managed-file-backup-process",
+      "command": "python3 -m pytest tests/test_shellmcp_contract.py -k file_backup_round_trip_through_process -q",
+      "evidence": "real ShellMCP process performs file_backup create/list/restore with bounded artifact state"
     }
   ],
   "profiles": [

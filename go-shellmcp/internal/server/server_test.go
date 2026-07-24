@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -25,6 +26,26 @@ func TestFromEnvDefaultLogLimit(t *testing.T) {
 	cfg := FromEnv()
 	if cfg.LogLimit != output.DefaultInlineTailBytes {
 		t.Fatalf("LogLimit=%d want %d", cfg.LogLimit, output.DefaultInlineTailBytes)
+	}
+}
+
+func TestFileEndpointRejectsSymlinkEvenWhenLinkIsInsideSpillRoot(t *testing.T) {
+	root := t.TempDir()
+	outside := filepath.Join(t.TempDir(), "outside.txt")
+	if err := os.WriteFile(outside, []byte("not-for-shell-client"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	link := filepath.Join(root, "link.txt")
+	if err := os.Symlink(outside, link); err != nil {
+		t.Skipf("symlinks unavailable: %v", err)
+	}
+	s := New(Config{Token: "t", SpillDir: root})
+	request := httptest.NewRequest(http.MethodGet, "/file?path="+url.QueryEscape(link), nil)
+	request.Header.Set("Authorization", "Bearer t")
+	record := httptest.NewRecorder()
+	s.Handler().ServeHTTP(record, request)
+	if record.Code == http.StatusOK || strings.Contains(record.Body.String(), "not-for-shell-client") {
+		t.Fatalf("file endpoint followed symlink: status=%d body=%q", record.Code, record.Body.String())
 	}
 }
 

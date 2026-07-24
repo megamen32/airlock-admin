@@ -125,6 +125,12 @@ func authorizeFacadeCall(r *http.Request, name string, args map[string]any) erro
 	}
 	if requestAccessMode(r) != accessModeReadonly {
 		switch name {
+		case "schema", "list_mcp_tools", "listMcpTools", "inspect", "inspect_system", "inspectSystem":
+			target := firstString(args, "target", "server_id", "agent_id")
+			if target != "" && !profileAllowsTarget(r, target) {
+				return errors.New("access profile denies this target")
+			}
+			return nil
 		case "execute", "call_mcp_tool", "callMcpTool":
 			return authorizeToolCall(r, firstString(args, "target", "server_id", "agent_id"), firstString(args, "tool", "tool_name", "name"))
 		default:
@@ -132,7 +138,13 @@ func authorizeFacadeCall(r *http.Request, name string, args map[string]any) erro
 		}
 	}
 	switch name {
-	case "ui", "render_gptadmin_dashboard", "renderGptadminDashboard", "discover", "demo", "list_mcp_servers", "listMcpServers", "list_mcp_agents", "listMcpAgents", "pending", "list_pending_servers", "schema", "list_mcp_tools", "listMcpTools", "inspect", "inspect_system", "inspectSystem", "job", "get_mcp_job", "getMcpJob":
+	case "ui", "render_gptadmin_dashboard", "renderGptadminDashboard", "discover", "demo", "list_mcp_servers", "listMcpServers", "list_mcp_agents", "listMcpAgents", "pending", "list_pending_servers", "job", "get_mcp_job", "getMcpJob":
+		return nil
+	case "schema", "list_mcp_tools", "listMcpTools", "inspect", "inspect_system", "inspectSystem":
+		target := firstString(args, "target", "server_id", "agent_id")
+		if target != "" && !profileAllowsTarget(r, target) {
+			return errors.New("access profile denies this target")
+		}
 		return nil
 	case "execute", "call_mcp_tool", "callMcpTool":
 		return authorizeToolCall(r, firstString(args, "target", "server_id", "agent_id"), firstString(args, "tool", "tool_name", "name"))

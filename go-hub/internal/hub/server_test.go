@@ -318,7 +318,7 @@ func TestOAuthAndMCPJSONRPC(t *testing.T) {
 	}
 
 	// Issue an auth code directly through the authorize POST path.
-	form := "client_id=c1&redirect_uri=https%3A%2F%2Fchatgpt.com%2Fconnector%2Foauth%2Fcb&resource=https%3A%2F%2Fhub.example&scope=gptadmin.read+gptadmin.exec&password=pw&code_challenge=" + pkceChallenge("verifier")
+	form := "client_id=c1&redirect_uri=https%3A%2F%2Fchatgpt.com%2Fconnector%2Foauth%2Fcb&resource=https%3A%2F%2Fhub.example&scope=gptadmin.read+gptadmin.exec&password=pw&code_challenge=" + pkceChallenge("verifier") + "&code_challenge_method=S256"
 	req = httptest.NewRequest(http.MethodPost, "/authorize", bytes.NewBufferString(form))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	w = httptest.NewRecorder()
@@ -339,7 +339,7 @@ func TestOAuthAndMCPJSONRPC(t *testing.T) {
 		t.Fatalf("no code in redirect %s", loc)
 	}
 
-	tokenForm := "grant_type=authorization_code&code=" + code + "&resource=https%3A%2F%2Fhub.example&code_verifier=verifier"
+	tokenForm := "grant_type=authorization_code&code=" + code + "&client_id=c1&redirect_uri=https%3A%2F%2Fchatgpt.com%2Fconnector%2Foauth%2Fcb&resource=https%3A%2F%2Fhub.example&code_verifier=verifier"
 	req = httptest.NewRequest(http.MethodPost, "/token", bytes.NewBufferString(tokenForm))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	w = httptest.NewRecorder()
@@ -1028,7 +1028,7 @@ func TestAuthPagesExplainAdminPasswordAndBearerOptions(t *testing.T) {
 		}
 	}
 
-	req = httptest.NewRequest(http.MethodGet, "/authorize?client_id=chatgpt&redirect_uri=https%3A%2F%2Fchatgpt.com%2Fconnector%2Foauth%2Fcb&resource=https%3A%2F%2Fu-f1102930.t.gptadmin.bezrabotnyi.com&scope=gptadmin.read+gptadmin.exec&code_challenge="+pkceChallenge("verifier"), nil)
+	req = httptest.NewRequest(http.MethodGet, "/authorize?client_id=chatgpt&redirect_uri=https%3A%2F%2Fchatgpt.com%2Fconnector%2Foauth%2Fcb&resource=https%3A%2F%2Fu-f1102930.t.gptadmin.bezrabotnyi.com&scope=gptadmin.read+gptadmin.exec&code_challenge="+pkceChallenge("verifier")+"&code_challenge_method=S256", nil)
 	w = httptest.NewRecorder()
 	h.ServeHTTP(w, req)
 	if w.Code != http.StatusOK {

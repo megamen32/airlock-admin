@@ -59,6 +59,72 @@ plan is [`PROJECT_PLAN.md`](./PROJECT_PLAN.md).
 - Delivery: Linear commits `4d26a3e43963c5197d95faca86949da5ddfe637f` and `0bd860a91f7d3670e03e8c38ba7e6f3b570cacb4`; no push, deployment or merge; preserve the unrelated untracked remote-secret-ingress plan.
 - Next: Close only external acceptance gates (native hosts, real collector, physical fallback hosts, signed/public release and third-party adapters) when their owning environments provide evidence.
 
+## 2026-07-24 - Extension SDK contract documentation - completed
+
+- Milestone: `S4.4`
+- Owner: `Codex`
+- Scope: Restore the public extension SDK contract, add a reference adapter, and prove its live Hub/relay path.
+- Baseline / red evidence: `docs/EXTENSION_SDK.md` was zero bytes; the new documentation contract test failed with an empty document.
+- Change: Populated `docs/EXTENSION_SDK.md`, added `mcp_extension_reference.py`, and extended `tests/test_extension_sdk.py` with manifest, stdio lifecycle, and live `discover -> schema -> execute` forwarding checks.
+- Verification: `pytest -q tests/test_extension_sdk.py` passes 5 tests; completion-matrix evidence now names the live relay path.
+- Delivery: Commit pending; preserve the unrelated untracked remote-secret-ingress plan.
+- Next: Keep external independently authored adapter certification separate from this local reference runner.
+
+## 2026-07-24 - OAuth canonical endpoints and code binding - completed
+
+- Milestone: `S0.5` / `S1.3` / `S2.1a`
+- Owner: `Codex`
+- Scope: Canonicalize OAuth discovery paths and harden authorization-code PKCE/client/redirect binding.
+- Baseline / red evidence: New `TestCanonicalOAuthEndpointsRequirePKCEAndBindClient` failed because metadata advertised root paths, missing PKCE was accepted, and a mismatched client/redirect could exchange a code.
+- Change: Added `/oauth/authorize` and `/oauth/token` routes, retained root aliases for migration, required PKCE S256, enforced code client/redirect equality, and aligned public docs.
+- Verification: Focused canonical OAuth, dynamic client inventory and OAuth/MCP tests pass; full Hub gate remains required after integration.
+- Delivery: Commit pending; preserve the unrelated untracked remote-secret-ingress plan.
+- Next: Run full Hub/race/vet and add the canonical OAuth check to the completion matrix.
+
+## 2026-07-24 - Legacy credential onboarding boundary - completed
+
+- Milestone: `S0.5` / `S0.1`
+- Owner: `Codex`
+- Scope: Remove legacy bearer values from Windows installer completion output and public adapter/install onboarding.
+- Baseline / red evidence: `tests/test_install_win.py` failed on `Write-Host "Token: $ShellmcpToken"` and public `CTL_TOKEN`/`SHELLMCP_TOKEN` copy instructions.
+- Change: Removed the Windows token echo and rewrote public docs to use `/connect` and OAuth Authorization Code + PKCE; internal compatibility variables remain runtime-only.
+- Verification: `pytest -q tests/test_install_win.py` passes 2 tests; no secrets were printed.
+- Delivery: Commit pending; preserve the unrelated untracked remote-secret-ingress plan.
+- Next: Extend the same product-language boundary to remaining native installer/docs paths and verify on a real Windows host.
+
+## 2026-07-24 - CLI connection-status secret boundary - completed
+
+- Milestone: `S0.5`
+- Owner: `Codex`
+- Scope: Remove internal credential names and prefixes from normal `gptadmin tokens` output.
+- Baseline / red evidence: `test_tokens_hides_internal_credential_names_in_normal_output` failed because status included the bridge credential prefix and internal labels.
+- Change: Replaced token-oriented output with Hub URL and hidden connection-state language; explicit inspection mode still never reveals values.
+- Verification: `pytest -q tests/test_cli_token_deprecation.py` passes 4 tests.
+- Delivery: Commit pending; preserve the unrelated untracked remote-secret-ingress plan.
+- Next: Run full Python and security matrix after the current integration commit.
+
+## 2026-07-24 - Process-level file sharing acceptance - completed
+
+- Milestone: `S1.3` / `S3.3`
+- Owner: `Codex`
+- Scope: Exercise `file_backup` through a real ShellMCP process and include it in the file-sharing matrix.
+- Baseline / red evidence: Existing coverage stopped at package-level `httptest`/handler tests; no process-level file-sharing check existed.
+- Change: Added backup/list/restore process coverage with an isolated temporary backup root and matrix entry.
+- Verification: `pytest -q tests/test_shellmcp_contract.py -k file_backup_round_trip_through_process` passes 1 test.
+- Delivery: Commit pending; preserve the unrelated untracked remote-secret-ingress plan.
+- Next: Run the full ShellMCP contract and retain native-host evidence as a separate gate.
+
+## 2026-07-24 - HAOS image supply-chain parity - completed
+
+- Milestone: `S4.3`
+- Owner: `Codex`
+- Scope: Add image-level SBOM/provenance metadata and digest verification to HAOS publication workflow.
+- Baseline / red evidence: Workflow audit found no `--sbom`, `--provenance`, metadata capture, or image digest verification in the HAOS publish path.
+- Change: Added BuildKit SBOM/provenance flags, metadata file and `imagetools inspect` verification before public artifact export.
+- Verification: `pytest -q tests/test_release_workflow_contract.py` passes 3 tests.
+- Delivery: Commit pending; preserve the unrelated untracked remote-secret-ingress plan.
+- Next: Obtain an immutable tagged CI run with published image attestation.
+
 ## 2026-07-24 - Clean-clone failover script mode - completed
 
 - Milestone: `S0.1` / `S3.4`
@@ -1361,6 +1427,28 @@ plan is [`PROJECT_PLAN.md`](./PROJECT_PLAN.md).
   release-ldflags Hub binary are active and reversible from the listed
   backups.
 - Next: Push the integrated commit and keep the existing admin password stable.
+
+## 2026-07-24 - Request-scoped MCP and file-boundary security - completed
+
+- Milestone: `S0.4`, `S1.6`, `S3.1`
+- Owner: Codex
+- Scope: Hub Apps SDK/relay policy dispatch, relay job ownership, webhook shell templating, and ShellMCP file/inspect boundaries.
+- Baseline / red evidence: Terra-assisted audit produced RED regressions for forbidden Apps SDK inspect, forbidden relay schema, cross-agent/duplicate relay results, shell metacharacter interpolation, and symlink reads.
+- Change: Request-scoped facade authorization now covers Apps SDK inspect and relay schema; relay results are owner-bound and single-assignment; webhook event values move to job environment variables; `/file` and read-only inspect reject symlink paths.
+- Verification: Hub focused security/webhook tests pass; ShellMCP inspect/server focused symlink tests pass; `git diff --check` passes.
+- Delivery: Local uncommitted integration slice on `codex/haos-addon-public`; no deploy or push.
+- Next: Run the complete Go/Python/release gates and retain the external-host proof gaps separately.
+
+## 2026-07-24 - Readonly schema regression correction - completed
+
+- Milestone: `S0.5`, `S1.6`
+- Owner: Codex
+- Scope: Request-scoped Apps SDK schema dispatch for readonly access claims.
+- Baseline / red evidence: `TestReadonlyAppsSDKSchemaCannotReachRemoteTargets` initially observed a remote relay job from a readonly JWT after the request-scoped branch was added.
+- Change: Restored the fail-closed readonly filter so only `hub` and `shell:*` schema targets are exposed.
+- Verification: `cd go-hub && go test ./internal/hub -run '^TestReadonlyAppsSDKSchemaCannotReachRemoteTargets$' -count=1` passes.
+- Delivery: Same local integration slice; no deploy or push.
+- Next: Include the regression in the final Hub security and race gates.
 
 ## 2026-07-24 - Remote secret ingress - completed
 

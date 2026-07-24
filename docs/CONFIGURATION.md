@@ -8,7 +8,7 @@ Full environment-variable reference, auth model, and OAuth setup.
 
 | Var | Required | Default | Purpose |
 |-----|----------|---------|---------|
-| `ADMIN_PASSWORD` | **yes** | — | Password for the `/authorize` HTML form and admin session. |
+| `ADMIN_PASSWORD` | **yes** | — | Password for the `/oauth/authorize` HTML form and admin session. |
 | `CTL_TOKEN` | legacy only until 2026-07-27 | — | Deprecated compatibility bearer; do not create or copy it. |
 | `OAUTH_CLIENT_SECRET` | for `/mcp` | — | Signs OAuth bearer tokens. Generate with `openssl rand -hex 32`. |
 | `PUBLIC_ORIGIN` | recommended | — | Public base URL (e.g. `https://your-hub.bezrabotnyi.com`). Used in OAuth + OpenAPI. |
@@ -96,7 +96,7 @@ GPT‑Админ has **three** auth mechanisms — they're different, don't mix 
 
 ### 3. `ADMIN_PASSWORD` (form)
 
-- Used for: the HTML form at `/authorize` inside the OAuth flow
+- Used for: the HTML form at `/oauth/authorize` inside the OAuth flow
 - This is what a human types to authorize an OAuth client.
 
 ### 4. `SHELLMCP_TOKEN` (agent → hub)

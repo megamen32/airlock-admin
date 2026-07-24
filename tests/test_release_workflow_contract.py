@@ -6,6 +6,7 @@ import yaml
 
 
 WORKFLOW = Path(__file__).resolve().parents[1] / ".github" / "workflows" / "build-and-sync.yml"
+HAOS_WORKFLOW = Path(__file__).resolve().parents[1] / ".github" / "workflows" / "publish-haos-addon.yml"
 
 
 def test_release_job_verifies_provenance_before_publication() -> None:
@@ -47,3 +48,19 @@ def test_release_job_attests_artifacts_and_scans_dependencies_before_publication
     assert attestation_step["uses"] == "actions/attest-build-provenance@v2"
     assert "build/manifest.json" in attestation_step["with"]["subject-path"]
     assert "build/gptadmin-sbom.spdx.json" in attestation_step["with"]["subject-path"]
+
+
+def test_haos_image_build_emits_sbom_provenance_and_verifies_digest() -> None:
+    """Keep the HAOS image path aligned with the archive supply-chain gate."""
+
+    workflow = yaml.safe_load(HAOS_WORKFLOW.read_text(encoding="utf-8"))
+    steps = workflow["jobs"]["publish"]["steps"]
+    build = next(step for step in steps if step.get("name") == "Build and publish ARM64 image")
+    verify = next(step for step in steps if step.get("name") == "Verify HAOS image provenance")
+    names = [step.get("name", "") for step in steps]
+    assert names.index(verify["name"]) < names.index("Export sanitized Apps repository artifact")
+    assert "--sbom=true" in build["run"]
+    assert "--provenance=mode=max" in build["run"]
+    assert "--metadata-file" in build["run"]
+    assert "containerimage.digest" in verify["run"]
+    assert "docker buildx imagetools inspect" in verify["run"]

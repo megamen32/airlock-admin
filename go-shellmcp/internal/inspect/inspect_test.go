@@ -75,6 +75,16 @@ func TestReadFileRejectsSymlinkEscapeAndCredentialDirectories(t *testing.T) {
 			t.Fatal("inspection followed a symlink outside its allowed roots")
 		}
 	}
+	inside := filepath.Join(root, "inside.txt")
+	if err := os.WriteFile(inside, []byte("inside"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	insideLink := filepath.Join(root, "inside-link")
+	if err := os.Symlink(inside, insideLink); err == nil {
+		if _, err := Run(Request{Action: "read_file", Path: insideLink, AllowedRoots: []string{root}}); err == nil {
+			t.Fatal("inspection accepted a symlink inside an allowed root")
+		}
+	}
 	sshDir := filepath.Join(root, ".ssh")
 	if err := os.MkdirAll(sshDir, 0o700); err != nil {
 		t.Fatal(err)

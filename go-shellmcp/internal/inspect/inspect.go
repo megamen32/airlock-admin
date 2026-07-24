@@ -141,6 +141,10 @@ func resolveAllowedPath(path string, roots []string) (string, error) {
 	if len(roots) == 0 {
 		return "", errors.New("read-only inspection has no allowed roots configured")
 	}
+	absoluteInput, err := filepath.Abs(path)
+	if err != nil {
+		return "", err
+	}
 	resolved, err := filepath.EvalSymlinks(path)
 	if err != nil {
 		return "", err
@@ -148,6 +152,9 @@ func resolveAllowedPath(path string, roots []string) (string, error) {
 	resolved, err = filepath.Abs(resolved)
 	if err != nil {
 		return "", err
+	}
+	if resolved != absoluteInput {
+		return "", fmt.Errorf("read-only inspection rejects symbolic links: %q", path)
 	}
 	for _, part := range strings.FieldsFunc(strings.ToLower(filepath.Clean(resolved)), func(r rune) bool { return r == '/' || r == '\\' }) {
 		if deniedCredentialDirectories[part] {

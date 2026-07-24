@@ -90,6 +90,126 @@ Rules:
 - Status: fixed.
 - Next action: Retain the reclaim request test and black-box scenario in the acceptance gate.
 
+## 2026-07-24 - EXTENSION-SDK-DOCS-20260724 - Extension SDK document was empty - fixed
+
+- Component: `docs/EXTENSION_SDK.md` and S4.4 acceptance.
+- First observed: 2026-07-24, read-only S4.4 audit and RED regression `test_extension_sdk_documentation_describes_reference_contract`.
+- Confirmed fact: The tracked SDK document had zero bytes although the repository exposed a versioned manifest validator.
+- Root cause: The implementation slice created the validator and fixture but never delivered the public reference contract document.
+- Fix / verification: Added the manifest/lifecycle/policy contract, a deterministic reference adapter, and a live Hub/generic-relay `discover -> schema -> execute` regression; focused extension tests pass.
+- Status: fixed.
+- Next action: Retain the local adapter runner while external third-party certification remains separate evidence.
+
+## 2026-07-24 - OAUTH-PKCE-BINDING-20260724 - OAuth authorization codes were not fully bound - fixed
+
+- Component: `go-hub/internal/hub/server.go` OAuth authorize/token handlers and public endpoint documentation.
+- First observed: 2026-07-24, Terra-assisted security audit and RED regression `TestCanonicalOAuthEndpointsRequirePKCEAndBindClient`.
+- Confirmed fact: Runtime metadata advertised root `/authorize` and `/token` while public docs advertised `/oauth/*`; authorization accepted missing PKCE, and token exchange did not require the original `client_id` and `redirect_uri`.
+- Root cause: Legacy compatibility routes were treated as canonical, and the authorization-code record fields were stored but not checked during exchange.
+- Fix / verification: Added canonical `/oauth/*` routes with documented root aliases, required PKCE S256 at both authorization entry points, enforced client/redirect binding, and passed focused OAuth tests plus the existing OAuth/MCP tests.
+- Status: fixed.
+- Next action: Keep the canonical endpoint/PKCE regression in the Hub acceptance matrix and obtain external client OAuth evidence.
+
+## 2026-07-24 - PUBLIC-TOKEN-ONBOARDING-20260724 - Windows installer and adapter docs exposed legacy credentials - fixed
+
+- Component: `deploy/install_win.ps1`, `docs/INSTALL_PATHS.md`, and `docs/ADAPTERS.md`.
+- First observed: 2026-07-24, native/client acceptance audit and RED regression `tests/test_install_win.py`.
+- Confirmed fact: The Windows installer printed the generated ShellMCP bearer, and public onboarding instructed users to copy internal bearer names into MCP/Action/browser configuration.
+- Root cause: Legacy compatibility credentials were treated as user-facing setup inputs after the AdminPassword/OAuth product contract had moved connection setup to `/connect`.
+- Fix / verification: Removed normal-output token echo and rewrote public onboarding around the Hub connection/OAuth PKCE flow; focused installer/docs tests pass. Runtime compatibility variables remain internal.
+- Status: fixed.
+- Next action: Complete the remaining migration on native installers and obtain real Windows/MCP/ChatGPT client evidence.
+
+## 2026-07-24 - CLI-TOKEN-STATUS-20260724 - Connection status exposed internal credential names - fixed
+
+- Component: `cli.py` `gptadmin tokens` status output.
+- First observed: 2026-07-24, security migration audit and RED regression `test_tokens_hides_internal_credential_names_in_normal_output`.
+- Confirmed fact: Normal status printed internal credential labels and a prefix of configured bearer values.
+- Root cause: The legacy token inspection command was not migrated to the one-password product vocabulary.
+- Fix / verification: Status now reports only Hub URL and configured/hidden connection state; it never prints internal names or credential prefixes, including with the explicit inspection flag.
+- Status: fixed.
+- Next action: Keep the output boundary in the CLI and installer acceptance matrix.
+
+## 2026-07-24 - FILE-BACKUP-PROCESS-EVIDENCE-20260724 - File sharing lacked process-level acceptance - fixed
+
+- Component: ShellMCP `file_backup` MCP surface and completion matrix.
+- First observed: 2026-07-24, native/client audit found only package-level handler coverage for backup/restore.
+- Confirmed fact: A real ShellMCP process contract exercised MCP resources and shell tools but not `file_backup` through HTTP/MCP.
+- Root cause: The file-sharing feature had unit/handler tests without a process-level acceptance entry.
+- Fix / verification: Added a real process test for backup/list/restore and a bounded temporary artifact root; the focused contract passes.
+- Status: fixed.
+- Next action: Retain the process check in the file-sharing matrix and obtain native-host file-sharing evidence separately.
+
+## 2026-07-24 - HAOS-IMAGE-PROVENANCE-20260724 - HAOS image workflow lacked image SBOM/provenance gate - fixed
+
+- Component: `.github/workflows/publish-haos-addon.yml` ARM64 image publication.
+- First observed: 2026-07-24, release/supply-chain audit.
+- Confirmed fact: The workflow checksum-verified the FRP archive but published the assembled image without BuildKit SBOM/provenance metadata or a digest verification step.
+- Root cause: Archive release provenance controls were not carried over to the HAOS container path.
+- Fix / verification: Added BuildKit SBOM/provenance flags, metadata capture, and pre-artifact-export digest verification; workflow contract test passes.
+- Status: fixed.
+- Next action: Run a tagged GitHub workflow and retain its immutable image digest/attestation evidence.
+
+## 2026-07-24 - SECURITY-DISPATCH-TARGET-20260724 - Apps SDK inspect could lose profile target context - fixed
+
+- Component: Hub Apps SDK dispatcher and profile policy context.
+- First observed: 2026-07-24, independent security audit of request-scoped MCP dispatch.
+- Confirmed fact: The request-free `inspect` path could bypass the request profile context and attempt a forbidden shell target.
+- Root cause: Apps SDK dispatch routed `inspect` through a legacy helper that accepted no `*http.Request`.
+- Fix / verification: Added request-scoped Apps SDK schema/inspect dispatch and profile authorization; `go test ./internal/hub -run 'TestAppsSDKInspectCannotBypassProfileTargetPolicy' -count=1` passes.
+- Status: fixed.
+- Next action: Retain the request-scoped regression in the Hub security gate.
+
+## 2026-07-24 - SECURITY-SCHEMA-TARGET-20260724 - Remote MCP schema lacked target policy check - fixed
+
+- Component: Hub relay schema/tools-list dispatch.
+- First observed: 2026-07-24, independent security audit.
+- Confirmed fact: Remote target existence was checked before schema enqueue, but profile `AllowedTargets` was not enforced for the selected target.
+- Root cause: Schema/list used registry validation without the common request profile authorization gate.
+- Fix / verification: Added the common request-scoped facade authorization before relay schema enqueue; `go test ./internal/hub -run 'TestMCPRelaySchemaCannotBypassProfileTargetPolicy' -count=1` passes.
+- Status: fixed.
+- Next action: Retain the relay schema policy regression in the Hub security gate.
+
+## 2026-07-24 - SECURITY-RELAY-OWNERSHIP-20260724 - Relay result ownership and duplicate completion were not explicit - fixed
+
+- Component: Hub relay poll/result job lifecycle.
+- First observed: 2026-07-24, independent security audit.
+- Confirmed fact: The shared relay credential is not agent-specific, so result paths must enforce job owner and immutable completion; those RED cases were absent.
+- Root cause: Result handling trusted the URL agent ID and permitted a later result to overwrite an already completed job.
+- Fix / verification: Result submission now requires the job owner and rejects terminal jobs before mutation; `go test ./internal/hub -run 'TestMCPRelayResultRequiresJobOwnerAndIsSingleAssignment' -count=1` passes.
+- Status: fixed.
+- Next action: Retain ownership and single-assignment checks in the relay acceptance gate.
+
+## 2026-07-24 - SECURITY-WEBHOOK-TEMPLATE-20260724 - Webhook shell event values lacked literal-safe substitution - fixed
+
+- Component: Hub webhook shell action templating.
+- First observed: 2026-07-24, independent security audit.
+- Confirmed fact: External event values were interpolated into shell command text; shell metacharacter behavior was not covered by a regression.
+- Root cause: Template rendering treated event values as command fragments rather than data.
+- Fix / verification: Shell templates now reference generated environment variables while event values remain in the job environment; `go test ./internal/hub -run '^TestWebhookShellTemplateValuesCannotBecomeShellSource$' -count=1` passes.
+- Status: fixed.
+- Next action: Retain the metacharacter regression in the webhook security gate.
+
+## 2026-07-24 - SECURITY-FILE-SYMLINK-20260724 - File reads could follow links outside the managed root - fixed
+
+- Component: ShellMCP `/file` and read-only inspection path.
+- First observed: 2026-07-24, independent security audit.
+- Confirmed fact: String-prefix/canonical checks were separate from the final open/ServeFile operation, so a symlink could point outside the allowed root.
+- Root cause: File access validated a path string but did not enforce no-symlink access.
+- Fix / verification: `/file` rejects symlink entries and canonical path changes; inspect rejects any symlink path before opening; `go test ./internal/inspect ./internal/server -run 'TestReadFileRejectsSymlinkEscapeAndCredentialDirectories|TestFileEndpointRejectsSymlinkEvenWhenLinkIsInsideSpillRoot' -count=1` passes.
+- Status: fixed.
+- Next action: Retain both process-level symlink regressions in the ShellMCP security gate.
+
+## 2026-07-24 - SECURITY-READONLY-SCHEMA-20260724 - Request-scoped schema path could bypass readonly remote-target filtering - fixed
+
+- Component: Hub Apps SDK request-scoped schema dispatch.
+- First observed: 2026-07-24, post-fix regression review while adding the profile-policy security suite.
+- Confirmed fact: The new request-scoped schema branch returned remote target tools for a readonly access claim instead of the established empty list.
+- Root cause: The branch returned before the legacy readonly target filter, which intentionally permits only `hub` and `shell:*` schema results.
+- Fix / verification: Restored the readonly target filter before request-scoped dispatch and added `TestReadonlyAppsSDKSchemaCannotReachRemoteTargets`; focused Hub security tests pass.
+- Status: fixed.
+- Next action: Retain the readonly remote-target regression with the profile-policy gate.
+
 ## 2026-07-24 - INSTALL-QUICKSTART-INTERNAL-AUTH-20260724 - Installer help exposed legacy credential name - fixed
 
 - Component: `deploy/install.sh` post-install quickstart.

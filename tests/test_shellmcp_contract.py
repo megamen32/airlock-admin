@@ -294,6 +294,7 @@ def shellmcp_contract(request: pytest.FixtureRequest, tmp_path: Path) -> Iterato
             "SHELLMCP_IDENTITY_DIR": str(identity_dir),
             "SHELL_IDENTITY_DIR": str(identity_dir),
             "SHELLMCP_SPILL_DIR": str(spill_dir),
+            "SHELLMCP_FILE_BACKUP_ROOT": str(tmp_path / "file-backups"),
             "SHELL_SPILL_DIR": str(spill_dir),
             "SHELLMCP_DEFAULT_CWD": cwd,
             "SHELL_DEFAULT_CWD": cwd,
@@ -503,3 +504,36 @@ def test_shellmcp_contract_mcp_resources_and_stateless_get(shellmcp_contract: Sh
     assert descriptor.get("error")
     assert _header(headers, "MCP-Protocol-Version")
     assert _header(headers, "Mcp-Session-Id") is None
+
+
+def test_shellmcp_contract_file_backup_round_trip_through_process(shellmcp_contract: ShellmcpProcess, tmp_path: Path) -> None:
+    """Exercise file sharing through the real ShellMCP HTTP/MCP process."""
+
+    target = tmp_path / "shared-config.txt"
+    target.write_text("before", encoding="utf-8")
+    created, _ = shellmcp_contract.mcp(
+        "tools/call",
+        {"name": "file_backup", "arguments": {"action": "backup", "path": str(target), "ttl_days": 7, "label": "process"}},
+        30,
+    )
+    structured = created.get("structuredContent", {})
+    backup_id = structured.get("backup_id")
+    artifact = structured.get("artifact")
+    assert backup_id and artifact and Path(artifact).is_file()
+    assert Path(artifact).read_text(encoding="utf-8") == "before"
+
+    target.write_text("after", encoding="utf-8")
+    restored, _ = shellmcp_contract.mcp(
+        "tools/call",
+        {"name": "file_backup", "arguments": {"action": "restore", "backup_id": backup_id, "overwrite": True}},
+        31,
+    )
+    assert restored.get("structuredContent", {}).get("backup_id") == backup_id
+    assert target.read_text(encoding="utf-8") == "before"
+
+    listed, _ = shellmcp_contract.mcp(
+        "tools/call",
+        {"name": "file_backup", "arguments": {"action": "list", "limit": 5}},
+        32,
+    )
+    assert any(item.get("backup_id") == backup_id for item in listed.get("structuredContent", {}).get("backups", []))

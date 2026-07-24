@@ -47,7 +47,7 @@ the resolved value, and readonly profiles cannot access these operations.
 | `GET /servers` | Bearer `CTL_TOKEN` |
 | `GET /api.json` | none |
 | `GET /openapi.yaml` | none |
-| `POST /authorize` | `ADMIN_PASSWORD` form |
+| `POST /oauth/authorize` | `ADMIN_PASSWORD` form |
 | `POST /oauth/token` | client credentials |
 
 See [Configuration → Auth model](./CONFIGURATION.md#auth-model).

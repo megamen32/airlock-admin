@@ -26,6 +26,8 @@ import pwd
 from functools import wraps
 from email.utils import parsedate_to_datetime
 from pathlib import Path, PurePosixPath
+from cryptography.exceptions import InvalidSignature
+from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
 try:
     import tomllib
 except Exception:
@@ -134,6 +136,11 @@ STARTUP_INSTRUCTIONS_FILE = ETC_DIR / 'startup_instructions.md'
 STARTUP_INSTRUCTIONS_MAX_BYTES = 16 * 1024
 
 MCP_CAPABILITY_CATALOG_VERSION = 'gptadmin-capabilities/v1'
+# The private signing key is intentionally not part of GPTAdmin. This detached
+# public key and signature authenticate the immutable catalog shipped in this
+# release; changing a definition requires a deliberate release-time re-sign.
+MCP_CAPABILITY_CATALOG_PUBLIC_KEY_B64 = 'em0_XbX6G5Tr8CSbH9EfQMFWUyHFHwyjYhs6JkCTl3s'
+MCP_CAPABILITY_CATALOG_SIGNATURE_B64 = 'fMIkvEZ7uOq3L19onPa9JyYK9oef-B5-Go9_CmaHYO9a2MKRMTHmogA9D4bK5mfhqF3K6dOBXfOWcjNRFOUmDQ'
 MCP_CAPABILITY_CATALOG = (
     {
         'id': 'gptadmin-safe-demo',
@@ -2401,20 +2408,55 @@ def cmd_mcp_list(args):
         print(f"{name}\t{'enabled' if enabled else 'disabled'}\t{fmt}{catalog_text}\t{cmd} {argv}")
 
 
-def _mcp_catalog_payload() -> dict:
-    """Return the immutable bundled capability catalog without secrets."""
+def _mcp_catalog_signed_material(payload: dict) -> dict:
+    """Return only the catalog fields covered by the detached signature."""
+
     return {
+        'catalog_version': payload['catalog_version'],
+        'source': payload['source'],
+        'definitions': payload['definitions'],
+    }
+
+
+def _mcp_catalog_canonical_bytes(payload: dict) -> bytes:
+    """Serialize signed catalog material deterministically for verification."""
+
+    return json.dumps(_mcp_catalog_signed_material(payload), ensure_ascii=False, sort_keys=True, separators=(',', ':')).encode('utf-8')
+
+
+def _verify_mcp_catalog_payload(payload: dict) -> None:
+    """Fail closed when the bundled capability catalog has been tampered with."""
+
+    try:
+        public_key = base64.urlsafe_b64decode(MCP_CAPABILITY_CATALOG_PUBLIC_KEY_B64 + '==')
+        signature = base64.urlsafe_b64decode(MCP_CAPABILITY_CATALOG_SIGNATURE_B64 + '==')
+        Ed25519PublicKey.from_public_bytes(public_key).verify(signature, _mcp_catalog_canonical_bytes(payload))
+    except (KeyError, ValueError, TypeError, InvalidSignature) as exc:
+        raise ValueError('MCP capability catalog signature verification failed') from exc
+
+
+def _mcp_catalog_payload() -> dict:
+    """Return the immutable bundled capability catalog with verified provenance."""
+    payload = {
         'catalog_version': MCP_CAPABILITY_CATALOG_VERSION,
         'source': 'GPTAdmin bundled capability catalog',
         'definitions': [dict(item) for item in MCP_CAPABILITY_CATALOG],
     }
+    _verify_mcp_catalog_payload(payload)
+    payload['catalog_digest_sha256'] = hashlib.sha256(_mcp_catalog_canonical_bytes(payload)).hexdigest()
+    payload['signature'] = {
+        'algorithm': 'Ed25519',
+        'public_key': MCP_CAPABILITY_CATALOG_PUBLIC_KEY_B64,
+        'verified': True,
+    }
+    return payload
 
 
 def _mcp_catalog_definition(catalog_id: str) -> dict | None:
     """Return one catalog definition by ID, or ``None`` for an uncurated server."""
     if not catalog_id:
         return None
-    for definition in MCP_CAPABILITY_CATALOG:
+    for definition in _mcp_catalog_payload()['definitions']:
         if definition['id'] == catalog_id:
             return dict(definition)
     die(f'unknown MCP capability catalog id: {catalog_id}')
@@ -2431,6 +2473,7 @@ def cmd_mcp_catalog(args):
         print(f"{definition['id']}\t{definition['version']}\t{definition['risk_level']}\t{definition['provenance']}")
         print(f"  scopes={','.join(definition['scopes'])} tools={','.join(definition['tools'])}")
         print(f"  network_needs={'; '.join(definition['network_needs']) or 'none'} owner={definition['maintenance_owner']}")
+    print(f"  signature={payload['signature']['algorithm']} verified digest={payload['catalog_digest_sha256']}")
 
 
 def _validate_mcp_extension_manifest(path: Path) -> dict:
@@ -3667,25 +3710,22 @@ def cmd_logs(args):
 def cmd_tokens(args):
     env = env_read()
     show_shell = getattr(args, 'show_shellmcp', False) if hasattr(args, 'show_shellmcp') else False
-    print_header('GPTAdmin Tokens')
-    print(f'  {c_dim("HUB_URL")}       {env.get("HUB_URL", env.get("PUBLIC_ORIGIN", c_dim("(not set)")))}')
-    # MCP bearer tokens
+    print_header('GPTAdmin Connections')
+    print(f'  Hub URL              {env.get("HUB_URL", env.get("PUBLIC_ORIGIN", c_dim("(not set)")))}')
+    # Never print internal credential names or prefixes in normal status output.
     for k in sorted(env):
         if k.startswith('GPTADMIN_') and k.endswith('_MCP_BEARER'):
-            val = env[k]
             label = k.replace('GPTADMIN_', '').replace('_MCP_BEARER', '').lower()
-            print(f'  {c_dim("MCP_BEARER")}    {c_cyan(label)}: {c_green(val[:16] + "..." if len(val) > 20 else val) if val else c_red("(not set)")}')
-    # ShellMCP token
+            print(f'  MCP connection       {c_cyan(label)}: {c_green("configured") if env[k] else c_red("(not set)")}')
     shell_tok = env.get('SHELLMCP_TOKEN', '')
     if show_shell:
-        print(f'  {c_dim("SHELLMCP_TOKEN")} {c_yellow(shell_tok) if shell_tok else c_red("(not set)")}')
-        print_warn('SHELLMCP_TOKEN is sensitive — do not share it.')
+        print(f'  Agent connection      {c_green("configured") if shell_tok else c_red("(not set)")}')
+        print_warn('The agent credential is internal and is never displayed.')
     else:
-        print(f'  {c_dim("SHELLMCP_TOKEN")} {c_yellow("(hidden, use --show-shellmcp to reveal)")}')
-    # MCP_BRIDGE_KEY
+        print(f'  Agent connection      {c_yellow("configured (hidden)") if shell_tok else c_red("(not set)")}')
     bridge = env.get('MCP_BRIDGE_KEY', '')
     if bridge and bridge != env.get('CTL_TOKEN', ''):
-        print(f'  {c_dim("MCP_BRIDGE_KEY")} {c_green(bridge[:16] + "...")}')
+        print(f'  Network bridge        {c_green("configured (hidden)")}')
     print()
     if env.get('CTL_TOKEN'):
         print_warn(f'Legacy Hub bearer is hidden and expires on {LEGACY_CTL_TOKEN_DEADLINE}; migrate to AdminPassword/OAuth.')

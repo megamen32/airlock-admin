@@ -803,6 +803,20 @@ func (s *Server) fileGet(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, 403, map[string]any{"error": "path outside spool dir"})
 		return
 	}
+	info, err := os.Lstat(abs)
+	if err != nil {
+		http.Error(w, "file not found", http.StatusNotFound)
+		return
+	}
+	if info.Mode()&os.ModeSymlink != 0 {
+		writeJSON(w, http.StatusForbidden, map[string]any{"error": "symbolic links are not allowed"})
+		return
+	}
+	resolved, err := filepath.EvalSymlinks(abs)
+	if err != nil || resolved != abs {
+		writeJSON(w, http.StatusForbidden, map[string]any{"error": "symbolic links are not allowed"})
+		return
+	}
 	http.ServeFile(w, r, abs)
 }
 
