@@ -56,7 +56,7 @@ plan is [`PROJECT_PLAN.md`](./PROJECT_PLAN.md).
 - Baseline / red evidence: `TestAuthFailuresAreRateLimitedPerClient` failed to compile because `Config` had no rate-limit policy and no auth-failure limiter.
 - Change: Added configurable `GPTADMIN_AUTH_RATE_LIMIT` (default 60 failed attempts/client/minute), bounded client-window storage, `Retry-After` 429 responses and coverage for admin/control/MCP authentication failures. Documented the setting without exposing internal credentials in normal UI vocabulary.
 - Verification: `cd go-hub && go test ./...` -> pass; `go test -race ./...` -> pass; `go vet ./...` -> pass; `python3 -m pytest tests/test_completion_matrix.py -q` -> `11 passed`.
-- Delivery: Pending commit on the single linear branch; no runtime deployment. Preserve the unrelated untracked remote-secret-ingress plan.
+- Delivery: Commit `cb190d6` on the single linear branch; no runtime deployment. Preserve the unrelated untracked remote-secret-ingress plan.
 - Next: Keep HTTPS/no-public-port and external verification as separate deployment/identity gates; do not claim S1.6 complete from rate limiting alone.
 
 ## 2026-07-24 - ProxyRelay bounded metrics - completed
