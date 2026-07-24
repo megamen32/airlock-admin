@@ -17,6 +17,7 @@ must update the relevant section here and the [Changelog](../CHANGELOG.md).
 | File sharing and recovery | [File backups](./FILE_BACKUPS.md) and [Backup/restore](./BACKUP_RESTORE.md) | Managed roots, backup metadata, restore and cleanup |
 | Reference deployments | [Deployment blueprints](./DEPLOYMENT_BLUEPRINTS.md) | Small-team, home-lab and production trade-offs/runbooks |
 | Feedback and roadmap evidence | [Feedback loop](./FEEDBACK_LOOP.md) | Design-partner intake, support/incident signals and quarterly review |
+| Open-core boundary | [Open-core plan](./OPEN_CORE_PLAN.md) | Self-hosted core, optional hosted/support convenience and portability guarantees |
 | Release and updates | [Supply chain](./SUPPLY_CHAIN.md) and [Failover](./FAILOVER.md) | Manifest, SBOM, provenance, canary and rollback evidence |
 | Live deployment acceptance | [Live acceptance runner](./LIVE_ACCEPTANCE.md) | Secret-safe endpoint, OAuth, OpenAPI and MCP smoke before deeper host/client gates |
 

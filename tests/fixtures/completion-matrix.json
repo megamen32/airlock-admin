@@ -152,6 +152,11 @@
       "id": "live-hub-acceptance-runner",
       "command": "python3 -m pytest tests/test_live_acceptance.py -q",
       "evidence": "secret-safe deployment runner covers health/version, connection and OAuth discovery, OpenAPI and authenticated safe MCP call"
+    },
+    {
+      "id": "sustainable-offering-boundary",
+      "command": "python3 -m pytest tests/test_sustainable_offering.py -q",
+      "evidence": "open-core boundary preserves AGPL self-hosted operation, data portability, optional hosted convenience and no forced lock-in"
     }
   ],
   "file_sharing": [

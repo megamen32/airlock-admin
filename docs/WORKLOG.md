@@ -2397,3 +2397,14 @@ plan is [`PROJECT_PLAN.md`](./PROJECT_PLAN.md).
 - Verification: runner/docs tests pass (`4 passed`); completion matrix passes (`12 passed`); live execution remains opt-in and was not falsely claimed against inactive hosts.
 - Delivery: Local acceptance tooling only; no service restart or public endpoint mutation.
 - Next: Run the runner in the authorized deployment session, then append authenticated endpoint/proxy/MCP/file/profile evidence.
+
+## 2026-07-24 - Open-core boundary contract - completed locally
+
+- Milestone: `S5.4`
+- Owner: Codex
+- Scope: Self-hosted AGPL core, optional hosted/support convenience, data portability and no forced lock-in.
+- Baseline / red evidence: `tests/test_sustainable_offering.py` failed because README references pointed to a missing `docs/OPEN_CORE_PLAN.md` and the canonical map omitted the offering boundary.
+- Change: Added `docs/OPEN_CORE_PLAN.md`, linked it from the documentation map and added the boundary to the completion matrix.
+- Verification: sustainable-offering/docs tests pass (`5 passed`); the document explicitly avoids claiming a currently available hosted service or commercial support.
+- Delivery: Local product contract only; no pricing, hosted deployment or user-outcome claim was invented.
+- Next: Keep any future hosted proposal behind a separate reviewed portability/security decision.
