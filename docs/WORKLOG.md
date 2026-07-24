@@ -48,6 +48,17 @@ plan is [`PROJECT_PLAN.md`](./PROJECT_PLAN.md).
 
 ## Entries
 
+## 2026-07-24 - ShellMCP bounded metrics endpoint - completed
+
+- Milestone: `S3.1`
+- Owner: `Codex`
+- Scope: Add authenticated ShellMCP `/metrics` with bounded build/job/transport/heartbeat/audit/storage state; never expose host identity, credentials or command payloads.
+- Baseline / red evidence: `TestMetricsEndpointIsAuthenticatedBoundedAndSecretFree` failed with HTTP 404 because ShellMCP had no metrics route.
+- Change: Added the authenticated endpoint and completion-matrix coverage.
+- Verification: Focused ShellMCP metrics test -> pass; full ShellMCP/race/vet and completion matrix remain the integration gate.
+- Delivery: Pending commit on the single linear branch; no runtime deployment. Preserve the unrelated untracked remote-secret-ingress plan.
+- Next: Keep S3.1 open until a real exporter/backend correlates all runtime metrics and traces.
+
 ## 2026-07-24 - Hub bounded metrics endpoint - completed
 
 - Milestone: `S3.1`

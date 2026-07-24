@@ -94,6 +94,11 @@
       "evidence": "Hub operational metrics expose bounded aggregate counts without credentials, arguments or file contents"
     },
     {
+      "id": "shellmcp-metrics",
+      "command": "cd go-shellmcp && go test ./internal/server -run 'TestMetricsEndpointIsAuthenticatedBoundedAndSecretFree' -count=1",
+      "evidence": "authenticated ShellMCP operational metrics expose bounded runtime state without credentials or host identity"
+    },
+    {
       "id": "request-trace-correlation",
       "command": "cd go-hub && go test ./internal/hub -run 'TestRequestTraceID' -count=1",
       "evidence": "bounded X-Request-ID correlation joins MCP policy, queued job and result audit without payloads"

@@ -380,6 +380,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/version", s.version)
 	mux.HandleFunc("/system/info", s.authed(s.systemInfo))
 	mux.HandleFunc("/system/health", s.authed(s.health))
+	mux.HandleFunc("/metrics", s.authed(s.metrics))
 	mux.HandleFunc("/capabilities", s.authed(s.capabilities))
 	mux.HandleFunc("/mcp", s.authed(s.mcpHTTP))
 	mux.HandleFunc("/exec", s.authed(s.exec))
@@ -489,6 +490,18 @@ func (s *Server) version(w http.ResponseWriter, _ *http.Request) {
 func (s *Server) systemInfo(w http.ResponseWriter, _ *http.Request) { writeJSON(w, 200, system.Get()) }
 func (s *Server) health(w http.ResponseWriter, _ *http.Request) {
 	writeJSON(w, 200, map[string]any{"ok": true, "time": time.Now().Unix(), "jobs": len(s.jobs.List()), "name": s.cfg.Name, "heartbeat": s.cfg.HeartbeatEnabled, "queue": s.cfg.QueueEnabled, "mode": s.cfg.Mode, "default_user": s.cfg.DefaultUser, "default_home": s.cfg.DefaultHome, "default_cwd": s.cfg.DefaultCwd})
+}
+func (s *Server) metrics(w http.ResponseWriter, _ *http.Request) {
+	writeJSON(w, 200, map[string]any{
+		"component":       "shellmcp-go",
+		"build_version":   parseBuildVersion(BuildVersion),
+		"jobs":            len(s.jobs.List()),
+		"queue_enabled":   s.cfg.QueueEnabled,
+		"mode":            s.cfg.Mode,
+		"heartbeat":       s.cfg.HeartbeatEnabled,
+		"audit_enabled":   s.cfg.AuditLog != "",
+		"storage_limited": s.storageLimit > 0,
+	})
 }
 func (s *Server) capabilities(w http.ResponseWriter, _ *http.Request) {
 	writeJSON(w, 200, map[string]any{
