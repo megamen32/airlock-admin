@@ -77,6 +77,11 @@
       "id": "safe-demo-readonly",
       "command": "cd go-hub && go test ./internal/hub -run 'TestSafeDemoToolIsAvailableToReadonlyMCPWithoutEchoingArguments' -count=1",
       "evidence": "readonly MCP connection check returns build/connection facts without shell, credentials or argument echo"
+    },
+    {
+      "id": "slo-alert-runbook",
+      "command": "python3 -m pytest tests/test_slo_docs.py -q",
+      "evidence": "operator SLO, error-budget and alert recovery contract is present and tied to machine-readable probes"
     }
   ],
   "file_sharing": [

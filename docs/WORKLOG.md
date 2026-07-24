@@ -48,6 +48,17 @@ plan is [`PROJECT_PLAN.md`](./PROJECT_PLAN.md).
 
 ## Entries
 
+## 2026-07-24 - SLO and alert runbook - completed
+
+- Milestone: `S3.2`
+- Owner: `Codex`
+- Scope: Add the operator-facing SLO/error-budget contract and alert recovery runbook in `/home/roomhacker/gptadmin/docs/SLO_ALERTS.md`, with a documentation acceptance test; no runtime or deployment changes.
+- Baseline / red evidence: `tests/test_slo_docs.py` failed because the canonical SLO/runbook document did not exist.
+- Change: Added `docs/SLO_ALERTS.md` with measurable availability/readiness/MCP/job objectives, error-budget policy, machine-readable probe sources, and owner/symptom/diagnosis/recovery steps for Hub, auth/policy, relay/jobs and backup/failover incidents. Added the runbook to the executable completion matrix.
+- Verification: `python3 -m pytest tests/test_slo_docs.py -q` -> `1 passed` after the RED test; full matrix verification remains part of the integration ladder.
+- Delivery: Documentation and test changes are uncommitted in the current linear worktree; no runtime or deployment change. Preserve the unrelated untracked remote-secret-ingress plan.
+- Next: Keep external probe observations separate from the documented target; the next S3 gap is safe delivery/CI provenance rather than inventing current SLO compliance.
+
 ## 2026-07-24 - Platform completion gate and single integration vertex - completed
 
 - Milestone: `S0.2` / `S0.3` / acceptance gates for proxy, endpoints, hooks, MCP, file sharing, profiles and security
