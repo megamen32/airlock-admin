@@ -26,6 +26,11 @@
       "id": "canonical-connection-page",
       "command": "cd go-hub && go test ./internal/hub -run 'TestConnectionPageExposesCanonicalClientChoicesWithoutSecrets' -count=1",
       "evidence": "one Hub URL, MCP/OAuth discovery links and Codex/Claude/ChatGPT choices without bearer or password material"
+    },
+    {
+      "id": "typed-admin-security-controls",
+      "command": "python3 -m pytest tests/test_admin_ui.py tests/test_shellmcp_heartbeat_config.py -q",
+      "evidence": "admin UI uses typed Hub security endpoints and contains no shell env mutation or internal credential controls"
     }
   ],
   "hooks": [
@@ -133,6 +138,11 @@
       "id": "security-preset-mfa",
       "command": "cd go-hub && go test ./internal/hub -run 'TestSecurityPresetAndTOTPFailClosedUntilEnrollment' -count=1",
       "evidence": "preset persistence, locked-down fail-closed behavior, TOTP enrollment/verification and MFA-required admin login"
+    },
+    {
+      "id": "typed-heartbeat-endpoint",
+      "command": "cd go-hub && go test ./internal/hub -run 'TestSecurityHeartbeatUsesTypedAdminEndpoint' -count=1",
+      "evidence": "heartbeat preference changes use a typed boolean endpoint and never accept an operator shell command"
     }
   ],
   "release_provenance": [
