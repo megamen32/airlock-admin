@@ -4727,9 +4727,11 @@ func (s *Server) mcpEndpoint(w http.ResponseWriter, r *http.Request) {
 		if name == "" {
 			rpcErr = map[string]any{"code": -32602, "message": "tool name is required"}
 		} else if err := authorizeFacadeCall(r, name, args); err != nil {
+			s.recordActivationTelemetry("failure")
 			s.auditToolDecision(r, "hub", name, args, "deny", err.Error(), nil, http.StatusForbidden)
 			rpcErr = map[string]any{"code": -32003, "message": err.Error()}
 		} else {
+			s.recordActivationTelemetry("first_tool")
 			structured := s.appsSDKCallForRequest(r, name, args)
 			result = mcpToolResult(structured)
 			s.auditToolDecision(r, "hub", name, args, "allow", "", map[string]any{}, http.StatusOK)

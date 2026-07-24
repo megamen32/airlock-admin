@@ -12,6 +12,7 @@ func (s *Server) connectionPage(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusMethodNotAllowed, map[string]any{"detail": "method not allowed"})
 		return
 	}
+	s.recordActivationTelemetry("connection_page_viewed")
 	origin := s.origin(r)
 	clientConfigs := map[string]any{}
 	for _, clientID := range []string{"codex", "claude", "chatgpt", "custom"} {
