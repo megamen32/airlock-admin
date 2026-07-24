@@ -2688,3 +2688,14 @@ plan is [`PROJECT_PLAN.md`](./PROJECT_PLAN.md).
 - Verification: runner/docs tests `8 passed`; completion matrix `12 passed`; actual probes report server-100 issues `hub_service_not_running`, `hub_health_failed`, `tunnel_router_conflict` and server-88 issues `legacy_shellmcp_binary`, `queue_auth_failed`.
 - Delivery: The remaining external repair now has a repeatable, non-mutating evidence command; no credentials, stderr or remote state are returned or changed.
 - Next: After authorized repair, rerun both probes and `tests/e2e/live_acceptance.py` with a short-lived scoped connection.
+
+## 2026-07-24 - Deployment probe honors configured Hub ports - completed locally
+
+- Milestone: `S1.1`, `S3.5`
+- Owner: Codex
+- Scope: Keep the new deployment runtime runner correct for non-default Hub ports.
+- Baseline / red evidence: `test_hub_probe_accepts_a_configured_non_default_port` failed because parser logic was fixed to `9001`.
+- Change: Parser now evaluates the one reported `port|<configured>|<http-code>` observation and requires `200`.
+- Verification: RED then GREEN; `python3 -m pytest tests/test_deployment_runtime.py -q` -> `4 passed`.
+- Delivery: Custom `HUB_PORT` deployments are now diagnosed without a false failure or relaxed health requirement.
+- Next: Re-run the runner after external repair on the actual configured ports.

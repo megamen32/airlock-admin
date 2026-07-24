@@ -619,3 +619,13 @@ Rules:
 - Fix / verification: Added both schema fields to the reserved set; the conformance regression passes and metadata is absent from the downstream unsupported-tool response.
 - Status: fixed.
 - Next action: Keep schema-control metadata out of tool arguments in the MCP security regression.
+
+## 2026-07-24 - DEPLOYMENT-RUNTIME-PORT-20260724 - Runtime probe hard-coded the default Hub port - fixed
+
+- Component: `tests/e2e/deployment_runtime.py` Hub parser.
+- First observed: 2026-07-24, RED regression `test_hub_probe_accepts_a_configured_non_default_port`.
+- Confirmed fact: A healthy probe line for configured port `9101` was reported as failed because parsing looked only for `port:9001`.
+- Root cause: The parser encoded the development default instead of evaluating the single reported port observation emitted by the remote script.
+- Fix / verification: Hub parsing now accepts the reported configured port while still requiring exactly one HTTP `200`; focused runner tests pass (`4 passed`).
+- Status: fixed.
+- Next action: Preserve non-default port coverage in the deployment runtime matrix.

@@ -35,6 +35,23 @@ def test_hub_probe_rejects_router_conflict_and_stale_listener() -> None:
     assert "tunnel_router_conflict" in report["issues"]
 
 
+def test_hub_probe_accepts_a_configured_non_default_port() -> None:
+    """Hub parsing must follow the reported configured port, not hard-code 9001."""
+    report = deployment_runtime.parse_probe_output(
+        "\n".join(
+            [
+                "unit|gptadmin-hub.service|active|running",
+                "port|9101|200",
+                "router_conflict|false",
+            ]
+        ),
+        kind="hub",
+    )
+
+    assert report["status"] == "passed"
+    assert report["issues"] == []
+
+
 def test_shellmcp_probe_rejects_legacy_binary_and_queue_auth_failure() -> None:
     """ShellMCP readiness must detect stale binary and queue authentication drift."""
     report = deployment_runtime.parse_probe_output(

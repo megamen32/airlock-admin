@@ -76,7 +76,8 @@ def parse_probe_output(output: str, *, kind: str) -> dict[str, Any]:
         state, substate = _unit_observation(observations, "gptadmin-hub.service")
         if (state, substate) != ("active", "running"):
             issues.append("hub_service_not_running")
-        if observations.get("port:9001") != "200":
+        port_statuses = [value for key, value in observations.items() if key.startswith("port:")]
+        if len(port_statuses) != 1 or port_statuses[0] != "200":
             issues.append("hub_health_failed")
         if observations.get("router_conflict") is True:
             issues.append("tunnel_router_conflict")
