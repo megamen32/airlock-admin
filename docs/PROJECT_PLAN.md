@@ -98,7 +98,7 @@ upgrades and realistic failures.
 | S3.2 SLO and alerts | Operator-facing health model, error budget and actionable alerts | Documented SLOs; alert runbook includes owner, symptom, diagnosis and recovery | Complete |
 | S3.3 Backup/restore drill | Versioned backup, restore verification and rollback procedure | Clean-host restore passes a scripted drill with integrity check and no root-owned user files | Complete |
 | S3.4 HA maturity | Multi-fallback configuration, fencing, reclaim, upgrade and partition scenarios | Docker black-box suite covers rank 1/rank 2 selection; a deployment recipe verifies two physical fallback hosts | In progress |
-| S3.5 Safe delivery | Signed/checksummed release artifacts, staged rollout and rollback | Canary update proves version, health, client reconnection and rollback before broad release | Planned |
+| S3.5 Safe delivery | Signed/checksummed release artifacts, staged rollout and rollback | Canary update proves version, health, client reconnection and rollback before broad release | In progress |
 
 ## Stage 4 - Interoperable ecosystem
 
