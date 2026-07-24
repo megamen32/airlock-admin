@@ -14,3 +14,12 @@ integrations, but they do not receive a catalog provenance claim. They must be
 reviewed by the operator before use. The catalog is metadata and a review
 boundary; Hub authentication, profile policy and approval gates remain the
 authoritative security controls.
+
+## Verification
+
+The catalog metadata, signature check and explicit activation acknowledgement
+are covered by:
+
+```bash
+python3 -m pytest tests/test_mcp_catalog.py -q
+```

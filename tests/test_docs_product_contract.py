@@ -61,3 +61,20 @@ def test_integration_control_contract_matches_current_hub_scope() -> None:
     assert "discover -> schema -> execute" in document
     assert "schema version/digest" in document
     assert "no implementation is being claimed" not in document
+
+
+def test_canonical_docs_include_executable_verification_snippets() -> None:
+    """Supported contract pages must expose the command that verifies them."""
+    required_snippets = {
+        "INTEGRATION_CONTROL_CONTRACT.md": "TestMCPIntegrationDiscoverSchemaExecuteConformance",
+        "CAPABILITY_CATALOG.md": "tests/test_mcp_catalog.py",
+        "OBSERVABILITY.md": "TestOTLPExporter",
+        "EXTENSION_SDK.md": "tests/fixtures/mcp-extension-example.json",
+        "BACKUP_RESTORE.md": "gptadmin backup verify",
+        "LIVE_ACCEPTANCE.md": "tests/e2e/live_acceptance.py",
+        "CANARY_ACCEPTANCE.md": "tests/e2e/canary_acceptance.py",
+    }
+    for filename, snippet in required_snippets.items():
+        document = (ROOT / "docs" / filename).read_text(encoding="utf-8")
+        assert "```" in document, f"{filename} has no executable snippet fence"
+        assert snippet in document, f"{filename} is missing verification command {snippet!r}"

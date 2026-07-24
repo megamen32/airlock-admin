@@ -67,3 +67,11 @@ idempotency and audit guarantees already covered by this contract.
 
 Codex Document Control is the external reference that motivated this contract.
 GPTAdmin adopts the interaction shape, not Codex-specific names or behavior.
+
+## Verification
+
+The current Hub implementation and policy path are covered by:
+
+```bash
+cd go-hub && go test ./internal/hub -run 'TestMCPIntegrationDiscoverSchemaExecuteConformance' -count=1
+```

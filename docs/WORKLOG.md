@@ -2562,3 +2562,14 @@ plan is [`PROJECT_PLAN.md`](./PROJECT_PLAN.md).
 - Verification: `python3 -m pytest tests/test_docs_product_contract.py tests/test_deployment_blueprints.py tests/test_feedback_loop_contract.py tests/test_sustainable_offering.py -q` passes (`10 passed`).
 - Delivery: Documentation/status reconciliation only; no external adoption, deployment, collector or hosted-service claim was added.
 - Next: Obtain immutable external evidence for the remaining in-progress rows before changing their status.
+
+## 2026-07-24 - Executable documentation snippet contract - completed locally
+
+- Milestone: `S4.1`, `S4.2`, `S5.3`
+- Owner: Codex
+- Scope: Make canonical integration, capability-catalog, observability, extension, backup and live-acceptance pages expose executable verification commands checked by docs CI.
+- Baseline / red evidence: `test_canonical_docs_include_executable_verification_snippets` failed because `INTEGRATION_CONTROL_CONTRACT.md` had no fenced verification command.
+- Change: Added the missing integration and catalog verification snippets and expanded `tests/test_docs_product_contract.py` to require the commands across supported contract pages.
+- Verification: RED then GREEN docs contract `5 passed`; the referenced integration conformance command passes; catalog command passes (`4 passed`).
+- Delivery: Local docs/command evidence only; translation review and real external usage outcomes remain open.
+- Next: Keep snippet and link checks in the release workflow while external S5.2 evidence is gathered.
