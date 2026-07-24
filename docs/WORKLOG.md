@@ -2518,3 +2518,14 @@ plan is [`PROJECT_PLAN.md`](./PROJECT_PLAN.md).
 - Verification: `python3 -m pytest tests/test_hub_contract.py -k profile_binding_enforces_mcp_tool_policy -q` passes (`1 passed`); forbidden `execute` is filtered/denied while `discover` succeeds.
 - Delivery: Local Hub process evidence only; external identity/profile and public client evidence remain separate.
 - Next: Run the same profile-bound token through the authorized public client/Tunnel smoke.
+
+## 2026-07-24 - Profile-gate full acceptance - completed locally
+
+- Milestone: `S2.1`, `S4.1`
+- Owner: Codex
+- Scope: Re-run the executable evidence index and Python suite after adding process-level profile enforcement.
+- Baseline / red evidence: The new profile contract was first red on missing fixture signing configuration; after the fixture correction the full Hub contract passed.
+- Change: No additional runtime change; retained the focused, matrix and full-suite evidence.
+- Verification: `python3 -m pytest tests/test_hub_contract.py -q` passed (`7 passed`); completion matrix passed (`12 passed`); full Python passed (`235 passed, 3 skipped`, 237 collected).
+- Delivery: Local current-tree evidence only; public identity/Tunnel and native-host profile proof remain external.
+- Next: Re-run the profile-bound smoke against the authorized deployed commit when runtime access is available.
