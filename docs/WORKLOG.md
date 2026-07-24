@@ -2636,3 +2636,12 @@ plan is [`PROJECT_PLAN.md`](./PROJECT_PLAN.md).
 - Verification: `cd go-shellmcp && go test ./...` passes; `go-hub` Darwin arm64 and amd64 cross-builds pass.
 - Delivery: Both Go components and local cross-platform compilation are green; real macOS runtime authorization and external deployment evidence remain open.
 - Next: Attach the same evidence to the authorized native/public acceptance run when those hosts are available.
+
+## 2026-07-24 - Completion audit continuation - local gates green, external runtime still open
+
+- Milestone: `S0.1`, `S1.3`, `S4.1`
+- Owner: Codex
+- Scope: Reconcile the remaining plan rows with the current executable evidence and recheck installed client handshakes and external runtime availability.
+- Verification: completion matrix has 63 rows with command/evidence metadata; real installed `codex`, `claude` and `opencode` disposable-Hub handshake passes (`1 passed in 18.53s`); focused secure secret-ingress tests pass; current server-100 probe reports Hub `inactive`, Tunnel `failed`, health `000`, and server-88 reports ShellMCP `inactive`, health `000`.
+- Delivery: Local proxy, endpoints, hooks, MCP forwarding, file sharing, profiles, security policy, secret ingress and client-CLI evidence are green. The repeated runtime observation remains `LIVE-RUNTIME-INACTIVE-20260724`; no deployment or restart was performed.
+- Next: Use an explicitly authorized deployment session to restore the supported release, then run the existing live acceptance runner through the public Tunnel and named clients.
