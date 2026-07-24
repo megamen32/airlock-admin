@@ -22,6 +22,7 @@ func (s *Server) connectionPage(w http.ResponseWriter, r *http.Request) {
 			"authentication":       "oauth2_pkce",
 			"authorization_server": origin + "/.well-known/oauth-authorization-server",
 			"resource":             origin,
+			"first_action":         map[string]any{"method": "tools/call", "tool": "demo", "arguments": map[string]any{}},
 		}
 		if clientID == "chatgpt" {
 			config["actions_openapi"] = origin + "/actions/openapi.yaml"

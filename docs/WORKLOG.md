@@ -1071,6 +1071,31 @@ plan is [`PROJECT_PLAN.md`](./PROJECT_PLAN.md).
 - Next: Retain live host service/Tunnel checks as explicit deployment evidence;
   do not infer clean-host runtime health from this mocked/local gate.
 
+## 2026-07-24 - Manifest-driven safe first action - completed
+
+- Milestone: `S1.3` / `S1.4`
+- Owner: `Codex`
+- Scope: Make the canonical connection manifest consumable for a harmless first
+  MCP action, while keeping actual Codex/Claude/ChatGPT runtime acceptance
+  separate.
+- Baseline / pre-fix evidence: `/connect.json` described the MCP endpoint and
+  OAuth mechanism but did not declare a machine-readable first tool call; a
+  generic client still had to consult prose to discover `demo`.
+- RED/GREEN evidence: The external Hub contract test first failed with missing
+  `client_configs.custom.first_action`, then consumed the declared endpoint and
+  `demo` call without hard-coded protocol details.
+- Change: Added a secret-free `first_action` descriptor to every client config;
+  it declares MCP `tools/call` and the read-only `demo` tool.
+- Verification: Focused first-action test passes; full Hub contract tests pass
+  (`5 passed`).
+- Write scope: `go-hub/internal/hub/connection_page.go`,
+  `tests/test_hub_contract.py`, focused matrix/docs only. Preserve proxy,
+  relay and unrelated plan files.
+- Delivery: Pending integration commit on `codex/haos-addon-public`; no deploy,
+  push or merge. The unrelated remote-secret-ingress plan remains preserved.
+- Next: Verify real Codex, Claude-compatible and ChatGPT clients through the
+  public Tunnel; this contract does not claim those live paths.
+
 
 ## 2026-07-24 - Typed admin security controls and Apps SDK contract - completed
 

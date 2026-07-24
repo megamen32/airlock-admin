@@ -280,6 +280,25 @@ def test_hub_contract_health_and_auth(hub_contract: HubProcess) -> None:
     assert body
 
 
+def test_connection_manifest_drives_safe_first_mcp_action(hub_contract: HubProcess) -> None:
+    """A generic client can consume the manifest and call the safe demo tool."""
+    status, manifest, _ = hub_contract.request("GET", "/connect.json", token=None)
+    assert status == 200, manifest
+    config = manifest["client_configs"]["custom"]
+    first_action = config["first_action"]
+    assert config["url"] == f"{hub_contract.base_url}/mcp"
+    assert first_action == {"method": "tools/call", "tool": "demo", "arguments": {}}
+    result = hub_contract.rpc(
+        "/mcp",
+        first_action["method"],
+        {"name": first_action["tool"], "arguments": first_action["arguments"]},
+        request_id=17,
+    )
+    structured = _structured_content(result)
+    assert structured["status"] == "ok"
+    assert structured["access_mode"] == "full"
+
+
 def test_hub_contract_relay_and_openapi(hub_contract: HubProcess) -> None:
     """Verify selected-target REST relay behavior and the published Action schema."""
     status, servers_body, _ = hub_contract.request("GET", "/mcp-relay/servers")
