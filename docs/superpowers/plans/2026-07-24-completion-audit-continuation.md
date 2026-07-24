@@ -43,9 +43,9 @@
 
 ### Task 4: Final completion audit and handoff
 
-- [ ] Compare every requested surface and every non-Complete `PROJECT_PLAN` row with an authoritative test/runtime artifact.
-- [ ] Fix actionable bugs found during the audit before handoff.
-- [ ] Commit all intended changes on the single branch; leave only the known unrelated untracked plan.
+- [x] Compare every requested surface and every non-Complete `PROJECT_PLAN` row with an authoritative test/runtime artifact; local proxy/endpoints/hooks/MCP/file-sharing/profile/policy rows and the new S0.3/S3.2 contracts are green, while real client/Tunnel, physical fallback, external MFA, CI publication and other roadmap lanes remain explicitly open.
+- [x] Fix actionable bugs found during the audit before handoff; the only remaining open records are the unrelated HAOS Supervisor job and the elevated Windows legacy-task cleanup, both requiring their owning external session.
+- [x] Commit all intended changes on the single branch; leave only the known unrelated untracked plan.
 
 ### Task 5: Add a verified configuration backup/restore contract
 
