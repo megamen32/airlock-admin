@@ -2595,3 +2595,14 @@ plan is [`PROJECT_PLAN.md`](./PROJECT_PLAN.md).
 - Verification: Go conformance passes; `python3 -m pytest tests/test_hub_contract.py -k relay_and_openapi -q` passes (`1 passed`); stale digest is rejected before tool execution.
 - Delivery: Local Hub/relay contract evidence only; external adapter certification and public client/Tunnel evidence remain separate.
 - Next: Add the schema identity to the authorized external adapter/client smoke when deployment access is available.
+
+## 2026-07-24 - Schema contract full acceptance - completed locally
+
+- Milestone: `S4.1`, `S3.5`
+- Owner: Codex
+- Scope: Re-run Hub full/race/vet, Darwin cross-builds, completion matrix and Python suite after the schema identity change.
+- Baseline / red evidence: The initial process endpoint run found and fixed the action-hint digest mismatch before the final acceptance run.
+- Change: No further source change after `33609eb`; retained the exact bounded verification results.
+- Verification: Hub `go test ./...`, `go test -race ./...`, `go vet ./...` pass; Darwin arm64/amd64 builds pass; completion matrix `12 passed`; full Python `237 passed, 3 skipped` (239 collected / 1 collection skip).
+- Delivery: Current local schema/endpoint evidence is green; external adapter/client/Tunnel certification remains open.
+- Next: Run schema-bound execute through the authorized public adapter/client smoke.
