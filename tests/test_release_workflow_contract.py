@@ -1,5 +1,6 @@
 """Regression checks for release provenance gates in GitHub Actions."""
 
+import re
 from pathlib import Path
 
 import yaml
@@ -28,6 +29,16 @@ def test_release_job_verifies_provenance_before_publication() -> None:
     assert "--android" in installer_step["run"]
 
 
+def test_release_job_runs_proxyrelay_tests() -> None:
+    """Keep the shipped relay implementation inside the release test gate."""
+
+    workflow = yaml.safe_load(WORKFLOW.read_text(encoding="utf-8"))
+    steps = workflow["jobs"]["build-and-release"]["steps"]
+    proxy_step = next(step for step in steps if step.get("name") == "Test Go proxyrelay")
+    assert "cd go-proxyrelay" in proxy_step["run"]
+    assert "go test ./..." in proxy_step["run"]
+
+
 def test_release_job_attests_artifacts_and_scans_dependencies_before_publication() -> None:
     """Require provenance attestation and vulnerability checks before release sync."""
 
@@ -45,7 +56,7 @@ def test_release_job_attests_artifacts_and_scans_dependencies_before_publication
     assert names.index(attestation_step["name"]) < mirror_index
     assert "govulncheck" in vulnerability_step["run"]
     assert "npm audit" in vulnerability_step["run"]
-    assert attestation_step["uses"] == "actions/attest-build-provenance@v2"
+    assert re.fullmatch(r"actions/attest-build-provenance@[0-9a-f]{40}", attestation_step["uses"])
     assert "build/manifest.json" in attestation_step["with"]["subject-path"]
     assert "build/gptadmin-sbom.spdx.json" in attestation_step["with"]["subject-path"]
 

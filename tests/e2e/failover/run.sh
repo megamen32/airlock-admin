@@ -1,8 +1,33 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-root=/tmp/gptadmin-failover-e2e
-port_base=${GPTADMIN_FAILOVER_E2E_PORT_BASE:-19001}
+root=${GPTADMIN_FAILOVER_E2E_ROOT:-/tmp/gptadmin-failover-e2e-$$}
+
+choose_port_base() {
+  python3 - <<'PY'
+import socket
+
+offsets = (0, 1, 2, 10, 11, 79)
+for base in range(20000, 60000, 20):
+    sockets = []
+    try:
+        for offset in offsets:
+            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            sock.bind(("127.0.0.1", base + offset))
+            sockets.append(sock)
+        print(base)
+        break
+    except OSError:
+        continue
+    finally:
+        for sock in sockets:
+            sock.close()
+else:
+    raise SystemExit("no free failover port range")
+PY
+}
+
+port_base="${GPTADMIN_FAILOVER_E2E_PORT_BASE:-$(choose_port_base)}"
 primary_port=$port_base
 fallback_one_port=$((port_base + 1))
 fallback_two_port=$((port_base + 2))
@@ -38,8 +63,8 @@ state_file="$root/state.json"
 pids=()
 
 cleanup() {
-  for pid in "${pids[@]:-}"; do kill "$pid" 2>/dev/null || true; done
-  wait 2>/dev/null || true
+  for pid in "${pids[@]:-}"; do kill_group "$pid"; done
+  for pid in "${pids[@]:-}"; do wait "$pid" 2>/dev/null || true; done
 }
 trap 'cleanup; if [[ "$hub_bin" == /tmp/gptadmin-failover-hub-* ]]; then rm -f "$hub_bin"; fi' EXIT
 
@@ -48,9 +73,16 @@ if [[ "$hub_bin" == /tmp/gptadmin-failover-hub-* ]]; then
 fi
 
 start() {
-  "$@" >/tmp/failover-e2e-"${#pids[@]}".log 2>&1 &
+  # A process group makes EXIT cleanup effective even when a service forks a
+  # helper; unique defaults keep an externally interrupted run isolated.
+  E2E_RUNNER_PID=$$ setsid "$@" >/tmp/failover-e2e-"${#pids[@]}".log 2>&1 &
   pids+=("$!")
   printf '%s\n' "$!"
+}
+
+kill_group() {
+  local pid="$1"
+  kill -- -"$pid" 2>/dev/null || kill "$pid" 2>/dev/null || true
 }
 
 wait_http() {
@@ -128,7 +160,7 @@ watchdog_node() {
   local runtime_path="$2"
   local pid_path="$3"
   local route_value="$4"
-  E2E_ROUTE_FILE="$route_file" E2E_ROUTE_VALUE="$route_value" python3 "$watchdog_script" \
+  E2E_RUNNER_PID=$$ E2E_ROUTE_FILE="$route_file" E2E_ROUTE_VALUE="$route_value" python3 "$watchdog_script" \
     --check-once --config "$config_file" --state "$state_file" --runtime-state "$runtime_path" \
     --node-id "$node_id" --hub-service none --frpc-service none --frpc-bin "$fake_frpc" \
     --frpc-config "$root/${node_id//:/-}.toml" --frpc-pid-file "$pid_path" \
@@ -211,13 +243,13 @@ start_primary() {
 }
 
 kill_primary() {
-  kill "${pids[0]}"
+  kill_group "${pids[0]}"
   wait "${pids[0]}" 2>/dev/null || true
 }
 
 kill_ingress() {
   local pid="${pids[-1]}"
-  kill "$pid"
+  kill_group "$pid"
   wait "$pid" 2>/dev/null || true
 }
 

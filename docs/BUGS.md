@@ -557,3 +557,23 @@ Rules:
 - Root-cause hypothesis: The known deployment services are stopped or failed; this is external runtime state, not a source-test failure.
 - Status: open.
 - Next action: In an explicitly authorized deployment session, inspect service logs and restore the supported current release on both hosts, then rerun authenticated endpoint/proxy/MCP/file/profile smoke.
+
+## 2026-07-24 - SUPPLY-CHAIN-MUTABLE-ACTIONS-20260724 - Release workflows used mutable action tags - fixed
+
+- Component: `.github/workflows/*.yml` release, deployment and website workflows.
+- First observed: 2026-07-24, supply-chain audit; RED regression `tests/test_supply_chain_policy.py::test_workflows_pin_third_party_actions_to_immutable_commits` rejected `@vN` action references.
+- Confirmed fact: Workflow execution selected moving major-version tags for checkout, language setup, Docker setup, artifact upload and provenance attestation.
+- Root cause: The workflow source had version comments but no immutable commit pinning policy.
+- Fix / verification: Pinned every third-party action to the verified full commit SHA and added the immutable-reference regression; supply-chain/release focused tests pass (`17 passed`).
+- Status: fixed.
+- Next action: Refresh pinned SHAs only through a reviewed dependency-update change that preserves the regression.
+
+## 2026-07-24 - FAILOVER-HARNESS-ORPHAN-FRPC-20260724 - Timed-out failover drills left orphan fake FRP processes - fixed
+
+- Component: `tests/e2e/failover/run.sh` and `tests/e2e/failover/fake-frpc`.
+- First observed: 2026-07-24, deployment-blueprint verification; immutable process evidence showed multiple `fake-frpc` children reparented to PID 1 after the verification tool timed out.
+- Confirmed fact: Re-running the drill can inherit stale `/tmp/gptadmin-failover-e2e` listeners and hang while waiting for an expected route transition.
+- Root cause: The harness used fixed default resources and did not propagate a parent identity into fake FRP children, so an externally terminated wrapper could leave listeners behind.
+- Fix / verification: Added per-run roots, dynamic free-port selection, process-group cleanup and an `E2E_RUNNER_PID` parent-watch in `fake-frpc`; `tests/test_failover_harness.py` passes, all seven failover scenarios pass, and a post-run process check finds no repository-owned fake FRP orphan.
+- Status: fixed.
+- Next action: Keep the parent-watch contract whenever the failover runner launches a new long-lived test double.

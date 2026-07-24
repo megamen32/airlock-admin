@@ -119,9 +119,9 @@ keeping the self-hosted core trustworthy.
 
 | Milestone | Deliverable | Exit gate | Status |
 | --- | --- | --- | --- |
-| S5.1 Reference deployments | Small-team, home-lab and production deployment blueprints | Each blueprint has a tested architecture, cost/security tradeoffs and incident runbook | Planned |
-| S5.2 Feedback loop | Public issue templates, design-partner program and quarterly outcome review | Roadmap changes cite observed activation, retention, support or incident evidence | Planned |
-| S5.3 Documentation as product | Versioned docs, tested snippets, translation review and changelog mapping | Docs CI checks snippets/links; every supported path has a single canonical page | Planned |
+| S5.1 Reference deployments | Small-team, home-lab and production deployment blueprints | Each blueprint has a tested architecture, cost/security tradeoffs and incident runbook | In progress |
+| S5.2 Feedback loop | Public issue templates, design-partner program and quarterly outcome review | Roadmap changes cite observed activation, retention, support or incident evidence | In progress |
+| S5.3 Documentation as product | Versioned docs, tested snippets, translation review and changelog mapping | Docs CI checks snippets/links; every supported path has a single canonical page | In progress |
 | S5.4 Sustainable offering | Clear open-core boundary and optional hosted/support offer | No self-hosted core regression; hosted value is operational convenience, not forced lock-in | Planned |
 
 ## Stage 6 - 1.0 release gate

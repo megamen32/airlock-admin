@@ -2353,3 +2353,25 @@ plan is [`PROJECT_PLAN.md`](./PROJECT_PLAN.md).
 - Verification: SSH `BatchMode` probes completed without credentials or service changes.
 - Delivery: External blocker; no deploy or push from this branch.
 - Next: Authorized deployment session must restore the supported current release and rerun endpoint/proxy/MCP/file/profile smoke.
+
+## 2026-07-24 - Release and delivery contract hardening - completed locally
+
+- Milestone: `S4.3`, `S3.4`
+- Owner: Codex
+- Scope: Immutable GitHub Action references, release ProxyRelay coverage and failover harness lifecycle.
+- Baseline / red evidence: `tests/test_supply_chain_policy.py` failed on mutable `@vN` action tags; the new release contract failed because `go-proxyrelay` was absent; `tests/test_failover_harness.py` failed because the runner used fixed resources and had no orphan guard.
+- Change: Pinned all workflow actions to verified commit SHAs, added the `go-proxyrelay` release test and cache input, and made failover runs use isolated roots/free port ranges, process groups and parent-watched fake FRP children.
+- Verification: supply-chain/release focused tests pass (`17 passed`); `go-proxyrelay` tests pass; failover harness contract passes; all seven `bash tests/e2e/failover/run.sh` scenarios pass; post-run process check finds no repository-owned fake FRP orphan.
+- Delivery: Local source and CI contract only; no tagged GitHub run, public attestation or host deployment claim.
+- Next: Run the next tagged release through GitHub and preserve its immutable run ID.
+
+## 2026-07-24 - Reference deployment and documentation product contracts - completed locally
+
+- Milestone: `S5.1`, `S5.2`, `S5.3`
+- Owner: Codex
+- Scope: Small-team/home-lab/production blueprints, canonical docs map, docs CI link checks and evidence-first feedback intake.
+- Baseline / red evidence: New RED tests failed because the three deployment blueprints, documentation map, feedback-loop process and required issue-template fields were absent.
+- Change: Added `docs/DEPLOYMENT_BLUEPRINTS.md`, `docs/DOCUMENTATION_MAP.md`, `docs/FEEDBACK_LOOP.md`, docs CI execution and issue-template fields for reproduction, activation/support/incident signal and immutable evidence.
+- Verification: deployment, docs and feedback contracts pass (`10 passed`); local Markdown links resolve; failover and release references point to tracked files.
+- Delivery: Local documentation/process contract only; no real design-partner metrics, physical deployment, external client certification or commercial offering claim.
+- Next: Obtain one consented external design-partner/host evidence artifact and link it from the worklog.

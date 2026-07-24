@@ -26,10 +26,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
       - name: Setup Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 22
           cache: npm
@@ -63,7 +63,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
       - name: Run failover Docker black-box suite
         run: docker compose -f tests/e2e/failover/docker-compose.yml up --build --abort-on-container-exit --exit-code-from failover-e2e
@@ -76,25 +76,26 @@ jobs:
       attestations: write
     steps:
       - name: Checkout private repo
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           fetch-depth: 0
 
       - name: Setup uv
-        uses: astral-sh/setup-uv@v3
+        uses: astral-sh/setup-uv@caf0cab7a618c569241d31dcd442f54681755d39 # v3
         with:
           enable-cache: true
 
       - name: Setup Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
         with:
           go-version: stable
           cache-dependency-path: |
             go-hub/go.sum
             go-shellmcp/go.sum
+            go-proxyrelay/go.sum
 
       - name: Setup Node for packaged admin UI
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 22
           cache: npm
@@ -105,6 +106,9 @@ jobs:
           uv sync
           uv run pytest tests/ -v
 
+      - name: Docs product contract
+        run: python3 -m pytest tests/test_docs_product_contract.py tests/test_feedback_loop_contract.py -q
+
       - name: Test Go hub
         run: |
           cd go-hub
@@ -113,6 +117,11 @@ jobs:
       - name: Test Go shellmcp
         run: |
           cd go-shellmcp
+          go test ./...
+
+      - name: Test Go proxyrelay
+        run: |
+          cd go-proxyrelay
           go test ./...
 
       - name: Build binaries
@@ -151,7 +160,7 @@ jobs:
 
       - name: Attest verified release artifacts
         if: startsWith(github.ref, 'refs/tags/v')
-        uses: actions/attest-build-provenance@v2
+        uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be # v2
         with:
           subject-path: |
             build/*.tar.gz
@@ -162,7 +171,7 @@ jobs:
       # --- Release: only on v* tags, only if the opensource PAT is configured ---
       - name: Checkout opensource (public) repo
         if: startsWith(github.ref, 'refs/tags/v') && env.OPENSOURCE_PAT != ''
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           repository: megamen32/gptadmin_opensource
           token: ${{ env.OPENSOURCE_PAT }}
@@ -242,10 +251,10 @@ jobs:
     runs-on: macos-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
       - name: Setup Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
         with:
           go-version: stable
           cache-dependency-path: |
@@ -276,10 +285,10 @@ jobs:
     runs-on: windows-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
       - name: Setup Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
         with:
           go-version: stable
           cache-dependency-path: go-shellmcp/go.sum
