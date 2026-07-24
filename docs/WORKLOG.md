@@ -1216,6 +1216,25 @@ plan is [`PROJECT_PLAN.md`](./PROJECT_PLAN.md).
 - Next: add retention/export controls only if the incident runbook requires
   them; current durable JSONL tail remains bounded and queryable.
 
+## 2026-07-24 - Versioned configuration backup and restore - completed
+
+- Milestone: `S3.3`
+- Owner: `Codex`
+- Scope: Add a manifest/digest-backed CLI backup, verifier and atomic restore
+  drill for the GPTAdmin configuration directory.
+- Baseline / red evidence: No `gptadmin backup` command or scripted restore
+  contract existed; a clean-host recovery could not be automated from the repo.
+- Change: `gptadmin.backup/v1` archive manifest, SHA-256 verification,
+  restrictive modes and traversal/symlink-safe extraction into a new target.
+- Verification: focused backup tests pass (`2 passed`); full Python suite is
+  `171 passed, 2 skipped`; completion matrix `11 passed`; CLI help exposes all
+  three backup commands; golden-path/doctor tests `4 passed`; diff check passes.
+  The clean temporary round trip preserves bytes/modes and rejects traversal.
+- Delivery: Pending integration commit on `codex/haos-addon-public`; no deploy
+  or push. Both existing untracked plan files remain preserved.
+- Next: run the restore drill on each supported host and verify service
+  ownership/restart behavior; the CLI intentionally does not chown or restart.
+
 ## 2026-07-22 - Isolated Network Tunnel proxy relay - completed
 
 - Milestone: `S2.2`

@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import argparse
+import gzip
+import io
 import stat
 import os
 import sys
@@ -22,7 +24,7 @@ import urllib.request
 import urllib.error
 import pwd
 from email.utils import parsedate_to_datetime
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 try:
     import tomllib
 except Exception:
@@ -3058,6 +3060,213 @@ def _doctor_report() -> dict:
     return {'ok': issues == 0, 'issues': issues, 'hub_url': hub_url or None, 'remote_build': remote_build, 'checks': checks}
 
 
+BACKUP_FORMAT = 'gptadmin.backup/v1'
+BACKUP_MANIFEST_NAME = 'manifest.json'
+BACKUP_MAX_FILE_BYTES = 64 << 20
+
+
+def _backup_member_name(value: str) -> str:
+    """Validate and normalize one archive-relative POSIX member name."""
+    name = str(value)
+    path = PurePosixPath(name)
+    if not name or name.startswith('/') or '\\' in name or name != path.as_posix() or any(part in {'', '.', '..'} for part in path.parts):
+        raise ValueError(f'unsafe archive member: {name!r}')
+    return path.as_posix()
+
+
+def _backup_files(source: Path) -> list[tuple[str, Path, int]]:
+    """Return regular files below source with validated relative names."""
+    source = source.resolve()
+    if not source.is_dir():
+        raise ValueError(f'backup source is not a directory: {source}')
+    files: list[tuple[str, Path, int]] = []
+    for path in sorted(source.rglob('*')):
+        relative = path.relative_to(source).as_posix()
+        if path.is_symlink():
+            raise ValueError(f'backup source contains symlink: {relative}')
+        if path.is_dir():
+            continue
+        if not path.is_file():
+            raise ValueError(f'backup source contains unsupported entry: {relative}')
+        size = path.stat().st_size
+        if size > BACKUP_MAX_FILE_BYTES:
+            raise ValueError(f'backup file is too large: {relative}')
+        files.append((_backup_member_name(relative), path, stat.S_IMODE(path.stat().st_mode)))
+    return files
+
+
+def _backup_manifest(source: Path) -> dict:
+    """Build a stable manifest of regular files under source."""
+    entries = []
+    for relative, path, mode in _backup_files(source):
+        digest = hashlib.sha256()
+        with path.open('rb') as handle:
+            for chunk in iter(lambda: handle.read(1024 * 1024), b''):
+                digest.update(chunk)
+        entries.append({'path': relative, 'size': path.stat().st_size, 'sha256': digest.hexdigest(), 'mode': mode})
+    entries.sort(key=lambda item: item['path'])
+    return {'format': BACKUP_FORMAT, 'files': entries}
+
+
+def _validate_backup_manifest(manifest: object) -> dict:
+    """Validate the untrusted manifest object and return its canonical shape."""
+    if not isinstance(manifest, dict) or manifest.get('format') != BACKUP_FORMAT or not isinstance(manifest.get('files'), list):
+        raise ValueError('invalid backup manifest format')
+    entries = []
+    seen: set[str] = set()
+    for item in manifest['files']:
+        if not isinstance(item, dict):
+            raise ValueError('invalid backup manifest entry')
+        relative = _backup_member_name(item.get('path', ''))
+        if relative in seen:
+            raise ValueError(f'duplicate backup member: {relative}')
+        seen.add(relative)
+        size = item.get('size')
+        mode = item.get('mode')
+        digest = item.get('sha256')
+        if not isinstance(size, int) or size < 0 or size > BACKUP_MAX_FILE_BYTES:
+            raise ValueError(f'invalid backup size: {relative}')
+        if not isinstance(mode, int) or mode < 0 or mode > 0o7777:
+            raise ValueError(f'invalid backup mode: {relative}')
+        if not isinstance(digest, str) or not re.fullmatch(r'[0-9a-f]{64}', digest):
+            raise ValueError(f'invalid backup digest: {relative}')
+        entries.append({'path': relative, 'size': size, 'sha256': digest, 'mode': mode})
+    entries.sort(key=lambda item: item['path'])
+    return {'format': BACKUP_FORMAT, 'files': entries}
+
+
+def _backup_tar_info(name: str, size: int, mode: int) -> tarfile.TarInfo:
+    info = tarfile.TarInfo(name)
+    info.size = size
+    info.mode = mode
+    info.mtime = 0
+    info.uid = 0
+    info.gid = 0
+    info.uname = ''
+    info.gname = ''
+    return info
+
+
+def create_backup_archive(source: Path, archive: Path) -> dict:
+    """Create an atomic, manifest-first configuration backup archive."""
+    source = Path(source).resolve()
+    archive = Path(archive).resolve()
+    try:
+        archive.relative_to(source)
+    except ValueError:
+        pass
+    else:
+        raise ValueError('backup archive must be outside its source directory')
+    manifest = _backup_manifest(source)
+    archive.parent.mkdir(parents=True, exist_ok=True)
+    fd, temporary_name = tempfile.mkstemp(prefix=f'.{archive.name}.', suffix='.tmp', dir=archive.parent)
+    os.close(fd)
+    temporary = Path(temporary_name)
+    try:
+        with temporary.open('wb') as raw:
+            with gzip.GzipFile(fileobj=raw, mode='wb', mtime=0) as compressed:
+                with tarfile.open(fileobj=compressed, mode='w') as handle:
+                    manifest_bytes = json.dumps(manifest, sort_keys=True, separators=(',', ':')).encode('utf-8')
+                    manifest_info = _backup_tar_info(BACKUP_MANIFEST_NAME, len(manifest_bytes), 0o600)
+                    handle.addfile(manifest_info, io.BytesIO(manifest_bytes))
+                    for item in manifest['files']:
+                        path = source / item['path']
+                        info = _backup_tar_info(item['path'], item['size'], item['mode'])
+                        with path.open('rb') as file_handle:
+                            handle.addfile(info, file_handle)
+        os.chmod(temporary, 0o600)
+        os.replace(temporary, archive)
+    finally:
+        temporary.unlink(missing_ok=True)
+    return manifest
+
+
+def verify_backup_archive(archive: Path) -> dict:
+    """Verify archive safety, member set, sizes and SHA-256 digests."""
+    archive = Path(archive)
+    with tarfile.open(archive, 'r:gz') as handle:
+        members = handle.getmembers()
+        manifest_members = [member for member in members if member.name == BACKUP_MANIFEST_NAME]
+        if len(manifest_members) != 1 or not manifest_members[0].isreg():
+            raise ValueError('backup manifest is missing or invalid')
+        manifest_payload = handle.extractfile(manifest_members[0])
+        if manifest_payload is None:
+            raise ValueError('backup manifest cannot be read')
+        manifest = _validate_backup_manifest(json.loads(manifest_payload.read()))
+        expected = {item['path']: item for item in manifest['files']}
+        actual: dict[str, tarfile.TarInfo] = {}
+        for member in members:
+            if member.name == BACKUP_MANIFEST_NAME:
+                continue
+            name = _backup_member_name(member.name)
+            if not member.isreg():
+                raise ValueError(f'unsafe archive member: {member.name!r}')
+            if name in actual:
+                raise ValueError(f'duplicate archive member: {name}')
+            actual[name] = member
+        if set(actual) != set(expected):
+            raise ValueError('backup members do not match manifest')
+        for name, item in expected.items():
+            member = actual[name]
+            if member.size != item['size']:
+                raise ValueError(f'backup size mismatch: {name}')
+            digest = hashlib.sha256()
+            stream = handle.extractfile(member)
+            if stream is None:
+                raise ValueError(f'backup member cannot be read: {name}')
+            for chunk in iter(lambda: stream.read(1024 * 1024), b''):
+                digest.update(chunk)
+            if digest.hexdigest() != item['sha256']:
+                raise ValueError(f'backup digest mismatch: {name}')
+    return manifest
+
+
+def restore_backup_archive(archive: Path, target: Path) -> dict:
+    """Atomically restore a verified archive into a new target directory."""
+    manifest = verify_backup_archive(archive)
+    target = Path(target).resolve()
+    if target.exists():
+        raise ValueError('restore target must not already exist')
+    target.parent.mkdir(parents=True, exist_ok=True)
+    temporary = Path(tempfile.mkdtemp(prefix=f'.{target.name}.', dir=target.parent))
+    try:
+        with tarfile.open(archive, 'r:gz') as handle:
+            for item in manifest['files']:
+                member = handle.getmember(item['path'])
+                destination = temporary / item['path']
+                destination.parent.mkdir(parents=True, exist_ok=True)
+                stream = handle.extractfile(member)
+                if stream is None:
+                    raise ValueError(f'backup member cannot be read: {item["path"]}')
+                with destination.open('xb') as output:
+                    shutil.copyfileobj(stream, output)
+                os.chmod(destination, item['mode'])
+        if _backup_manifest(temporary) != manifest:
+            raise ValueError('restored files do not match backup manifest')
+        os.replace(temporary, target)
+    except Exception:
+        shutil.rmtree(temporary, ignore_errors=True)
+        raise
+    return manifest
+
+
+def cmd_backup(args):
+    try:
+        if args.backup_cmd == 'create':
+            manifest = create_backup_archive(Path(args.source), Path(args.archive))
+            print(json.dumps({'ok': True, 'archive': str(Path(args.archive)), 'file_count': len(manifest['files']), 'format': BACKUP_FORMAT}))
+        elif args.backup_cmd == 'verify':
+            manifest = verify_backup_archive(Path(args.archive))
+            print(json.dumps({'ok': True, 'archive': str(Path(args.archive)), 'file_count': len(manifest['files']), 'format': BACKUP_FORMAT}))
+        elif args.backup_cmd == 'restore':
+            manifest = restore_backup_archive(Path(args.archive), Path(args.target))
+            print(json.dumps({'ok': True, 'target': str(Path(args.target)), 'file_count': len(manifest['files']), 'format': BACKUP_FORMAT}))
+        else:
+            die('backup command is required: create, verify or restore')
+    except (OSError, ValueError, tarfile.TarError, json.JSONDecodeError) as exc:
+        die(f'backup failed: {exc}')
+
+
 def cmd_doctor(args):
     """Health check — services, ports, config, tokens."""
     report = _doctor_report()
@@ -4458,6 +4667,20 @@ def main():
     ap_doctor = sub.add_parser('doctor', help='Проверка здоровья: сервисы, порты, конфиг, токены')
     ap_doctor.add_argument('--json', action='store_true', help='Вывести машиночитаемый JSON без секретов')
     ap_doctor.set_defaults(func=cmd_doctor)
+
+    ap_backup = sub.add_parser('backup', help='Создать, проверить или восстановить конфигурационный backup')
+    backup_sub = ap_backup.add_subparsers(dest='backup_cmd')
+    ap_backup_create = backup_sub.add_parser('create', help='Создать backup с manifest и SHA-256')
+    ap_backup_create.add_argument('archive')
+    ap_backup_create.add_argument('--source', default=str(ETC_DIR), help='Каталог конфигурации; по умолчанию текущий Hub config')
+    ap_backup_create.set_defaults(func=cmd_backup)
+    ap_backup_verify = backup_sub.add_parser('verify', help='Проверить backup без распаковки')
+    ap_backup_verify.add_argument('archive')
+    ap_backup_verify.set_defaults(func=cmd_backup)
+    ap_backup_restore = backup_sub.add_parser('restore', help='Атомарно восстановить backup в новый каталог')
+    ap_backup_restore.add_argument('archive')
+    ap_backup_restore.add_argument('target')
+    ap_backup_restore.set_defaults(func=cmd_backup)
     ap_setup = sub.add_parser('setup', help='Установка и настройка')
     ap_setup.add_argument('--pkg-all')
     ap_setup.add_argument('--pkg-hub')

@@ -64,6 +64,11 @@
       "evidence": "opt-in local event counters, payload exclusion and restart persistence"
     },
     {
+      "id": "backup-restore-drill",
+      "command": "python3 -m pytest tests/test_backup_restore.py -q",
+      "evidence": "manifest/digest round trip, restrictive modes and traversal-safe atomic restore"
+    },
+    {
       "id": "safe-demo-readonly",
       "command": "cd go-hub && go test ./internal/hub -run 'TestSafeDemoToolIsAvailableToReadonlyMCPWithoutEchoingArguments' -count=1",
       "evidence": "readonly MCP connection check returns build/connection facts without shell, credentials or argument echo"

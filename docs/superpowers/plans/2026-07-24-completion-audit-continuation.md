@@ -46,3 +46,12 @@
 - [ ] Compare every requested surface and every non-Complete `PROJECT_PLAN` row with an authoritative test/runtime artifact.
 - [ ] Fix actionable bugs found during the audit before handoff.
 - [ ] Commit all intended changes on the single branch; leave only the known unrelated untracked plan.
+
+### Task 5: Add a verified configuration backup/restore contract
+
+**Files:** `cli.py`, `tests/test_backup_restore.py`, `docs/PROJECT_PLAN.md`, `docs/WORKLOG.md`.
+
+- [ ] Write a failing test that creates a temporary config directory with an env file and JSON state, runs backup creation, verifies the archive manifest and rejects a path-traversal archive member.
+- [ ] Implement `gptadmin backup create <archive>` and `gptadmin backup verify <archive>` using a deterministic manifest with relative paths, byte sizes and SHA-256 digests; preserve restrictive modes and never print file contents.
+- [ ] Implement `gptadmin backup restore <archive> <target>` with an explicit target directory, traversal/symlink rejection, atomic extraction and post-restore digest verification.
+- [x] Run focused Python tests, full Python suite and a clean temporary restore drill; document that live service restart and root ownership remain deployment-specific evidence.
