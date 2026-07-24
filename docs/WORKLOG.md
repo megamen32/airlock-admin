@@ -2474,3 +2474,14 @@ plan is [`PROJECT_PLAN.md`](./PROJECT_PLAN.md).
 - Verification: Clone status was clean; `go test ./...` passed in `go-hub`, `go-shellmcp`, and `go-proxyrelay`; `python3 -m pytest tests/test_completion_matrix.py -q` passed (`12 passed`).
 - Delivery: Reproducible local source evidence only; signed CI artifacts, deployed hosts, public Tunnel and real client proof remain external gaps.
 - Next: Use the authorized deployment/CI session to obtain immutable external evidence rather than inferring it from this clean clone.
+
+## 2026-07-24 - Installed MCP client golden-path acceptance - completed locally
+
+- Milestone: `S0.1`, `S1.1`
+- Owner: Codex
+- Scope: Isolated real Codex, Claude and OpenCode CLI registration against a disposable canonical Hub, followed by a safe `demo` MCP call.
+- Baseline / red evidence: Earlier acceptance classified real client applications as an unverified lane; the current host now exposes all three CLIs and the process test exercises each one without user configuration.
+- Change: No runtime source change; reran the existing real-client contract and golden-path fixture at the current worktree.
+- Verification: `python3 -m pytest tests/test_golden_paths.py tests/test_real_mcp_clients.py -q` passes (`3 passed`); no client test was skipped.
+- Delivery: Local installed-client evidence only; ChatGPT/browser, native macOS/Windows/Android, public Tunnel and external OAuth evidence remain separate.
+- Next: Attach the same canonical manifest and first-tool probe to authorized external client/runtime sessions.

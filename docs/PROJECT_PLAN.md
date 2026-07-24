@@ -37,7 +37,7 @@ minimum practical MCP context loaded only when the current task needs it.
 | Installation and updates | Linux, macOS, Windows and Android packaging checks | In progress |
 | Failover | Docker black-box coverage for tunnel, hub, combined outage, reclaim and ranked fallback promotion | In progress |
 | Auth and relay target safety | OAuth/OpenAPI paths and explicit MCP target contract | In progress |
-| Product activation | No canonical end-to-end golden path or activation measurement | Not started |
+| Product activation | Canonical local first-tool path, installed-client handshake and opt-in activation counters; external outcome data remains absent | In progress |
 | Policy, observability and ecosystem | Partial primitives; no coherent operator product | Not started |
 
 ## Stage 0 - Product contract and engineering baseline
