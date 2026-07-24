@@ -1115,6 +1115,23 @@ plan is [`PROJECT_PLAN.md`](./PROJECT_PLAN.md).
 - Next: Keep S1.3 real client/Tunnel acceptance separate; do not treat this
   generic contract as Codex/Claude/ChatGPT live proof.
 
+## 2026-07-24 - Capability policy and autonomy exit gates - completed
+
+- Milestones: `S2.2`, `S2.3`
+- Owner: `Codex`
+- Scope: Audit the policy/autonomy implementation against the explicit plan
+  gates rather than treating individual feature commits as completion.
+- Evidence: Access-profile black-box tests cover per-target/per-tool allow and
+  deny behavior; network proxy tests cover policy denial attribution; approval
+  tests cover canonical relay, pinned-server and legacy-agent aliases; bounded
+  autonomous tests cover relay plus both aliases and raw-argument exclusion.
+- Verification: These rows run through `tests/test_completion_matrix.py`; the
+  latest matrix passed (`11 passed`) and Hub full/race/vet passed.
+- Delivery: Pending integration commit on `codex/haos-addon-public`; no deploy,
+  push or merge. The unrelated remote-secret-ingress plan remains preserved.
+- Next: Keep S2.1 identity migration and S2.1a passkey/OIDC verification as
+  separate open gates; do not conflate them with policy/autonomy completion.
+
 
 ## 2026-07-24 - Typed admin security controls and Apps SDK contract - completed
 
