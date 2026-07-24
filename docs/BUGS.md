@@ -12,6 +12,16 @@ Rules:
 - At the end of the current goal, resolve every actionable open entry before
   final handoff, unless a concrete external blocker is recorded.
 
+## 2026-07-24 - HUB-PUBLIC-ORIGIN-HTTP-20260724 - Security preset accepted external HTTP origin - fixed
+
+- Component: `go-hub/internal/hub/security_settings.go` preset mutation.
+- First observed: 2026-07-24, immutable RED test `TestSecurityPresetRejectsExternalHTTPOrigin`.
+- Symptom / evidence: `private_access` accepted `PUBLIC_ORIGIN=http://hub.example`, allowing a non-TLS public identity to be selected for a hardened preset.
+- Root cause: Preset validation checked only the preset name and MFA enrollment; it did not validate the configured public origin transport.
+- Fix / verification: External origins now require HTTPS and reject userinfo; loopback HTTP remains allowed only for internal Hub↔Tunnel transport. Full Hub test/race/vet and completion matrix pass.
+- Status: fixed.
+- Next action: Prove TLS and external identity behavior at the real Tunnel/deployment boundary.
+
 ## 2026-07-24 - HUB-BIND-LOOPBACK-20260724 - Go Hub ignored installer loopback bind - fixed
 
 - Component: `cli.py` Hub service environment and `go-hub/internal/hub.FromEnv`.

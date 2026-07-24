@@ -63,6 +63,25 @@ func validateSecurityPreset(preset string) error {
 	}
 }
 
+func validatePublicOriginForPreset(origin string) error {
+	origin = strings.TrimSpace(origin)
+	if origin == "" {
+		return nil
+	}
+	parsed, err := url.Parse(origin)
+	if err != nil || parsed.Host == "" || parsed.User != nil {
+		return errors.New("PUBLIC_ORIGIN must be an absolute URL without userinfo")
+	}
+	if parsed.Scheme == "https" {
+		return nil
+	}
+	host := strings.ToLower(parsed.Hostname())
+	if parsed.Scheme == "http" && (host == "localhost" || host == "127.0.0.1" || host == "::1") {
+		return nil
+	}
+	return errors.New("external PUBLIC_ORIGIN must use HTTPS")
+}
+
 func loadSecuritySettings(path, key string) (securitySettings, error) {
 	state := defaultSecuritySettings()
 	if path == "" {
@@ -393,6 +412,10 @@ func (s *Server) adminSecurityPreset(w http.ResponseWriter, r *http.Request) {
 		preset := strings.ToLower(strings.TrimSpace(req.Preset))
 		if err := validateSecurityPreset(preset); err != nil {
 			writeJSON(w, http.StatusBadRequest, map[string]any{"detail": err.Error()})
+			return
+		}
+		if err := validatePublicOriginForPreset(s.cfg.PublicOrigin); err != nil {
+			writeJSON(w, http.StatusPreconditionFailed, map[string]any{"detail": err.Error()})
 			return
 		}
 		s.mu.Lock()
