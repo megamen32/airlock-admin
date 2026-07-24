@@ -48,6 +48,17 @@ plan is [`PROJECT_PLAN.md`](./PROJECT_PLAN.md).
 
 ## Entries
 
+## 2026-07-24 - Current-head repository acceptance - completed
+
+- Milestone: `S0.1` / `S0.2` / `S1.1` / `S3.5`
+- Owner: `Codex`
+- Scope: Re-run the repository acceptance gates after setup health and installer vocabulary fixes on the single linear integration vertex.
+- Baseline / red evidence: The current-head from-scratch Docker run exposed the installer quickstart credential-name regression; it was fixed before this final gate.
+- Change: No additional product change; record the final acceptance evidence for the current linear tree.
+- Verification: Full Python `188 passed, 2 skipped`; completion matrix `11 passed`; Go Hub, ShellMCP and ProxyRelay full tests plus race/vet passed; Hub Darwin arm64/amd64 cross-builds passed; Docker installer/Tunnel run at `497fac7` exited `0` with `ALL SHELLMCP E2E SCENARIOS PASSED`; `git diff --check` passed.
+- Delivery: Current linear commits `ef31e3d`, `497fac7`, `8ce1c25`; no push, deployment or merge performed. Preserve `docs/superpowers/plans/2026-07-24-remote-secret-ingress.md` untouched.
+- Next: Obtain the remaining external clean-host/native/CI/collector/physical-fallback evidence before closing the corresponding roadmap gates.
+
 ## 2026-07-24 - Installer quickstart delivery identity - completed
 
 - Milestone: `S0.5` / `S1.1`
