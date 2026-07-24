@@ -48,6 +48,17 @@ plan is [`PROJECT_PLAN.md`](./PROJECT_PLAN.md).
 
 ## Entries
 
+## 2026-07-24 - Setup health acceptance gate - completed
+
+- Milestone: `S1.1`
+- Owner: `Codex`
+- Scope: Make non-interactive and interactive Hub setup fail closed when the newly started local Hub does not become healthy; add a regression contract without touching the unrelated untracked plan.
+- Baseline / red evidence: `setup_interactive()` ignores a false `wait_local_hub_health()` result and can print `Готово` after a failed Hub bootstrap.
+- Change: Added `_require_local_hub_health()` and wired setup through the same fail-closed health gate as update; a failed local Hub now aborts instead of printing a successful setup completion.
+- Verification: `python3 -m pytest tests/test_setup_semantics.py tests/test_install_scripts.py -q` and `python3 -m py_compile cli.py` pass. Full Python and completion-matrix verification remains the next integration gate.
+- Delivery: Pending the current linear integration commit; no push or deployment.
+- Next: Run the full repository acceptance gate and preserve clean-host/native gaps separately.
+
 ## 2026-07-24 - Safe delivery status delivery identity - completed
 
 - Milestone: `S3.5`

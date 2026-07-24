@@ -22,6 +22,16 @@ Rules:
 - Status: fixed.
 - Next action: Prove the same transaction with a clean-host update and real client reconnection before closing S3.5.
 
+## 2026-07-24 - SETUP-HEALTH-IGNORED-20260724 - Failed setup health did not abort - fixed
+
+- Component: `cli.py:setup_interactive` Hub bootstrap.
+- First observed: 2026-07-24, source inspection after the update health-gate fix.
+- Confirmed fact: Setup starts the Hub and calls `wait_local_hub_health`, but ignores a false result and continues to report a completed installation.
+- Root-cause hypothesis: Install and update paths evolved separately and only the update path treats health as an acceptance gate.
+- Fix / verification: Added `_require_local_hub_health()` and wired setup through the fail-closed helper; focused setup semantics tests pass and the installer contract remains green.
+- Status: fixed.
+- Next action: Retain the setup health gate in the from-scratch installer acceptance run.
+
 ## 2026-07-24 - WEBAUTHN-CEREMONY-EXPIRY-20260724 - Ceremony sessions rejected immediately - fixed
 
 - Component: `go-hub/internal/hub/webauthn.go` WebAuthn registration/login ceremony store.

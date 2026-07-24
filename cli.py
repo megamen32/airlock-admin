@@ -1697,6 +1697,20 @@ def wait_local_hub_health(env: dict, timeout_s: int = 90) -> bool:
     return False
 
 
+def _require_local_hub_health(env: dict, timeout_s: int = 90) -> None:
+    """Abort setup when the newly started local Hub never becomes healthy.
+
+    Args:
+        env: Installer environment containing the Hub address and credentials.
+        timeout_s: Maximum number of seconds to wait for the health endpoint.
+
+    Raises:
+        RuntimeError: If the Hub health gate does not pass.
+    """
+    if not wait_local_hub_health(env, timeout_s=timeout_s):
+        raise RuntimeError('local Hub health check failed during setup')
+
+
 def _load_local_shellmcp_identity(env: dict, timeout_s: int = 30) -> dict:
     identity_dir = Path(env.get('IDENTITY_DIR') or env.get('SHELLMCP_IDENTITY_DIR') or str(ETC_DIR))
     ident_file = identity_dir / 'shellmcp_identity.json'
@@ -2009,7 +2023,7 @@ def setup_interactive(args):
     svc_daemon_reload()
     if install_hub:
         svc_enable_start(svc_hub_name(), UNIT_PATH_HUB)
-        wait_local_hub_health(env)
+        _require_local_hub_health(env)
     if env.get('FRP_ENABLE', 'false') == 'true':
         svc_frpc_enable_start_all(env)
     if env.get('TUNNEL_MODE') == 'cloudflare' or env.get('CLOUDFLARE_TUNNEL_ENABLE', 'false') == 'true':

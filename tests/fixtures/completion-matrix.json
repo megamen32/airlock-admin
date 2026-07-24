@@ -69,6 +69,11 @@
       "evidence": "local unit/config, Hub health, remote clock and permission readiness without secrets"
     },
     {
+      "id": "setup-health-gate",
+      "command": "python3 -m pytest tests/test_setup_semantics.py tests/test_install_scripts.py -q",
+      "evidence": "from-scratch setup aborts on failed Hub health instead of reporting a false successful installation"
+    },
+    {
       "id": "activation-telemetry",
       "command": "cd go-hub && go test ./internal/hub -run 'TestActivationTelemetry(RecordsConnectionAndFirstToolWithoutPayload|IsOptInAggregatedAndPersistent)' -count=1",
       "evidence": "opt-in local event counters, payload exclusion and restart persistence"
