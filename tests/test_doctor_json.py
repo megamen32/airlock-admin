@@ -134,6 +134,30 @@ def test_doctor_reports_legacy_shellmcp_binary_in_canonical_unit(monkeypatch, ca
     )
 
 
+def test_doctor_rejects_tcp_listener_without_hub_health(monkeypatch, capsys):
+    """A stale process on the configured Hub port must not count as a healthy Hub."""
+    listener = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    listener.bind(("127.0.0.1", 0))
+    listener.listen(1)
+    port = listener.getsockname()[1]
+
+    monkeypatch.setattr(cli, "installed_units", lambda: [])
+    monkeypatch.setattr(cli, "env_read", lambda: {
+        "ADMIN_PASSWORD": "hidden",
+        "HUB_HOST": "127.0.0.1",
+        "HUB_PORT": str(port),
+    })
+
+    cli.cmd_doctor(Namespace(json=True))
+    listener.close()
+
+    report = json.loads(capsys.readouterr().out)
+    assert any(
+        check["name"] == "hub_local_health" and check["status"] == "error"
+        for check in report["checks"]
+    )
+
+
 def test_doctor_probes_authenticated_hub_readiness_without_echoing_token(monkeypatch, capsys, tmp_path):
     """Configured machine auth must be checked without entering the report."""
     unit = tmp_path / "gptadmin-hub.service"

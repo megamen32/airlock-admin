@@ -2666,3 +2666,14 @@ plan is [`PROJECT_PLAN.md`](./PROJECT_PLAN.md).
 - Verification: RED then GREEN focused regression; `python3 -m pytest tests/test_doctor_json.py -q` -> `5 passed`.
 - Delivery: Local diagnosis is now fail-closed for the observed deployment drift; the remote unit and credentials remain unchanged.
 - Next: Run `gptadmin doctor --json` on server-88 after the authorized deployment repair and require no `shellmcp_unit` error.
+
+## 2026-07-24 - Doctor rejects stale Hub listeners - completed locally
+
+- Milestone: `S1.2`, `S1.1`
+- Owner: Codex
+- Scope: Ensure an occupied Hub TCP port is not treated as a healthy Hub when the listener does not serve `/healthz`.
+- Baseline / red evidence: `test_doctor_rejects_tcp_listener_without_hub_health` failed because the doctor checked only `connect_ex`.
+- Change: For an explicitly configured `HUB_HOST`/`HUB_BIND`, doctor now performs a bounded local `/healthz` JSON probe and reports `hub_local_health` as an error on stale or foreign listeners.
+- Verification: RED then GREEN regression; `python3 -m pytest tests/test_doctor_json.py -q` -> `6 passed`.
+- Delivery: The observed server-100 stale `:9001` listener will now be diagnosable by the product without exposing response data or credentials.
+- Next: Re-run `gptadmin doctor --json` during the authorized external repair.

@@ -3198,6 +3198,23 @@ def _doctor_shellmcp_unit_contract(path: Path) -> tuple[str, str] | None:
     return None
 
 
+def _doctor_local_hub_health(host: str, port: str) -> tuple[str, str]:
+    """Require an explicit local Hub bind to answer its health contract."""
+    probe_host = host.strip()
+    if probe_host in {'', '0.0.0.0', '::'}:
+        probe_host = '127.0.0.1'
+    url_host = f'[{probe_host}]' if ':' in probe_host and not probe_host.startswith('[') else probe_host
+    try:
+        request = urllib.request.Request(f'http://{url_host}:{int(port)}/healthz', headers={'Accept': 'application/json'})
+        with urllib.request.urlopen(request, timeout=3) as response:
+            payload = json.loads(response.read().decode('utf-8', 'replace') or '{}')
+            if response.status != 200 or not isinstance(payload, dict) or payload.get('ok') is not True:
+                raise ValueError('invalid Hub health response')
+    except Exception:
+        return 'error', 'configured Hub port does not answer the local health contract'
+    return 'ok', 'local Hub health passed'
+
+
 def _doctor_report() -> dict:
     """Collect service, configuration and local Hub readiness checks."""
     checks = []
@@ -3324,6 +3341,13 @@ def _doctor_report() -> dict:
     except (OSError, TypeError, ValueError) as exc:
         checks.append({'name': 'hub_port', 'status': 'error', 'message': f'invalid port configuration: {exc}'})
         issues += 1
+
+    local_host = env.get('HUB_HOST', env.get('HUB_BIND', '')).strip()
+    if local_host:
+        local_health_status, local_health_message = _doctor_local_hub_health(local_host, hub_port)
+        checks.append({'name': 'hub_local_health', 'status': local_health_status, 'message': local_health_message})
+        if local_health_status == 'error':
+            issues += 1
 
     return {'ok': issues == 0, 'issues': issues, 'hub_url': hub_url or None, 'remote_build': remote_build, 'checks': checks}
 
