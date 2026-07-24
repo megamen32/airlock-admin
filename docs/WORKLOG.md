@@ -48,6 +48,28 @@ plan is [`PROJECT_PLAN.md`](./PROJECT_PLAN.md).
 
 ## Entries
 
+## 2026-07-24 - S4.4 extension conformance delivery identity - completed
+
+- Milestone: `S4.4`
+- Owner: `Codex`
+- Scope: Attach the immutable commit to the extension manifest schema/validator slice.
+- Baseline / red evidence: The reference extension test first failed because no validator existed.
+- Change: No additional production change; record the current linear delivery identity.
+- Verification: `git show --no-patch --format='%H %s' 69d0642` identifies `feat: add MCP extension manifest conformance`; focused extension/catalog/MCP tests pass.
+- Delivery: Commit `69d0642`; no push, deployment or merge performed.
+- Next: Add a real third-party adapter runner before closing S4.4.
+
+## 2026-07-24 - S4.2 capability catalog delivery identity - completed
+
+- Milestone: `S4.2`
+- Owner: `Codex`
+- Scope: Attach the immutable commit to the curated capability catalog and explicit activation acknowledgement.
+- Baseline / red evidence: Catalog tests first failed because `mcp catalog` and catalog-bound activation controls were absent.
+- Change: No additional production change; record the current linear delivery identity.
+- Verification: `git show --no-patch --format='%H %s' b650515` identifies `feat: add curated MCP capability catalog`; catalog and MCP relay tests pass.
+- Delivery: Commit `b650515`; no push, deployment or merge performed.
+- Next: Keep signed/public catalog provenance and external extension certification open.
+
 ## 2026-07-24 - Extension manifest conformance - active
 
 - Milestone: `S4.4`
