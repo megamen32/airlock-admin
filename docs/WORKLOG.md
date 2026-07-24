@@ -2375,3 +2375,14 @@ plan is [`PROJECT_PLAN.md`](./PROJECT_PLAN.md).
 - Verification: deployment, docs and feedback contracts pass (`10 passed`); local Markdown links resolve; failover and release references point to tracked files.
 - Delivery: Local documentation/process contract only; no real design-partner metrics, physical deployment, external client certification or commercial offering claim.
 - Next: Obtain one consented external design-partner/host evidence artifact and link it from the worklog.
+
+## 2026-07-24 - Live runtime blocker confirmation - open
+
+- Milestone: `S1.1`, `S3.4`
+- Owner: Codex / deployment owner
+- Scope: Fresh direct-IP read-only probes for the known Hub/Tunnel and ShellMCP hosts.
+- Baseline / red evidence: `trash/logs/live-runtime-smoke-20260724-rerun.md` records server-100 Hub inactive/Tunnel failed with `:9001` unreachable and server-88 ShellMCP inactive with `:25900` unreachable.
+- Change: No runtime mutation; direct IPs were used after the SSH aliases failed DNS resolution, and existing service state was preserved.
+- Verification: Both SSH probes completed in BatchMode and returned the same inactive/unreachable runtime result.
+- Delivery: External blocker; no deploy, restart or credential change.
+- Next: In an explicitly authorized deployment session, restore the supported release and run the authenticated endpoint/proxy/MCP/file/profile smoke.
