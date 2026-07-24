@@ -924,6 +924,33 @@ plan is [`PROJECT_PLAN.md`](./PROJECT_PLAN.md).
   backups.
 - Next: Push the integrated commit and keep the existing admin password stable.
 
+## 2026-07-24 - Typed admin security controls and Apps SDK contract - completed
+
+- Milestone: `S2.1` / `S1.4`
+- Owner: `Codex`
+- Scope: Remove browser-side shell/env mutation from the production admin UI;
+  expose heartbeat, local activation telemetry, MFA, security presets and
+  approval review through typed Hub endpoints; keep Apps SDK capability
+  metadata aligned with the safe readonly demo.
+- Baseline / red evidence: `tests/test_admin_ui.py` failed because the UI still
+  listed internal environment keys and `setEnvVar` built a `shell_exec` command;
+  the focused Hub regression returned 404 for the typed heartbeat endpoint;
+  the full Hub suite then caught a stale Apps SDK count of 7 after `demo` was
+  intentionally added.
+- Change: Added `/admin/api/security/heartbeat`, replaced legacy UI mutation
+  controls with typed preset/MFA/telemetry/approval flows, removed the raw
+  restart fallback, and changed the Apps SDK test to assert the exact eight
+  capability names including `demo`.
+- Verification: Focused admin/security tests `13 passed`; JS syntax check
+  passed; Hub focused typed-endpoint and Apps SDK tests passed; Hub full,
+  race and vet passed; ShellMCP full, race and vet passed; acceptance/golden/
+  doctor tests `15 passed`; full Python suite `172 passed, 2 skipped`.
+- Delivery: Pending integration commit on `codex/haos-addon-public`; no deploy,
+  push or merge performed. The unrelated remote-secret-ingress plan remains
+  untracked and preserved.
+- Next: Continue the outstanding fresh-host/native runtime and clean-host
+  restore acceptance audit; do not mark the overall completion goal done yet.
+
 ## 2026-07-24 - Release provenance and golden-path evidence - completed
 
 - Milestone: `S0.1` / `S0.3`

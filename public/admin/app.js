@@ -403,62 +403,79 @@ function formatArgs(){try{$('args').value=JSON.stringify(JSON.parse($('args').va
 initMaxActiveIpsInput();showView(currentView);loadFailover().catch(()=>{});refreshAll();setInterval(()=>{if($('autoRefresh').checked)refreshAll()},15000);
 
 // ===== Security management =====
-async function loadSecurityEnv(){
-  const el=$('securityEnv');
-  el.innerHTML='<p class="muted">Загрузка…</p>';
+async function loadSecurityControls(){
   try{
-    const j=await api('/admin/api/security/env');
-    const variables=Array.isArray(j.variables)?j.variables:[];
-    const heartbeatInput=$('shellHeartbeatEnabled');
-    if(heartbeatInput)heartbeatInput.checked=!!j.shellmcp_heartbeat;
-    el.innerHTML=variables.map(v=>{
-      const label=v.sensitive?'sensitive · value hidden':(v.present?'set':'empty');
-      return `<div class="recentMiniItem"><div class="recentMiniTop"><span class="mono">${esc(v.key)}</span><span class="muted small">${label}</span></div><div class="mono">${v.present?'length '+esc(String(v.length)):'not set'}</div></div>`;
-    }).join('');
-  }catch(e){
-    el.innerHTML='<p class="bad">ERR '+esc(e.message)+'</p>';
-  }
+    const preset=await api('/admin/api/security/preset');
+    if($('securityPreset'))$('securityPreset').value=preset.preset||'working_default';
+    $('securityPresetStatus').textContent=JSON.stringify({preset:preset.preset,mfa_enrolled:!!preset.mfa_enrolled,updated_at:preset.updated_at||null},null,2);
+    const env=await api('/admin/api/security/env');
+    if($('shellHeartbeatEnabled'))$('shellHeartbeatEnabled').checked=!!env.shellmcp_heartbeat;
+    $('securityHeartbeatResult').textContent=env.shellmcp_heartbeat?'Включён':'Выключен';
+    const telemetry=await api('/admin/api/telemetry');
+    if($('securityTelemetryEnabled'))$('securityTelemetryEnabled').checked=!!telemetry.enabled;
+    $('securityTelemetryResult').textContent=JSON.stringify({enabled:!!telemetry.enabled,local_only:!!telemetry.local_only,counters:telemetry.counters||{}},null,2);
+    await loadApprovals();
+  }catch(e){$('securityPresetStatus').textContent='ERR '+e.message}
 }
 
-async function setEnvVar(){
-  const key=$('secEnvKey').value;
-  const val=$('secEnvVal').value.trim();
-  if(!val){alert('Введите значение');return}
-  const realKey=key==='_custom'?prompt('Имя переменной:'):key;
-  if(!realKey)return;
-  if(!confirm('Установить '+realKey+' в env? Это изменит конфигурацию хаба.'))return;
+async function saveSecurityPreset(){
   try{
-    const cmd=`grep -v '^${realKey}=' /etc/gptadmin/gptadmin.env 2>/dev/null > /tmp/_gptadmin.env.tmp && echo '${realKey}=${val.replace(/'/g,"'\''")}' >> /tmp/_gptadmin.env.tmp && mv /tmp/_gptadmin.env.tmp /etc/gptadmin/gptadmin.env && echo OK || echo FAIL`;
-    const j=await api('/mcp-relay/call',{method:'POST',body:JSON.stringify({
-      target:'shell:roomhacker-server-100',
-      tool_name:'shell_exec',
-      arguments:{cmd,sudo:true}
-    })});
-    const sc=j.response?.structuredContent||j.structuredContent||{};
-    const result=sc.result||{};
-    const out=result.stdout||'';
-    if(out.includes('OK')){
-      $('secEnvVal').value='';
-      loadSecurityEnv();
-      alert(realKey+' установлен. Перезапустите хаб.');
-    }else{
-      alert('Ошибка: '+out);
-    }
-  }catch(e){alert('ERR '+e.message)}
+    const j=await api('/admin/api/security/preset',{method:'PUT',body:JSON.stringify({preset:$('securityPreset').value})});
+    $('securityPresetStatus').textContent=JSON.stringify(j,null,2);
+  }catch(e){$('securityPresetStatus').textContent='ERR '+e.message}
 }
 
-function setShellHeartbeatFromPanel(enabled){
-  $('secEnvKey').value='SHELLMCP_HEARTBEAT';
-  $('secEnvVal').value=enabled?'1':'0';
-  setEnvVar();
+async function enrollSecurityTotp(){
+  try{
+    const j=await api('/admin/api/security/mfa/totp/enroll',{method:'POST',body:'{}'});
+    $('securityMfaResult').textContent=JSON.stringify(j,null,2);
+  }catch(e){$('securityMfaResult').textContent='ERR '+e.message}
+}
+
+async function verifySecurityTotp(){
+  const code=$('securityMfaCode').value.trim();
+  if(!code){alert('Введите MFA-код');return}
+  try{
+    const j=await api('/admin/api/security/mfa/totp/verify',{method:'POST',body:JSON.stringify({code})});
+    $('securityMfaResult').textContent=JSON.stringify(j,null,2);
+    await loadSecurityControls();
+  }catch(e){$('securityMfaResult').textContent='ERR '+e.message}
+}
+
+async function setShellHeartbeatFromPanel(enabled){
+  try{
+    const j=await api('/admin/api/security/heartbeat',{method:'POST',body:JSON.stringify({enabled})});
+    $('securityHeartbeatResult').textContent=JSON.stringify(j,null,2);
+  }catch(e){$('securityHeartbeatResult').textContent='ERR '+e.message}
+}
+
+async function setSecurityTelemetry(enabled){
+  try{
+    const j=await api('/admin/api/telemetry',{method:'PUT',body:JSON.stringify({enabled})});
+    $('securityTelemetryResult').textContent=JSON.stringify(j,null,2);
+  }catch(e){$('securityTelemetryResult').textContent='ERR '+e.message}
+}
+
+async function loadApprovals(){
+  const el=$('securityApprovals');
+  if(!el)return;
+  try{
+    const j=await api('/admin/api/approvals');
+    const rows=Array.isArray(j.approvals)?j.approvals:[];
+    el.innerHTML=rows.length?rows.map(a=>'<div class="recentMiniItem"><div class="recentMiniTop"><span class="mono">'+esc(a.status||'unknown')+'</span><span class="muted small">'+esc(a.tool||'')+'</span></div><div class="mono">'+esc(a.target||'')+' · '+esc(a.actor||'')+'</div>'+(a.status==='pending'?'<div class="row"><button onclick="decideApproval(\''+esc(a.approval_id)+'\',\'approve\')">Разрешить</button><button class="cancelBtn" onclick="decideApproval(\''+esc(a.approval_id)+'\',\'reject\')">Отклонить</button></div>':'')+'</div>').join(''):'<p class="muted">Нет запросов</p>';
+  }catch(e){el.innerHTML='<p class="bad">ERR '+esc(e.message)+'</p>'}
+}
+
+async function decideApproval(id,action){
+  try{await api('/admin/api/approvals/'+encodeURIComponent(id),{method:'POST',body:JSON.stringify({action})});await loadApprovals()}catch(e){alert('ERR '+e.message)}
 }
 
 async function rotateOAuth(){
-  if(!confirm('Сгенерировать новый OAUTH_CLIENT_SECRET? Все MCP-клиенты нужно будет переподключить!'))return;
+  if(!confirm('Обновить внутреннюю OAuth-конфигурацию? Подключения MCP потребуется проверить заново.'))return;
   try{
     const j=await api('/admin/api/auth/rotate-oauth',{method:'POST'});
-    alert(j.message||'OAuth secret rotated. Перезапустите хаб.');
-    loadSecurityEnv();
+    alert(j.message||'OAuth-конфигурация обновлена. Перезапустите хаб.');
+    await loadSecurityControls();
   }catch(e){alert('ERR '+e.message)}
 }
 
@@ -473,23 +490,6 @@ async function issueMcpTokenFromPanel(){
     el.textContent=JSON.stringify(j,null,2);
   }catch(e){el.textContent='ERR '+e.message}
 }
-
-async function restartHub(){
-  if(!confirm('Перезапустить gptadmin_hub? Кратковременный простой.'))return;
-  $('secRestartStatus').textContent='Перезапуск…';
-  try{
-    const j=await api('/mcp-relay/call',{method:'POST',body:JSON.stringify({
-      target:'shell:roomhacker-server-100',
-      tool_name:'shell_exec',
-      arguments:{cmd:'sudo systemctl restart gptadmin_hub 2>&1; echo exit=$?',sudo:true}
-    })});
-    const sc=j.response?.structuredContent||j.structuredContent||{};
-    const result=sc.result||{};
-    $('secRestartStatus').textContent='Готово: '+(result.stdout||'').trim();
-    setTimeout(()=>{$('secRestartStatus').textContent='';loadSecurityEnv()},3000);
-  }catch(e){$('secRestartStatus').textContent='ERR '+e.message}
-}
-
 
 async function revokeClient(key){
   if(!confirm('Отозвать клиента '+key+'? Он больше не сможет использовать MCP.'))return;

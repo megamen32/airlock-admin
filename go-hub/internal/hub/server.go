@@ -671,6 +671,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/admin/api/mcp/resources/read", s.requireCtl(s.adminMCPResourceRead))
 	mux.HandleFunc("/admin/api/auth/rotate-oauth", s.requireCtl(s.adminRotateOAuth))
 	mux.HandleFunc("/admin/api/security/env", s.requireCtl(s.adminSecurityEnv))
+	mux.HandleFunc("/admin/api/security/heartbeat", s.requireCtl(s.adminSecurityHeartbeat))
 	mux.HandleFunc("/admin/api/security/preset", s.requireCtl(s.adminSecurityPreset))
 	mux.HandleFunc("/admin/api/security/mfa/totp/enroll", s.requireCtl(s.adminTOTPEnroll))
 	mux.HandleFunc("/admin/api/security/mfa/totp/verify", s.requireCtl(s.adminTOTPVerify))
@@ -3309,6 +3310,35 @@ func (s *Server) adminSecurityEnv(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"variables": variables, "shellmcp_heartbeat": heartbeat})
+}
+
+func (s *Server) adminSecurityHeartbeat(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		w.Header().Set("Allow", "POST")
+		writeJSON(w, http.StatusMethodNotAllowed, map[string]any{"detail": "method not allowed"})
+		return
+	}
+	var req struct {
+		Enabled *bool `json:"enabled"`
+	}
+	if err := readJSON(r, &req); err != nil || req.Enabled == nil {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"detail": "enabled boolean is required"})
+		return
+	}
+	if strings.TrimSpace(s.cfg.EnvFile) == "" {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]any{"detail": "env file is not configured"})
+		return
+	}
+	value := "0"
+	if *req.Enabled {
+		value = "1"
+	}
+	if err := replaceEnvValue(s.cfg.EnvFile, "SHELLMCP_HEARTBEAT", value); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]any{"detail": "failed to persist heartbeat setting"})
+		return
+	}
+	s.addSecurityAudit("security_heartbeat_changed", map[string]any{"enabled": *req.Enabled, "restart_required": true})
+	writeJSON(w, http.StatusOK, map[string]any{"enabled": *req.Enabled, "restart_required": true, "message": "Restart the ShellMCP service to apply the setting."})
 }
 
 func sensitiveEnvKey(key string) bool {

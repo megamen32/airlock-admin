@@ -12,6 +12,24 @@ Rules:
 - At the end of the current goal, resolve every actionable open entry before
   final handoff, unless a concrete external blocker is recorded.
 
+## 2026-07-24 - ADMIN-ENV-SHELL-20260724 - Legacy admin env mutation bypass - fixed
+
+- Component: `public/admin/index.html` and `public/admin/app.js:setEnvVar`.
+- First observed: 2026-07-24, immutable evidence ID `admin-ui-security-audit-20260724-01` from the tracked source inspection and the missing typed-endpoint regression in `tests/test_admin_ui.py`.
+- Symptom / evidence: The production admin view exposes internal environment key names and constructs a `shell_exec` command containing an operator-supplied value to rewrite `/etc/gptadmin/gptadmin.env`; this bypasses the typed Hub security API and can put sensitive values into command/audit paths.
+- Root cause: The legacy UI retained an operator shell-editing fallback after the redacted `/admin/api/security/env` metadata endpoint was introduced.
+- Fix / verification: Replaced shell mutation and restart fallback with typed preset, MFA, telemetry, heartbeat and approval controls; removed internal key names from normal UI copy. `python3 -m pytest tests/test_admin_ui.py tests/test_shellmcp_heartbeat_config.py -q` passed (13 tests), `node --check public/admin/app.js` passed, and `go test ./internal/hub -run 'TestSecurityHeartbeatUsesTypedAdminEndpoint' -count=1` passed.
+- Next action: None for this bug; retain the full-suite run as the release gate.
+
+## 2026-07-24 - HUB-APPS-SDK-COUNT-20260724 - Apps SDK capability count drift - fixed
+
+- Component: `go-hub/internal/hub/server_test.go:TestAppsSDKMetadataAndWidget`.
+- First observed: 2026-07-24, immutable test evidence from `cd go-hub && go test ./...` after the safe readonly `demo` capability was added.
+- Symptom / evidence: The runtime advertised 8 Apps SDK tools while the regression asserted the previous count of 7, so the full Hub suite failed even though the new capability was intentional and readonly.
+- Root cause: The test encoded a stale aggregate count instead of asserting the capability names and safe metadata contract.
+- Fix / verification: Updated the regression to assert the exact eight capability names, including `demo`, while preserving widget metadata checks. `go test ./...`, `go test -race ./...` and `go vet ./...` in `go-hub` all pass; the focused Apps SDK test also passes.
+- Next action: None for this bug.
+
 ## 2026-07-24 - DOCKER-SETUP-PROMPT-20260724 - ShellMCP installer E2E input drift - fixed
 
 - Component: `tests/e2e/docker/scenarios/user-public-hub-shellmcp.sh` and the interactive setup contract in `cli.py`.

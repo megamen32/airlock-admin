@@ -468,6 +468,28 @@ func TestSecurityEnvEndpointNeverReturnsValues(t *testing.T) {
 	}
 }
 
+func TestSecurityHeartbeatUsesTypedAdminEndpoint(t *testing.T) {
+	envFile := filepath.Join(t.TempDir(), "gptadmin.env")
+	if err := os.WriteFile(envFile, []byte("SHELLMCP_HEARTBEAT=0\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	s := New(Config{CtlToken: "ctl", EnvFile: envFile})
+	req := httptest.NewRequest(http.MethodPost, "/admin/api/security/heartbeat", strings.NewReader(`{"enabled":true}`))
+	req.Header.Set("Authorization", "Bearer ctl")
+	rec := httptest.NewRecorder()
+	s.Handler().ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `"enabled":true`) || !strings.Contains(rec.Body.String(), "restart_required") {
+		t.Fatalf("typed heartbeat endpoint failed: status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	contents, err := os.ReadFile(envFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(contents), "SHELLMCP_HEARTBEAT=1") {
+		t.Fatalf("typed heartbeat endpoint did not persist setting: %s", contents)
+	}
+}
+
 func TestAdminIssueMCPTokenUsesPublicOriginAndWorksForRelay(t *testing.T) {
 	s := New(Config{
 		CtlToken:                 "ctl",
@@ -1669,9 +1691,18 @@ func TestAppsSDKMetadataAndWidget(t *testing.T) {
 	}
 	result := body["result"].(map[string]any)
 	tools := result["tools"].([]any)
+	expectedToolNames := map[string]bool{
+		"ui": true, "discover": true, "demo": true, "approve_pending_server": true,
+		"schema": true, "inspect": true, "execute": true, "job": true,
+	}
 	renderTools := 0
 	for _, raw := range tools {
 		tool := raw.(map[string]any)
+		name, ok := tool["name"].(string)
+		if !ok || !expectedToolNames[name] {
+			t.Fatalf("unexpected Apps SDK tool %q", tool["name"])
+		}
+		delete(expectedToolNames, name)
 		meta := tool["_meta"].(map[string]any)
 		if _, ok := tool["outputSchema"]; !ok {
 			t.Fatalf("tool %s missing outputSchema", tool["name"])
@@ -1703,8 +1734,8 @@ func TestAppsSDKMetadataAndWidget(t *testing.T) {
 			}
 		}
 	}
-	if len(tools) != 7 {
-		t.Fatalf("got %d Apps SDK tools, want 7", len(tools))
+	if len(tools) != 8 || len(expectedToolNames) != 0 {
+		t.Fatalf("got Apps SDK tools=%d missing=%v, want exact capability set", len(tools), expectedToolNames)
 	}
 	if renderTools != 1 {
 		t.Fatalf("got %d render tools, want 1", renderTools)

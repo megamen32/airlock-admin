@@ -46,3 +46,23 @@ def test_admin_ui_does_not_offer_legacy_ctl_bearer_controls():
     script = (ROOT / "public" / "admin" / "app.js").read_text()
     assert "CTL_TOKEN" not in html
     assert "CTL_TOKEN" not in script
+
+
+def test_admin_security_controls_use_typed_hub_endpoints_without_shell_env_mutation():
+    html = (ROOT / "public" / "admin" / "index.html").read_text()
+    script = (ROOT / "public" / "admin" / "app.js").read_text()
+    security_start = script.index("// ===== Security management =====")
+    security = script[security_start:]
+    for internal_name in ("MCP_BRIDGE_KEY", "OAUTH_CLIENT_SECRET", "SHELLMCP_TOKEN", "CTL_TOKEN"):
+        assert internal_name not in html
+        assert internal_name not in security
+    assert "setEnvVar" not in html
+    assert "shell_exec" not in security
+    for endpoint in (
+        "/admin/api/security/preset",
+        "/admin/api/security/mfa/totp/enroll",
+        "/admin/api/security/mfa/totp/verify",
+        "/admin/api/telemetry",
+        "/admin/api/approvals",
+    ):
+        assert endpoint in security

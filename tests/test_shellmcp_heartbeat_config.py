@@ -42,9 +42,10 @@ def test_admin_ui_exposes_heartbeat_as_an_explicit_setting() -> None:
     js = (root / "public" / "admin" / "app.js").read_text(encoding="utf-8")
 
     assert 'id="shellHeartbeatEnabled"' in html
-    assert "SHELLMCP_HEARTBEAT" in html
+    assert "SHELLMCP_HEARTBEAT" not in html
     assert "function setShellHeartbeatFromPanel" in js
-    assert "heartbeatInput.checked" in js
+    assert "/admin/api/security/heartbeat" in js
+    assert "env.shellmcp_heartbeat" in js
 
 
 def test_homeassistant_runtime_keeps_heartbeat_opt_in() -> None:
