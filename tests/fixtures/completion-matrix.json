@@ -155,6 +155,11 @@
       "id": "release-manifest-tamper-check",
       "command": "python3 -m pytest tests/test_release_provenance.py tests/test_sbom.py tests/test_update_semantics.py -q",
       "evidence": "artifact provenance/SBOM, canonical manifest compatibility and installer digest rejection"
+    },
+    {
+      "id": "release-workflow-gates",
+      "command": "python3 -m pytest tests/test_release_workflow_contract.py -q",
+      "evidence": "release workflow verifies manifest/SBOM and shipped installer links before publication"
     }
   ],
   "golden_paths": [

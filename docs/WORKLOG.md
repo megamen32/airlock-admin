@@ -48,6 +48,17 @@ plan is [`PROJECT_PLAN.md`](./PROJECT_PLAN.md).
 
 ## Entries
 
+## 2026-07-24 - Release provenance workflow contract - completed
+
+- Milestone: `S0.3`
+- Owner: `Codex`
+- Scope: Protect the existing release manifest/SBOM/digest and installer-link gates in `.github/workflows/build-and-sync.yml` with a repository test; no release or public-repository mutation.
+- Baseline / red evidence: The workflow gates existed, but no test failed if a future edit removed them.
+- Change: Added `tests/test_release_workflow_contract.py`, asserting manifest/SBOM verification and installer-link checks occur before public release publication.
+- Verification: `python3 -m pytest tests/test_release_workflow_contract.py tests/test_completion_matrix.py -q` -> `12 passed`; the full Python suite and release-manifest/SBOM tests also passed in the same integration ladder.
+- Delivery: Local workflow contract and plan status are committed in the current linear worktree; no GitHub run or release publication was triggered. Preserve the unrelated untracked remote-secret-ingress plan.
+- Next: Treat actual GitHub CI provenance/public release as an external proof gate; do not claim it from the local YAML test alone.
+
 ## 2026-07-24 - SLO and alert runbook - completed
 
 - Milestone: `S3.2`
