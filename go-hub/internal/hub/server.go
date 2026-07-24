@@ -3087,10 +3087,69 @@ func (s *Server) adminJobs(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) adminAudit(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		w.Header().Set("Allow", "GET")
+		writeJSON(w, http.StatusMethodNotAllowed, map[string]any{"detail": "method not allowed"})
+		return
+	}
+	query := r.URL.Query()
+	limit := 100
+	offset := 0
+	var err error
+	if raw := strings.TrimSpace(query.Get("limit")); raw != "" {
+		limit, err = strconv.Atoi(raw)
+		if err != nil || limit < 1 || limit > 500 {
+			writeJSON(w, http.StatusBadRequest, map[string]any{"detail": "limit must be between 1 and 500"})
+			return
+		}
+	}
+	if raw := strings.TrimSpace(query.Get("offset")); raw != "" {
+		offset, err = strconv.Atoi(raw)
+		if err != nil || offset < 0 {
+			writeJSON(w, http.StatusBadRequest, map[string]any{"detail": "offset must be non-negative"})
+			return
+		}
+	}
 	s.mu.Lock()
-	items := append([]auditEvent(nil), s.audit...)
+	all := append([]auditEvent(nil), s.audit...)
 	s.mu.Unlock()
-	writeJSON(w, http.StatusOK, map[string]any{"events": items, "audit_log": "go-in-memory"})
+	nameFilter := strings.TrimSpace(query.Get("name"))
+	actorFilter := strings.TrimSpace(query.Get("actor"))
+	targetFilter := strings.TrimSpace(query.Get("target"))
+	textFilter := strings.ToLower(strings.TrimSpace(query.Get("q")))
+	filtered := make([]auditEvent, 0, len(all))
+	for _, event := range all {
+		if nameFilter != "" && event.Name != nameFilter {
+			continue
+		}
+		if actorFilter != "" && firstString(event.Fields, "actor", "client_id", "subject") != actorFilter {
+			continue
+		}
+		if targetFilter != "" && firstString(event.Fields, "target", "server_id", "agent_id") != targetFilter {
+			continue
+		}
+		if textFilter != "" {
+			encoded, _ := json.Marshal(event)
+			if !strings.Contains(strings.ToLower(string(encoded)), textFilter) {
+				continue
+			}
+		}
+		filtered = append(filtered, event)
+	}
+	total := len(filtered)
+	if offset > total {
+		offset = total
+	}
+	end := offset + limit
+	if end > total {
+		end = total
+	}
+	items := filtered[offset:end]
+	response := map[string]any{"events": items, "count": len(items), "total": total, "offset": offset, "audit_log": "durable-jsonl"}
+	if end < total {
+		response["next_offset"] = end
+	}
+	writeJSON(w, http.StatusOK, response)
 }
 
 func (s *Server) adminApprovals(w http.ResponseWriter, r *http.Request) {

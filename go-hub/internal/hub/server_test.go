@@ -1042,6 +1042,46 @@ func TestSafeDemoToolIsAvailableToReadonlyMCPWithoutEchoingArguments(t *testing.
 	}
 }
 
+func TestAuditEndpointFiltersSearchesAndPaginatesWithoutRawArguments(t *testing.T) {
+	s := New(Config{CtlToken: "ctl", ConfigDir: t.TempDir()})
+	s.mu.Lock()
+	s.addAuditLocked("tool_decision", map[string]any{"actor": "alice", "target": "hub", "tool": "demo", "arguments_digest": "digest-alice"})
+	s.addAuditLocked("tool_decision", map[string]any{"actor": "bob", "target": "shell:node", "tool": "system_inspect", "arguments_digest": "digest-bob"})
+	s.addAuditLocked("policy_denied", map[string]any{"actor": "alice", "target": "hub", "tool": "shell_exec", "arguments_digest": "digest-denied"})
+	s.mu.Unlock()
+	req := httptest.NewRequest(http.MethodGet, "/admin/api/audit?name=tool_decision&actor=alice&target=hub&limit=1&offset=0", nil)
+	req.Header.Set("Authorization", "Bearer ctl")
+	w := httptest.NewRecorder()
+	s.Handler().ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("audit filter status=%d body=%s", w.Code, w.Body.String())
+	}
+	var body struct {
+		Events     []auditEvent `json:"events"`
+		Total      int          `json:"total"`
+		NextOffset *int         `json:"next_offset"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &body); err != nil {
+		t.Fatal(err)
+	}
+	if len(body.Events) != 1 || body.Total != 1 || body.NextOffset != nil {
+		t.Fatalf("audit filter/pagination mismatch: %+v body=%s", body, w.Body.String())
+	}
+	if body.Events[0].Fields["actor"] != "alice" || body.Events[0].Fields["target"] != "hub" {
+		t.Fatalf("audit filters returned wrong event: %+v", body.Events[0])
+	}
+	if !strings.Contains(w.Body.String(), "digest-alice") || strings.Contains(w.Body.String(), "secret-argument") {
+		t.Fatalf("audit response lost digest or exposed raw arguments: %s", w.Body.String())
+	}
+	q := httptest.NewRequest(http.MethodGet, "/admin/api/audit?q=policy_denied&limit=10", nil)
+	q.Header.Set("Authorization", "Bearer ctl")
+	qw := httptest.NewRecorder()
+	s.Handler().ServeHTTP(qw, q)
+	if qw.Code != http.StatusOK || !strings.Contains(qw.Body.String(), "policy_denied") {
+		t.Fatalf("audit q search failed: status=%d body=%s", qw.Code, qw.Body.String())
+	}
+}
+
 func TestRegistryStatePersistsAgentsAcrossRestart(t *testing.T) {
 	tmp := t.TempDir()
 	cfg := Config{CtlToken: "ctl", RelayAgentToken: "relay", ConfigDir: tmp, RegistryStateFile: filepath.Join(tmp, "registry_state.json"), DefaultTimeout: time.Second, PollMaxTimeout: time.Second}

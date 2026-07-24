@@ -106,8 +106,8 @@
     },
     {
       "id": "operator-audit-decision",
-      "command": "cd go-hub && go test ./internal/hub -run 'Test(ToolAuditIncludesActorPolicyDigestAndResultReference|DeniedToolAuditIncludesPolicyReasonWithoutArguments|AuditTrailSurvivesHubRestartWithRestrictivePermissions)' -count=1",
-      "evidence": "actor, target, allow/deny policy decisions, durable audit, argument digest and result reference without raw arguments"
+      "command": "cd go-hub && go test ./internal/hub -run 'Test(ToolAuditIncludesActorPolicyDigestAndResultReference|DeniedToolAuditIncludesPolicyReasonWithoutArguments|AuditTrailSurvivesHubRestartWithRestrictivePermissions|AuditEndpointFiltersSearchesAndPaginatesWithoutRawArguments)' -count=1",
+      "evidence": "actor, target, allow/deny policy decisions, durable/searchable audit, pagination, argument digest and result reference without raw arguments"
     },
     {
       "id": "ask-before-write",

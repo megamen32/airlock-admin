@@ -1197,6 +1197,25 @@ plan is [`PROJECT_PLAN.md`](./PROJECT_PLAN.md).
 - Next: wire the demo into the connection-page client flows and keep the
   destructive-action boundary enforced through every alias.
 
+## 2026-07-24 - Searchable operator audit trail - completed
+
+- Milestone: `S2.4`
+- Owner: `Codex`
+- Scope: Make the existing durable audit surface searchable and bounded for
+  incident review without changing the digest-only argument contract.
+- Baseline / red evidence: `/admin/api/audit` returned the entire in-memory
+  tail and exposed no filters, pagination metadata or query contract.
+- Change: Exact name/actor/target filters, case-insensitive `q`, bounded
+  limit/offset pagination and durable-jsonl response metadata.
+- Verification: Hub full/race/vet pass; ShellMCP and ProxyRelay race/vet pass;
+  Python `169 passed, 2 skipped`; completion matrix `11 passed`; public Hub
+  contract/golden tests `6 passed`; focused test covers search, filters,
+  pagination and digest-without-raw-arguments behavior.
+- Delivery: Pending integration commit on `codex/haos-addon-public`; no deploy
+  or push. Both untracked plan files remain preserved.
+- Next: add retention/export controls only if the incident runbook requires
+  them; current durable JSONL tail remains bounded and queryable.
+
 ## 2026-07-22 - Isolated Network Tunnel proxy relay - completed
 
 - Milestone: `S2.2`
