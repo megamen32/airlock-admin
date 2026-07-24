@@ -2430,3 +2430,14 @@ plan is [`PROJECT_PLAN.md`](./PROJECT_PLAN.md).
 - Verification: `python3 -m pytest tests/test_live_acceptance.py -q` passes (`2 passed`); the full smoke covers health, version, connection/OAuth discovery, OpenAPI and authenticated safe MCP call.
 - Delivery: Disposable local process evidence only; it does not certify the inactive external hosts, public Tunnel or third-party clients.
 - Next: Run the same runner against the authorized live Hub URL and attach the redacted result artifact.
+
+## 2026-07-24 - Disposable real-Hub canary gate - completed locally
+
+- Milestone: `S3.5`
+- Owner: Codex
+- Scope: Real Go Hub binary version swap, MCP reconnect and bad-candidate rollback on one disposable endpoint.
+- Baseline / red evidence: `tests/test_canary_acceptance.py` initially failed because the process-level canary harness was absent, then exposed a dynamic-module loader defect before implementation was complete.
+- Change: Added `tests/e2e/canary_acceptance.py` and `docs/CANARY_ACCEPTANCE.md`; the harness builds `canary-old`/`canary-new`, swaps real processes, exercises the live runner and restores the known-good candidate after an invalid executable.
+- Verification: `python3 -m pytest tests/test_canary_acceptance.py -q` passes (`1 passed`); no signed artifact, host service or public Tunnel claim is made.
+- Delivery: Local process-level canary only; external clean-host/client reconnect and signed release evidence remain separate.
+- Next: Run a signed canary on an authorized clean host and preserve its immutable artifact/run ID.

@@ -157,6 +157,11 @@
       "id": "sustainable-offering-boundary",
       "command": "python3 -m pytest tests/test_sustainable_offering.py -q",
       "evidence": "open-core boundary preserves AGPL self-hosted operation, data portability, optional hosted convenience and no forced lock-in"
+    },
+    {
+      "id": "disposable-canary-rollback",
+      "command": "python3 -m pytest tests/test_canary_acceptance.py -q",
+      "evidence": "real Go Hub binaries swap on one endpoint, reconnect through live MCP smoke and roll back a bad candidate"
     }
   ],
   "file_sharing": [
