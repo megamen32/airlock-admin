@@ -2452,3 +2452,14 @@ plan is [`PROJECT_PLAN.md`](./PROJECT_PLAN.md).
 - Verification: The process-level webhook test passes (`1 passed`); route token is absent from callback payload and the callback receiver observes the job ID.
 - Delivery: Local Go Hub process evidence only; public Tunnel ingress and external sender certification remain separate.
 - Next: Run the same webhook path through the authorized public Tunnel with an external sender and callback receiver.
+
+## 2026-07-24 - Process-level ProxyRelay acceptance gate - completed locally
+
+- Milestone: `S3.1`, `S4.1`
+- Owner: Codex
+- Scope: Built ProxyRelay process metrics, signed stream tickets, client-agent pairing and frame forwarding.
+- Baseline / red evidence: The existing blackbox covered an in-process HTTP server only; the new process contract initially caught test-harness API/configuration mistakes before the focused gate passed.
+- Change: Added `go-proxyrelay/blackbox/process_blackbox_test.go` and registered it in the completion matrix.
+- Verification: `cd go-proxyrelay && go test ./blackbox -run TestProxyRelayProcessMetricsAndStreamRoundTrip -count=1` passes; the test builds and launches the actual binary, checks `/metrics`, and verifies a signed frame round trip.
+- Delivery: Local process evidence only; public Tunnel routing and authorized external client proof remain separate.
+- Next: Run the same relay path through the authorized public Tunnel during the live deployment session.
