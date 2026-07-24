@@ -1072,6 +1072,25 @@ plan is [`PROJECT_PLAN.md`](./PROJECT_PLAN.md).
 - Next: define and enforce bounded-autonomous quotas, then implement the
   remaining MFA/security-preset and connection-page gates.
 
+## 2026-07-24 - Bounded-autonomous write budget - completed
+
+- Milestone: `S2.3`
+- Owner: `Codex`
+- Scope: Enforce a bounded autonomous write budget consistently across the
+  canonical relay, pinned-server action and legacy-agent MCP surfaces.
+- Baseline / red evidence: `bounded_autonomous` was accepted as a profile mode
+  but had no execution quota; an allowlisted actor could repeat write calls
+  indefinitely while bypassing any per-window autonomy bound.
+- Change: Added a shared in-memory five-minute actor/profile budget with a
+  32-call write limit, sanitized limit response, audit denial and identical
+  enforcement across relay, pinned-server and legacy-agent aliases.
+- Verification: Hub full and race suites pass; ShellMCP and ProxyRelay race
+  suites plus vet pass; Python `169 passed, 2 skipped`; completion matrix `11
+  passed`; OpenAPI YAML parses with approval and quota schemas.
+- Delivery: Pending integration commit on `codex/haos-addon-public`; no deploy
+  or push. The unrelated untracked remote-secret plan remains preserved.
+- Next: implement the remaining MFA/security-preset and connection-page gates.
+
 ## 2026-07-22 - Isolated Network Tunnel proxy relay - completed
 
 - Milestone: `S2.2`

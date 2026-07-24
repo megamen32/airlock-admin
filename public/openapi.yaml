@@ -80,6 +80,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ApprovalRequired"
+        "429":
+          description: The bounded-autonomous profile has exhausted its write budget for the current window.
   /mcp-relay/job/{job_id}:
     get:
       operationId: job
@@ -375,6 +377,24 @@ components:
         target:
           type: string
         tool:
+          type: string
+        message:
+          type: string
+    BoundedAutonomousLimit:
+      type: object
+      additionalProperties: false
+      required: [status, retry_at, limit, window]
+      properties:
+        status:
+          type: string
+          enum: [bounded_autonomous_limit]
+        retry_at:
+          type: string
+          format: date-time
+        limit:
+          type: integer
+          minimum: 1
+        window:
           type: string
         message:
           type: string

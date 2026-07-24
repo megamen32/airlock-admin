@@ -81,6 +81,9 @@ their credentials or their instruction files.
   once. Raw arguments are never stored in or returned by approval metadata.
 - Approval requests are intentionally in-memory and expire after five minutes;
   a restart invalidates outstanding requests.
+- `bounded_autonomous` is still profile-scoped and allowlist-scoped, and its
+  write-capable calls are limited to 32 calls per actor/profile in a five-minute
+  window. The response exposes only a retry time and limit, never arguments.
 - Profile and workspace-reference updates use version checks to prevent stale
   writes.
 - Instruction updates affect subsequent MCP initialization without restarting

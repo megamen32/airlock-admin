@@ -96,8 +96,8 @@
     },
     {
       "id": "ask-before-write",
-      "command": "cd go-hub && go test ./internal/hub -run 'TestAskBeforeWrite(RequiresAdminApprovalAndConsumesApproval|CoversPinnedServerAndLegacyAgentAliases)' -count=1",
-      "evidence": "write-capable MCP call and pinned/legacy aliases require admin approval, bind target/tool/digest and consume approval once"
+      "command": "cd go-hub && go test ./internal/hub -run 'Test(AskBeforeWrite(RequiresAdminApprovalAndConsumesApproval|CoversPinnedServerAndLegacyAgentAliases)|BoundedAutonomousProfileStopsWriteBudgetAcrossRelay)' -count=1",
+      "evidence": "write-capable MCP calls and aliases enforce approval, one-time consume, and bounded-autonomous per-actor budgets"
     },
     {
       "id": "readonly-security",

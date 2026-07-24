@@ -227,6 +227,16 @@ type approvalRequest struct {
 	Status          string    `json:"status"`
 }
 
+type autonomousBudget struct {
+	WindowStart time.Time
+	Count       int
+}
+
+const (
+	autonomousCallLimit  = 32
+	autonomousWindowSize = 5 * time.Minute
+)
+
 type oauthCode struct {
 	Created     time.Time
 	Challenge   string
@@ -284,6 +294,7 @@ type Server struct {
 	oauthClients   map[string]oauthClientMetadata
 	accessProfiles map[string]AccessProfile
 	approvals      map[string]*approvalRequest
+	autonomous     map[string]*autonomousBudget
 	audit          []auditEvent
 	failover       FailoverConfig
 
@@ -325,6 +336,7 @@ func New(cfg Config) *Server {
 		oauthClients:      map[string]oauthClientMetadata{},
 		accessProfiles:    map[string]AccessProfile{},
 		approvals:         map[string]*approvalRequest{},
+		autonomous:        map[string]*autonomousBudget{},
 		audit:             []auditEvent{},
 		webhookRoutes:     webhookRouteMap(webhookRoutes),
 		webhookJobs:       map[string]*webhookJob{},
@@ -949,6 +961,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ApprovalRequired"
+        "429":
+          description: The bounded-autonomous profile has exhausted its write budget for the current window.
   /mcp-relay/job/{job_id}:
     get:
       operationId: job
@@ -1043,6 +1057,24 @@ components:
         target:
           type: string
         tool:
+          type: string
+        message:
+          type: string
+    BoundedAutonomousLimit:
+      type: object
+      additionalProperties: false
+      required: [status, retry_at, limit, window]
+      properties:
+        status:
+          type: string
+          enum: [bounded_autonomous_limit]
+        retry_at:
+          type: string
+          format: date-time
+        limit:
+          type: integer
+          minimum: 1
+        window:
           type: string
         message:
           type: string
@@ -1992,6 +2024,10 @@ func (s *Server) executeMCPTool(r *http.Request, target, toolName string, args m
 		s.auditToolDecision(r, target, toolName, callArgs, "deny", "approval required", response, http.StatusPreconditionRequired)
 		return response, http.StatusPreconditionRequired
 	}
+	if response, blocked := s.boundedAutonomousGate(r, target, toolName); blocked {
+		s.auditToolDecision(r, target, toolName, callArgs, "deny", "bounded autonomous budget exhausted", response, http.StatusTooManyRequests)
+		return response, http.StatusTooManyRequests
+	}
 	args = callArgs
 	operation := func() (map[string]any, int) {
 		if target == "hub" {
@@ -2134,6 +2170,35 @@ func (s *Server) approvalGate(r *http.Request, target, toolName string, args map
 		"expires_at": approval.ExpiresAt, "target": target, "tool": toolName,
 		"message": "An administrator must approve this write before execution.",
 	}, true
+}
+
+func (s *Server) boundedAutonomousGate(r *http.Request, target, toolName string) (map[string]any, bool) {
+	profile, bound := AccessProfileFromRequest(r)
+	if !bound || profile.ApprovalMode != approvalModeBoundedAutonomous || isReadOnlyTool(target, toolName) {
+		return nil, false
+	}
+	key := profile.ID + "\x00" + s.actorForRequest(r)
+	now := s.now()
+	s.mu.Lock()
+	budget := s.autonomous[key]
+	if budget == nil || !now.Before(budget.WindowStart.Add(autonomousWindowSize)) {
+		budget = &autonomousBudget{WindowStart: now}
+		s.autonomous[key] = budget
+	}
+	if budget.Count >= autonomousCallLimit {
+		retryAt := budget.WindowStart.Add(autonomousWindowSize)
+		s.mu.Unlock()
+		return map[string]any{
+			"status":   "bounded_autonomous_limit",
+			"retry_at": retryAt,
+			"limit":    autonomousCallLimit,
+			"window":   autonomousWindowSize.String(),
+			"message":  "The bounded autonomous write budget is exhausted; retry after the window.",
+		}, true
+	}
+	budget.Count++
+	s.mu.Unlock()
+	return nil, false
 }
 
 func isReadOnlyTool(target, toolName string) bool {
@@ -4123,6 +4188,10 @@ func (s *Server) serverActionToolCall(w http.ResponseWriter, r *http.Request, ag
 		writeJSON(w, http.StatusPreconditionRequired, approvalResponse)
 		return
 	}
+	if budgetResponse, blocked := s.boundedAutonomousGate(r, agent.AgentID, toolName); blocked {
+		writeJSON(w, http.StatusTooManyRequests, budgetResponse)
+		return
+	}
 	result, rpcErr := s.agentToolCall(agent, toolName, callArgs)
 	if rpcErr != nil {
 		writeJSON(w, http.StatusBadGateway, map[string]any{"server_id": agent.AgentID, "tool_name": toolName, "status": "failed", "error": rpcErr})
@@ -4332,6 +4401,9 @@ func (s *Server) agentMCPJSONRPC(r *http.Request, agent Agent, body map[string]a
 		callArgs, approvalID := approvalArguments(args)
 		if approvalResponse, blocked := s.approvalGate(r, agent.AgentID, name, callArgs, approvalID); blocked {
 			return nil, map[string]any{"code": -32004, "message": "approval required", "data": approvalResponse}, false
+		}
+		if budgetResponse, blocked := s.boundedAutonomousGate(r, agent.AgentID, name); blocked {
+			return nil, map[string]any{"code": -32005, "message": "bounded autonomous budget exhausted", "data": budgetResponse}, false
 		}
 		result, err := s.agentToolCall(agent, name, callArgs)
 		return result, err, false

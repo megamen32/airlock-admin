@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -1992,6 +1993,94 @@ func TestAskBeforeWriteCoversPinnedServerAndLegacyAgentAliases(t *testing.T) {
 	approve(t, legacyApprovalID)
 	if replay := callLegacy(legacyApprovalID); strings.Contains(replay.Body.String(), `"code":-32004`) {
 		t.Fatalf("legacy agent approval was reusable: %s", replay.Body.String())
+	}
+}
+
+func TestBoundedAutonomousProfileStopsWriteBudgetAcrossRelay(t *testing.T) {
+	s := New(Config{CtlToken: "ctl-token", OAuthClientSecret: "oauth-secret", PublicOrigin: "https://hub.example", MCPResource: "https://hub.example"})
+	s.mu.Lock()
+	s.accessProfiles["bounded-profile"] = AccessProfile{
+		ID: "bounded-profile", AccessMode: accessModeFull, ApprovalMode: approvalModeBoundedAutonomous,
+		AllowedTargets: []string{"hub"}, AllowedTools: []string{"approve_pending_server"}, Version: 1,
+	}
+	s.mu.Unlock()
+	token, err := s.signJWT(map[string]any{
+		"sub": "bounded-writer", "client_id": "bounded-writer", "jti": "bounded-writer-jti", "profile_id": "bounded-profile",
+		"scope": "gptadmin.read gptadmin.exec", "aud": "https://hub.example", "resource": "https://hub.example",
+		"exp": time.Now().Add(time.Hour).Unix(), "iat": time.Now().Unix(), "kid": defaultJWTKeyID,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	call := func(index int) *httptest.ResponseRecorder {
+		body := fmt.Sprintf(`{"target":"hub","tool_name":"approve_pending_server","arguments":{"server_id":"shell:bounded-%d"}}`, index)
+		req := httptest.NewRequest(http.MethodPost, "/mcp-relay/call", strings.NewReader(body))
+		req.Header.Set("Authorization", "Bearer "+token)
+		w := httptest.NewRecorder()
+		s.Handler().ServeHTTP(w, req)
+		return w
+	}
+	for i := 0; i < autonomousCallLimit; i++ {
+		response := call(i)
+		if response.Code == http.StatusTooManyRequests {
+			t.Fatalf("bounded profile exhausted too early at call %d: %s", i, response.Body.String())
+		}
+	}
+	response := call(autonomousCallLimit)
+	if response.Code != http.StatusTooManyRequests {
+		t.Fatalf("bounded profile bypassed autonomous budget: status=%d body=%s", response.Code, response.Body.String())
+	}
+	if strings.Contains(response.Body.String(), "bounded-"+fmt.Sprint(autonomousCallLimit)) {
+		t.Fatalf("budget response exposed raw arguments: %s", response.Body.String())
+	}
+	for _, surface := range []string{"pinned", "legacy"} {
+		actor := "bounded-" + surface
+		surfaceToken, err := s.signJWT(map[string]any{
+			"sub": actor, "client_id": actor, "jti": actor + "-jti", "profile_id": "bounded-profile",
+			"scope": "gptadmin.read gptadmin.exec", "aud": "https://hub.example", "resource": "https://hub.example",
+			"exp": time.Now().Add(time.Hour).Unix(), "iat": time.Now().Unix(), "kid": defaultJWTKeyID,
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		callSurface := func(index int) *httptest.ResponseRecorder {
+			args := map[string]any{"server_id": fmt.Sprintf("shell:%s-%d", surface, index)}
+			var path string
+			var body []byte
+			if surface == "pinned" {
+				path = "/server/hub/actions/tools/approve_pending_server"
+				body, err = json.Marshal(args)
+			} else {
+				path = "/agent/hub"
+				body, err = json.Marshal(map[string]any{
+					"jsonrpc": "2.0", "id": index, "method": "tools/call",
+					"params": map[string]any{"name": "approve_pending_server", "arguments": args},
+				})
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			req := httptest.NewRequest(http.MethodPost, path, bytes.NewReader(body))
+			req.Header.Set("Authorization", "Bearer "+surfaceToken)
+			w := httptest.NewRecorder()
+			s.Handler().ServeHTTP(w, req)
+			return w
+		}
+		for i := 0; i < autonomousCallLimit; i++ {
+			if got := callSurface(i); got.Code == http.StatusTooManyRequests || strings.Contains(got.Body.String(), `"code":-32005`) {
+				t.Fatalf("%s alias exhausted too early at call %d: status=%d body=%s", surface, i, got.Code, got.Body.String())
+			}
+		}
+		limited := callSurface(autonomousCallLimit)
+		if surface == "pinned" && limited.Code != http.StatusTooManyRequests {
+			t.Fatalf("pinned alias bypassed autonomous budget: status=%d body=%s", limited.Code, limited.Body.String())
+		}
+		if surface == "legacy" && !strings.Contains(limited.Body.String(), `"code":-32005`) {
+			t.Fatalf("legacy alias bypassed autonomous budget: status=%d body=%s", limited.Code, limited.Body.String())
+		}
+		if strings.Contains(limited.Body.String(), surface+"-"+fmt.Sprint(autonomousCallLimit)) {
+			t.Fatalf("%s alias budget response exposed raw arguments: %s", surface, limited.Body.String())
+		}
 	}
 }
 
