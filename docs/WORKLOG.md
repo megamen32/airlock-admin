@@ -2408,3 +2408,14 @@ plan is [`PROJECT_PLAN.md`](./PROJECT_PLAN.md).
 - Verification: sustainable-offering/docs tests pass (`5 passed`); the document explicitly avoids claiming a currently available hosted service or commercial support.
 - Delivery: Local product contract only; no pricing, hosted deployment or user-outcome claim was invented.
 - Next: Keep any future hosted proposal behind a separate reviewed portability/security decision.
+
+## 2026-07-24 - Integration control contract alignment - completed locally
+
+- Milestone: `S4.1`
+- Owner: Codex
+- Scope: Documentation of the implemented `discover -> schema -> execute` Hub flow and its remaining schema-version boundary.
+- Baseline / red evidence: `tests/test_docs_product_contract.py::test_integration_control_contract_matches_current_hub_scope` failed because the contract called the implemented path `Planned` and claimed no implementation.
+- Change: Updated `docs/INTEGRATION_CONTROL_CONTRACT.md` to identify the current request-scoped Hub mapping, queued identity and retry/idempotency semantics; retained schema version/digest as the explicit remaining gap.
+- Verification: contract and integration certification tests pass (`3 passed`); the canonical docs map now exposes the contract.
+- Delivery: Local documentation alignment only; no new session-oriented adapter or external certification was claimed.
+- Next: Obtain a real third-party/session adapter certification after the external client/host gate is available.

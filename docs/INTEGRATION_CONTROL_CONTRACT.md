@@ -21,7 +21,7 @@ version returned by that session, and construct arguments only after `schema`.
 Retrying the same logical operation reuses the same idempotency key; a new
 operation gets a new key.
 
-## Existing GPTAdmin Mapping
+## Current Hub implementation
 
 | Control pattern | Existing Hub operation |
 | --- | --- |
@@ -33,6 +33,12 @@ The selected `target` is the current stable agent/server identity. A separate
 executor session and schema version are not currently part of the ordinary
 Hub relay contract because MCP tool schemas are fetched directly from the
 selected server.
+
+The current Hub implementation exposes the stable `discover -> schema ->
+execute` flow through the MCP and relay facades. The request-scoped policy
+decision is applied before schema lookup and execution, and the same target
+identity is carried through queued calls and results.
+In short, the implemented contract is `discover -> schema -> execute`.
 
 ## Remaining Gaps
 
@@ -50,14 +56,14 @@ relay API.
 
 ## GPTAdmin Scope
 
-This contract applies only to future session-oriented adapters. It does not
-change the stable MCP `tools/list` surface and it does not replace ordinary
-Hub, MCP client or Tunnel calls.
+This contract documents the existing Hub baseline for session-oriented
+adapters. It does not change the stable MCP `tools/list` surface and it does
+not replace ordinary Hub, MCP client or Tunnel calls.
 
-The first bounded extension candidate is still Stage 1.3 Universal connection
-page, but it should reuse the Hub flow above and add session-specific schema
-lookup only where a client actually requires it. That milestone is still
-`Planned`; no implementation is being claimed here.
+The Universal connection page and third-party extension path reuse the Hub flow
+above. A future session adapter may add session-specific schema lookup only
+where a client actually requires it; it must preserve the target policy,
+idempotency and audit guarantees already covered by this contract.
 
 Codex Document Control is the external reference that motivated this contract.
 GPTAdmin adopts the interaction shape, not Codex-specific names or behavior.

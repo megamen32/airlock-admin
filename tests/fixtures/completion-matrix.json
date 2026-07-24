@@ -282,6 +282,11 @@
       "id": "integration-support-inventory",
       "command": "python3 -m pytest tests/test_integration_certification.py -q",
       "evidence": "documented adapters have version policy, smoke command, evidence class and explicit write idempotency semantics"
+    },
+    {
+      "id": "integration-control-contract",
+      "command": "python3 -m pytest tests/test_docs_product_contract.py::test_integration_control_contract_matches_current_hub_scope -q",
+      "evidence": "current Hub discover -> schema -> execute mapping is documented without downgrading the implemented policy and retry contract"
     }
   ],
   "golden_paths": [

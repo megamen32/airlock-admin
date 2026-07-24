@@ -49,3 +49,13 @@ def test_release_workflow_runs_docs_contract() -> None:
     workflow = (ROOT / ".github" / "workflows" / "build-and-sync.yml").read_text(encoding="utf-8")
     assert "name: Docs product contract" in workflow
     assert "python3 -m pytest tests/test_docs_product_contract.py tests/test_feedback_loop_contract.py -q" in workflow
+
+
+def test_integration_control_contract_matches_current_hub_scope() -> None:
+    """Integration docs must not downgrade implemented discover/schema/execute flow."""
+
+    document = (ROOT / "docs" / "INTEGRATION_CONTROL_CONTRACT.md").read_text(encoding="utf-8").lower()
+    assert "current hub implementation" in document
+    assert "discover -> schema -> execute" in document
+    assert "schema version/digest" in document
+    assert "no implementation is being claimed" not in document
