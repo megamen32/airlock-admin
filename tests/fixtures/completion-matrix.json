@@ -199,6 +199,11 @@
       "id": "managed-file-backup-process",
       "command": "python3 -m pytest tests/test_shellmcp_contract.py -k file_backup_round_trip_through_process -q",
       "evidence": "real ShellMCP process performs file_backup create/list/restore with bounded artifact state"
+    },
+    {
+      "id": "readonly-symlink-process",
+      "command": "python3 -m pytest tests/test_shellmcp_contract.py -k symlink_escape_through_process -q",
+      "evidence": "real ShellMCP MCP process rejects read-only inspection of a symbolic link at the managed-root boundary"
     }
   ],
   "profiles": [

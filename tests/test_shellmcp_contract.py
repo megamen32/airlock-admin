@@ -294,6 +294,7 @@ def shellmcp_contract(request: pytest.FixtureRequest, tmp_path: Path) -> Iterato
             "SHELLMCP_IDENTITY_DIR": str(identity_dir),
             "SHELL_IDENTITY_DIR": str(identity_dir),
             "SHELLMCP_SPILL_DIR": str(spill_dir),
+            "SHELLMCP_INSPECT_ROOTS": str(tmp_path),
             "SHELLMCP_FILE_BACKUP_ROOT": str(tmp_path / "file-backups"),
             "SHELL_SPILL_DIR": str(spill_dir),
             "SHELLMCP_DEFAULT_CWD": cwd,
@@ -537,3 +538,30 @@ def test_shellmcp_contract_file_backup_round_trip_through_process(shellmcp_contr
         32,
     )
     assert any(item.get("backup_id") == backup_id for item in listed.get("structuredContent", {}).get("backups", []))
+
+
+def test_shellmcp_contract_rejects_symlink_escape_through_process(shellmcp_contract: ShellmcpProcess, tmp_path: Path) -> None:
+    """Keep the read-only file boundary fail-closed at the public MCP process."""
+    outside = tmp_path / "outside-secret.txt"
+    outside.write_text("not-for-model", encoding="utf-8")
+    link = tmp_path / "inspect-root" / "escape.txt"
+    link.parent.mkdir()
+    try:
+        link.symlink_to(outside)
+    except OSError:
+        pytest.skip("symlinks are unavailable on this host")
+
+    status, body, _ = shellmcp_contract.request(
+        "POST",
+        "/mcp",
+        {
+            "jsonrpc": "2.0",
+            "id": 33,
+            "method": "tools/call",
+            "params": {"name": "system_inspect", "arguments": {"action": "read_file", "path": str(link)}},
+        },
+    )
+    assert status == 200, body
+    assert body.get("error")
+    error_text = json.dumps(body["error"]).lower()
+    assert "symlink" in error_text or "symbolic link" in error_text or "outside" in error_text or "regular file" in error_text

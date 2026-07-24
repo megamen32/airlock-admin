@@ -2529,3 +2529,14 @@ plan is [`PROJECT_PLAN.md`](./PROJECT_PLAN.md).
 - Verification: `python3 -m pytest tests/test_hub_contract.py -q` passed (`7 passed`); completion matrix passed (`12 passed`); full Python passed (`235 passed, 3 skipped`, 237 collected).
 - Delivery: Local current-tree evidence only; public identity/Tunnel and native-host profile proof remain external.
 - Next: Re-run the profile-bound smoke against the authorized deployed commit when runtime access is available.
+
+## 2026-07-24 - Process-level read-only symlink boundary - completed locally
+
+- Milestone: `S2.2`, `S4.1`
+- Owner: Codex
+- Scope: ShellMCP public MCP `system_inspect(read_file)` rejection of a symbolic-link escape from the configured inspection root.
+- Baseline / red evidence: The repository had unit regressions for symlink escape, but no process-level file-sharing/security contract.
+- Change: Added the process test, configured only the temporary inspection root in the test fixture and registered the gate in the file-sharing matrix.
+- Verification: `python3 -m pytest tests/test_shellmcp_contract.py -k symlink_escape_through_process -q` passes (`1 passed`); the process returns a structured MCP error and never returns the outside file content.
+- Delivery: Local ShellMCP process evidence only; native-host file-sharing and public client evidence remain external.
+- Next: Retain this gate in the full ShellMCP and completion-matrix runs.
