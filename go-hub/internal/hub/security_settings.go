@@ -4,8 +4,10 @@ import (
 	"crypto/hmac"
 	"crypto/rand"
 	"crypto/sha1"
+	"crypto/sha256"
 	"encoding/base32"
 	"encoding/binary"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -26,10 +28,11 @@ const (
 )
 
 type securitySettings struct {
-	Preset        string    `json:"preset"`
-	TOTPSecret    string    `json:"totp_secret,omitempty"`
-	MFAEnrolledAt time.Time `json:"mfa_enrolled_at,omitempty"`
-	UpdatedAt     time.Time `json:"updated_at"`
+	Preset             string    `json:"preset"`
+	TOTPSecret         string    `json:"totp_secret,omitempty"`
+	MFAEnrolledAt      time.Time `json:"mfa_enrolled_at,omitempty"`
+	RecoveryCodeHashes []string  `json:"recovery_code_hashes,omitempty"`
+	UpdatedAt          time.Time `json:"updated_at"`
 }
 
 func defaultSecuritySettings() securitySettings {
@@ -71,6 +74,9 @@ func loadSecuritySettings(path string) (securitySettings, error) {
 	}
 	if state.TOTPSecret != "" && !validTOTPSecret(state.TOTPSecret) {
 		return defaultSecuritySettings(), errors.New("security settings contains invalid TOTP secret")
+	}
+	if len(state.RecoveryCodeHashes) > 16 {
+		return defaultSecuritySettings(), errors.New("security settings contains too many recovery codes")
 	}
 	return state, nil
 }
@@ -115,6 +121,26 @@ func generateTOTPSecret() (string, error) {
 		return "", err
 	}
 	return base32.StdEncoding.WithPadding(base32.NoPadding).EncodeToString(raw), nil
+}
+
+func generateRecoveryCodes(count int) ([]string, []string, error) {
+	codes := make([]string, 0, count)
+	hashes := make([]string, 0, count)
+	for i := 0; i < count; i++ {
+		raw := make([]byte, 8)
+		if _, err := rand.Read(raw); err != nil {
+			return nil, nil, err
+		}
+		code := strings.ToUpper(hex.EncodeToString(raw))
+		codes = append(codes, code)
+		hashes = append(hashes, recoveryCodeHash(code))
+	}
+	return codes, hashes, nil
+}
+
+func recoveryCodeHash(code string) string {
+	digest := sha256.Sum256([]byte(strings.ToUpper(strings.TrimSpace(code))))
+	return hex.EncodeToString(digest[:])
 }
 
 func validTOTPSecret(secret string) bool {
@@ -165,11 +191,12 @@ func (s *Server) securitySnapshot() securitySettings {
 func (s *Server) securityPublicSnapshot() map[string]any {
 	state := s.securitySnapshot()
 	return map[string]any{
-		"preset":        state.Preset,
-		"mfa_enrolled":  !state.MFAEnrolledAt.IsZero(),
-		"updated_at":    state.UpdatedAt,
-		"mfa_method":    map[bool]string{true: "totp", false: "none"}[!state.MFAEnrolledAt.IsZero()],
-		"restart_bound": true,
+		"preset":                   state.Preset,
+		"mfa_enrolled":             !state.MFAEnrolledAt.IsZero(),
+		"updated_at":               state.UpdatedAt,
+		"mfa_method":               map[bool]string{true: "totp", false: "none"}[!state.MFAEnrolledAt.IsZero()],
+		"recovery_codes_remaining": len(state.RecoveryCodeHashes),
+		"restart_bound":            true,
 	}
 }
 
@@ -235,8 +262,15 @@ func (s *Server) adminTOTPEnroll(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusInternalServerError, map[string]any{"detail": "failed to generate TOTP enrollment"})
 		return
 	}
+	recoveryCodes, recoveryHashes, err := generateRecoveryCodes(8)
+	if err != nil {
+		s.mu.Unlock()
+		writeJSON(w, http.StatusInternalServerError, map[string]any{"detail": "failed to generate recovery codes"})
+		return
+	}
 	state := s.security
 	state.TOTPSecret = secret
+	state.RecoveryCodeHashes = recoveryHashes
 	state.UpdatedAt = s.now()
 	s.security = state
 	s.mu.Unlock()
@@ -248,7 +282,7 @@ func (s *Server) adminTOTPEnroll(w http.ResponseWriter, r *http.Request) {
 	issuer := url.QueryEscape("GPTAdmin")
 	account := url.QueryEscape("admin")
 	uri := "otpauth://totp/" + issuer + ":" + account + "?secret=" + secret + "&issuer=" + issuer
-	writeJSON(w, http.StatusOK, map[string]any{"mfa_enrolled": false, "method": "totp", "secret": secret, "otpauth_uri": uri, "message": "Store the setup secret securely, then verify one code."})
+	writeJSON(w, http.StatusOK, map[string]any{"mfa_enrolled": false, "method": "totp", "secret": secret, "otpauth_uri": uri, "recovery_codes": recoveryCodes, "message": "Store the setup secret and recovery codes securely, then verify one code."})
 }
 
 func (s *Server) adminTOTPVerify(w http.ResponseWriter, r *http.Request) {
@@ -268,6 +302,16 @@ func (s *Server) adminTOTPVerify(w http.ResponseWriter, r *http.Request) {
 	state := s.security
 	now := s.now()
 	valid := validTOTPCode(state.TOTPSecret, req.Code, now)
+	if !valid {
+		hash := recoveryCodeHash(req.Code)
+		for i, candidate := range state.RecoveryCodeHashes {
+			if hmac.Equal([]byte(candidate), []byte(hash)) {
+				state.RecoveryCodeHashes = append(state.RecoveryCodeHashes[:i], state.RecoveryCodeHashes[i+1:]...)
+				valid = true
+				break
+			}
+		}
+	}
 	if valid {
 		state.MFAEnrolledAt = now
 		state.UpdatedAt = now
@@ -299,6 +343,29 @@ func (s *Server) securityRequiresMFA() bool {
 }
 
 func (s *Server) verifyAdminMFA(code string) bool {
-	state := s.securitySnapshot()
-	return !state.MFAEnrolledAt.IsZero() && validTOTPCode(state.TOTPSecret, code, s.now())
+	s.mu.Lock()
+	previous := s.security
+	state := previous
+	if !state.MFAEnrolledAt.IsZero() && validTOTPCode(state.TOTPSecret, code, s.now()) {
+		s.mu.Unlock()
+		return true
+	}
+	hash := recoveryCodeHash(code)
+	for i, candidate := range state.RecoveryCodeHashes {
+		if hmac.Equal([]byte(candidate), []byte(hash)) {
+			state.RecoveryCodeHashes = append(state.RecoveryCodeHashes[:i], state.RecoveryCodeHashes[i+1:]...)
+			state.UpdatedAt = s.now()
+			s.security = state
+			s.mu.Unlock()
+			if err := s.persistSecurity(state); err != nil {
+				s.mu.Lock()
+				s.security = previous
+				s.mu.Unlock()
+				return false
+			}
+			return true
+		}
+	}
+	s.mu.Unlock()
+	return false
 }

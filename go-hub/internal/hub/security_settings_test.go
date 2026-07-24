@@ -50,12 +50,13 @@ func TestSecurityPresetAndTOTPFailClosedUntilEnrollment(t *testing.T) {
 		t.Fatalf("TOTP enrollment status=%d body=%s", enroll.Code, enroll.Body.String())
 	}
 	var enrollment struct {
-		Secret string `json:"secret"`
+		Secret        string   `json:"secret"`
+		RecoveryCodes []string `json:"recovery_codes"`
 	}
 	if err := json.Unmarshal(enroll.Body.Bytes(), &enrollment); err != nil {
 		t.Fatal(err)
 	}
-	if enrollment.Secret == "" || !strings.Contains(enroll.Body.String(), "otpauth://") {
+	if enrollment.Secret == "" || len(enrollment.RecoveryCodes) != 8 || !strings.Contains(enroll.Body.String(), "otpauth://") {
 		t.Fatalf("enrollment response missing one-time setup data: %s", enroll.Body.String())
 	}
 	verify := request(s, http.MethodPost, "/admin/api/security/mfa/totp/verify", "ctl", `{"code":"000000"}`)
@@ -65,6 +66,13 @@ func TestSecurityPresetAndTOTPFailClosedUntilEnrollment(t *testing.T) {
 	verify = request(s, http.MethodPost, "/admin/api/security/mfa/totp/verify", "ctl", `{"code":"`+totpCode(enrollment.Secret, s.now())+`"}`)
 	if verify.Code != http.StatusOK || !strings.Contains(verify.Body.String(), `"mfa_enrolled":true`) {
 		t.Fatalf("valid TOTP code status=%d body=%s", verify.Code, verify.Body.String())
+	}
+	recoveryVerify := request(s, http.MethodPost, "/admin/api/security/mfa/totp/verify", "ctl", `{"code":"`+enrollment.RecoveryCodes[0]+`"}`)
+	if recoveryVerify.Code != http.StatusOK {
+		t.Fatalf("recovery code verification status=%d body=%s", recoveryVerify.Code, recoveryVerify.Body.String())
+	}
+	if reused := request(s, http.MethodPost, "/admin/api/security/mfa/totp/verify", "ctl", `{"code":"`+enrollment.RecoveryCodes[0]+`"}`); reused.Code != http.StatusUnauthorized {
+		t.Fatalf("recovery code was reusable: status=%d body=%s", reused.Code, reused.Body.String())
 	}
 	if repeated := request(s, http.MethodPost, "/admin/api/security/mfa/totp/enroll", "ctl", "{}"); repeated.Code != http.StatusConflict {
 		t.Fatalf("TOTP enrollment was reusable: status=%d body=%s", repeated.Code, repeated.Body.String())
@@ -95,7 +103,7 @@ func TestSecurityPresetAndTOTPFailClosedUntilEnrollment(t *testing.T) {
 		t.Fatalf("locked login without MFA was accepted: status=%d cookies=%v body=%s", loginResponse.Code, loginResponse.Result().Cookies(), loginResponse.Body.String())
 	}
 
-	login = httptest.NewRequest(http.MethodPost, "/admin/login", strings.NewReader("password=pw&mfa_code="+totpCode(enrollment.Secret, restarted.now())))
+	login = httptest.NewRequest(http.MethodPost, "/admin/login", strings.NewReader("password=pw&mfa_code="+enrollment.RecoveryCodes[1]))
 	login.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	loginResponse = httptest.NewRecorder()
 	restarted.Handler().ServeHTTP(loginResponse, login)

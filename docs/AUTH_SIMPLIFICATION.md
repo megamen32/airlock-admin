@@ -109,9 +109,10 @@ agent policy or JWT validation.
 The current Hub runtime exposes the progressive preset API and a fail-closed
 TOTP enrollment/verification path at `/admin/api/security/preset` and
 `/admin/api/security/mfa/totp/*`. Locked down cannot be selected until TOTP is
-enrolled, and browser admin login then requires a valid six-digit code. Passkey,
-recovery-code and external-verification support remain separate follow-up
-gates; they must not be inferred from TOTP enrollment.
+enrolled, and browser admin login then requires a valid six-digit TOTP or
+one-time recovery code. Recovery codes are returned only during explicit
+enrollment and persisted as hashes. Passkey and external-verification support
+remain separate follow-up gates; they must not be inferred from TOTP enrollment.
 
 ### Connect an MCP client
 
