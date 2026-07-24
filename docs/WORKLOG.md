@@ -56,7 +56,7 @@ plan is [`PROJECT_PLAN.md`](./PROJECT_PLAN.md).
 - Baseline / red evidence: `TestRequestTraceIDIsReturnedAndCorrelatesMCPAudit` failed because the Hub returned no request ID and policy audit had no correlation field.
 - Change: Added `X-Request-ID` generation/sanitization middleware, trace context, trace-safe policy/hub/job audit fields, relay/shell job retention and response propagation, plus queued enqueue/result regression coverage. ShellMCP queue contracts now carry the trace into `TaskResult` and bounded audit events.
 - Verification: `cd go-hub && go test ./internal/hub -run 'TestRequestTraceID' -count=1` -> pass; `cd go-shellmcp && go test ./internal/server -run 'TestQueueExecutesGenericMCPToolAndPostsResult' -count=1` -> pass; full Hub/race/vet and Python acceptance remain required after this slice.
-- Delivery: Commit `ceb036e` on the single linear branch; no runtime deployment. Preserve the unrelated untracked remote-secret-ingress plan.
+- Delivery: Commits `ceb036e` and `46ce0f2` on the single linear branch; no runtime deployment. Preserve the unrelated untracked remote-secret-ingress plan.
 - Next: Complete the S3.1 OpenTelemetry/metrics/logging span across ShellMCP and ProxyRelay before marking this milestone complete.
 
 ## 2026-07-24 - Release provenance workflow contract - completed
