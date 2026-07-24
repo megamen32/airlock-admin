@@ -2496,3 +2496,14 @@ plan is [`PROJECT_PLAN.md`](./PROJECT_PLAN.md).
 - Verification: RED then GREEN `python3 -m pytest tests/test_docs_product_contract.py -q` (`4 passed`); Hub trace/OTLP, ShellMCP propagation and ProxyRelay process gates also pass.
 - Delivery: Local documentation and redaction evidence only; retained production OTLP trace, collector availability and cross-host relay span remain external.
 - Next: Capture an authorized collector/runtime artifact before closing the full S3.1 exit gate.
+
+## 2026-07-24 - Post-observability full acceptance - completed locally
+
+- Milestone: `S0.1`, `S3.1`, `S4.1`, `S5.3`
+- Owner: Codex
+- Scope: Re-run the evidence index and complete Python suite after the observability documentation and client-golden-path updates.
+- Baseline / red evidence: The combined runner exceeded the tool RPC limit; no pytest child remained, so the two gates were rerun separately with bounded commands.
+- Change: No further runtime change; preserved the exact split command evidence.
+- Verification: `python3 -m pytest tests/test_completion_matrix.py -q` passed (`12 passed` in `117.05s`); `python3 -m pytest tests/ --ignore=tests/e2e` passed (`234 passed, 3 skipped` in `183.59s`).
+- Delivery: Current local acceptance is green; external hosts, public Tunnel, native clients, retained collector trace and signed CI remain unproven.
+- Next: Obtain the authorized external artifacts, then rerun the live acceptance runner against the exact deployed commit.
