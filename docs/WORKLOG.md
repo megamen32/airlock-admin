@@ -56,7 +56,7 @@ plan is [`PROJECT_PLAN.md`](./PROJECT_PLAN.md).
 - Baseline / red evidence: `TestMetricsEndpointIsAuthenticatedBoundedAndSecretFree` failed with HTTP 404 because ShellMCP had no metrics route.
 - Change: Added the authenticated endpoint and completion-matrix coverage.
 - Verification: Focused ShellMCP metrics test -> pass; full ShellMCP/race/vet and completion matrix remain the integration gate.
-- Delivery: Pending commit on the single linear branch; no runtime deployment. Preserve the unrelated untracked remote-secret-ingress plan.
+- Delivery: Commit `8eb1333` on the single linear branch; no runtime deployment. Preserve the unrelated untracked remote-secret-ingress plan.
 - Next: Keep S3.1 open until a real exporter/backend correlates all runtime metrics and traces.
 
 ## 2026-07-24 - Hub bounded metrics endpoint - completed
