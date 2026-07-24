@@ -629,3 +629,12 @@ Rules:
 - Fix / verification: Hub parsing now accepts the reported configured port while still requiring exactly one HTTP `200`; focused runner tests pass (`4 passed`).
 - Status: fixed.
 - Next action: Preserve non-default port coverage in the deployment runtime matrix.
+
+## 2026-07-24 - WEBUI-LOGIN-OUTAGE-20260724 - Primary WebUI origin returns 502 - open
+
+- Component: Primary public Hub origin and WebUI login path.
+- First observed: 2026-07-24, user report that WebUI login is unavailable; immutable evidence `trash/logs/webui-login-probe-20260724.md`.
+- Confirmed fact: `https://gptadminmcp.bezrabotnyi.com` returns nginx HTTP `502` for `/admin/login`, `/healthz`, OAuth discovery and `/connect.json`. A personal Tunnel returns an old `1.0.5` Hub with `/connect.json` `404` and is not a current-build replacement.
+- Root-cause hypothesis: Primary origin has no healthy current Hub backend, consistent with the server-100 Hub inactive and Tunnel router conflict evidence.
+- Status: open.
+- Next action: In an authorized deployment session, restore the current Hub/Tunnel behind the primary origin and verify browser login plus the authenticated live acceptance runner.

@@ -2708,3 +2708,13 @@ plan is [`PROJECT_PLAN.md`](./PROJECT_PLAN.md).
 - Verification: `go-hub go test ./...`, `go test -race ./...`, `go vet ./...`, `go-shellmcp go test ./...`, and Darwin arm64/amd64 Hub builds all pass.
 - Delivery: Source and cross-platform local evidence remain green; external deployment/Tunnel/client evidence remains separate.
 - Next: Attach this baseline to the authorized deployment repair and public live acceptance.
+
+## 2026-07-24 - Primary WebUI login outage diagnosed - handed off
+
+- Milestone: `S1.1`, `S1.3`
+- Owner: Codex
+- Scope: Verify the user's WebUI login failure from the public origins without submitting credentials.
+- Evidence: `trash/logs/webui-login-probe-20260724.md` and BUG `WEBUI-LOGIN-OUTAGE-20260724`.
+- Confirmed: Primary origin returns nginx `502` for every Hub/WebUI/OAuth path; personal Tunnel serves an older `1.0.5` Hub with a password form but missing current `/connect.json`.
+- Delivery: Login failure is an upstream availability/deployment issue, not a browser password validation issue; no remote state changed.
+- Next: Authorized owner must restore the current backend and verify the primary WebUI login end-to-end.
