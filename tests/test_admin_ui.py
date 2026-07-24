@@ -60,9 +60,11 @@ def test_admin_security_controls_use_typed_hub_endpoints_without_shell_env_mutat
     assert "shell_exec" not in security
     for endpoint in (
         "/admin/api/security/preset",
+        "/admin/api/security/reauth",
         "/admin/api/security/mfa/totp/enroll",
         "/admin/api/security/mfa/totp/verify",
         "/admin/api/telemetry",
         "/admin/api/approvals",
     ):
         assert endpoint in security
+    assert "function ensureSecurityReauth" in security

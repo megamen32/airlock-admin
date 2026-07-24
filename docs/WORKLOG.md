@@ -1022,6 +1022,32 @@ plan is [`PROJECT_PLAN.md`](./PROJECT_PLAN.md).
 - Next: Keep remote client golden paths and standard cross-component traces
   separate; this milestone intentionally remains local-only.
 
+## 2026-07-24 - Sensitive security re-authentication - completed
+
+- Milestone: `S2.1a`
+- Owner: `Codex`
+- Scope: Add a short-lived, browser-bound re-authentication proof for
+  security preset and exposure mutations; preserve TOTP/recovery semantics and
+  do not expose passwords or MFA material.
+- Baseline / pre-fix evidence: Existing security endpoints accepted a valid
+  control bearer or admin cookie for preset/heartbeat changes without a fresh
+  password/MFA proof after login.
+- RED/GREEN evidence: `TestSensitiveSecurityMutationRequiresFreshAdminReauth`
+  first failed because preset mutation returned 200 without proof, then passed
+  after enforcement; it covers password reauth, missing MFA, fresh TOTP and
+  locked-down mutation.
+- Change: Added short-lived signed HttpOnly reauth cookie and
+  `/admin/api/security/reauth`; preset, heartbeat and OAuth rotation now reject
+  stale admin/control access. The admin UI invokes reauth before mutations.
+- Verification: Focused security tests, typed endpoint compatibility tests,
+  admin UI tests (`13 passed`) and JS syntax check pass.
+- Write scope: `go-hub/internal/hub/security_settings.go`, targeted route
+  wiring/UI/tests/docs only. Do not touch proxy, relay, or unrelated plans.
+- Delivery: Pending integration commit on `codex/haos-addon-public`; no deploy,
+  push or merge. The unrelated remote-secret-ingress plan remains preserved.
+- Next: Keep passkeys/WebAuthn and OIDC/external verification as separate
+  outstanding S2.1a gates; do not infer them from this TOTP reauth slice.
+
 ## 2026-07-24 - Typed admin security controls and Apps SDK contract - completed
 
 - Milestone: `S2.1` / `S1.4`

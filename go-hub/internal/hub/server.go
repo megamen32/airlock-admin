@@ -671,6 +671,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/admin/api/mcp/resources/read", s.requireCtl(s.adminMCPResourceRead))
 	mux.HandleFunc("/admin/api/auth/rotate-oauth", s.requireCtl(s.adminRotateOAuth))
 	mux.HandleFunc("/admin/api/security/env", s.requireCtl(s.adminSecurityEnv))
+	mux.HandleFunc("/admin/api/security/reauth", s.requireCtl(s.adminSecurityReauth))
 	mux.HandleFunc("/admin/api/security/heartbeat", s.requireCtl(s.adminSecurityHeartbeat))
 	mux.HandleFunc("/admin/api/security/preset", s.requireCtl(s.adminSecurityPreset))
 	mux.HandleFunc("/admin/api/security/mfa/totp/enroll", s.requireCtl(s.adminTOTPEnroll))
@@ -3250,6 +3251,9 @@ func (s *Server) adminRotateOAuth(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusMethodNotAllowed, map[string]any{"detail": "method not allowed"})
 		return
 	}
+	if !s.requireSensitiveSecurityReauth(w, r) {
+		return
+	}
 	if strings.TrimSpace(s.cfg.EnvFile) == "" {
 		writeJSON(w, http.StatusServiceUnavailable, map[string]any{"detail": "OAuth env file is not configured"})
 		return
@@ -3316,6 +3320,9 @@ func (s *Server) adminSecurityHeartbeat(w http.ResponseWriter, r *http.Request) 
 	if r.Method != http.MethodPost {
 		w.Header().Set("Allow", "POST")
 		writeJSON(w, http.StatusMethodNotAllowed, map[string]any{"detail": "method not allowed"})
+		return
+	}
+	if !s.requireSensitiveSecurityReauth(w, r) {
 		return
 	}
 	var req struct {

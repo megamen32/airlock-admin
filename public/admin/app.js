@@ -419,6 +419,7 @@ async function loadSecurityControls(){
 }
 
 async function saveSecurityPreset(){
+  if(!await ensureSecurityReauth())return;
   try{
     const j=await api('/admin/api/security/preset',{method:'PUT',body:JSON.stringify({preset:$('securityPreset').value})});
     $('securityPresetStatus').textContent=JSON.stringify(j,null,2);
@@ -443,6 +444,7 @@ async function verifySecurityTotp(){
 }
 
 async function setShellHeartbeatFromPanel(enabled){
+  if(!await ensureSecurityReauth()){$('shellHeartbeatEnabled').checked=!enabled;return}
   try{
     const j=await api('/admin/api/security/heartbeat',{method:'POST',body:JSON.stringify({enabled})});
     $('securityHeartbeatResult').textContent=JSON.stringify(j,null,2);
@@ -454,6 +456,16 @@ async function setSecurityTelemetry(enabled){
     const j=await api('/admin/api/telemetry',{method:'PUT',body:JSON.stringify({enabled})});
     $('securityTelemetryResult').textContent=JSON.stringify(j,null,2);
   }catch(e){$('securityTelemetryResult').textContent='ERR '+e.message}
+}
+
+async function ensureSecurityReauth(){
+  const password=prompt('Введите admin-пароль для подтверждения изменения безопасности:');
+  if(password===null)return false;
+  const code=($('securityMfaCode')?.value||'').trim();
+  try{
+    await api('/admin/api/security/reauth',{method:'POST',body:JSON.stringify({password,code})});
+    return true;
+  }catch(e){alert('ERR '+e.message);return false}
 }
 
 async function loadApprovals(){
@@ -472,6 +484,7 @@ async function decideApproval(id,action){
 
 async function rotateOAuth(){
   if(!confirm('Обновить внутреннюю OAuth-конфигурацию? Подключения MCP потребуется проверить заново.'))return;
+  if(!await ensureSecurityReauth())return;
   try{
     const j=await api('/admin/api/auth/rotate-oauth',{method:'POST'});
     alert(j.message||'OAuth-конфигурация обновлена. Перезапустите хаб.');

@@ -18,6 +18,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -28,6 +29,8 @@ const (
 	securityPresetLockedDown     = "locked_down"
 	securityStateFilename        = "security_state.json"
 	securityStateMaxBytes        = 16 << 10
+	adminReauthCookieName        = "gptadmin_admin_reauth"
+	adminReauthTTL               = 10 * time.Minute
 )
 
 type securitySettings struct {
@@ -284,6 +287,90 @@ func (s *Server) persistSecurity(state securitySettings) error {
 	return saveSecuritySettings(s.securityPath, state, s.securityKey())
 }
 
+func (s *Server) signAdminReauth(expires time.Time) string {
+	payload := strconv.FormatInt(expires.Unix(), 10)
+	mac := s.adminSessionMAC("reauth:" + payload)
+	return payload + "." + base64.RawURLEncoding.EncodeToString(mac)
+}
+
+func (s *Server) adminReauthValid(r *http.Request) bool {
+	if s.cfg.AdminPassword == "" {
+		return true
+	}
+	if !s.adminSessionValid(r) {
+		return false
+	}
+	cookie, err := r.Cookie(adminReauthCookieName)
+	if err != nil || cookie.Value == "" {
+		return false
+	}
+	parts := strings.Split(cookie.Value, ".")
+	if len(parts) != 2 {
+		return false
+	}
+	expires, err := strconv.ParseInt(parts[0], 10, 64)
+	if err != nil || expires < time.Now().Unix() {
+		return false
+	}
+	mac, err := base64.RawURLEncoding.DecodeString(parts[1])
+	if err != nil {
+		return false
+	}
+	return hmac.Equal(mac, s.adminSessionMAC("reauth:"+parts[0]))
+}
+
+func (s *Server) requireSensitiveSecurityReauth(w http.ResponseWriter, r *http.Request) bool {
+	if s.cfg.AdminPassword == "" || s.adminReauthValid(r) {
+		return true
+	}
+	writeJSON(w, http.StatusPreconditionRequired, map[string]any{"detail": "fresh admin reauthentication required"})
+	return false
+}
+
+func (s *Server) adminSecurityReauth(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		w.Header().Set("Allow", "POST")
+		writeJSON(w, http.StatusMethodNotAllowed, map[string]any{"detail": "method not allowed"})
+		return
+	}
+	if s.cfg.AdminPassword != "" && !s.adminSessionValid(r) {
+		writeJSON(w, http.StatusUnauthorized, map[string]any{"detail": "admin session required"})
+		return
+	}
+	var req struct {
+		Password string `json:"password"`
+		Code     string `json:"code"`
+	}
+	if err := readJSON(r, &req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"detail": err.Error()})
+		return
+	}
+	if s.cfg.AdminPassword != "" && !hmac.Equal([]byte(req.Password), []byte(s.cfg.AdminPassword)) {
+		s.addSecurityAudit("security_reauth_denied", map[string]any{"reason": "bad_password"})
+		writeJSON(w, http.StatusUnauthorized, map[string]any{"detail": "invalid reauthentication"})
+		return
+	}
+	state := s.securitySnapshot()
+	if !state.MFAEnrolledAt.IsZero() && !s.verifyAdminMFA(req.Code) {
+		s.addSecurityAudit("security_reauth_denied", map[string]any{"reason": "invalid_mfa"})
+		writeJSON(w, http.StatusUnauthorized, map[string]any{"detail": "invalid reauthentication"})
+		return
+	}
+	expires := time.Now().Add(adminReauthTTL)
+	http.SetCookie(w, &http.Cookie{
+		Name:     adminReauthCookieName,
+		Value:    s.signAdminReauth(expires),
+		Path:     "/",
+		Expires:  expires,
+		MaxAge:   int(adminReauthTTL.Seconds()),
+		HttpOnly: true,
+		Secure:   isSecureRequest(r) || strings.HasPrefix(s.origin(r), "https://"),
+		SameSite: http.SameSiteLaxMode,
+	})
+	s.addSecurityAudit("security_reauth_ok", map[string]any{"mfa": !state.MFAEnrolledAt.IsZero()})
+	writeJSON(w, http.StatusOK, map[string]any{"reauthenticated": true, "expires_at": expires})
+}
+
 func (s *Server) securityKey() string {
 	return firstNonEmpty(s.cfg.AdminPassword, s.cfg.OAuthClientSecret, s.cfg.CtlToken, "gptadmin-security-state")
 }
@@ -293,6 +380,9 @@ func (s *Server) adminSecurityPreset(w http.ResponseWriter, r *http.Request) {
 	case http.MethodGet:
 		writeJSON(w, http.StatusOK, s.securityPublicSnapshot())
 	case http.MethodPut:
+		if !s.requireSensitiveSecurityReauth(w, r) {
+			return
+		}
 		var req struct {
 			Preset string `json:"preset"`
 		}

@@ -136,8 +136,8 @@
     },
     {
       "id": "security-preset-mfa",
-      "command": "cd go-hub && go test ./internal/hub -run 'TestSecurityPresetAndTOTPFailClosedUntilEnrollment' -count=1",
-      "evidence": "preset persistence, locked-down fail-closed behavior, TOTP enrollment/verification and MFA-required admin login"
+      "command": "cd go-hub && go test ./internal/hub -run 'Test(SecurityPresetAndTOTPFailClosedUntilEnrollment|SensitiveSecurityMutationRequiresFreshAdminReauth)' -count=1",
+      "evidence": "preset persistence, locked-down fail-closed behavior, TOTP enrollment/verification, fresh security re-auth and MFA-required admin login"
     },
     {
       "id": "typed-heartbeat-endpoint",
