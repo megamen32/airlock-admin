@@ -555,6 +555,7 @@ Rules:
 - First observed: 2026-07-24, read-only SSH smoke; immutable evidence `trash/logs/live-runtime-smoke-20260724.md`, `trash/logs/live-runtime-smoke-20260724-rerun.md`, and canonical-unit rerun `trash/logs/live-runtime-canonical-unit-rerun-20260724.md`.
 - Confirmed fact: Server-100 Hub `:9001` health/version remain unreachable with the Hub unit inactive and a stale/unattributed listener; Tunnel is failed with `router config conflict`. Server-88's expected user unit is absent, while the root `shellmcp.service` is active but has no expected listener and repeatedly receives queue-poll `401 unauthorized` responses.
 - Root-cause hypothesis: External deployment drift has split the expected unit/artifact contract and invalidated the Hub/Tunnel/ShellMCP credentials or routing configuration; this is not a source-test failure.
+- Local guard / verification: `gptadmin doctor` now rejects a canonical ShellMCP unit whose `ExecStart` uses the legacy `rootd-go` or `rootd-go-canary` binary; RED then GREEN coverage is in `tests/test_doctor_json.py`.
 - Status: open.
 - Next action: In an explicitly authorized deployment session, reconcile the canonical units and supported artifacts/configuration, repair Tunnel router ownership and auth, then rerun authenticated endpoint/proxy/MCP/file/profile smoke.
 

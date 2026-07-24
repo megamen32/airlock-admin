@@ -2655,3 +2655,14 @@ plan is [`PROJECT_PLAN.md`](./PROJECT_PLAN.md).
 - Confirmed: server-100 has an inactive Hub, a stale/unattributed `:9001` listener and Tunnel `router config conflict`; server-88 lacks the expected user unit, while the root `shellmcp.service` is active but polls its queue with HTTP 401 and exposes no expected listener.
 - Delivery: Corrected the BUG record so it no longer mislabels server-88's canonical system service as inactive; no remote state was changed.
 - Next: Deployment owner must reconcile units/artifacts/auth and rerun the authenticated live acceptance runner.
+
+## 2026-07-24 - Doctor detects legacy ShellMCP deployment drift - completed locally
+
+- Milestone: `S1.2`, `S1.1`
+- Owner: Codex
+- Scope: Prevent an active legacy `rootd-go` unit from being reported as the supported ShellMCP runtime.
+- Baseline / red evidence: `test_doctor_reports_legacy_shellmcp_binary_in_canonical_unit` failed because `doctor` only checked service-manager state.
+- Change: Added a secret-free unit contract check for `rootd-go` and `rootd-go-canary`; the check reports an actionable update message and increments doctor issues.
+- Verification: RED then GREEN focused regression; `python3 -m pytest tests/test_doctor_json.py -q` -> `5 passed`.
+- Delivery: Local diagnosis is now fail-closed for the observed deployment drift; the remote unit and credentials remain unchanged.
+- Next: Run `gptadmin doctor --json` on server-88 after the authorized deployment repair and require no `shellmcp_unit` error.

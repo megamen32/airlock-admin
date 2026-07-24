@@ -3186,6 +3186,18 @@ def _doctor_service_runtime(label: str) -> tuple[str, str]:
         return 'warning', 'service manager is unavailable'
 
 
+def _doctor_shellmcp_unit_contract(path: Path) -> tuple[str, str] | None:
+    """Detect a legacy rootd binary hidden behind the canonical ShellMCP unit."""
+    try:
+        lines = path.read_text(encoding='utf-8').splitlines()
+    except OSError:
+        return 'warning', 'ShellMCP unit could not be inspected'
+    exec_lines = [line.strip() for line in lines if line.strip().startswith('ExecStart=')]
+    if any(re.search(r'/rootd-go(?:-canary)?(?:\s|$)', line) for line in exec_lines):
+        return 'error', 'legacy ShellMCP binary is configured; run gptadmin update'
+    return None
+
+
 def _doctor_report() -> dict:
     """Collect service, configuration and local Hub readiness checks."""
     checks = []
@@ -3203,6 +3215,13 @@ def _doctor_report() -> dict:
                 checks.append({'name': f'service_runtime:{label}', 'status': runtime_status, 'message': runtime_message})
                 if runtime_status == 'error':
                     issues += 1
+                if label == svc_shellmcp_name():
+                    unit_contract = _doctor_shellmcp_unit_contract(path)
+                    if unit_contract is not None:
+                        contract_status, contract_message = unit_contract
+                        checks.append({'name': 'shellmcp_unit', 'status': contract_status, 'message': contract_message})
+                        if contract_status == 'error':
+                            issues += 1
             else:
                 checks.append({'name': f'service:{label}', 'status': 'error', 'message': 'unit missing'})
                 issues += 1
