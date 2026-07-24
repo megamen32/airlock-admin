@@ -169,6 +169,24 @@ Rules:
   Windows Hub contract `1 passed`.
 - Next action: None for this bug.
 
+## 2026-07-24 - FAILOVER-E2E-RESTART-20260724 - Failover E2E output looked like a restart - fixed
+
+- Component: `tests/e2e/failover/docker-compose.yml` and
+  `tests/e2e/failover/run.sh`.
+- First observed: 2026-07-24, immutable Docker command evidence from
+  `docker compose -f tests/e2e/failover/docker-compose.yml up --build --abort-on-container-exit --exit-code-from failover-e2e`.
+- Symptom / evidence: Unbounded Docker output made expected public-down curl
+  errors appear after the success line, and context extraction split the same
+  invocation into multiple sections that looked like a second cycle.
+- Root cause: Interleaved Docker stdout/stderr plus query-section rendering;
+  there was no restart policy and no second container invocation in the
+  captured serial command.
+- Fix / verification: Serial capture under a unique compose project returned
+  `rc=0`, exactly one `ALL FAILOVER BLACK-BOX SCENARIOS PASSED` line and all
+  seven scenario lines. No harness change was required.
+- Next action: Use captured exit-code/count evidence for future failover runs;
+  do not interpret expected public-down curl stderr as a failure.
+
 ## 2026-07-23 - HAOS-PUBLIC-FALLBACK-PROXY-20260723 - Forward-proxy probe used the wrong listener contract - wont_fix
 
 - Component: Public HAOS `gptadmin_hub_standby` `1.0.5`, fallback listener `:9101`.
