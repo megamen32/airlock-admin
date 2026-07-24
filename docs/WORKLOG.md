@@ -943,6 +943,27 @@ plan is [`PROJECT_PLAN.md`](./PROJECT_PLAN.md).
 - Next: Execute the same ownership/restart procedure on each real supported
   host when deployment access is explicitly in scope.
 
+## 2026-07-24 - Doctor authenticated readiness probe - completed
+
+- Milestone: `S1.2`
+- Owner: `Codex`
+- Scope: Close the doctor auth-observability gap without exposing machine
+  credentials in human or JSON output.
+- Baseline / red evidence: `test_doctor_probes_authenticated_hub_readiness_without_echoing_token`
+  failed because doctor checked public `/healthz` only and emitted no
+  authenticated readiness result.
+- Change: When a configured machine credential exists, doctor probes the
+  protected `/admin/api/overview`; it reports only `remote_auth: ok/failed`.
+  With no machine credential it reports a warning rather than claiming auth
+  was verified.
+- Verification: `python3 -m pytest tests/test_doctor_json.py -q` passed
+  (`3 passed`); real `python3 cli.py doctor --json` remained valid JSON and
+  contained no secret material.
+- Delivery: Pending integration commit on `codex/haos-addon-public`; no deploy,
+  push or merge. The unrelated remote-secret-ingress plan remains preserved.
+- Next: Prove active service state and Tunnel lifecycle on a clean supported
+  host before changing S1.2 from In progress to Complete.
+
 ## 2026-07-24 - Typed admin security controls and Apps SDK contract - completed
 
 - Milestone: `S2.1` / `S1.4`

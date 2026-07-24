@@ -3032,6 +3032,27 @@ def _doctor_report() -> dict:
         checks.append({'name': 'remote_health', 'status': 'warning', 'message': 'skipped because Hub URL is not configured'})
         checks.append({'name': 'remote_clock', 'status': 'warning', 'message': 'skipped because Hub URL is not configured'})
 
+    auth_token = str(env.get('CTL_TOKEN', '')).strip()
+    if hub_url and auth_token:
+        try:
+            auth_url = hub_url.rstrip('/') + '/admin/api/overview'
+            auth_request = urllib.request.Request(
+                auth_url,
+                headers={'Accept': 'application/json', 'Authorization': f'Bearer {auth_token}'},
+            )
+            with urllib.request.urlopen(auth_request, timeout=3) as response:
+                if response.status != 200:
+                    raise RuntimeError(f'HTTP {response.status}')
+                payload = json.loads(response.read().decode('utf-8', 'replace') or '{}')
+                if not isinstance(payload, dict):
+                    raise RuntimeError('invalid JSON response')
+            checks.append({'name': 'remote_auth', 'status': 'ok', 'message': 'authenticated Hub probe passed'})
+        except Exception:
+            checks.append({'name': 'remote_auth', 'status': 'error', 'message': 'authenticated Hub probe failed'})
+            issues += 1
+    elif hub_url:
+        checks.append({'name': 'remote_auth', 'status': 'warning', 'message': 'not probed; no machine credential is configured'})
+
     if ENV_FILE.exists():
         mode = stat.S_IMODE(ENV_FILE.stat().st_mode)
         if mode & 0o077:
