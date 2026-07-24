@@ -48,6 +48,7 @@ type AccessProfile struct {
 	Name             string         `json:"name"`
 	InstructionSetID string         `json:"instruction_set_id"`
 	AccessMode       string         `json:"access_mode"`
+	ApprovalMode     string         `json:"approval_mode"`
 	AllowedTargets   []string       `json:"allowed_targets"`
 	AllowedTools     []string       `json:"allowed_tools"`
 	WorkspaceRefs    []WorkspaceRef `json:"workspace_refs"`
@@ -64,6 +65,7 @@ type accessProfileRequest struct {
 	Name             string         `json:"name"`
 	InstructionSetID string         `json:"instruction_set_id"`
 	AccessMode       string         `json:"access_mode"`
+	ApprovalMode     string         `json:"approval_mode"`
 	AllowedTargets   []string       `json:"allowed_targets"`
 	AllowedTools     []string       `json:"allowed_tools"`
 	WorkspaceRefs    []WorkspaceRef `json:"workspace_refs"`
@@ -402,6 +404,16 @@ func normalizeAccessProfile(profile AccessProfile) (AccessProfile, error) {
 	if profile.AccessMode != accessModeFull && profile.AccessMode != accessModeReadonly {
 		return AccessProfile{}, errors.New("access_mode must be full or readonly")
 	}
+	approvalMode := strings.ToLower(strings.TrimSpace(profile.ApprovalMode))
+	if approvalMode == "" {
+		approvalMode = approvalModeBoundedAutonomous
+	}
+	if profile.AccessMode == accessModeReadonly {
+		approvalMode = approvalModeReadOnly
+	}
+	if approvalMode != approvalModeReadOnly && approvalMode != approvalModeAskBeforeWrite && approvalMode != approvalModeBoundedAutonomous {
+		return AccessProfile{}, errors.New("approval_mode must be read_only, ask_before_write or bounded_autonomous")
+	}
 	if profile.Version < 1 {
 		return AccessProfile{}, errors.New("version must be positive")
 	}
@@ -420,6 +432,7 @@ func normalizeAccessProfile(profile AccessProfile) (AccessProfile, error) {
 	profile.ID = id
 	profile.Name = name
 	profile.InstructionSetID = instructionSetID
+	profile.ApprovalMode = approvalMode
 	profile.AllowedTargets = allowedTargets
 	profile.AllowedTools = allowedTools
 	profile.WorkspaceRefs = workspaceRefs
@@ -523,6 +536,7 @@ func (s *Server) adminAccessProfile(w http.ResponseWriter, r *http.Request) {
 			Name:             req.Name,
 			InstructionSetID: req.InstructionSetID,
 			AccessMode:       strings.ToLower(strings.TrimSpace(req.AccessMode)),
+			ApprovalMode:     strings.ToLower(strings.TrimSpace(req.ApprovalMode)),
 			AllowedTargets:   req.AllowedTargets,
 			AllowedTools:     req.AllowedTools,
 			WorkspaceRefs:    req.WorkspaceRefs,

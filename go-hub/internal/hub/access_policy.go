@@ -14,6 +14,12 @@ const (
 
 type authClaimsContextKey struct{}
 
+const (
+	approvalModeReadOnly          = "read_only"
+	approvalModeAskBeforeWrite    = "ask_before_write"
+	approvalModeBoundedAutonomous = "bounded_autonomous"
+)
+
 func requestWithAuthClaims(r *http.Request, claims map[string]any) *http.Request {
 	return r.WithContext(context.WithValue(r.Context(), authClaimsContextKey{}, claims))
 }

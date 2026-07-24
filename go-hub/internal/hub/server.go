@@ -21,6 +21,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -214,6 +215,18 @@ type auditEvent struct {
 	Fields map[string]any `json:"fields,omitempty"`
 }
 
+type approvalRequest struct {
+	ID              string    `json:"approval_id"`
+	ProfileID       string    `json:"profile_id"`
+	Actor           string    `json:"actor"`
+	Target          string    `json:"target"`
+	Tool            string    `json:"tool"`
+	ArgumentsDigest string    `json:"arguments_digest"`
+	CreatedAt       time.Time `json:"created_at"`
+	ExpiresAt       time.Time `json:"expires_at"`
+	Status          string    `json:"status"`
+}
+
 type oauthCode struct {
 	Created     time.Time
 	Challenge   string
@@ -270,6 +283,7 @@ type Server struct {
 	managedMCP     map[string]managedMCPToken
 	oauthClients   map[string]oauthClientMetadata
 	accessProfiles map[string]AccessProfile
+	approvals      map[string]*approvalRequest
 	audit          []auditEvent
 	failover       FailoverConfig
 
@@ -310,6 +324,7 @@ func New(cfg Config) *Server {
 		managedMCP:        map[string]managedMCPToken{},
 		oauthClients:      map[string]oauthClientMetadata{},
 		accessProfiles:    map[string]AccessProfile{},
+		approvals:         map[string]*approvalRequest{},
 		audit:             []auditEvent{},
 		webhookRoutes:     webhookRouteMap(webhookRoutes),
 		webhookJobs:       map[string]*webhookJob{},
@@ -622,6 +637,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/admin/api/failover", s.requireCtl(s.adminFailover))
 	mux.HandleFunc("/admin/api/jobs", s.requireCtl(s.adminJobs))
 	mux.HandleFunc("/admin/api/audit", s.requireCtl(s.adminAudit))
+	mux.HandleFunc("/admin/api/approvals", s.requireCtl(s.adminApprovals))
+	mux.HandleFunc("/admin/api/approvals/", s.requireCtl(s.adminApproval))
 	mux.HandleFunc("/admin/api/clients", s.requireCtl(s.adminClients))
 	mux.HandleFunc("/admin/login", s.adminLogin)
 	mux.HandleFunc("/admin/logout", s.adminLogout)
@@ -926,6 +943,12 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Result"
+        "428":
+          description: A write-capable call is waiting for one administrator approval.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApprovalRequired"
   /mcp-relay/job/{job_id}:
     get:
       operationId: job
@@ -1003,6 +1026,26 @@ components:
       type: http
       scheme: bearer
   schemas:
+    ApprovalRequired:
+      type: object
+      additionalProperties: false
+      required: [status, approval_id, expires_at, target, tool]
+      properties:
+        status:
+          type: string
+          enum: [approval_required]
+        approval_id:
+          type: string
+          description: Opaque one-time approval handle; never a copy of the request arguments.
+        expires_at:
+          type: string
+          format: date-time
+        target:
+          type: string
+        tool:
+          type: string
+        message:
+          type: string
     DiscoverResponse:
       type: object
       additionalProperties: false
@@ -1944,6 +1987,12 @@ const (
 )
 
 func (s *Server) executeMCPTool(r *http.Request, target, toolName string, args map[string]any, background bool, timeout time.Duration, key string) (map[string]any, int) {
+	callArgs, approvalID := approvalArguments(args)
+	if response, blocked := s.approvalGate(r, target, toolName, callArgs, approvalID); blocked {
+		s.auditToolDecision(r, target, toolName, callArgs, "deny", "approval required", response, http.StatusPreconditionRequired)
+		return response, http.StatusPreconditionRequired
+	}
+	args = callArgs
 	operation := func() (map[string]any, int) {
 		if target == "hub" {
 			resp, status := s.callHubToolForRequest(r, toolName, args)
@@ -2036,6 +2085,86 @@ func (s *Server) executeMCPTool(r *http.Request, target, toolName string, args m
 	close(entry.Done)
 	s.mu.Unlock()
 	return response, status
+}
+
+func approvalArguments(args map[string]any) (map[string]any, string) {
+	callArgs := cloneMap(args)
+	approvalID := firstString(callArgs, "approval_id")
+	delete(callArgs, "approval_id")
+	return callArgs, approvalID
+}
+
+func (s *Server) approvalGate(r *http.Request, target, toolName string, args map[string]any, approvalID string) (map[string]any, bool) {
+	profile, bound := AccessProfileFromRequest(r)
+	if !bound || profile.ApprovalMode != approvalModeAskBeforeWrite || isReadOnlyTool(target, toolName) {
+		return nil, false
+	}
+	actor := s.actorForRequest(r)
+	digestBytes, err := json.Marshal(args)
+	if err != nil {
+		return map[string]any{"status": "failed", "error": "arguments cannot be serialized"}, true
+	}
+	digest := sha256Hex(digestBytes)
+	now := s.now()
+	if approvalID != "" {
+		s.mu.Lock()
+		approval := s.approvals[approvalID]
+		if approval != nil && approval.Status == "approved" && now.Before(approval.ExpiresAt) &&
+			approval.ProfileID == profile.ID && approval.Actor == actor && approval.Target == target &&
+			approval.Tool == toolName && approval.ArgumentsDigest == digest {
+			approval.Status = "consumed"
+			s.mu.Unlock()
+			return nil, false
+		}
+		s.mu.Unlock()
+	}
+	approval := &approvalRequest{
+		ID: newID(), ProfileID: profile.ID, Actor: actor, Target: target, Tool: toolName,
+		ArgumentsDigest: digest, CreatedAt: now, ExpiresAt: now.Add(5 * time.Minute), Status: "pending",
+	}
+	s.mu.Lock()
+	if len(s.approvals) >= 256 {
+		s.mu.Unlock()
+		return map[string]any{"status": "failed", "error": "approval queue is full"}, true
+	}
+	s.approvals[approval.ID] = approval
+	s.mu.Unlock()
+	return map[string]any{
+		"status": "approval_required", "approval_id": approval.ID,
+		"expires_at": approval.ExpiresAt, "target": target, "tool": toolName,
+		"message": "An administrator must approve this write before execution.",
+	}, true
+}
+
+func isReadOnlyTool(target, toolName string) bool {
+	if target == "hub" {
+		switch toolName {
+		case "discover", "list_mcp_servers", "listMcpServers", "list_mcp_agents", "listMcpAgents", "pending", "list_pending_servers", "hub_status", "status", "schema", "list_mcp_tools", "listMcpTools", "job", "get_mcp_job", "getMcpJob":
+			return true
+		default:
+			return false
+		}
+	}
+	return strings.HasPrefix(target, "shell:") && toolName == "system_inspect"
+}
+
+func (s *Server) actorForRequest(r *http.Request) string {
+	if r == nil {
+		return "anonymous"
+	}
+	if s.cfg.CtlToken != "" && tokenMatches(r, s.cfg.CtlToken) {
+		return "legacy_ctl"
+	}
+	if claims, ok := r.Context().Value(authClaimsContextKey{}).(map[string]any); ok {
+		if actor := firstString(claims, "client_id", "sub"); actor != "" {
+			return actor
+		}
+		return "scoped_connection"
+	}
+	if s.adminSessionValid(r) {
+		return "admin_session"
+	}
+	return "anonymous"
 }
 
 func sha256Hex(value []byte) string {
@@ -2849,6 +2978,98 @@ func (s *Server) adminAudit(w http.ResponseWriter, r *http.Request) {
 	items := append([]auditEvent(nil), s.audit...)
 	s.mu.Unlock()
 	writeJSON(w, http.StatusOK, map[string]any{"events": items, "audit_log": "go-in-memory"})
+}
+
+func (s *Server) adminApprovals(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		w.Header().Set("Allow", "GET")
+		writeJSON(w, http.StatusMethodNotAllowed, map[string]any{"detail": "method not allowed"})
+		return
+	}
+	s.mu.Lock()
+	items := s.approvalSnapshotLocked()
+	s.mu.Unlock()
+	writeJSON(w, http.StatusOK, map[string]any{"approvals": items})
+}
+
+func (s *Server) adminApproval(w http.ResponseWriter, r *http.Request) {
+	id := strings.Trim(strings.TrimPrefix(r.URL.Path, "/admin/api/approvals/"), "/")
+	if id == "" || strings.Contains(id, "/") {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"detail": "invalid approval id"})
+		return
+	}
+	s.mu.Lock()
+	approval, ok := s.approvals[id]
+	if ok && approval.Status == "pending" && !s.now().Before(approval.ExpiresAt) {
+		approval.Status = "expired"
+	}
+	if !ok {
+		s.mu.Unlock()
+		writeJSON(w, http.StatusNotFound, map[string]any{"detail": "approval not found"})
+		return
+	}
+	if r.Method == http.MethodGet {
+		result := *approval
+		s.mu.Unlock()
+		writeJSON(w, http.StatusOK, result)
+		return
+	}
+	if r.Method != http.MethodPost {
+		s.mu.Unlock()
+		w.Header().Set("Allow", "GET, POST")
+		writeJSON(w, http.StatusMethodNotAllowed, map[string]any{"detail": "method not allowed"})
+		return
+	}
+	var req struct {
+		Action string `json:"action"`
+	}
+	if err := readJSON(r, &req); err != nil {
+		s.mu.Unlock()
+		writeJSON(w, http.StatusBadRequest, map[string]any{"detail": err.Error()})
+		return
+	}
+	if approval.Status != "pending" {
+		status := approval.Status
+		s.mu.Unlock()
+		writeJSON(w, http.StatusConflict, map[string]any{"detail": "approval is no longer pending", "status": status})
+		return
+	}
+	switch strings.ToLower(strings.TrimSpace(req.Action)) {
+	case "approve":
+		approval.Status = "approved"
+	case "reject":
+		approval.Status = "rejected"
+	default:
+		s.mu.Unlock()
+		writeJSON(w, http.StatusBadRequest, map[string]any{"detail": "action must be approve or reject"})
+		return
+	}
+	result := *approval
+	s.mu.Unlock()
+	s.addApprovalAudit(result)
+	writeJSON(w, http.StatusOK, result)
+}
+
+func (s *Server) approvalSnapshotLocked() []approvalRequest {
+	items := make([]approvalRequest, 0, len(s.approvals))
+	now := s.now()
+	for _, approval := range s.approvals {
+		if approval.Status == "pending" && !now.Before(approval.ExpiresAt) {
+			approval.Status = "expired"
+		}
+		items = append(items, *approval)
+	}
+	sort.Slice(items, func(i, j int) bool { return items[i].CreatedAt.Before(items[j].CreatedAt) })
+	return items
+}
+
+func (s *Server) addApprovalAudit(approval approvalRequest) {
+	s.mu.Lock()
+	s.addAuditLocked("approval_"+approval.Status, map[string]any{
+		"approval_id": approval.ID, "profile_id": approval.ProfileID, "actor": approval.Actor,
+		"target": approval.Target, "tool": approval.Tool, "arguments_digest": approval.ArgumentsDigest,
+	})
+	s.mu.Unlock()
 }
 
 func (s *Server) adminRotateOAuth(w http.ResponseWriter, r *http.Request) {
@@ -3897,7 +4118,12 @@ func (s *Server) serverActionToolCall(w http.ResponseWriter, r *http.Request, ag
 		writeJSON(w, http.StatusForbidden, map[string]any{"detail": authErr.Error()})
 		return
 	}
-	result, rpcErr := s.agentToolCall(agent, toolName, args)
+	callArgs, approvalID := approvalArguments(args)
+	if approvalResponse, blocked := s.approvalGate(r, agent.AgentID, toolName, callArgs, approvalID); blocked {
+		writeJSON(w, http.StatusPreconditionRequired, approvalResponse)
+		return
+	}
+	result, rpcErr := s.agentToolCall(agent, toolName, callArgs)
 	if rpcErr != nil {
 		writeJSON(w, http.StatusBadGateway, map[string]any{"server_id": agent.AgentID, "tool_name": toolName, "status": "failed", "error": rpcErr})
 		return
@@ -4103,7 +4329,11 @@ func (s *Server) agentMCPJSONRPC(r *http.Request, agent Agent, body map[string]a
 		if authErr != nil {
 			return nil, map[string]any{"code": -32003, "message": authErr.Error()}, false
 		}
-		result, err := s.agentToolCall(agent, name, args)
+		callArgs, approvalID := approvalArguments(args)
+		if approvalResponse, blocked := s.approvalGate(r, agent.AgentID, name, callArgs, approvalID); blocked {
+			return nil, map[string]any{"code": -32004, "message": "approval required", "data": approvalResponse}, false
+		}
+		result, err := s.agentToolCall(agent, name, callArgs)
 		return result, err, false
 	case "resources/list":
 		result, err := s.agentResourcesList(r, agent)

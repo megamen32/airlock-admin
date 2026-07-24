@@ -68,6 +68,7 @@ func TestManagedClientAccessProfilePersistsBindsAndEnforcesPolicy(t *testing.T) 
 	profile := map[string]any{
 		"id":              "ops",
 		"access_mode":     "full",
+		"approval_mode":   "ask_before_write",
 		"allowed_targets": []string{"hub"},
 		"allowed_tools":   []string{"discover"},
 	}
@@ -75,6 +76,9 @@ func TestManagedClientAccessProfilePersistsBindsAndEnforcesPolicy(t *testing.T) 
 	profilePut := request(s, http.MethodPut, profilePath, "ctl", profile, map[string]string{"If-Match": "*"})
 	if profilePut.Code != http.StatusOK {
 		t.Fatalf("PUT %s status=%d body=%s", profilePath, profilePut.Code, profilePut.Body.String())
+	}
+	if !strings.Contains(profilePut.Body.String(), `"approval_mode":"ask_before_write"`) {
+		t.Fatalf("profile response omitted approval mode: %s", profilePut.Body.String())
 	}
 
 	bindingPath := "/admin/api/client-bindings/" + url.PathEscape(issuedBody.TokenID)
@@ -85,6 +89,10 @@ func TestManagedClientAccessProfilePersistsBindsAndEnforcesPolicy(t *testing.T) 
 
 	// A fresh Server must load both records from the shared config directory.
 	restarted := New(cfg)
+	profileGet := request(restarted, http.MethodGet, profilePath, "ctl", nil, nil)
+	if profileGet.Code != http.StatusOK || !strings.Contains(profileGet.Body.String(), `"approval_mode":"ask_before_write"`) {
+		t.Fatalf("persisted approval mode missing after restart: status=%d body=%s", profileGet.Code, profileGet.Body.String())
+	}
 	mcp := func(server *Server, token, payload string) *httptest.ResponseRecorder {
 		req := httptest.NewRequest(http.MethodPost, "/mcp", bytes.NewBufferString(payload))
 		req.Header.Set("Authorization", "Bearer "+token)
@@ -429,5 +437,11 @@ func TestAccessProfileRejectsUnsupportedInstructionSet(t *testing.T) {
 	})
 	if err == nil || !strings.Contains(err.Error(), "instruction_set_id") {
 		t.Fatalf("normalizeAccessProfile error = %v, want unsupported instruction_set_id", err)
+	}
+	_, err = normalizeAccessProfile(AccessProfile{
+		ID: "ops", AccessMode: accessModeFull, ApprovalMode: "unsafe", Version: 1,
+	})
+	if err == nil || !strings.Contains(err.Error(), "approval_mode") {
+		t.Fatalf("normalizeAccessProfile error = %v, want unsupported approval_mode", err)
 	}
 }

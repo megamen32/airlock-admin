@@ -1840,6 +1840,161 @@ func TestAuditTrailSurvivesHubRestartWithRestrictivePermissions(t *testing.T) {
 	t.Fatal("audit event did not survive restart")
 }
 
+func TestAskBeforeWriteRequiresAdminApprovalAndConsumesApproval(t *testing.T) {
+	s := New(Config{CtlToken: "ctl-token", OAuthClientSecret: "oauth-secret", PublicOrigin: "https://hub.example", MCPResource: "https://hub.example"})
+	s.mu.Lock()
+	s.accessProfiles["ask-profile"] = AccessProfile{
+		ID: "ask-profile", AccessMode: accessModeFull, ApprovalMode: "ask_before_write",
+		AllowedTargets: []string{"hub"}, AllowedTools: []string{"approve_pending_server"}, Version: 1,
+	}
+	s.mu.Unlock()
+	token, err := s.signJWT(map[string]any{
+		"sub": "writer", "client_id": "writer", "jti": "writer-jti", "profile_id": "ask-profile",
+		"scope": "gptadmin.read gptadmin.exec", "aud": "https://hub.example", "resource": "https://hub.example",
+		"exp": time.Now().Add(time.Hour).Unix(), "iat": time.Now().Unix(), "kid": defaultJWTKeyID,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	call := func(approvalID string) *httptest.ResponseRecorder {
+		args := `{"server_id":"shell:secret-target"}`
+		if approvalID != "" {
+			args = `{"server_id":"shell:secret-target","approval_id":"` + approvalID + `"}`
+		}
+		req := httptest.NewRequest(http.MethodPost, "/mcp-relay/call", strings.NewReader(`{"target":"hub","tool_name":"approve_pending_server","arguments":`+args+`}`))
+		req.Header.Set("Authorization", "Bearer "+token)
+		response := httptest.NewRecorder()
+		s.Handler().ServeHTTP(response, req)
+		return response
+	}
+
+	pending := call("")
+	if pending.Code != http.StatusPreconditionRequired {
+		t.Fatalf("write bypassed approval gate: status=%d body=%s", pending.Code, pending.Body.String())
+	}
+	var pendingBody map[string]any
+	if err := json.Unmarshal(pending.Body.Bytes(), &pendingBody); err != nil {
+		t.Fatal(err)
+	}
+	approvalID, ok := pendingBody["approval_id"].(string)
+	if !ok || approvalID == "" || strings.Contains(pending.Body.String(), "secret-target") {
+		t.Fatalf("approval response exposed invalid metadata: %s", pending.Body.String())
+	}
+
+	approveReq := httptest.NewRequest(http.MethodPost, "/admin/api/approvals/"+approvalID, strings.NewReader(`{"action":"approve"}`))
+	approveReq.Header.Set("Authorization", "Bearer ctl-token")
+	approveResponse := httptest.NewRecorder()
+	s.Handler().ServeHTTP(approveResponse, approveReq)
+	if approveResponse.Code != http.StatusOK {
+		t.Fatalf("approval failed: status=%d body=%s", approveResponse.Code, approveResponse.Body.String())
+	}
+
+	approved := call(approvalID)
+	if approved.Code == http.StatusPreconditionRequired {
+		t.Fatalf("approved write was still blocked: %s", approved.Body.String())
+	}
+	replay := call(approvalID)
+	if replay.Code != http.StatusPreconditionRequired {
+		t.Fatalf("approval was reusable: status=%d body=%s", replay.Code, replay.Body.String())
+	}
+}
+
+func TestAskBeforeWriteCoversPinnedServerAndLegacyAgentAliases(t *testing.T) {
+	s := New(Config{CtlToken: "ctl-token", OAuthClientSecret: "oauth-secret", PublicOrigin: "https://hub.example", MCPResource: "https://hub.example"})
+	s.mu.Lock()
+	s.accessProfiles["ask-profile"] = AccessProfile{
+		ID: "ask-profile", AccessMode: accessModeFull, ApprovalMode: approvalModeAskBeforeWrite,
+		AllowedTargets: []string{"hub"}, AllowedTools: []string{"approve_pending_server"}, Version: 1,
+	}
+	s.mu.Unlock()
+	token, err := s.signJWT(map[string]any{
+		"sub": "writer", "client_id": "writer", "jti": "writer-jti", "profile_id": "ask-profile",
+		"scope": "gptadmin.read gptadmin.exec", "aud": "https://hub.example", "resource": "https://hub.example",
+		"exp": time.Now().Add(time.Hour).Unix(), "iat": time.Now().Unix(), "kid": defaultJWTKeyID,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	approve := func(t *testing.T, id string) {
+		t.Helper()
+		req := httptest.NewRequest(http.MethodPost, "/admin/api/approvals/"+id, strings.NewReader(`{"action":"approve"}`))
+		req.Header.Set("Authorization", "Bearer ctl-token")
+		w := httptest.NewRecorder()
+		s.Handler().ServeHTTP(w, req)
+		if w.Code != http.StatusOK {
+			t.Fatalf("approval status=%d body=%s", w.Code, w.Body.String())
+		}
+	}
+
+	callAction := func(approvalID string) *httptest.ResponseRecorder {
+		args := `{"server_id":"shell:secret-target"}`
+		if approvalID != "" {
+			args = `{"server_id":"shell:secret-target","approval_id":"` + approvalID + `"}`
+		}
+		req := httptest.NewRequest(http.MethodPost, "/server/hub/actions/tools/approve_pending_server", strings.NewReader(args))
+		req.Header.Set("Authorization", "Bearer "+token)
+		w := httptest.NewRecorder()
+		s.Handler().ServeHTTP(w, req)
+		return w
+	}
+
+	pending := callAction("")
+	if pending.Code != http.StatusPreconditionRequired || strings.Contains(pending.Body.String(), "secret-target") {
+		t.Fatalf("pinned server alias did not return sanitized approval: status=%d body=%s", pending.Code, pending.Body.String())
+	}
+	var pendingBody map[string]any
+	if err := json.Unmarshal(pending.Body.Bytes(), &pendingBody); err != nil {
+		t.Fatal(err)
+	}
+	actionApprovalID, _ := pendingBody["approval_id"].(string)
+	if actionApprovalID == "" {
+		t.Fatalf("pinned server alias omitted approval id: %s", pending.Body.String())
+	}
+	approve(t, actionApprovalID)
+	if replay := callAction(actionApprovalID); replay.Code == http.StatusPreconditionRequired {
+		t.Fatalf("pinned server approval was reusable: %s", replay.Body.String())
+	}
+
+	callLegacy := func(approvalID string) *httptest.ResponseRecorder {
+		args := map[string]any{"server_id": "shell:secret-target"}
+		if approvalID != "" {
+			args["approval_id"] = approvalID
+		}
+		body, err := json.Marshal(map[string]any{
+			"jsonrpc": "2.0", "id": 1, "method": "tools/call",
+			"params": map[string]any{"name": "approve_pending_server", "arguments": args},
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		req := httptest.NewRequest(http.MethodPost, "/agent/hub", bytes.NewReader(body))
+		req.Header.Set("Authorization", "Bearer "+token)
+		w := httptest.NewRecorder()
+		s.Handler().ServeHTTP(w, req)
+		return w
+	}
+
+	pending = callLegacy("")
+	if pending.Code != http.StatusOK || strings.Contains(pending.Body.String(), "secret-target") {
+		t.Fatalf("legacy agent alias did not return sanitized approval: status=%d body=%s", pending.Code, pending.Body.String())
+	}
+	var legacyBody map[string]any
+	if err := json.Unmarshal(pending.Body.Bytes(), &legacyBody); err != nil {
+		t.Fatal(err)
+	}
+	legacyError, _ := legacyBody["error"].(map[string]any)
+	legacyData, _ := legacyError["data"].(map[string]any)
+	legacyApprovalID, _ := legacyData["approval_id"].(string)
+	if legacyApprovalID == "" {
+		t.Fatalf("legacy agent alias omitted approval id: %s", pending.Body.String())
+	}
+	approve(t, legacyApprovalID)
+	if replay := callLegacy(legacyApprovalID); strings.Contains(replay.Body.String(), `"code":-32004`) {
+		t.Fatalf("legacy agent approval was reusable: %s", replay.Body.String())
+	}
+}
+
 func TestServerActionsOpenAPIProxyForPinnedMCPServer(t *testing.T) {
 	s := New(Config{CtlToken: "ctl", RelayAgentToken: "relay", PublicOrigin: "https://hub.example", DefaultTimeout: 2 * time.Second, PollMaxTimeout: 2 * time.Second})
 	h := s.Handler()

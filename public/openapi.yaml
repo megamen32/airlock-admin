@@ -74,6 +74,12 @@ paths:
                 $ref: "#/components/schemas/Result"
         "403":
           description: The JWT is read-only and the selected tool can modify state or execute commands.
+        "428":
+          description: A write-capable call is waiting for one administrator approval.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApprovalRequired"
   /mcp-relay/job/{job_id}:
     get:
       operationId: job
@@ -352,6 +358,26 @@ components:
       type: http
       scheme: bearer
   schemas:
+    ApprovalRequired:
+      type: object
+      additionalProperties: false
+      required: [status, approval_id, expires_at, target, tool]
+      properties:
+        status:
+          type: string
+          enum: [approval_required]
+        approval_id:
+          type: string
+          description: Opaque one-time approval handle; never a copy of the request arguments.
+        expires_at:
+          type: string
+          format: date-time
+        target:
+          type: string
+        tool:
+          type: string
+        message:
+          type: string
     NetworkProxyPolicy:
       type: object
       additionalProperties: false

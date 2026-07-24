@@ -11,6 +11,8 @@ A persisted profile will contain:
 - a stable profile ID and display name;
 - a versioned instruction-set reference;
 - an access mode and allowed MCP targets/tools;
+- an approval mode (`read_only`, `ask_before_write` or
+  `bounded_autonomous`);
 - client bindings;
 - zero or more external workspace references.
 
@@ -72,6 +74,13 @@ their credentials or their instruction files.
 
 ## Runtime requirements
 
+- `read_only` profiles reject write-capable tools. `ask_before_write` profiles
+  return a short-lived opaque approval request for each write; an operator
+  approves or rejects it through the admin API, and an approved request is
+  bound to the profile, actor, target, tool and argument digest and consumed
+  once. Raw arguments are never stored in or returned by approval metadata.
+- Approval requests are intentionally in-memory and expire after five minutes;
+  a restart invalidates outstanding requests.
 - Profile and workspace-reference updates use version checks to prevent stale
   writes.
 - Instruction updates affect subsequent MCP initialization without restarting

@@ -1047,6 +1047,31 @@ plan is [`PROJECT_PLAN.md`](./PROJECT_PLAN.md).
 - Next: add authenticated Tunnel/client connection checks and native CI proof
   before promoting S1.2 to Complete.
 
+## 2026-07-24 - Ask-before-write approval boundary - completed
+
+- Milestone: `S2.3` / `S2.4`
+- Owner: Codex
+- Scope: Add an explicit profile approval mode, in-process approval
+  request metadata, admin approve/reject endpoints and one-time execution
+  binding across the MCP relay boundary; never persist or return raw args.
+- Baseline / red evidence: Existing `AccessProfile` has access mode and
+  allowlists but no `ask-before-write`; full-access profiles can invoke
+  write-capable tools immediately through `/mcp-relay/call`.
+- Change: Added `approval_mode` normalization and persistence, a shared approval
+  gate for relay, pinned-server action and legacy-agent aliases, sanitized
+  admin list/get/approve/reject endpoints, five-minute expiry, profile/actor/
+  target/tool/argument-digest binding and one-time consume. Approval metadata
+  never stores or returns raw arguments; restart invalidates in-process requests.
+- Verification: Focused red/green tests cover direct relay, pinned-server and
+  legacy-agent aliases, admin approval, replay rejection and profile persistence;
+  `cd go-hub && go test ./internal/hub -run 'TestAskBeforeWrite|TestManagedClientAccessProfile|TestAccessProfileRejectsUnsupportedInstructionSet' -count=1` passes.
+  Full Hub suite, all-module race tests, vet, Python `169 passed, 2 skipped`,
+  completion matrix `11 passed` and OpenAPI YAML parsing pass.
+- Delivery: Pending integration commit on `codex/haos-addon-public`; no deploy
+  or push. The unrelated untracked remote-secret plan remains preserved.
+- Next: define and enforce bounded-autonomous quotas, then implement the
+  remaining MFA/security-preset and connection-page gates.
+
 ## 2026-07-22 - Isolated Network Tunnel proxy relay - completed
 
 - Milestone: `S2.2`

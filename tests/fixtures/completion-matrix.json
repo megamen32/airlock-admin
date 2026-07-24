@@ -95,6 +95,11 @@
       "evidence": "actor, target, allow/deny policy decisions, durable audit, argument digest and result reference without raw arguments"
     },
     {
+      "id": "ask-before-write",
+      "command": "cd go-hub && go test ./internal/hub -run 'TestAskBeforeWrite(RequiresAdminApprovalAndConsumesApproval|CoversPinnedServerAndLegacyAgentAliases)' -count=1",
+      "evidence": "write-capable MCP call and pinned/legacy aliases require admin approval, bind target/tool/digest and consume approval once"
+    },
+    {
       "id": "readonly-security",
       "command": "cd go-shellmcp && go test ./internal/inspect ./internal/redact ./internal/security -count=1",
       "evidence": "path boundary, symlink/credential rejection and secret redaction"
