@@ -48,6 +48,17 @@ plan is [`PROJECT_PLAN.md`](./PROJECT_PLAN.md).
 
 ## Entries
 
+## 2026-07-24 - OTLP telemetry delivery identity - completed
+
+- Milestone: `S3.1`
+- Owner: `Codex`
+- Scope: Attach the immutable delivery identity to the OTLP telemetry entry above.
+- Baseline / red evidence: The implementation entry was committed after its initial handoff text was written.
+- Change: No production change; record the exact linear commit for the local exporter contract.
+- Verification: `git show --no-patch --format='%H %s' 807ffe7` identifies `feat: add opt-in OTLP telemetry export`.
+- Delivery: Commit `807ffe7`; no push, deployment or merge performed.
+- Next: Keep real collector/backend and cross-service production evidence open.
+
 ## 2026-07-24 - Opt-in OTLP structured telemetry contract - completed
 
 - Milestone: `S3.1`
