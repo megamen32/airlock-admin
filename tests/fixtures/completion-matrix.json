@@ -62,6 +62,11 @@
       "id": "activation-telemetry",
       "command": "cd go-hub && go test ./internal/hub -run 'TestActivationTelemetryIsOptInAggregatedAndPersistent' -count=1",
       "evidence": "opt-in local event counters, payload exclusion and restart persistence"
+    },
+    {
+      "id": "safe-demo-readonly",
+      "command": "cd go-hub && go test ./internal/hub -run 'TestSafeDemoToolIsAvailableToReadonlyMCPWithoutEchoingArguments' -count=1",
+      "evidence": "readonly MCP connection check returns build/connection facts without shell, credentials or argument echo"
     }
   ],
   "file_sharing": [

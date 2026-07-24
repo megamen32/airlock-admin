@@ -1009,6 +1009,39 @@ func TestConnectionPageExposesCanonicalClientChoicesWithoutSecrets(t *testing.T)
 	}
 }
 
+func TestSafeDemoToolIsAvailableToReadonlyMCPWithoutEchoingArguments(t *testing.T) {
+	s := New(Config{CtlToken: "ctl", OAuthClientSecret: "oauth-secret", PublicOrigin: "https://hub.example", MCPResource: "https://hub.example"})
+	token, err := s.signJWT(map[string]any{
+		"sub": "demo-reader", "client_id": "demo-reader", "jti": "demo-reader-jti",
+		"scope": "gptadmin.read gptadmin.inspect", "access_mode": accessModeReadonly,
+		"aud": "https://hub.example", "resource": "https://hub.example",
+		"exp": time.Now().Add(time.Hour).Unix(), "iat": time.Now().Unix(), "kid": defaultJWTKeyID,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	mcp := func(body string) *httptest.ResponseRecorder {
+		req := httptest.NewRequest(http.MethodPost, "/mcp", strings.NewReader(body))
+		req.Header.Set("Authorization", "Bearer "+token)
+		w := httptest.NewRecorder()
+		s.Handler().ServeHTTP(w, req)
+		return w
+	}
+	tools := mcp(`{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}`)
+	if tools.Code != http.StatusOK || !strings.Contains(tools.Body.String(), `"name":"demo"`) {
+		t.Fatalf("readonly tools/list missing safe demo: status=%d body=%s", tools.Code, tools.Body.String())
+	}
+	result := mcp(`{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"demo","arguments":{"secret":"must-not-return"}}}`)
+	if result.Code != http.StatusOK || strings.Contains(result.Body.String(), "must-not-return") || strings.Contains(result.Body.String(), "oauth-secret") {
+		t.Fatalf("safe demo leaked input or secret: status=%d body=%s", result.Code, result.Body.String())
+	}
+	for _, required := range []string{"connection", "build_version", "readonly"} {
+		if !strings.Contains(result.Body.String(), required) {
+			t.Fatalf("safe demo missing %q: %s", required, result.Body.String())
+		}
+	}
+}
+
 func TestRegistryStatePersistsAgentsAcrossRestart(t *testing.T) {
 	tmp := t.TempDir()
 	cfg := Config{CtlToken: "ctl", RelayAgentToken: "relay", ConfigDir: tmp, RegistryStateFile: filepath.Join(tmp, "registry_state.json"), DefaultTimeout: time.Second, PollMaxTimeout: time.Second}

@@ -80,7 +80,7 @@ func authorizeToolCall(r *http.Request, target, toolName string) error {
 	}
 	if target == "hub" {
 		switch toolName {
-		case "listMcpServers", "list_mcp_servers", "listMcpAgents", "list_mcp_agents", "list_pending_servers", "pending", "hub_status", "status":
+		case "listMcpServers", "list_mcp_servers", "listMcpAgents", "list_mcp_agents", "list_pending_servers", "pending", "hub_status", "status", "demo":
 			return nil
 		}
 	}
@@ -103,7 +103,7 @@ func authorizeFacadeCall(r *http.Request, name string, args map[string]any) erro
 		}
 	}
 	switch name {
-	case "ui", "render_gptadmin_dashboard", "renderGptadminDashboard", "discover", "list_mcp_servers", "listMcpServers", "list_mcp_agents", "listMcpAgents", "pending", "list_pending_servers", "schema", "list_mcp_tools", "listMcpTools", "inspect", "inspect_system", "inspectSystem", "job", "get_mcp_job", "getMcpJob":
+	case "ui", "render_gptadmin_dashboard", "renderGptadminDashboard", "discover", "demo", "list_mcp_servers", "listMcpServers", "list_mcp_agents", "listMcpAgents", "pending", "list_pending_servers", "schema", "list_mcp_tools", "listMcpTools", "inspect", "inspect_system", "inspectSystem", "job", "get_mcp_job", "getMcpJob":
 		return nil
 	case "execute", "call_mcp_tool", "callMcpTool":
 		return authorizeToolCall(r, firstString(args, "target", "server_id", "agent_id"), firstString(args, "tool", "tool_name", "name"))

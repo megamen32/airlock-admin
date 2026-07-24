@@ -1176,6 +1176,27 @@ plan is [`PROJECT_PLAN.md`](./PROJECT_PLAN.md).
 - Next: wire only explicitly selected funnel events and add cross-process
   telemetry aggregation if the product needs it; no remote telemetry is sent.
 
+## 2026-07-24 - Safe read-only demo capability - completed
+
+- Milestone: `S1.4`
+- Owner: `Codex`
+- Scope: Add a built-in Hub MCP `demo` tool for a harmless connection check;
+  enforce readonly authorization across global MCP and Apps surfaces.
+- Baseline / red evidence: The safe-demo plan row was still `Planned`; readonly
+  clients had discovery and inspection but no single no-shell/no-credential
+  connection check.
+- Change: Added `demo` tool advertisement, readonly policy allowlist and a
+  real `/mcp` JSON-RPC regression proving no argument echo or secret exposure.
+- Verification: Hub full/race/vet pass; ShellMCP and ProxyRelay race/vet pass;
+  Python `169 passed, 2 skipped`; completion matrix `11 passed`; public Hub
+  contract/golden tests `6 passed`; focused readonly `/mcp` test proves the
+  safe response contains connection/build/access facts but neither argument
+  input nor OAuth material.
+- Delivery: Pending integration commit on `codex/haos-addon-public`; no deploy
+  or push. Both untracked plan files remain preserved.
+- Next: wire the demo into the connection-page client flows and keep the
+  destructive-action boundary enforced through every alias.
+
 ## 2026-07-22 - Isolated Network Tunnel proxy relay - completed
 
 - Milestone: `S2.2`

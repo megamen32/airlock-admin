@@ -2242,7 +2242,7 @@ func (s *Server) boundedAutonomousGate(r *http.Request, target, toolName string)
 func isReadOnlyTool(target, toolName string) bool {
 	if target == "hub" {
 		switch toolName {
-		case "discover", "list_mcp_servers", "listMcpServers", "list_mcp_agents", "listMcpAgents", "pending", "list_pending_servers", "hub_status", "status", "schema", "list_mcp_tools", "listMcpTools", "job", "get_mcp_job", "getMcpJob":
+		case "discover", "demo", "list_mcp_servers", "listMcpServers", "list_mcp_agents", "listMcpAgents", "pending", "list_pending_servers", "hub_status", "status", "schema", "list_mcp_tools", "listMcpTools", "job", "get_mcp_job", "getMcpJob":
 			return true
 		default:
 			return false
@@ -2563,6 +2563,15 @@ func (s *Server) callHubToolForRequest(r *http.Request, name string, args map[st
 			}
 		}
 		return map[string]any{"ok": true, "servers": len(s.agents), "awaiting_approval": awaiting, "relay_jobs": len(s.relayJobs), "shell_jobs": len(s.shellJobs)}, http.StatusOK
+	case "demo":
+		return map[string]any{
+			"status":        "ok",
+			"connection":    map[string]any{"hub_url": s.origin(r), "mcp_endpoint": s.origin(r) + "/mcp"},
+			"build_version": BuildVersion,
+			"access_mode":   requestAccessMode(r),
+			"capabilities":  []string{"mcp", "read_only_demo"},
+			"message":       "GPTAdmin safe demo is ready; no command or credential access was used.",
+		}, http.StatusOK
 	default:
 		return map[string]any{"error": "unsupported hub tool", "tool": name, "arguments": args}, http.StatusBadRequest
 	}
@@ -2620,6 +2629,7 @@ func (s *Server) callShellTool(target, toolName string, args map[string]any, bac
 func hubTools() []map[string]any {
 	tools := []map[string]any{
 		{"name": "discover", "description": "List registered targets", "inputSchema": map[string]any{"type": "object", "properties": map[string]any{}}},
+		{"name": "demo", "description": "Run a safe read-only connection check; no shell or credentials", "inputSchema": map[string]any{"type": "object", "properties": map[string]any{}, "additionalProperties": false}},
 		{"name": "pending", "description": "List pending approvals", "inputSchema": map[string]any{"type": "object", "properties": map[string]any{}}},
 		{"name": "approve_pending_server", "description": "Approve one ShellMCP device awaiting enrollment", "inputSchema": map[string]any{"type": "object", "properties": map[string]any{"server_id": map[string]any{"type": "string", "description": "Exact shell:<name> returned by pending"}}, "required": []string{"server_id"}, "additionalProperties": false}},
 		{"name": "status", "description": "Return Hub status", "inputSchema": map[string]any{"type": "object", "properties": map[string]any{}}},
@@ -4738,6 +4748,9 @@ func (s *Server) appsSDKCall(name string, args map[string]any) any {
 	case "pending", "list_pending_servers", "approve_pending_server":
 		result, _ := s.callHubToolForRequest(nil, name, args)
 		return result
+	case "demo":
+		result, _ := s.callHubTool(name, args)
+		return result
 	case "list_mcp_agents", "listMcpAgents":
 		s.mu.Lock()
 		agents := s.publicAgentsLocked(nil)
@@ -4791,6 +4804,10 @@ func (s *Server) appsSDKCall(name string, args map[string]any) any {
 }
 
 func (s *Server) appsSDKCallForRequest(r *http.Request, name string, args map[string]any) any {
+	if name == "demo" {
+		result, _ := s.callHubToolForRequest(r, name, args)
+		return result
+	}
 	if requestAccessMode(r) == accessModeReadonly && (name == "schema" || name == "list_mcp_tools" || name == "listMcpTools") {
 		target := firstString(args, "target", "server_id", "agent_id")
 		if target != "hub" && !strings.HasPrefix(target, "shell:") {
@@ -4880,6 +4897,16 @@ func appsSDKTools() []map[string]any {
 			"description":     "List compact MCP targets. Set detail=full only when metadata is needed.",
 			"inputSchema":     map[string]any{"type": "object", "properties": map[string]any{"detail": map[string]any{"type": "string", "enum": []string{"full"}, "description": "Opt in to transport, capabilities and metadata."}}, "additionalProperties": false},
 			"outputSchema":    map[string]any{"type": "object", "properties": map[string]any{"servers": map[string]any{"type": "array", "items": map[string]any{"type": "object", "additionalProperties": true}}}, "required": []string{"servers"}, "additionalProperties": true},
+			"annotations":     map[string]any{"readOnlyHint": true, "destructiveHint": false, "openWorldHint": false},
+			"securitySchemes": readSecurity,
+			"_meta":           readMeta,
+		},
+		{
+			"name":            "demo",
+			"title":           "Safe connection check",
+			"description":     "Run a read-only connection check without shell execution, file access or credentials.",
+			"inputSchema":     map[string]any{"type": "object", "properties": map[string]any{}, "additionalProperties": false},
+			"outputSchema":    map[string]any{"type": "object", "additionalProperties": true},
 			"annotations":     map[string]any{"readOnlyHint": true, "destructiveHint": false, "openWorldHint": false},
 			"securitySchemes": readSecurity,
 			"_meta":           readMeta,
