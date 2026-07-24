@@ -587,3 +587,13 @@ Rules:
 - Fix / verification: Aligned the runner and mock with the authoritative `mcp_endpoint` field; `python3 -m pytest tests/test_live_acceptance.py -q` passes (`2 passed`) against both the in-process surface and a real Go Hub process.
 - Status: fixed.
 - Next action: Keep the live runner contract synchronized with `connection_page.go` when discovery fields change.
+
+## 2026-07-24 - PROFILE-PROCESS-FIXTURE-OAUTH-20260724 - Profile process contract lacked signing configuration - fixed
+
+- Component: `tests/test_hub_contract.py` process fixture.
+- First observed: 2026-07-24, RED regression `test_hub_contract_profile_binding_enforces_mcp_tool_policy`.
+- Confirmed fact: The real Hub process returned HTTP 500 from `/admin/api/mcp/issue-token` because its test environment omitted the required OAuth signing configuration.
+- Root cause: The existing generic Hub contract fixture covered health and MCP calls but did not provide the deterministic test-only `OAUTH_CLIENT_SECRET` required by managed-token issuance.
+- Fix / verification: Added the isolated fixture value; the process profile test passes (`1 passed`) and no production credential or source fallback was introduced.
+- Status: fixed.
+- Next action: Keep managed-token profile binding in the process acceptance matrix.

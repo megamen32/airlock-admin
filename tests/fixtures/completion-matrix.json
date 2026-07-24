@@ -206,6 +206,11 @@
       "id": "admin-access-profile",
       "command": "cd go-hub && go test ./internal/hub -run 'TestManagedClientAccessProfile|TestAccessProfileCASInventoryAndAuthContext|TestAccessProfileSharedConfigRefreshAndWorkspacePersistence|TestAccessProfileNormalizesNamedInstructionSetReference|TestNamedInstructionSetCRUDAndProfileInitialize' -count=1",
       "evidence": "profile persistence, named instruction-set CRUD, live MCP initialize refresh, bindings and effective tool filtering"
+    },
+    {
+      "id": "admin-access-profile-process",
+      "command": "python3 -m pytest tests/test_hub_contract.py -k profile_binding_enforces_mcp_tool_policy -q",
+      "evidence": "real Hub process creates a profile, binds a managed token and enforces allowed discover versus forbidden execute"
     }
   ],
   "security_policies": [

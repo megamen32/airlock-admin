@@ -2507,3 +2507,14 @@ plan is [`PROJECT_PLAN.md`](./PROJECT_PLAN.md).
 - Verification: `python3 -m pytest tests/test_completion_matrix.py -q` passed (`12 passed` in `117.05s`); `python3 -m pytest tests/ --ignore=tests/e2e` passed (`234 passed, 3 skipped` in `183.59s`).
 - Delivery: Current local acceptance is green; external hosts, public Tunnel, native clients, retained collector trace and signed CI remain unproven.
 - Next: Obtain the authorized external artifacts, then rerun the live acceptance runner against the exact deployed commit.
+
+## 2026-07-24 - Process-level access-profile enforcement - completed locally
+
+- Milestone: `S2.1`, `S4.1`
+- Owner: Codex
+- Scope: Real Hub HTTP process profile CRUD, managed-token issuance/binding, allowed `discover` and denied `execute` MCP behavior.
+- Baseline / red evidence: The new process regression first returned HTTP 500 because the generic Hub contract fixture omitted the OAuth signing configuration required by managed-token issuance; this was recorded as `PROFILE-PROCESS-FIXTURE-OAUTH-20260724` in `docs/BUGS.md`.
+- Change: Added optional request headers to the black-box helper, the profile process regression, deterministic fixture signing configuration and a completion-matrix row.
+- Verification: `python3 -m pytest tests/test_hub_contract.py -k profile_binding_enforces_mcp_tool_policy -q` passes (`1 passed`); forbidden `execute` is filtered/denied while `discover` succeeds.
+- Delivery: Local Hub process evidence only; external identity/profile and public client evidence remain separate.
+- Next: Run the same profile-bound token through the authorized public client/Tunnel smoke.
