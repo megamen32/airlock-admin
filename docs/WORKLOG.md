@@ -48,6 +48,17 @@ plan is [`PROJECT_PLAN.md`](./PROJECT_PLAN.md).
 
 ## Entries
 
+## 2026-07-24 - Admin passkey enrollment UI - completed
+
+- Milestone: `S2.1a`
+- Owner: `Codex`
+- Scope: Expose authenticated WebAuthn/passkey enrollment in the production vanilla-JS admin SPA using the existing Hub ceremony endpoints.
+- Baseline / red evidence: `test_admin_security_ui_offers_passkey_enrollment_without_raw_credentials` failed because the security view had no passkey controls or WebAuthn browser call.
+- Change: Added a passkey enrollment button/result view and browser-native `navigator.credentials.create` flow with challenge/user/exclusion decoding and attestation encoding.
+- Verification: `python3 -m pytest tests/test_admin_ui.py -q` -> 8 passed; `node --check public/admin/app.js` passes. Virtual-authenticator browser smoke remains the next gate.
+- Delivery: Pending current linear integration commit; no push, deployment or merge.
+- Next: Run browser-backed enrollment against a disposable Hub, then record the delivery identity.
+
 ## 2026-07-24 - S4.1 conformance delivery identity - completed
 
 - Milestone: `S4.1`

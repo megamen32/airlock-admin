@@ -433,6 +433,35 @@ async function enrollSecurityTotp(){
   }catch(e){$('securityMfaResult').textContent='ERR '+e.message}
 }
 
+function webAuthnDecode(value){
+  const normalized=value.replace(/-/g,'+').replace(/_/g,'/')+'='.repeat((4-value.length%4)%4);
+  const raw=atob(normalized);const bytes=new Uint8Array(raw.length);
+  for(let i=0;i<raw.length;i++)bytes[i]=raw.charCodeAt(i);
+  return bytes;
+}
+function webAuthnEncode(value){
+  const bytes=new Uint8Array(value);let raw='';
+  for(const byte of bytes)raw+=String.fromCharCode(byte);
+  return btoa(raw).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
+}
+async function enrollSecurityPasskey(){
+  const output=$('securityPasskeyResult');
+  if(!window.PublicKeyCredential||!navigator.credentials?.create){output.textContent='ERR WebAuthn is not available in this browser';return}
+  try{
+    const begin=await api('/admin/api/security/mfa/webauthn/register/begin',{method:'POST',body:'{}'});
+    const publicKey=begin.publicKey;
+    publicKey.challenge=webAuthnDecode(publicKey.challenge);
+    if(publicKey.user?.id)publicKey.user={...publicKey.user,id:webAuthnDecode(publicKey.user.id)};
+    if(publicKey.excludeCredentials)publicKey.excludeCredentials=publicKey.excludeCredentials.map(item=>({...item,id:webAuthnDecode(item.id)}));
+    const credential=await navigator.credentials.create({publicKey});
+    if(!credential)throw new Error('passkey registration was cancelled');
+    const response=credential.response;
+    const result=await api('/admin/api/security/mfa/webauthn/register/finish',{method:'POST',body:JSON.stringify({id:credential.id,rawId:webAuthnEncode(credential.rawId),response:{clientDataJSON:webAuthnEncode(response.clientDataJSON),attestationObject:webAuthnEncode(response.attestationObject)},type:credential.type})});
+    output.textContent=JSON.stringify(result,null,2);
+    await loadSecurityControls();
+  }catch(e){output.textContent='ERR '+e.message}
+}
+
 async function verifySecurityTotp(){
   const code=$('securityMfaCode').value.trim();
   if(!code){alert('Введите MFA-код');return}

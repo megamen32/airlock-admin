@@ -52,6 +52,16 @@ Rules:
 - Status: fixed.
 - Next action: Keep the conformance regression in the MCP forwarding/completion matrix.
 
+## 2026-07-24 - MFA-PASSKEY-UI-MISSING-20260724 - Admin SPA could not enroll a passkey - fixed
+
+- Component: `public/admin/index.html` and `public/admin/app.js` security view.
+- First observed: 2026-07-24, read-only security audit and RED regression `test_admin_security_ui_offers_passkey_enrollment_without_raw_credentials`.
+- Confirmed fact: Hub WebAuthn registration endpoints existed, but the shipped admin SPA exposed only TOTP enrollment; operators could not create the first passkey from the production admin surface.
+- Root cause: Browser login support was added without wiring the authenticated enrollment ceremony into the admin dashboard.
+- Fix / verification: Added browser-native passkey enrollment with base64url conversion, typed begin/finish requests and secret-free result rendering. `tests/test_admin_ui.py` passes 8 tests and `node --check public/admin/app.js` passes.
+- Status: fixed.
+- Next action: Retain a virtual-authenticator browser smoke in the security acceptance lane.
+
 ## 2026-07-24 - INSTALL-QUICKSTART-INTERNAL-AUTH-20260724 - Installer help exposed legacy credential name - fixed
 
 - Component: `deploy/install.sh` post-install quickstart.

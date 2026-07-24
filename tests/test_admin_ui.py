@@ -68,3 +68,18 @@ def test_admin_security_controls_use_typed_hub_endpoints_without_shell_env_mutat
     ):
         assert endpoint in security
     assert "function ensureSecurityReauth" in security
+
+
+def test_admin_security_ui_offers_passkey_enrollment_without_raw_credentials():
+    """The shipped admin SPA must expose the backend WebAuthn enrollment flow."""
+
+    html = (ROOT / "public" / "admin" / "index.html").read_text(encoding="utf-8")
+    script = (ROOT / "public" / "admin" / "app.js").read_text(encoding="utf-8")
+    security_start = script.index("// ===== Security management =====")
+    security = script[security_start:]
+    assert "Зарегистрировать passkey" in html
+    assert "securityPasskeyResult" in html
+    assert "/admin/api/security/mfa/webauthn/register/begin" in security
+    assert "/admin/api/security/mfa/webauthn/register/finish" in security
+    assert "navigator.credentials.create" in security
+    assert "CTL_TOKEN" not in security

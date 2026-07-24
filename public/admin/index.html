@@ -144,6 +144,8 @@
         <div style="margin-top:16px"><h2 style="font-size:13px">MFA для администратора</h2>
           <div class="row"><button onclick="enrollSecurityTotp()">Начать регистрацию MFA</button><input id="securityMfaCode" inputmode="numeric" placeholder="6-значный код" style="min-width:160px"><button onclick="verifySecurityTotp()">Подтвердить</button></div>
           <pre id="securityMfaResult" style="min-height:60px">—</pre>
+          <div class="row"><button onclick="enrollSecurityPasskey()">Зарегистрировать passkey</button></div>
+          <pre id="securityPasskeyResult" style="min-height:40px">—</pre>
           <p class="muted small">Ключ настройки и recovery codes показываются только в явном ответе регистрации; обычные списки их не возвращают.</p>
         </div>
         <div style="margin-top:16px"><h2 style="font-size:13px">Диагностический heartbeat</h2>

@@ -210,6 +210,11 @@
       "evidence": "passkey registration/login ceremony boundaries, restrictive credential state and locked-down MFA acceptance"
     },
     {
+      "id": "webauthn-admin-browser-enrollment",
+      "command": "GPTADMIN_BROWSER_TESTS=1 python3 -m pytest tests/test_admin_passkey_browser.py -q",
+      "evidence": "real Chromium virtual-authenticator enrolls a passkey through the production admin SPA and Hub ceremony endpoints"
+    },
+    {
       "id": "auth-failure-rate-limit",
       "command": "cd go-hub && go test ./internal/hub -run 'TestAuthFailuresAreRateLimitedPerClient' -count=1",
       "evidence": "failed admin/control authentication is bounded per client with Retry-After while successful auth remains outside the failure budget"
