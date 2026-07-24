@@ -2627,3 +2627,12 @@ plan is [`PROJECT_PLAN.md`](./PROJECT_PLAN.md).
 - Verification: `go test ./...`, `go test -race ./...`, and `go vet ./...` pass; completion matrix `12 passed in 126.87s`; full Python suite `237 passed, 3 skipped` from `239 collected / 1 collection skip` in `182.18s`.
 - Delivery: Local Hub, endpoint, MCP forwarding, policy and security regression gates are green; external runtime, public adapter/client and native-platform evidence remain open.
 - Next: In an authorized external session, run the same schema-bound execute and argument-boundary smoke through the public Tunnel/client path.
+
+## 2026-07-24 - Cross-component schema boundary acceptance - completed locally
+
+- Milestone: `S0.2`, `S0.3`, `S4.1`
+- Owner: Codex
+- Scope: Recheck the unaffected ShellMCP implementation and supported Darwin build targets after the Hub schema-boundary change.
+- Verification: `cd go-shellmcp && go test ./...` passes; `go-hub` Darwin arm64 and amd64 cross-builds pass.
+- Delivery: Both Go components and local cross-platform compilation are green; real macOS runtime authorization and external deployment evidence remain open.
+- Next: Attach the same evidence to the authorized native/public acceptance run when those hosts are available.
