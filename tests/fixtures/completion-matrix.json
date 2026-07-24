@@ -60,6 +60,11 @@
       "id": "queued-mcp-forwarding",
       "command": "cd go-shellmcp && go test ./internal/server -run 'TestQueueExecutesGenericMCPToolAndPostsResult' -count=1",
       "evidence": "queue-to-MCP tool execution and result postback"
+    },
+    {
+      "id": "mcp-integration-conformance",
+      "command": "cd go-hub && go test ./internal/hub -run 'TestMCPIntegrationDiscoverSchemaExecuteConformance' -count=1",
+      "evidence": "canonical discover -> schema -> execute flow reaches the safe Hub target through the request-scoped policy path"
     }
   ],
   "operations": [
@@ -235,6 +240,13 @@
       "id": "release-workflow-gates",
       "command": "python3 -m pytest tests/test_release_workflow_contract.py -q",
       "evidence": "release workflow verifies manifest/SBOM and shipped installer links before publication"
+    }
+  ],
+  "integration_certification": [
+    {
+      "id": "integration-support-inventory",
+      "command": "python3 -m pytest tests/test_integration_certification.py -q",
+      "evidence": "documented adapters have version policy, smoke command, evidence class and explicit write idempotency semantics"
     }
   ],
   "golden_paths": [

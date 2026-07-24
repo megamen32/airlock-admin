@@ -19,6 +19,7 @@ REQUIRED_SURFACES = {
     "operations",
     "file_sharing",
     "golden_paths",
+    "integration_certification",
     "profiles",
     "release_provenance",
     "security_policies",

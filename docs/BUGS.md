@@ -42,6 +42,16 @@ Rules:
 - Status: fixed.
 - Next action: Retain the named profile flow in the profiles acceptance matrix and public API documentation.
 
+## 2026-07-24 - MCP-EXEC-NIL-REQUEST-20260724 - Canonical execute crashed without request context - fixed
+
+- Component: `go-hub/internal/hub/server.go` Apps SDK `execute` dispatch.
+- First observed: 2026-07-24, RED regression `TestMCPIntegrationDiscoverSchemaExecuteConformance`; the `/mcp` execute path panicked in `origin()` after passing a nil request to `appsSDKCallMCP`.
+- Confirmed fact: `discover` and `schema` worked, but the canonical `discover -> schema -> execute` flow could crash when executing the safe Hub `demo` tool.
+- Root cause: `appsSDKCallForRequest` routed `execute` through the legacy request-free helper, while the Hub demo result requires request origin/access context.
+- Fix / verification: Route `execute` through the request-scoped executor and make request-free internal origin calculation loopback-safe. The conformance test and full Hub package pass.
+- Status: fixed.
+- Next action: Keep the conformance regression in the MCP forwarding/completion matrix.
+
 ## 2026-07-24 - INSTALL-QUICKSTART-INTERNAL-AUTH-20260724 - Installer help exposed legacy credential name - fixed
 
 - Component: `deploy/install.sh` post-install quickstart.

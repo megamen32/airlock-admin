@@ -4278,12 +4278,15 @@ func (s *Server) origin(r *http.Request) string {
 		return s.cfg.PublicOrigin
 	}
 	scheme := "http"
-	if r.TLS != nil || r.Header.Get("X-Forwarded-Proto") == "https" {
+	if r != nil && (r.TLS != nil || r.Header.Get("X-Forwarded-Proto") == "https") {
 		scheme = "https"
 	}
-	host := r.Host
-	if xf := strings.TrimSpace(r.Header.Get("X-Forwarded-Host")); xf != "" {
-		host = xf
+	host := ""
+	if r != nil {
+		host = r.Host
+		if xf := strings.TrimSpace(r.Header.Get("X-Forwarded-Host")); xf != "" {
+			host = xf
+		}
 	}
 	if host == "" {
 		host = "127.0.0.1"
@@ -5334,6 +5337,9 @@ func (s *Server) appsSDKCallForRequest(r *http.Request, name string, args map[st
 		}
 	}
 	if name == "call_mcp_tool" || name == "callMcpTool" {
+		return s.appsSDKCallMCP(r, name, args)
+	}
+	if name == "execute" {
 		return s.appsSDKCallMCP(r, name, args)
 	}
 	result := s.appsSDKCall(name, args)

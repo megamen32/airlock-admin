@@ -48,6 +48,17 @@ plan is [`PROJECT_PLAN.md`](./PROJECT_PLAN.md).
 
 ## Entries
 
+## 2026-07-24 - MCP integration conformance and execute safety - completed
+
+- Milestone: `S4.1` / `S2.2`
+- Owner: `Codex`
+- Scope: Certify the canonical local MCP `discover -> schema -> execute` flow and remove a request-context crash in `execute` dispatch.
+- Baseline / red evidence: `TestMCPIntegrationDiscoverSchemaExecuteConformance` panicked in `Server.origin()` because `execute` reached `appsSDKCallMCP` with a nil request.
+- Change: Added the conformance test and routed `execute` through the request-scoped Apps SDK executor; request-free internal origin fallback is now safe.
+- Verification: Focused conformance test passes; full Hub test/race/vet and completion-matrix inclusion remain the integration gate.
+- Delivery: Pending current linear integration commit; no push, deployment or merge.
+- Next: Add the conformance test and support-version contract to the matrix, then run the full local acceptance suite.
+
 ## 2026-07-24 - Named profile instruction sets - completed
 
 - Milestone: `S1.3a`

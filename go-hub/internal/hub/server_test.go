@@ -234,6 +234,38 @@ func TestMCPToolsExposeCompactCanonicalNames(t *testing.T) {
 	}
 }
 
+func TestMCPIntegrationDiscoverSchemaExecuteConformance(t *testing.T) {
+	s := New(Config{CtlToken: "ctl", DefaultTimeout: time.Second, PollMaxTimeout: time.Second})
+	call := func(id int, name, arguments string) map[string]any {
+		t.Helper()
+		return postMCPRPC(t, s, fmt.Sprintf(`{"jsonrpc":"2.0","id":%d,"method":"tools/call","params":{"name":%q,"arguments":%s}}`, id, name, arguments))
+	}
+
+	discover := call(1, "discover", `{}`)
+	discovered := mapValue(mapValue(discover["result"])["structuredContent"])
+	servers := sliceValue(discovered["servers"])
+	if len(servers) == 0 || firstString(mapValue(servers[0]), "server_id") != "hub" {
+		t.Fatalf("discover did not return hub target: %v", discovered)
+	}
+
+	schema := call(2, "schema", `{"target":"hub"}`)
+	schemaContent := mapValue(mapValue(schema["result"])["structuredContent"])
+	response := mapValue(schemaContent["response"])
+	tools := sliceValue(response["tools"])
+	if len(tools) == 0 {
+		t.Fatalf("schema returned no tools: %v", schemaContent)
+	}
+
+	execute := call(3, "execute", `{"target":"hub","tool":"demo","arguments":{"probe":"conformance"},"idempotency_key":"conformance-demo-1"}`)
+	executeJSON, err := json.Marshal(execute)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(executeJSON), `"status":"ok"`) {
+		t.Fatalf("execute did not return the safe demo result: %s", executeJSON)
+	}
+}
+
 func registerRelayAgent(t *testing.T, s *Server, agentID string) {
 	t.Helper()
 	postHubJSON(t, s, "/mcp-relay/register", "relay", `{"agent_id":"`+agentID+`","name":"Demo","capabilities":["tools/list","tools/call"]}`)
