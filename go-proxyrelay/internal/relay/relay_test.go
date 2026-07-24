@@ -139,6 +139,28 @@ func readReady(t *testing.T, c *websocket.Conn) Ready {
 	return ready
 }
 
+func TestMetricsEndpointExposesBoundedRelayCounters(t *testing.T) {
+	h := newRelayHarness(t, nil)
+	req := httptest.NewRequest(http.MethodGet, "/metrics", nil)
+	rec := httptest.NewRecorder()
+	h.server.Handler().ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("metrics status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	var metrics map[string]any
+	if err := json.Unmarshal(rec.Body.Bytes(), &metrics); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"active_sessions", "authenticated_peers_total", "pairs_started_total", "resets_total", "max_observed_queue_depth"} {
+		if _, ok := metrics[name]; !ok {
+			t.Fatalf("metrics missing %q: %v", name, metrics)
+		}
+	}
+	if strings.Contains(rec.Body.String(), "ticket") || strings.Contains(rec.Body.String(), "target") {
+		t.Fatalf("metrics leaked relay authorization data: %s", rec.Body.String())
+	}
+}
+
 func writeFrame(t *testing.T, c *websocket.Conn, frame Frame) {
 	t.Helper()
 	raw, err := EncodeFrame(frame, 1<<20)
@@ -203,6 +225,10 @@ func TestRelayPairsExactlyOneClientAndAgent(t *testing.T) {
 	defer cancel()
 	if _, _, err := extra.Read(ctx); err == nil {
 		t.Fatal("second client unexpectedly joined an active pair")
+	}
+	stats := h.server.Stats()
+	if stats.AuthenticatedPeers < 2 || stats.PairsStarted < 1 || stats.ActiveSessions < 1 {
+		t.Fatalf("relay metrics did not observe the active pair: %+v", stats)
 	}
 }
 

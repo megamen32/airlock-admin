@@ -48,6 +48,17 @@ plan is [`PROJECT_PLAN.md`](./PROJECT_PLAN.md).
 
 ## Entries
 
+## 2026-07-24 - ProxyRelay bounded metrics - completed
+
+- Milestone: `S3.1`
+- Owner: `Codex`
+- Scope: Add a secret-free `/metrics` JSON surface and bounded counters for ProxyRelay authentication, active sessions, pairs, resets and queue high-water mark; preserve the existing WebSocket/ticket protocol.
+- Baseline / red evidence: `TestMetricsEndpointExposesBoundedRelayCounters` failed with HTTP 404 because ProxyRelay had no metrics endpoint.
+- Change: Added secret-free JSON `/metrics` with active sessions, authenticated peers, pairs, resets and queue high-water counters; counters are atomic and do not expose tickets, targets or payloads. Added runtime counter assertions and completion-matrix coverage.
+- Verification: `cd go-proxyrelay && go test ./...` -> pass; `go test -race ./...` -> pass; `go vet ./...` -> pass; `python3 -m pytest tests/test_completion_matrix.py -q` -> `11 passed`.
+- Delivery: Pending commit on the single linear branch; no runtime deployment. Preserve the unrelated untracked remote-secret-ingress plan.
+- Next: Continue S3.1 with trace/metrics export across the remaining client and relay integration boundary; do not mark OpenTelemetry complete from this local metrics surface.
+
 ## 2026-07-24 - Safe request trace correlation - completed
 
 - Milestone: `S3.1`

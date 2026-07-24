@@ -9,6 +9,11 @@
       "id": "go-proxyrelay-blackbox",
       "command": "cd go-proxyrelay && go test ./blackbox ./internal/relay ./internal/ticket -count=1",
       "evidence": "real relay stream and ticket contract"
+    },
+    {
+      "id": "go-proxyrelay-metrics",
+      "command": "cd go-proxyrelay && go test ./internal/relay -run 'TestMetricsEndpointExposesBoundedRelayCounters|TestRelayPairsExactlyOneClientAndAgent' -count=1",
+      "evidence": "secret-free bounded relay counters expose auth, active sessions, pairs, resets and queue depth"
     }
   ],
   "endpoints": [

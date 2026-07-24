@@ -50,7 +50,11 @@ type Ready struct {
 
 // Stats reports bounded relay queue observations.
 type Stats struct {
-	MaxObservedQueueDepth int `json:"max_observed_queue_depth"`
+	MaxObservedQueueDepth int   `json:"max_observed_queue_depth"`
+	ActiveSessions        int   `json:"active_sessions"`
+	AuthenticatedPeers    int64 `json:"authenticated_peers_total"`
+	PairsStarted          int64 `json:"pairs_started_total"`
+	Resets                int64 `json:"resets_total"`
 }
 
 // Server owns the isolated in-memory stream pairing registry.
@@ -66,6 +70,10 @@ type Server struct {
 	agentStreams   map[string]int
 	profileStreams map[string]int
 	maxQueue       atomic.Int64
+	activeSessions atomic.Int64
+	authenticated  atomic.Int64
+	pairsStarted   atomic.Int64
+	resets         atomic.Int64
 }
 
 type relaySession struct {
@@ -114,6 +122,7 @@ func New(config Config) (*Server, error) {
 	mux.HandleFunc("/v1/stream/client", server.handleStream(ticket.RoleClient))
 	mux.HandleFunc("/v1/stream/agent", server.handleStream(ticket.RoleAgent))
 	mux.HandleFunc("/v1/control/revoke", server.handleRevoke)
+	mux.HandleFunc("/metrics", server.metrics)
 	server.handler = mux
 	return server, nil
 }
@@ -150,7 +159,23 @@ func (s *Server) Stats() Stats {
 		}
 	}
 	s.mu.Unlock()
-	return Stats{MaxObservedQueueDepth: int(maximum)}
+	return Stats{
+		MaxObservedQueueDepth: int(maximum),
+		ActiveSessions:        int(s.activeSessions.Load()),
+		AuthenticatedPeers:    s.authenticated.Load(),
+		PairsStarted:          s.pairsStarted.Load(),
+		Resets:                s.resets.Load(),
+	}
+}
+
+func (s *Server) metrics(writer http.ResponseWriter, request *http.Request) {
+	if request.Method != http.MethodGet {
+		writer.Header().Set("Allow", http.MethodGet)
+		writer.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+	writer.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(writer).Encode(s.Stats())
 }
 
 func (s *Server) handleStream(role string) http.HandlerFunc {
@@ -169,6 +194,7 @@ func (s *Server) handleStream(role string) http.HandlerFunc {
 			connection.CloseNow()
 			return
 		}
+		s.authenticated.Add(1)
 		s.emit(claims, "peer_authenticated", "", role)
 
 		session, startsPair, rejected := s.join(peer, claims)
@@ -267,6 +293,7 @@ func (s *Server) join(peer *relayPeer, claims ticket.Claims) (*relaySession, boo
 		session.agent = peer
 	}
 	s.sessions[claims.StreamID] = session
+	s.activeSessions.Add(1)
 	s.agentStreams[claims.AgentID]++
 	s.profileStreams[claims.ProfileID]++
 	s.mu.Unlock()
@@ -274,6 +301,7 @@ func (s *Server) join(peer *relayPeer, claims ticket.Claims) (*relaySession, boo
 }
 
 func (s *Server) startPair(session *relaySession) {
+	s.pairsStarted.Add(1)
 	var pair *streamPair
 	pair = newStreamPair(session.claims, session.client.frame, session.agent.frame, s.config.Audit, func() {
 		s.observePair(pair)
@@ -363,6 +391,7 @@ func (s *Server) removeSessionLocked(session *relaySession) {
 		return
 	}
 	delete(s.sessions, session.claims.StreamID)
+	s.activeSessions.Add(-1)
 	s.agentStreams[session.claims.AgentID]--
 	if s.agentStreams[session.claims.AgentID] == 0 {
 		delete(s.agentStreams, session.claims.AgentID)
@@ -422,6 +451,9 @@ func (s *Server) observePair(pair *streamPair) {
 }
 
 func (s *Server) emit(claims ticket.Claims, event, reason, role string) {
+	if event == "pair_reset" {
+		s.resets.Add(1)
+	}
 	if s.config.Audit == nil {
 		return
 	}
