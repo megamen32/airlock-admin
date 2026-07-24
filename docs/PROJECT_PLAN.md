@@ -62,11 +62,11 @@ evidence unambiguous before adding surface area.
 | --- | --- | --- | --- |
 | S1.1 One-command working Hub | Idempotent install/update that starts Hub, creates/verifies Tunnel and outputs one Hub URL | Fresh supported host completes with minimal questions and no manual topology/token configuration | Planned |
 | S1.2 `gptadmin doctor` | Structured local and remote readiness diagnosis | Detects version, service health, Tunnel reachability, auth, clock and permissions; has machine-readable JSON | In progress |
-| S1.3 Universal connection page | One Hub URL that detects/configures local MCP clients and derives protocol details | Codex, Claude-compatible and ChatGPT-compatible paths complete a harmless action without documentation lookup | Planned |
+| S1.3 Universal connection page | One Hub URL that detects/configures local MCP clients and derives protocol details | Codex, Claude-compatible and ChatGPT-compatible paths complete a harmless action without documentation lookup | In progress |
 | S1.3a Admin profile workspace | Configure versioned instructions, access mode, allowed targets/tools, external machine/workspace references and client bindings as one user-facing profile; follow [`ADMIN_PROFILES.md`](./ADMIN_PROFILES.md) | A profile survives restart, updates effective MCP instructions without restart, filters the real tool list and rejects a forbidden call in black-box tests; referenced private repositories remain separate sources of truth | Complete |
 | S1.4 Safe demo capability | Built-in read-only demo/diagnostics tool and explicit destructive-action boundary | A user can validate connection without shell execution or credentials beyond setup | Planned |
 | S1.5 Activation telemetry | Opt-in, privacy-preserving local event summary | Operator can see funnel failures without sending command contents or secrets | Planned |
-| S1.6 Progressive security presets | Working default, Private access and Locked down presets applied after first connection | Working default has HTTPS/rate limits/no direct public port; Locked down requires MFA and external verification | Planned |
+| S1.6 Progressive security presets | Working default, Private access and Locked down presets applied after first connection | Working default has HTTPS/rate limits/no direct public port; Locked down requires MFA and external verification | In progress |
 
 The vocabulary of every Stage 1 surface is **Hub**, **MCP clients** and
 **Tunnel**. Protocol/transport names are advanced diagnostics, not setup
@@ -82,7 +82,7 @@ experience, not an expert-only configuration exercise.
 | Milestone | Deliverable | Exit gate | Status |
 | --- | --- | --- | --- |
 | S2.1 One-password identity and connection hygiene | `AdminPassword` for humans; hidden internal keys and short-lived scoped JWT connections | Black-box tests reject wrong audience, expired token and token forwarding; normal user flows reveal no raw token | In progress |
-| S2.1a Admin MFA | WebAuthn/passkeys first, TOTP fallback, recovery codes and optional OIDC proxy identity | Locked down admin sessions cannot be enabled without MFA; enrollment, recovery and sensitive-setting re-auth are black-box tested | Planned |
+| S2.1a Admin MFA | WebAuthn/passkeys first, TOTP fallback, recovery codes and optional OIDC proxy identity | Locked down admin sessions cannot be enabled without MFA; enrollment, recovery and sensitive-setting re-auth are black-box tested | In progress |
 | S2.2 Capability policy | Per-agent, per-server and per-tool allow rules with explicit deny behavior | Policy decision is included in every audit event and covered by API/MCP tests | In progress |
 | S2.3 Progressive autonomy | Approval modes: read-only, ask-before-write, bounded autonomous | Dangerous calls require the configured approval and cannot bypass it through aliases or relay targets | In progress |
 | S2.4 Operator audit trail | Searchable immutable-enough action log with actor, target, policy, arguments digest and result reference | Incident drill can answer who did what, where, why and with what result | In progress |

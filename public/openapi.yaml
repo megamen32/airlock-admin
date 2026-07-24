@@ -16,6 +16,19 @@ servers:
 security:
   - bearerAuth: []
 paths:
+  /connect.json:
+    get:
+      operationId: connectionManifest
+      summary: Discover the canonical Hub connection contract
+      description: Public, secret-free manifest for deriving MCP and OAuth client setup from one Hub URL.
+      security: []
+      responses:
+        "200":
+          description: Canonical Hub URL and named client choices
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ConnectionManifest"
   /mcp-relay/servers:
     get:
       operationId: discover
@@ -360,6 +373,45 @@ components:
       type: http
       scheme: bearer
   schemas:
+    ConnectionManifest:
+      type: object
+      additionalProperties: false
+      required: [hub_url, mcp_endpoint, oauth_authorization_server, clients]
+      properties:
+        hub_url:
+          type: string
+          format: uri
+        mcp_endpoint:
+          type: string
+          format: uri
+        oauth_authorization_server:
+          type: string
+          format: uri
+        oauth_protected_resource:
+          type: string
+          format: uri
+        actions_openapi:
+          type: string
+          format: uri
+        clients:
+          type: array
+          items:
+            $ref: "#/components/schemas/ConnectionClient"
+    ConnectionClient:
+      type: object
+      additionalProperties: false
+      required: [id, label, method, endpoint]
+      properties:
+        id:
+          type: string
+          enum: [codex, claude, chatgpt, custom]
+        label:
+          type: string
+        method:
+          type: string
+        endpoint:
+          type: string
+          format: uri
     ApprovalRequired:
       type: object
       additionalProperties: false
