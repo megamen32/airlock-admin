@@ -23,7 +23,7 @@ func TestQueueExecutesGenericMCPToolAndPostsResult(t *testing.T) {
 		case r.Method == http.MethodGet && strings.HasPrefix(r.URL.Path, "/queue/queue-agent"):
 			w.Header().Set("Content-Type", "application/json")
 			if polls.Add(1) == 1 {
-				_ = json.NewEncoder(w).Encode(map[string]any{"id": "generic-1", "trace_id": "trace-shell-789", "tool_name": "system_info", "arguments": map[string]any{}})
+				_ = json.NewEncoder(w).Encode(map[string]any{"id": "generic-1", "trace_id": "trace-shell-789", "traceparent": "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01", "tool_name": "system_info", "arguments": map[string]any{}})
 				return
 			}
 			_, _ = w.Write([]byte("{}"))
@@ -50,7 +50,7 @@ func TestQueueExecutesGenericMCPToolAndPostsResult(t *testing.T) {
 	go s.queueLoop(ctx)
 	select {
 	case result := <-resultCh:
-		if result.ID != "generic-1" || result.TraceID != "trace-shell-789" || !strings.Contains(strings.ToLower(toJSON(result.Result)), "capability_registry") {
+		if result.ID != "generic-1" || result.TraceID != "trace-shell-789" || result.TraceParent != "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01" || !strings.Contains(strings.ToLower(toJSON(result.Result)), "capability_registry") {
 			t.Fatalf("unexpected generic result: %#v", result)
 		}
 	case <-time.After(3 * time.Second):

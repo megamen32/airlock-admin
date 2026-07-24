@@ -10,6 +10,14 @@
 
 REST + MCP endpoints exposed by the hub.
 
+## Request correlation
+
+The Hub accepts an optional W3C `traceparent` request header. It returns a
+validated child `traceparent` and the bounded `X-Request-ID` response header;
+queued relay and ShellMCP jobs carry the same correlation fields through poll
+and result delivery. Invalid trace headers are discarded and replaced. Trace
+metadata never contains command arguments, credentials or file contents.
+
 ## Auth quick reference
 
 | Endpoint | Auth |

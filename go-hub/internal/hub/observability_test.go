@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 )
@@ -104,7 +105,8 @@ func TestRequestTraceIDFollowsQueuedMCPJobAndResultAudit(t *testing.T) {
 
 func TestRequestTraceIDCrossesShellQueuePollAndResult(t *testing.T) {
 	s := New(Config{CtlToken: "ctl", ShellToken: "shell", DefaultTimeout: 1, PollMaxTimeout: 1})
-	queued := s.callShellToolWithTrace("shell:demo", "shell_exec", map[string]any{"cmd": "printf safe"}, true, time.Second, "trace-shell-789")
+	parent := "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"
+	queued := s.callShellToolWithTraceParent("shell:demo", "shell_exec", map[string]any{"cmd": "printf safe"}, true, time.Second, "trace-shell-789", parent)
 	jobID, _ := queued["job_id"].(string)
 	if jobID == "" {
 		t.Fatalf("missing shell job id: %v", queued)
@@ -121,7 +123,7 @@ func TestRequestTraceIDCrossesShellQueuePollAndResult(t *testing.T) {
 	if err := json.Unmarshal(pollWriter.Body.Bytes(), &job); err != nil {
 		t.Fatal(err)
 	}
-	if job["id"] != jobID || job["trace_id"] != "trace-shell-789" {
+	if job["id"] != jobID || job["trace_id"] != "trace-shell-789" || job["traceparent"] != parent {
 		t.Fatalf("poll lost trace: %v", job)
 	}
 
@@ -144,4 +146,74 @@ func TestRequestTraceIDCrossesShellQueuePollAndResult(t *testing.T) {
 		}
 	}
 	t.Fatalf("shell result audit missing for job %s", jobID)
+}
+
+func TestTraceParentCrossesRelayQueue(t *testing.T) {
+	s := New(Config{CtlToken: "ctl", RelayAgentToken: "relay", DefaultTimeout: 1, PollMaxTimeout: 1})
+	registerRelayAgent(t, s, "demo")
+	incoming := "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"
+	req := httptest.NewRequest(http.MethodPost, "/mcp-relay/call", bytes.NewBufferString(`{"target":"demo","tool_name":"ping","arguments":{"value":"safe"},"background":true}`))
+	req.Header.Set("Authorization", "Bearer ctl")
+	req.Header.Set("traceparent", incoming)
+	w := httptest.NewRecorder()
+	s.Handler().ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("queue status=%d body=%s", w.Code, w.Body.String())
+	}
+	parent := w.Header().Get("traceparent")
+	if parent == "" || !strings.HasPrefix(parent, "00-4bf92f3577b34da6a3ce929d0e0e4736-") || parent == incoming {
+		t.Fatalf("response traceparent=%q, want same trace id and a child span", parent)
+	}
+	var queued map[string]any
+	if err := json.Unmarshal(w.Body.Bytes(), &queued); err != nil {
+		t.Fatal(err)
+	}
+	jobID, _ := queued["job_id"].(string)
+	if jobID == "" || queued["traceparent"] != parent {
+		t.Fatalf("queued response=%v, want traceparent=%q", queued, parent)
+	}
+
+	poll := httptest.NewRequest(http.MethodGet, "/mcp-relay/poll/demo?timeout=0", nil)
+	poll.Header.Set("Authorization", "Bearer relay")
+	pollWriter := httptest.NewRecorder()
+	s.Handler().ServeHTTP(pollWriter, poll)
+	if pollWriter.Code != http.StatusOK {
+		t.Fatalf("poll status=%d body=%s", pollWriter.Code, pollWriter.Body.String())
+	}
+	var job map[string]any
+	if err := json.Unmarshal(pollWriter.Body.Bytes(), &job); err != nil {
+		t.Fatal(err)
+	}
+	if job["id"] != jobID || job["traceparent"] != parent {
+		t.Fatalf("poll lost traceparent: %v, want %q", job, parent)
+	}
+}
+
+func TestInvalidTraceParentIsReplaced(t *testing.T) {
+	s := New(Config{CtlToken: "ctl", DefaultTimeout: 1, PollMaxTimeout: 1})
+	req := httptest.NewRequest(http.MethodGet, "/healthz", nil)
+	req.Header.Set("traceparent", "not-a-trace")
+	w := httptest.NewRecorder()
+	s.Handler().ServeHTTP(w, req)
+	parent := w.Header().Get(traceParentHeader)
+	if parent == "not-a-trace" {
+		t.Fatal("invalid traceparent was reflected")
+	}
+	if _, ok := parseTraceParent(parent); !ok {
+		t.Fatalf("response traceparent=%q is not valid W3C format", parent)
+	}
+}
+
+func TestTraceParentParserRejectsInvalidValues(t *testing.T) {
+	for _, value := range []string{
+		"",
+		"00-00000000000000000000000000000000-00f067aa0ba902b7-01",
+		"00-4bf92f3577b34da6a3ce929d0e0e4736-0000000000000000-01",
+		"ff-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01",
+		"00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-zz",
+	} {
+		if _, ok := parseTraceParent(value); ok {
+			t.Errorf("parseTraceParent(%q) accepted invalid value", value)
+		}
+	}
 }

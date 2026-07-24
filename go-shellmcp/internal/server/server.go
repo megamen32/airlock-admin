@@ -868,7 +868,7 @@ func (s *Server) queueLoop(ctx context.Context) {
 		}
 		if ok {
 			if q.ToolName != "" && q.ToolName != "shell_exec" {
-				go s.runCallbackTool(q.ID, q.TraceID, q.ToolName, q.Arguments)
+				go s.runCallbackTool(q.ID, q.TraceID, q.TraceParent, q.ToolName, q.Arguments)
 			} else {
 				req := shellRequestFromQueueJob(q, s.cfg.SpillDir)
 				s.applyDefaults(&req)
@@ -883,13 +883,13 @@ func shellRequestFromQueueJob(q hub.QueueJob, spillDir string) shell.Request {
 	if runAsUser == "" {
 		runAsUser, _ = q.Arguments["user"].(string)
 	}
-	return shell.Request{Cmd: q.Cmd, TraceID: normalizeTraceID(q.TraceID), Cwd: q.Cwd, Timeout: q.Timeout, Env: q.Env, SpillDir: spillDir, RunAsUser: runAsUser}
+	return shell.Request{Cmd: q.Cmd, TraceID: normalizeTraceID(q.TraceID), TraceParent: q.TraceParent, Cwd: q.Cwd, Timeout: q.Timeout, Env: q.Env, SpillDir: spillDir, RunAsUser: runAsUser}
 }
 
-func (s *Server) runCallbackTool(jobID, traceID, name string, args map[string]any) {
+func (s *Server) runCallbackTool(jobID, traceID, traceParent, name string, args map[string]any) {
 	traceID = normalizeTraceID(traceID)
 	result, err := s.callMCPTool(context.Background(), name, args)
-	payload := hub.TaskResult{ID: jobID, TraceID: traceID, Result: result}
+	payload := hub.TaskResult{ID: jobID, TraceID: traceID, TraceParent: traceParent, Result: result}
 	if err != nil {
 		payload.Result = map[string]any{"error": err.Error()}
 	}
@@ -897,7 +897,7 @@ func (s *Server) runCallbackTool(jobID, traceID, name string, args map[string]an
 	if err != nil {
 		status = "failed"
 	}
-	s.auditLog.Event(audit.PollJob, map[string]any{"job_id": jobID, "tool": name, "trace_id": traceID, "status": status})
+	s.auditLog.Event(audit.PollJob, map[string]any{"job_id": jobID, "tool": name, "trace_id": traceID, "traceparent": traceParent, "status": status})
 	if s.hub == nil {
 		return
 	}
@@ -909,13 +909,13 @@ func (s *Server) runCallbackTool(jobID, traceID, name string, args map[string]an
 
 func (s *Server) runCallbackJob(jobID string, req shell.Request) {
 	req.TraceID = normalizeTraceID(req.TraceID)
-	s.auditLog.Event(audit.ExecStart, map[string]any{"job_id": jobID, "trace_id": req.TraceID, "background": true})
+	s.auditLog.Event(audit.ExecStart, map[string]any{"job_id": jobID, "trace_id": req.TraceID, "traceparent": req.TraceParent, "background": true})
 	res := s.runShell(context.Background(), req)
-	s.auditLog.Event(audit.ExecEnd, map[string]any{"job_id": jobID, "trace_id": req.TraceID, "return_code": res.ReturnCode, "elapsed_ms": res.DurationMS})
+	s.auditLog.Event(audit.ExecEnd, map[string]any{"job_id": jobID, "trace_id": req.TraceID, "traceparent": req.TraceParent, "return_code": res.ReturnCode, "elapsed_ms": res.DurationMS})
 	if s.hub == nil {
 		return
 	}
-	payload := hub.TaskResult{ID: jobID, TraceID: req.TraceID, Result: res}
+	payload := hub.TaskResult{ID: jobID, TraceID: req.TraceID, TraceParent: req.TraceParent, Result: res}
 	if err := s.hub.PostResult(context.Background(), s.cfg.Name, payload); err != nil {
 		log.Printf("callback result failed job=%s err=%v", jobID, err)
 		s.spoolOutbox(jobID, payload, err)

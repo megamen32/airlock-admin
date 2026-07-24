@@ -48,6 +48,17 @@ plan is [`PROJECT_PLAN.md`](./PROJECT_PLAN.md).
 
 ## Entries
 
+## 2026-07-24 - W3C traceparent relay propagation - completed
+
+- Milestone: `S3.1`
+- Owner: `Codex`
+- Scope: Carry bounded W3C `traceparent` metadata from Hub HTTP requests through relay and ShellMCP queues, polls, callbacks and durable-result correlation without payloads.
+- Baseline / red evidence: `TestTraceParentCrossesRelayQueue` failed because Hub returned no `traceparent` header and queued jobs did not carry the parent.
+- Change: Added strict traceparent parsing/replacement, child-span response headers, relay/shell queue fields, ShellMCP `TaskResult` propagation, audit fields and regression coverage; documented the contract in `API_REFERENCE.md`.
+- Verification: Hub/ShellMCP focused tests -> pass; all Go tests, race and vet for Hub/ShellMCP/ProxyRelay -> pass; Python suite -> `178 passed, 2 skipped`; completion/release/SLO tests -> `13 passed`; Darwin Hub and ShellMCP arm64/amd64 builds -> pass.
+- Delivery: Pending commit on the single linear branch; no runtime deployment. Preserve the unrelated untracked remote-secret-ingress plan.
+- Next: Finish the remaining S3.1 exporter/backend and structured-log integration before marking standard telemetry complete.
+
 ## 2026-07-24 - ShellMCP bounded metrics endpoint - completed
 
 - Milestone: `S3.1`

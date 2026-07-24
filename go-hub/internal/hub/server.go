@@ -197,35 +197,37 @@ type persistentRegistryState struct {
 }
 
 type relayJob struct {
-	ID        string         `json:"id"`
-	AgentID   string         `json:"agent_id,omitempty"`
-	TraceID   string         `json:"trace_id,omitempty"`
-	Method    string         `json:"method"`
-	Params    map[string]any `json:"params,omitempty"`
-	CreatedAt float64        `json:"created_at"`
-	StartedAt float64        `json:"started_at,omitempty"`
-	DoneAt    float64        `json:"completed_at,omitempty"`
-	Status    string         `json:"status"`
-	Result    map[string]any `json:"result,omitempty"`
-	Error     any            `json:"error,omitempty"`
+	ID          string         `json:"id"`
+	AgentID     string         `json:"agent_id,omitempty"`
+	TraceID     string         `json:"trace_id,omitempty"`
+	TraceParent string         `json:"traceparent,omitempty"`
+	Method      string         `json:"method"`
+	Params      map[string]any `json:"params,omitempty"`
+	CreatedAt   float64        `json:"created_at"`
+	StartedAt   float64        `json:"started_at,omitempty"`
+	DoneAt      float64        `json:"completed_at,omitempty"`
+	Status      string         `json:"status"`
+	Result      map[string]any `json:"result,omitempty"`
+	Error       any            `json:"error,omitempty"`
 }
 
 type shellJob struct {
-	ID        string         `json:"id"`
-	Server    string         `json:"server,omitempty"`
-	TraceID   string         `json:"trace_id,omitempty"`
-	ToolName  string         `json:"tool_name,omitempty"`
-	Arguments map[string]any `json:"arguments,omitempty"`
-	Cmd       string         `json:"cmd,omitempty"`
-	Cwd       string         `json:"cwd,omitempty"`
-	Timeout   int            `json:"timeout,omitempty"`
-	Env       map[string]any `json:"env,omitempty"`
-	CreatedAt float64        `json:"created_at"`
-	StartedAt float64        `json:"started_at,omitempty"`
-	DoneAt    float64        `json:"completed_at,omitempty"`
-	Status    string         `json:"status"`
-	Result    any            `json:"result,omitempty"`
-	Error     any            `json:"error,omitempty"`
+	ID          string         `json:"id"`
+	Server      string         `json:"server,omitempty"`
+	TraceID     string         `json:"trace_id,omitempty"`
+	TraceParent string         `json:"traceparent,omitempty"`
+	ToolName    string         `json:"tool_name,omitempty"`
+	Arguments   map[string]any `json:"arguments,omitempty"`
+	Cmd         string         `json:"cmd,omitempty"`
+	Cwd         string         `json:"cwd,omitempty"`
+	Timeout     int            `json:"timeout,omitempty"`
+	Env         map[string]any `json:"env,omitempty"`
+	CreatedAt   float64        `json:"created_at"`
+	StartedAt   float64        `json:"started_at,omitempty"`
+	DoneAt      float64        `json:"completed_at,omitempty"`
+	Status      string         `json:"status"`
+	Result      any            `json:"result,omitempty"`
+	Error       any            `json:"error,omitempty"`
 }
 
 type auditEvent struct {
@@ -1688,6 +1690,9 @@ func (s *Server) shellQueueResult(w http.ResponseWriter, r *http.Request, name s
 	if job.TraceID != "" {
 		fields["trace_id"] = job.TraceID
 	}
+	if job.TraceParent != "" {
+		fields["traceparent"] = job.TraceParent
+	}
 	s.addAuditLocked("shell_result", fields)
 	s.cond.Broadcast()
 	s.mu.Unlock()
@@ -1774,7 +1779,14 @@ func (s *Server) mcpRelayPoll(w http.ResponseWriter, r *http.Request) {
 			}
 			job.Status = "running"
 			job.StartedAt = nowFloat()
-			writeJSON(w, http.StatusOK, map[string]any{"id": job.ID, "method": job.Method, "params": job.Params})
+			payload := map[string]any{"id": job.ID, "method": job.Method, "params": job.Params}
+			if job.TraceID != "" {
+				payload["trace_id"] = job.TraceID
+			}
+			if job.TraceParent != "" {
+				payload["traceparent"] = job.TraceParent
+			}
+			writeJSON(w, http.StatusOK, payload)
 			return
 		}
 		remaining := time.Until(deadline)
@@ -1829,6 +1841,9 @@ func (s *Server) mcpRelayResult(w http.ResponseWriter, r *http.Request) {
 	fields := map[string]any{"server_id": agentID, "job_id": res.ID, "status": job.Status}
 	if job.TraceID != "" {
 		fields["trace_id"] = job.TraceID
+	}
+	if job.TraceParent != "" {
+		fields["traceparent"] = job.TraceParent
 	}
 	s.addAuditLocked("mcp_result", fields)
 	s.cond.Broadcast()
@@ -2113,13 +2128,16 @@ func (s *Server) executeMCPTool(r *http.Request, target, toolName string, args m
 			return map[string]any{"server_id": target, "status": "completed", "response": resp}, status
 		}
 		if strings.HasPrefix(target, "shell:") {
-			return s.callShellToolWithTrace(target, toolName, args, background, timeout, requestTraceID(r)), http.StatusOK
+			return s.callShellToolWithTraceParent(target, toolName, args, background, timeout, requestTraceID(r), requestTraceParent(r)), http.StatusOK
 		}
-		jobID := s.enqueueRelayWithTrace(target, "tools/call", map[string]any{"name": toolName, "arguments": args}, requestTraceID(r))
+		jobID := s.enqueueRelayWithTraceParent(target, "tools/call", map[string]any{"name": toolName, "arguments": args}, requestTraceID(r), requestTraceParent(r))
 		if background {
 			response := map[string]any{"server_id": target, "status": "running", "background": true, "job_id": jobID}
 			if traceID := requestTraceID(r); traceID != "" {
 				response["trace_id"] = traceID
+			}
+			if parent := requestTraceParent(r); parent != "" {
+				response["traceparent"] = parent
 			}
 			return response, http.StatusOK
 		}
@@ -2509,13 +2527,20 @@ func (s *Server) enqueueRelay(agentID, method string, params map[string]any) str
 }
 
 func (s *Server) enqueueRelayWithTrace(agentID, method string, params map[string]any, traceID string) string {
+	return s.enqueueRelayWithTraceParent(agentID, method, params, traceID, "")
+}
+
+func (s *Server) enqueueRelayWithTraceParent(agentID, method string, params map[string]any, traceID, traceParent string) string {
 	id := newID()
 	s.mu.Lock()
-	s.relayJobs[id] = &relayJob{ID: id, AgentID: agentID, TraceID: traceID, Method: method, Params: params, CreatedAt: nowFloat(), Status: "queued"}
+	s.relayJobs[id] = &relayJob{ID: id, AgentID: agentID, TraceID: traceID, TraceParent: traceParent, Method: method, Params: params, CreatedAt: nowFloat(), Status: "queued"}
 	s.relayQueues[agentID] = append(s.relayQueues[agentID], id)
 	fields := map[string]any{"server_id": agentID, "job_id": id, "method": method}
 	if traceID != "" {
 		fields["trace_id"] = traceID
+	}
+	if traceParent != "" {
+		fields["traceparent"] = traceParent
 	}
 	s.addAuditLocked("mcp_enqueue", fields)
 	s.cond.Broadcast()
@@ -2548,6 +2573,9 @@ func relayJobResponse(job *relayJob) map[string]any {
 	if job.TraceID != "" {
 		response["trace_id"] = job.TraceID
 	}
+	if job.TraceParent != "" {
+		response["traceparent"] = job.TraceParent
+	}
 	if job.Status == "failed" {
 		response["error"] = job.Error
 		return response
@@ -2560,6 +2588,9 @@ func shellJobResponse(job *shellJob) map[string]any {
 	out := map[string]any{"server_id": "shell:" + job.Server, "status": job.Status, "job_id": job.ID, "task_id": job.ID}
 	if job.TraceID != "" {
 		out["trace_id"] = job.TraceID
+	}
+	if job.TraceParent != "" {
+		out["traceparent"] = job.TraceParent
 	}
 	if job.Result != nil {
 		out["response"] = map[string]any{"content": []map[string]any{{"type": "text", "text": "shell_exec completed on " + job.Server}}, "structuredContent": map[string]any{"server": job.Server, "result": job.Result}}
@@ -2659,11 +2690,15 @@ func (s *Server) callShellTool(target, toolName string, args map[string]any, bac
 }
 
 func (s *Server) callShellToolWithTrace(target, toolName string, args map[string]any, background bool, timeout time.Duration, traceID string) map[string]any {
+	return s.callShellToolWithTraceParent(target, toolName, args, background, timeout, traceID, "")
+}
+
+func (s *Server) callShellToolWithTraceParent(target, toolName string, args map[string]any, background bool, timeout time.Duration, traceID, traceParent string) map[string]any {
 	server := canonicalShellQueueName(strings.TrimPrefix(target, "shell:"))
 	if toolName == "" {
 		return map[string]any{"server_id": target, "status": "failed", "error": "missing tool name"}
 	}
-	job := &shellJob{ID: newID(), Server: server, TraceID: traceID, ToolName: toolName, Arguments: cloneMap(args), CreatedAt: nowFloat(), Status: "queued"}
+	job := &shellJob{ID: newID(), Server: server, TraceID: traceID, TraceParent: traceParent, ToolName: toolName, Arguments: cloneMap(args), CreatedAt: nowFloat(), Status: "queued"}
 	if toolName == "shell_exec" {
 		job.Cmd = firstString(args, "cmd", "command")
 		if job.Cmd == "" {
@@ -2680,6 +2715,9 @@ func (s *Server) callShellToolWithTrace(target, toolName string, args map[string
 	if traceID != "" {
 		fields["trace_id"] = traceID
 	}
+	if traceParent != "" {
+		fields["traceparent"] = traceParent
+	}
 	s.addAuditLocked("shell_enqueue", fields)
 	s.cond.Broadcast()
 	s.mu.Unlock()
@@ -2687,6 +2725,9 @@ func (s *Server) callShellToolWithTrace(target, toolName string, args map[string
 		response := map[string]any{"server_id": target, "status": "running", "background": true, "job_id": job.ID, "task_id": job.ID, "message": "shell job queued"}
 		if traceID != "" {
 			response["trace_id"] = traceID
+		}
+		if traceParent != "" {
+			response["traceparent"] = traceParent
 		}
 		return response
 	}
@@ -4694,9 +4735,9 @@ func (s *Server) agentToolCall(r *http.Request, agent Agent, name string, args m
 		return mcpToolResult(s.appsSDKCall(name, args)), nil
 	}
 	if strings.HasPrefix(agent.AgentID, "shell:") {
-		return unwrapMCPUpstream(s.callShellToolWithTrace(agent.AgentID, name, args, false, s.cfg.DefaultTimeout, requestTraceID(r)))
+		return unwrapMCPUpstream(s.callShellToolWithTraceParent(agent.AgentID, name, args, false, s.cfg.DefaultTimeout, requestTraceID(r), requestTraceParent(r)))
 	}
-	jobID := s.enqueueRelayWithTrace(agent.AgentID, "tools/call", map[string]any{"name": name, "arguments": args}, requestTraceID(r))
+	jobID := s.enqueueRelayWithTraceParent(agent.AgentID, "tools/call", map[string]any{"name": name, "arguments": args}, requestTraceID(r), requestTraceParent(r))
 	return unwrapMCPUpstream(s.waitRelay(jobID, s.cfg.DefaultTimeout))
 }
 
