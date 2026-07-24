@@ -48,6 +48,17 @@ plan is [`PROJECT_PLAN.md`](./PROJECT_PLAN.md).
 
 ## Entries
 
+## 2026-07-24 - Installer quickstart delivery identity - completed
+
+- Milestone: `S0.5` / `S1.1`
+- Owner: `Codex`
+- Scope: Attach the exact commit to the installer quickstart vocabulary fix.
+- Baseline / red evidence: `trash/logs/setup-e2e-ef31e3d.txt` contained the legacy credential name before the fix.
+- Change: No additional production change; record the immutable delivery identity for the corrected installer help.
+- Verification: `git show --no-patch --format='%H %s' 497fac7` identifies `fix: hide legacy auth names from installer help`; current-head Docker installer log `trash/logs/setup-e2e-497fac7.txt` has exit code 0, the expected AdminPassword/OAuth wording and no `CTL_TOKEN`.
+- Delivery: Commit `497fac7`; no push, deployment or merge performed.
+- Next: Keep the quickstart vocabulary regression in the from-scratch installer gate.
+
 ## 2026-07-24 - Installer quickstart auth vocabulary - completed
 
 - Milestone: `S0.5` / `S1.1`
