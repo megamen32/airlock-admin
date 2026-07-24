@@ -70,6 +70,17 @@ plan is [`PROJECT_PLAN.md`](./PROJECT_PLAN.md).
 - Delivery: Documentation correction in the current linear integration work; no push or deployment.
 - Next: Use exact commit IDs for subsequent handoffs.
 
+## 2026-07-24 - Browser passkey delivery identity - completed
+
+- Milestone: `S2.1a`
+- Owner: `Codex`
+- Scope: Attach the exact delivery identity to the browser passkey acceptance entry above.
+- Baseline / red evidence: The implementation entry was committed after its initial handoff text was written.
+- Change: No production change; record the immutable linear commit for the completed browser flow.
+- Verification: `git show --no-patch --format='%H %s' 985cdc4` identifies `feat: complete browser passkey login flow`.
+- Delivery: Commit `985cdc4`; no push, deployment or merge performed.
+- Next: Keep external/native/CI gates open until their stated evidence exists.
+
 ## 2026-07-24 - Docker install and failover acceptance - completed
 
 - Milestone: `S0.1/S3.4`
