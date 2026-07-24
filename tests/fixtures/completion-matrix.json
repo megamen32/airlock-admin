@@ -108,6 +108,11 @@
       "id": "repository-secret-boundary",
       "command": "python3 -m pytest tests/test_no_secrets.py tests/test_public_mirror.py -q",
       "evidence": "tracked-tree public/private and credential scan"
+    },
+    {
+      "id": "security-preset-mfa",
+      "command": "cd go-hub && go test ./internal/hub -run 'TestSecurityPresetAndTOTPFailClosedUntilEnrollment' -count=1",
+      "evidence": "preset persistence, locked-down fail-closed behavior, TOTP enrollment/verification and MFA-required admin login"
     }
   ],
   "release_provenance": [

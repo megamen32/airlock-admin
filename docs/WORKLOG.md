@@ -1089,7 +1089,30 @@ plan is [`PROJECT_PLAN.md`](./PROJECT_PLAN.md).
   passed`; OpenAPI YAML parses with approval and quota schemas.
 - Delivery: Pending integration commit on `codex/haos-addon-public`; no deploy
   or push. The unrelated untracked remote-secret plan remains preserved.
-- Next: implement the remaining MFA/security-preset and connection-page gates.
+- Next: implement the remaining connection-page gate and complete passkey,
+  recovery-code and external-verification support.
+
+## 2026-07-24 - Progressive security preset and TOTP gate - completed
+
+- Milestone: `S1.6` / `S2.1a`
+- Owner: `Codex`
+- Scope: Add persisted Working default, Private access and Locked down preset
+  state with a fail-closed TOTP fallback for browser admin sessions.
+- Baseline / red evidence: No runtime preset or MFA state existed; the plan
+  required Locked down to fail closed rather than being a documentation-only
+  choice.
+- Change: Added restrictive `0600` security state, preset API, one-time
+  TOTP enrollment response, code verification and locked admin-login gate.
+- Verification: `cd go-hub && go test ./... && go test -race ./... && go vet
+  ./...` passes; ShellMCP and ProxyRelay race/vet pass; Python `169 passed, 2
+  skipped`; completion matrix `11 passed`; OpenAPI YAML parses. Focused test
+  covers preset persistence, fail-closed locked-down selection, TOTP
+  enrollment/verification, 0600 state permissions, re-enrollment rejection
+  and MFA-required browser login.
+- Delivery: Pending integration commit on `codex/haos-addon-public`; no deploy
+  or push. The unrelated untracked remote-secret plan remains preserved.
+- Next: implement passkey/recovery-code/external-verification support and the
+  remaining connection-page gate; TOTP alone is not full MFA completion.
 
 ## 2026-07-22 - Isolated Network Tunnel proxy relay - completed
 

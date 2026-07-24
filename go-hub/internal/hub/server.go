@@ -73,6 +73,7 @@ type Config struct {
 	WebhookConfigFile          string
 	WebhookStateFile           string
 	AuditStateFile             string
+	SecurityStateFile          string
 	WebhookRoutes              []WebhookRoute
 }
 
@@ -118,6 +119,7 @@ func FromEnv() Config {
 		WebhookConfigFile:          env("GPTADMIN_WEBHOOK_CONFIG_FILE", filepath.Join(cfgDir, "webhooks.json")),
 		WebhookStateFile:           env("GPTADMIN_WEBHOOK_STATE_FILE", filepath.Join(cfgDir, "webhook_state.json")),
 		AuditStateFile:             env("GPTADMIN_AUDIT_STATE_FILE", filepath.Join(cfgDir, "audit.jsonl")),
+		SecurityStateFile:          env("GPTADMIN_SECURITY_STATE_FILE", filepath.Join(cfgDir, securityStateFilename)),
 	}
 }
 
@@ -295,6 +297,8 @@ type Server struct {
 	accessProfiles map[string]AccessProfile
 	approvals      map[string]*approvalRequest
 	autonomous     map[string]*autonomousBudget
+	security       securitySettings
+	securityPath   string
 	audit          []auditEvent
 	failover       FailoverConfig
 
@@ -323,6 +327,15 @@ func New(cfg Config) *Server {
 		log.Printf("webhook config rejected path=%s err=%v", cfg.WebhookConfigFile, err)
 		webhookRoutes = nil
 	}
+	securityPath := cfg.SecurityStateFile
+	if securityPath == "" && cfg.ConfigDir != "" {
+		securityPath = filepath.Join(cfg.ConfigDir, securityStateFilename)
+	}
+	security, err := loadSecuritySettings(securityPath)
+	if err != nil {
+		log.Printf("security settings load failed path=%s err=%v", securityPath, err)
+		security = defaultSecuritySettings()
+	}
 	s := &Server{
 		cfg:               cfg,
 		agents:            map[string]*Agent{},
@@ -337,6 +350,8 @@ func New(cfg Config) *Server {
 		accessProfiles:    map[string]AccessProfile{},
 		approvals:         map[string]*approvalRequest{},
 		autonomous:        map[string]*autonomousBudget{},
+		security:          security,
+		securityPath:      securityPath,
 		audit:             []auditEvent{},
 		webhookRoutes:     webhookRouteMap(webhookRoutes),
 		webhookJobs:       map[string]*webhookJob{},
@@ -638,6 +653,9 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/admin/api/mcp/resources/read", s.requireCtl(s.adminMCPResourceRead))
 	mux.HandleFunc("/admin/api/auth/rotate-oauth", s.requireCtl(s.adminRotateOAuth))
 	mux.HandleFunc("/admin/api/security/env", s.requireCtl(s.adminSecurityEnv))
+	mux.HandleFunc("/admin/api/security/preset", s.requireCtl(s.adminSecurityPreset))
+	mux.HandleFunc("/admin/api/security/mfa/totp/enroll", s.requireCtl(s.adminTOTPEnroll))
+	mux.HandleFunc("/admin/api/security/mfa/totp/verify", s.requireCtl(s.adminTOTPVerify))
 	mux.HandleFunc("/admin/api/clients/revoke-all", s.requireCtl(s.adminClientsRevokeAll))
 	mux.HandleFunc("/admin/api/clients/", s.requireCtl(s.adminClientDelete))
 	mux.HandleFunc("/admin/api/overview", s.requireCtl(s.adminOverview))
@@ -3379,6 +3397,11 @@ func (s *Server) adminLogin(w http.ResponseWriter, r *http.Request) {
 			s.renderAdminLogin(w, r, "неверный пароль")
 			return
 		}
+		if s.securityRequiresMFA() && !s.verifyAdminMFA(r.FormValue("mfa_code")) {
+			s.authAudit("admin_login_denied", r, map[string]any{"reason": "mfa_required_or_invalid"})
+			s.renderAdminLogin(w, r, "нужен корректный MFA-код")
+			return
+		}
 		expires := time.Now().Add(adminSessionTTL)
 		http.SetCookie(w, &http.Cookie{
 			Name:     adminSessionCookieName,
@@ -3414,8 +3437,12 @@ func (s *Server) renderAdminLogin(w http.ResponseWriter, r *http.Request, errMsg
 	if errMsg != "" {
 		errHTML = `<div class="err">` + html.EscapeString(errMsg) + `</div>`
 	}
+	mfaHTML := ""
+	if s.securityRequiresMFA() {
+		mfaHTML = `<label for="mfa_code">MFA-код</label><input id="mfa_code" name="mfa_code" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" required>`
+	}
 	page := `<!doctype html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>GPTAdmin Login</title><style>
-:root{color-scheme:dark}*{box-sizing:border-box}body{margin:0;min-height:100vh;display:grid;place-items:center;background:radial-gradient(circle at 20% 0,#1d2b64 0,#090d18 36%,#05070c 100%);color:#e5eefc;font-family:Inter,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}.card{width:min(460px,calc(100vw - 32px));padding:30px;border:1px solid rgba(148,163,184,.24);border-radius:26px;background:rgba(15,23,42,.86);box-shadow:0 24px 80px rgba(0,0,0,.42);backdrop-filter:blur(16px)}h1{margin:0 0 8px;font-size:28px}.muted{margin:0 0 22px;color:#94a3b8;line-height:1.45}.hint{margin:0 0 18px;padding:12px 14px;border-radius:16px;background:rgba(56,189,248,.08);border:1px solid rgba(56,189,248,.18);color:#cbd5e1;line-height:1.45}.hint code{color:#fff}.err{margin:0 0 14px;padding:10px 12px;border-radius:14px;background:rgba(239,68,68,.14);border:1px solid rgba(239,68,68,.35);color:#fecaca}label{display:block;margin-bottom:8px;color:#cbd5e1;font-size:14px}input,button{width:100%;padding:14px 15px;border-radius:16px;font-size:16px}input{border:1px solid #334155;background:#0b1220;color:#fff;outline:none}input:focus{border-color:#38bdf8;box-shadow:0 0 0 3px rgba(56,189,248,.16)}button{margin-top:14px;border:0;background:linear-gradient(135deg,#7c3aed,#06b6d4);color:white;font-weight:800;cursor:pointer}.foot{margin-top:16px;color:#64748b;font-size:12px;text-align:center}</style></head><body><main class="card"><h1>GPTAdmin</h1><p class="muted">Введите admin-пароль. Без cookie-сессии админка и её API не отдаются.</p><div class="hint">Для браузерной админки нужен <strong>admin-пароль</strong>. Для Custom GPT / generated Action schema используйте <code>Authorization: Bearer &lt;CTL_TOKEN&gt;</code> или Bearer JWT, выпущенный через OAuth.</div>` + errHTML + `<form method="post" action="/admin/login"><input type="hidden" name="next" value="` + html.EscapeString(next) + `"><label for="password">Пароль</label><input id="password" name="password" type="password" autocomplete="current-password" autofocus required><button type="submit">Войти</button></form><div class="foot">session cookie · 12h</div></main></body></html>`
+:root{color-scheme:dark}*{box-sizing:border-box}body{margin:0;min-height:100vh;display:grid;place-items:center;background:radial-gradient(circle at 20% 0,#1d2b64 0,#090d18 36%,#05070c 100%);color:#e5eefc;font-family:Inter,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}.card{width:min(460px,calc(100vw - 32px));padding:30px;border:1px solid rgba(148,163,184,.24);border-radius:26px;background:rgba(15,23,42,.86);box-shadow:0 24px 80px rgba(0,0,0,.42);backdrop-filter:blur(16px)}h1{margin:0 0 8px;font-size:28px}.muted{margin:0 0 22px;color:#94a3b8;line-height:1.45}.hint{margin:0 0 18px;padding:12px 14px;border-radius:16px;background:rgba(56,189,248,.08);border:1px solid rgba(56,189,248,.18);color:#cbd5e1;line-height:1.45}.hint code{color:#fff}.err{margin:0 0 14px;padding:10px 12px;border-radius:14px;background:rgba(239,68,68,.14);border:1px solid rgba(239,68,68,.35);color:#fecaca}label{display:block;margin-bottom:8px;color:#cbd5e1;font-size:14px}input,button{width:100%;padding:14px 15px;border-radius:16px;font-size:16px}input{border:1px solid #334155;background:#0b1220;color:#fff;outline:none}input:focus{border-color:#38bdf8;box-shadow:0 0 0 3px rgba(56,189,248,.16)}button{margin-top:14px;border:0;background:linear-gradient(135deg,#7c3aed,#06b6d4);color:white;font-weight:800;cursor:pointer}.foot{margin-top:16px;color:#64748b;font-size:12px;text-align:center}</style></head><body><main class="card"><h1>GPTAdmin</h1><p class="muted">Введите admin-пароль. Без cookie-сессии админка и её API не отдаются.</p><div class="hint">Для браузерной админки нужен <strong>admin-пароль</strong>. Для Custom GPT / generated Action schema используйте <code>Authorization: Bearer &lt;CTL_TOKEN&gt;</code> или Bearer JWT, выпущенный через OAuth.</div>` + errHTML + `<form method="post" action="/admin/login"><input type="hidden" name="next" value="` + html.EscapeString(next) + `"><label for="password">Пароль</label><input id="password" name="password" type="password" autocomplete="current-password" autofocus required>` + mfaHTML + `<button type="submit">Войти</button></form><div class="foot">session cookie · 12h</div></main></body></html>`
 	_, _ = io.WriteString(w, page)
 }
 

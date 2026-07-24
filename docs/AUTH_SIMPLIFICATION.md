@@ -106,6 +106,13 @@ agent policy or JWT validation.
   proxy. GPTAdmin still verifies the proxy identity, maps it to local roles and
   records it in the audit trail.
 
+The current Hub runtime exposes the progressive preset API and a fail-closed
+TOTP enrollment/verification path at `/admin/api/security/preset` and
+`/admin/api/security/mfa/totp/*`. Locked down cannot be selected until TOTP is
+enrolled, and browser admin login then requires a valid six-digit code. Passkey,
+recovery-code and external-verification support remain separate follow-up
+gates; they must not be inferred from TOTP enrollment.
+
 ### Connect an MCP client
 
 The operator chooses **Connect Codex**, **Connect Claude** or **Connect custom
