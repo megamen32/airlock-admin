@@ -2617,3 +2617,13 @@ plan is [`PROJECT_PLAN.md`](./PROJECT_PLAN.md).
 - Verification: `go test ./internal/hub -run TestMCPIntegrationDiscoverSchemaExecuteConformance -count=1` passes; the test asserts no schema metadata leak.
 - Delivery: Local Hub boundary evidence only; external adapter/client evidence remains separate.
 - Next: Preserve the regression in the full Hub and completion-matrix gates.
+
+## 2026-07-24 - Schema metadata boundary full acceptance - completed locally
+
+- Milestone: `S2.2`, `S4.1`, `S3.5`
+- Owner: Codex
+- Scope: Prove the schema-control metadata fix across the complete local acceptance ladder.
+- Baseline / red evidence: The focused conformance regression caught top-level schema fields crossing into downstream tool arguments; the reserved-field fix was applied before this gate.
+- Verification: `go test ./...`, `go test -race ./...`, and `go vet ./...` pass; completion matrix `12 passed in 126.87s`; full Python suite `237 passed, 3 skipped` from `239 collected / 1 collection skip` in `182.18s`.
+- Delivery: Local Hub, endpoint, MCP forwarding, policy and security regression gates are green; external runtime, public adapter/client and native-platform evidence remain open.
+- Next: In an authorized external session, run the same schema-bound execute and argument-boundary smoke through the public Tunnel/client path.
