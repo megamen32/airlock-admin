@@ -964,6 +964,26 @@ plan is [`PROJECT_PLAN.md`](./PROJECT_PLAN.md).
 - Next: Prove active service state and Tunnel lifecycle on a clean supported
   host before changing S1.2 from In progress to Complete.
 
+## 2026-07-24 - Cross-transport audit incident drill - completed
+
+- Milestone: `S2.4`
+- Owner: `Codex`
+- Scope: Make one incident query recover both a direct MCP allow and a relay
+  deny with actor, target, tool, policy decision/reason, digest and result
+  reference, without raw arguments.
+- Baseline / red evidence: `TestAuditIncidentDrillRecoversDecisionWithoutRawArguments`
+  initially found only the relay deny; direct `/mcp` `demo` allow was absent
+  from `tool_policy_decision` events.
+- Change: Routed direct `/mcp` `tools/call` allow/deny outcomes through the
+  existing digest-only `auditToolDecision` helper and added the incident drill
+  to the security acceptance matrix.
+- Verification: Incident drill and focused direct-MCP audit regressions pass;
+  Hub full/race/vet pass; completion matrix `11 passed`.
+- Delivery: Pending integration commit on `codex/haos-addon-public`; no deploy,
+  push or merge. The unrelated remote-secret-ingress plan remains preserved.
+- Next: Keep the full audit incident drill in the release gate and separately
+  obtain external client/target-host evidence for the remaining proof gaps.
+
 ## 2026-07-24 - Typed admin security controls and Apps SDK contract - completed
 
 - Milestone: `S2.1` / `S1.4`

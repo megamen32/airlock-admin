@@ -1943,6 +1943,89 @@ func TestDeniedToolAuditIncludesPolicyReasonWithoutArguments(t *testing.T) {
 	t.Fatal("denied tool policy audit event not found")
 }
 
+func TestAuditIncidentDrillRecoversDecisionWithoutRawArguments(t *testing.T) {
+	s := New(Config{CtlToken: "ctl-token", OAuthClientSecret: "oauth-secret", PublicOrigin: "https://hub.example", MCPResource: "https://hub.example"})
+	issueToken := func(clientID, accessMode, scope string) string {
+		t.Helper()
+		token, err := s.signJWT(map[string]any{
+			"sub": clientID, "client_id": clientID, "jti": clientID + "-jti", "scope": scope,
+			"access_mode": accessMode, "aud": "https://hub.example", "resource": "https://hub.example",
+			"exp": time.Now().Add(time.Hour).Unix(), "iat": time.Now().Unix(), "kid": defaultJWTKeyID,
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return token
+	}
+	call := func(path, token, payload string) *httptest.ResponseRecorder {
+		t.Helper()
+		req := httptest.NewRequest(http.MethodPost, path, strings.NewReader(payload))
+		req.Header.Set("Authorization", "Bearer "+token)
+		req.Header.Set("Content-Type", "application/json")
+		response := httptest.NewRecorder()
+		s.Handler().ServeHTTP(response, req)
+		return response
+	}
+
+	allow := call("/mcp", issueToken("incident-allow", accessModeFull, "gptadmin.read gptadmin.exec"), `{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"demo","arguments":{"probe":"audit-allow-secret"}}}`)
+	if allow.Code != http.StatusOK || !strings.Contains(allow.Body.String(), `"status":"ok"`) {
+		t.Fatalf("allowing MCP call failed: status=%d body=%s", allow.Code, allow.Body.String())
+	}
+	deny := call("/mcp-relay/call", issueToken("incident-deny", accessModeReadonly, "gptadmin.read"), `{"target":"hub","tool_name":"approve_pending_server","arguments":{"server_id":"audit-deny-secret"}}`)
+	if deny.Code != http.StatusForbidden {
+		t.Fatalf("denying relay call returned status=%d body=%s", deny.Code, deny.Body.String())
+	}
+
+	auditRequest := httptest.NewRequest(http.MethodGet, "/admin/api/audit?name=tool_policy_decision&limit=100", nil)
+	auditRequest.Header.Set("Authorization", "Bearer ctl-token")
+	auditResponse := httptest.NewRecorder()
+	s.Handler().ServeHTTP(auditResponse, auditRequest)
+	if auditResponse.Code != http.StatusOK {
+		t.Fatalf("audit incident query status=%d body=%s", auditResponse.Code, auditResponse.Body.String())
+	}
+	var body struct {
+		Events []auditEvent `json:"events"`
+	}
+	if err := json.Unmarshal(auditResponse.Body.Bytes(), &body); err != nil {
+		t.Fatal(err)
+	}
+	seen := map[string]bool{}
+	for _, event := range body.Events {
+		actor := firstString(event.Fields, "actor")
+		if actor != "incident-allow" && actor != "incident-deny" {
+			continue
+		}
+		encoded, err := json.Marshal(event)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if strings.Contains(string(encoded), "audit-allow-secret") || strings.Contains(string(encoded), "audit-deny-secret") {
+			t.Fatalf("audit event leaked raw incident argument: %s", encoded)
+		}
+		digest, ok := event.Fields["arguments_digest"].(string)
+		if !ok || len(digest) != 64 {
+			t.Fatalf("incident event has invalid arguments digest: %#v", event.Fields)
+		}
+		if _, ok := event.Fields["arguments"]; ok {
+			t.Fatalf("incident event contains raw arguments: %#v", event.Fields)
+		}
+		if event.Fields["target"] == "" || event.Fields["tool"] == "" || event.Fields["result_reference"] == "" {
+			t.Fatalf("incident event lacks investigation fields: %#v", event.Fields)
+		}
+		decision, _ := event.Fields["policy_decision"].(string)
+		if actor == "incident-allow" && (decision != "allow" || event.Fields["result_reference"] != "inline") {
+			t.Fatalf("allow incident event incomplete: %#v", event.Fields)
+		}
+		if actor == "incident-deny" && (decision != "deny" || event.Fields["policy_reason"] == "" || event.Fields["result_reference"] != "none") {
+			t.Fatalf("deny incident event incomplete: %#v", event.Fields)
+		}
+		seen[actor] = true
+	}
+	if !seen["incident-allow"] || !seen["incident-deny"] {
+		t.Fatalf("audit incident query missed allow/deny decisions: %#v", seen)
+	}
+}
+
 func TestAuditTrailSurvivesHubRestartWithRestrictivePermissions(t *testing.T) {
 	configDir := t.TempDir()
 	cfg := Config{ConfigDir: configDir, CtlToken: "ctl-token"}

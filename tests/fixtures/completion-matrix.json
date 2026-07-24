@@ -116,7 +116,7 @@
     },
     {
       "id": "operator-audit-decision",
-      "command": "cd go-hub && go test ./internal/hub -run 'Test(ToolAuditIncludesActorPolicyDigestAndResultReference|DeniedToolAuditIncludesPolicyReasonWithoutArguments|AuditTrailSurvivesHubRestartWithRestrictivePermissions|AuditEndpointFiltersSearchesAndPaginatesWithoutRawArguments)' -count=1",
+      "command": "cd go-hub && go test ./internal/hub -run 'Test(ToolAuditIncludesActorPolicyDigestAndResultReference|DeniedToolAuditIncludesPolicyReasonWithoutArguments|AuditIncidentDrillRecoversDecisionWithoutRawArguments|AuditTrailSurvivesHubRestartWithRestrictivePermissions|AuditEndpointFiltersSearchesAndPaginatesWithoutRawArguments)' -count=1",
       "evidence": "actor, target, allow/deny policy decisions, durable/searchable audit, pagination, argument digest and result reference without raw arguments"
     },
     {

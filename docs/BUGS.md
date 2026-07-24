@@ -30,6 +30,24 @@ Rules:
 - Fix / verification: Updated the regression to assert the exact eight capability names, including `demo`, while preserving widget metadata checks. `go test ./...`, `go test -race ./...` and `go vet ./...` in `go-hub` all pass; the focused Apps SDK test also passes.
 - Next action: None for this bug.
 
+## 2026-07-24 - AUDIT-MCP-DECISION-20260724 - Direct MCP allow missing policy audit - fixed
+
+- Component: Hub `/mcp` Apps SDK `tools/call` path and durable operator audit.
+- First observed: 2026-07-24, immutable RED evidence from
+  `TestAuditIncidentDrillRecoversDecisionWithoutRawArguments`: the `/mcp`
+  allow for `demo` produced no `tool_policy_decision`, while the equivalent
+  `/mcp-relay/call` deny did.
+- Symptom / evidence: An incident query over `/admin/api/audit` could recover
+  the denied relay decision but not the successful direct MCP decision, so the
+  audit trail was not transport-complete.
+- Root cause: Direct Apps SDK dispatch used a separate call path that returned
+  the typed result without passing through `auditToolDecision`.
+- Fix / verification: Direct `/mcp` allow and deny decisions now use the same
+  digest-only audit helper as relay calls. The incident drill and focused
+  direct-MCP audit regressions pass; Hub `go test ./...`, `go test -race ./...`
+  and `go vet ./...` plus completion matrix `11 passed` are green.
+- Next action: None for this bug.
+
 ## 2026-07-24 - DOCKER-SETUP-PROMPT-20260724 - ShellMCP installer E2E input drift - fixed
 
 - Component: `tests/e2e/docker/scenarios/user-public-hub-shellmcp.sh` and the interactive setup contract in `cli.py`.
