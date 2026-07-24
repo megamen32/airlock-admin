@@ -15,15 +15,18 @@ from __future__ import annotations
 import contextlib
 import json
 import os
+import queue
 import shlex
 import shutil
 import signal
 import socket
 import subprocess
+import threading
 import time
 import urllib.error
 import urllib.request
 from dataclasses import dataclass
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any, Iterator
 
@@ -399,3 +402,61 @@ def test_hub_contract_per_server_mcp_and_action_proxy(hub_contract: HubProcess) 
     assert status == 200
     assert action.get("server_id") == "hub"
     assert action.get("status") == "completed"
+
+
+def test_hub_contract_webhook_route_job_and_callback_through_process(hub_contract: HubProcess) -> None:
+    """Exercise webhook ingress, policy-dispatched MCP work and callback delivery."""
+
+    callback_bodies: queue.Queue[bytes] = queue.Queue()
+
+    class CallbackHandler(BaseHTTPRequestHandler):
+        def do_POST(self) -> None:  # noqa: N802 - stdlib handler contract
+            length = int(self.headers.get("Content-Length", "0"))
+            callback_bodies.put(self.rfile.read(length))
+            self.send_response(204)
+            self.end_headers()
+
+        def log_message(self, *_args: object) -> None:
+            return
+
+    callback_server = ThreadingHTTPServer(("127.0.0.1", 0), CallbackHandler)
+    callback_thread = threading.Thread(target=callback_server.serve_forever, daemon=True)
+    callback_thread.start()
+    route = {
+        "id": "process-hook",
+        "token": "process-hook-token",
+        "action": {"kind": "mcp", "target": "hub", "tool": "demo", "arguments": {}},
+        "callback": {"url": f"http://127.0.0.1:{callback_server.server_port}", "token": "callback-token"},
+    }
+    try:
+        status, created, _ = hub_contract.request("POST", "/webhook-routes", payload=route)
+        assert status == 201, created
+        assert created == {"id": "process-hook", "kind": "mcp", "target": "hub", "tool": "demo", "auth_mode": "token", "callback_configured": True}
+
+        status, accepted, _ = hub_contract.request(
+            "POST",
+            "/webhooks/v1/process-hook",
+            token="process-hook-token",
+            payload={"event": "push", "value": "safe"},
+        )
+        assert status == 202, accepted
+        job_id = accepted["job_id"]
+
+        job = {}
+        for _ in range(50):
+            status, job, _ = hub_contract.request("GET", f"/webhook-jobs/{job_id}", token="process-hook-token")
+            assert status == 200, job
+            if job.get("status") == "failed" or (
+                job.get("status") == "completed" and job.get("callback_status") == "delivered"
+            ):
+                break
+            time.sleep(0.1)
+        assert job.get("status") == "completed", job
+        assert job.get("callback_status") == "delivered", job
+        callback_body = callback_bodies.get(timeout=2)
+        assert json.loads(callback_body)["job_id"] == job_id
+        assert "process-hook-token" not in callback_body.decode("utf-8")
+    finally:
+        callback_server.shutdown()
+        callback_thread.join(timeout=5)
+        callback_server.server_close()

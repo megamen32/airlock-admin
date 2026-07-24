@@ -53,6 +53,11 @@
       "id": "webhook-http-surface",
       "command": "cd go-hub && go test ./internal/hub -run 'TestWebhook(RoutesCRUD|JobsSurviveRestart|JobEndpointRequiresRouteAuth|CallbackRetries)' -count=1",
       "evidence": "authenticated job endpoint and durable delivery state"
+    },
+    {
+      "id": "webhook-process-round-trip",
+      "command": "python3 -m pytest tests/test_hub_contract.py -k webhook_route_job_and_callback_through_process -q",
+      "evidence": "real Go Hub process accepts authenticated webhook ingress, dispatches safe MCP work and delivers a callback without route-token leakage"
     }
   ],
   "mcp_forwarding": [

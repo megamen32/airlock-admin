@@ -2441,3 +2441,14 @@ plan is [`PROJECT_PLAN.md`](./PROJECT_PLAN.md).
 - Verification: `python3 -m pytest tests/test_canary_acceptance.py -q` passes (`1 passed`); no signed artifact, host service or public Tunnel claim is made.
 - Delivery: Local process-level canary only; external clean-host/client reconnect and signed release evidence remain separate.
 - Next: Run a signed canary on an authorized clean host and preserve its immutable artifact/run ID.
+
+## 2026-07-24 - Process-level webhook ingress and callback gate - completed locally
+
+- Milestone: `S4.1`, `S0.1`
+- Owner: Codex
+- Scope: Real Go Hub process route CRUD, authenticated webhook ingress, MCP demo dispatch, durable job polling and callback receiver.
+- Baseline / red evidence: New process contract first exposed asynchronous callback completion (`status=completed` before `callback_status=delivered`); the test was corrected to poll the complete delivery state.
+- Change: Added `tests/test_hub_contract.py::test_hub_contract_webhook_route_job_and_callback_through_process` and included it in the hooks completion matrix.
+- Verification: The process-level webhook test passes (`1 passed`); route token is absent from callback payload and the callback receiver observes the job ID.
+- Delivery: Local Go Hub process evidence only; public Tunnel ingress and external sender certification remain separate.
+- Next: Run the same webhook path through the authorized public Tunnel with an external sender and callback receiver.
