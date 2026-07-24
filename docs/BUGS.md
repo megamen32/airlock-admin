@@ -12,6 +12,16 @@ Rules:
 - At the end of the current goal, resolve every actionable open entry before
   final handoff, unless a concrete external blocker is recorded.
 
+## 2026-07-24 - SECRET-INGRESS-CSP-20260724 - Secret input CSP header malformed - fixed
+
+- Component: `go-hub/internal/hub/secret_ingress.go` browser input response.
+- First observed: 2026-07-24, immutable RED evidence `TestSecretIngressPageConsumesTokenWithoutReturningSecret` after adding the exact CSP contract.
+- Symptom / evidence: The response emitted `style-src 'unsafe-inline` without the closing quote, weakening the intended browser policy syntax.
+- Root cause: The CSP literal omitted the closing single quote around the inline-style source expression.
+- Fix / verification: Corrected the header and added exact Cache-Control, Referrer-Policy and CSP assertions; focused secret-ingress tests pass.
+- Status: fixed.
+- Next action: Keep the browser ingress contract in the full Hub and secret-ingress test gates.
+
 ## 2026-07-24 - HUB-PUBLIC-ORIGIN-HTTP-20260724 - Security preset accepted external HTTP origin - fixed
 
 - Component: `go-hub/internal/hub/security_settings.go` preset mutation.

@@ -1704,6 +1704,7 @@ func TestAppsSDKMetadataAndWidget(t *testing.T) {
 	expectedToolNames := map[string]bool{
 		"ui": true, "discover": true, "demo": true, "approve_pending_server": true,
 		"schema": true, "inspect": true, "execute": true, "job": true,
+		"secret_request": true, "secret_status": true,
 	}
 	renderTools := 0
 	for _, raw := range tools {
@@ -1744,7 +1745,7 @@ func TestAppsSDKMetadataAndWidget(t *testing.T) {
 			}
 		}
 	}
-	if len(tools) != 8 || len(expectedToolNames) != 0 {
+	if len(tools) != 10 || len(expectedToolNames) != 0 {
 		t.Fatalf("got Apps SDK tools=%d missing=%v, want exact capability set", len(tools), expectedToolNames)
 	}
 	if renderTools != 1 {

@@ -18,6 +18,16 @@ queued relay and ShellMCP jobs carry the same correlation fields through poll
 and result delivery. Invalid trace headers are discarded and replaced. Trace
 metadata never contains command arguments, credentials or file contents.
 
+## Remote secret ingress
+
+Full-access MCP clients can call `secret_request` and `secret_status`. The
+first returns only `request_id`, `input_url`, `secret_ref`, `env_name`, `file`
+and expiry metadata. The operator submits the value once to
+`POST /secret-input/{token}`; neither MCP nor the response body accepts or
+returns the plaintext. A later `shell_exec` may pass
+`secret_env: {"ENV_NAME": "secret_ref"}`. Hub job responses and logs redact
+the resolved value, and readonly profiles cannot access these operations.
+
 ## Auth quick reference
 
 | Endpoint | Auth |

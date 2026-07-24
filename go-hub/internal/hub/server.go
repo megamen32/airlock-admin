@@ -76,6 +76,10 @@ type Config struct {
 	AuditStateFile             string
 	SecurityStateFile          string
 	TelemetryStateFile         string
+	SecretStoreDir             string
+	SecretStoreKeyFile         string
+	SecretIngressStateFile     string
+	SecretIngressTTL           time.Duration
 	WebhookRoutes              []WebhookRoute
 }
 
@@ -89,6 +93,10 @@ func FromEnv() Config {
 	cfgDir := env("GPTADMIN_CONFIG_DIR", filepath.Join(root, "config"))
 	defTimeout := secondsEnv("MCP_RELAY_DEFAULT_TIMEOUT", 30)
 	pollTimeout := secondsEnv("MCP_RELAY_POLL_MAX_TIMEOUT", 55)
+	secretTTL := secondsEnv("GPTADMIN_SECRET_INGRESS_TTL", 15*60)
+	if secretTTL < 60 || secretTTL > 3600 {
+		secretTTL = 15 * 60
+	}
 	return Config{
 		Addr:                       host + ":" + port,
 		ConfigDir:                  cfgDir,
@@ -127,6 +135,10 @@ func FromEnv() Config {
 		AuditStateFile:             env("GPTADMIN_AUDIT_STATE_FILE", filepath.Join(cfgDir, "audit.jsonl")),
 		SecurityStateFile:          env("GPTADMIN_SECURITY_STATE_FILE", filepath.Join(cfgDir, securityStateFilename)),
 		TelemetryStateFile:         env("GPTADMIN_TELEMETRY_STATE_FILE", filepath.Join(cfgDir, telemetryStateFilename)),
+		SecretStoreDir:             env("GPTADMIN_SECRET_STORE_DIR", filepath.Join(cfgDir, "secrets")),
+		SecretStoreKeyFile:         env("GPTADMIN_SECRET_STORE_KEY_FILE", filepath.Join(cfgDir, "secret-store.key")),
+		SecretIngressStateFile:     env("GPTADMIN_SECRET_INGRESS_STATE_FILE", filepath.Join(cfgDir, "secrets", "requests.json")),
+		SecretIngressTTL:           time.Duration(secretTTL) * time.Second,
 	}
 }
 
@@ -212,22 +224,23 @@ type relayJob struct {
 }
 
 type shellJob struct {
-	ID          string         `json:"id"`
-	Server      string         `json:"server,omitempty"`
-	TraceID     string         `json:"trace_id,omitempty"`
-	TraceParent string         `json:"traceparent,omitempty"`
-	ToolName    string         `json:"tool_name,omitempty"`
-	Arguments   map[string]any `json:"arguments,omitempty"`
-	Cmd         string         `json:"cmd,omitempty"`
-	Cwd         string         `json:"cwd,omitempty"`
-	Timeout     int            `json:"timeout,omitempty"`
-	Env         map[string]any `json:"env,omitempty"`
-	CreatedAt   float64        `json:"created_at"`
-	StartedAt   float64        `json:"started_at,omitempty"`
-	DoneAt      float64        `json:"completed_at,omitempty"`
-	Status      string         `json:"status"`
-	Result      any            `json:"result,omitempty"`
-	Error       any            `json:"error,omitempty"`
+	ID           string         `json:"id"`
+	Server       string         `json:"server,omitempty"`
+	TraceID      string         `json:"trace_id,omitempty"`
+	TraceParent  string         `json:"traceparent,omitempty"`
+	ToolName     string         `json:"tool_name,omitempty"`
+	Arguments    map[string]any `json:"arguments,omitempty"`
+	Cmd          string         `json:"cmd,omitempty"`
+	Cwd          string         `json:"cwd,omitempty"`
+	Timeout      int            `json:"timeout,omitempty"`
+	Env          map[string]any `json:"env,omitempty"`
+	SecretValues []string       `json:"-"`
+	CreatedAt    float64        `json:"created_at"`
+	StartedAt    float64        `json:"started_at,omitempty"`
+	DoneAt       float64        `json:"completed_at,omitempty"`
+	Status       string         `json:"status"`
+	Result       any            `json:"result,omitempty"`
+	Error        any            `json:"error,omitempty"`
 }
 
 type auditEvent struct {
@@ -326,6 +339,8 @@ type Server struct {
 	securityPath   string
 	telemetry      telemetryState
 	telemetryPath  string
+	secretStore    *SecretStore
+	secretStoreErr error
 	audit          []auditEvent
 	authRate       map[string]authRateWindow
 	failover       FailoverConfig
@@ -400,6 +415,27 @@ func New(cfg Config) *Server {
 		webhookRoutes:     webhookRouteMap(webhookRoutes),
 		webhookJobs:       map[string]*webhookJob{},
 		webhookDeliveries: map[string]*webhookDelivery{},
+	}
+	if cfg.ConfigDir != "" || cfg.SecretStoreDir != "" || cfg.SecretStoreKeyFile != "" || cfg.SecretIngressStateFile != "" {
+		if cfg.SecretStoreDir == "" {
+			cfg.SecretStoreDir = filepath.Join(cfg.ConfigDir, "secrets")
+		}
+		if cfg.SecretStoreKeyFile == "" {
+			cfg.SecretStoreKeyFile = filepath.Join(cfg.ConfigDir, "secret-store.key")
+		}
+		if cfg.SecretIngressStateFile == "" {
+			cfg.SecretIngressStateFile = filepath.Join(cfg.SecretStoreDir, "requests.json")
+		}
+		if cfg.SecretIngressTTL <= 0 {
+			cfg.SecretIngressTTL = 15 * time.Minute
+		}
+		s.cfg = cfg
+		secretStore, secretStoreErr := NewSecretStoreWithStateFile(cfg.ConfigDir, cfg.SecretStoreDir, cfg.SecretStoreKeyFile, cfg.SecretIngressStateFile, cfg.Now)
+		s.secretStore = secretStore
+		s.secretStoreErr = secretStoreErr
+		if secretStoreErr != nil {
+			log.Printf("secret ingress store unavailable: %v", secretStoreErr)
+		}
 	}
 	s.cond = sync.NewCond(&s.mu)
 	networkProxyStatePath := cfg.NetworkProxyStateFile
@@ -625,6 +661,9 @@ func (s *Server) saveRegistryStateLocked() error {
 }
 
 func (s *Server) ListenAndServe() error {
+	if s.secretStoreErr != nil {
+		return fmt.Errorf("secret ingress store unavailable: %w", s.secretStoreErr)
+	}
 	if err := os.MkdirAll(s.cfg.OutputDir, 0o750); err != nil {
 		log.Printf("output dir unavailable: %v", err)
 	}
@@ -678,6 +717,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/mcp", s.mcpEndpoint)
 	mux.HandleFunc("/connect", s.connectionPage)
 	mux.HandleFunc("/connect.json", s.connectionPage)
+	mux.HandleFunc("/secret-input/", s.secretIngress)
 	mux.HandleFunc("/_services/", s.httpServiceEndpoint)
 	mux.HandleFunc("/server/", s.serverMCPEndpoint)
 	// Legacy alias kept for old pinned MCP URLs.
@@ -2122,13 +2162,23 @@ func (s *Server) executeMCPTool(r *http.Request, target, toolName string, args m
 		return response, http.StatusTooManyRequests
 	}
 	args = callArgs
+	secretValues := []string(nil)
+	if toolName == "shell_exec" {
+		resolvedArgs, resolvedSecrets, err := s.resolveSecretEnvForRequest(r, target, args)
+		if err != nil {
+			s.auditToolDecision(r, target, toolName, callArgs, "deny", err.Error(), nil, http.StatusForbidden)
+			return map[string]any{"status": "failed", "error": err.Error()}, http.StatusForbidden
+		}
+		args = resolvedArgs
+		secretValues = resolvedSecrets
+	}
 	operation := func() (map[string]any, int) {
 		if target == "hub" {
 			resp, status := s.callHubToolForRequest(r, toolName, args)
 			return map[string]any{"server_id": target, "status": "completed", "response": resp}, status
 		}
 		if strings.HasPrefix(target, "shell:") {
-			return s.callShellToolWithTraceParent(target, toolName, args, background, timeout, requestTraceID(r), requestTraceParent(r)), http.StatusOK
+			return s.callShellToolWithTraceParentAndSecrets(target, toolName, args, background, timeout, requestTraceID(r), requestTraceParent(r), secretValues), http.StatusOK
 		}
 		jobID := s.enqueueRelayWithTraceParent(target, "tools/call", map[string]any{"name": toolName, "arguments": args}, requestTraceID(r), requestTraceParent(r))
 		if background {
@@ -2486,8 +2536,11 @@ func (s *Server) mcpRelayShellExec(w http.ResponseWriter, r *http.Request) {
 		"timeout":     req["timeout"],
 		"run_as_user": firstString(req, "run_as_user", "user"),
 	}
-	resp := s.callShellTool(target, "shell_exec", args, truthy(req["background"]), timeoutFromReq(req, s.cfg.DefaultTimeout))
-	writeJSON(w, http.StatusOK, resp)
+	if raw, ok := req["secret_env"]; ok {
+		args["secret_env"] = raw
+	}
+	resp, responseStatus := s.executeMCPTool(r, target, "shell_exec", args, truthy(req["background"]), timeoutFromReq(req, s.cfg.DefaultTimeout), "")
+	writeJSON(w, responseStatus, resp)
 }
 
 func (s *Server) mcpRelayJob(w http.ResponseWriter, r *http.Request) {
@@ -2593,10 +2646,10 @@ func shellJobResponse(job *shellJob) map[string]any {
 		out["traceparent"] = job.TraceParent
 	}
 	if job.Result != nil {
-		out["response"] = map[string]any{"content": []map[string]any{{"type": "text", "text": "shell_exec completed on " + job.Server}}, "structuredContent": map[string]any{"server": job.Server, "result": job.Result}}
+		out["response"] = map[string]any{"content": []map[string]any{{"type": "text", "text": "shell_exec completed on " + job.Server}}, "structuredContent": map[string]any{"server": job.Server, "result": redactSecretValues(job.Result, job.SecretValues)}}
 	}
 	if job.Error != nil {
-		out["error"] = job.Error
+		out["error"] = redactSecretValues(job.Error, job.SecretValues)
 	}
 	return out
 }
@@ -2694,11 +2747,15 @@ func (s *Server) callShellToolWithTrace(target, toolName string, args map[string
 }
 
 func (s *Server) callShellToolWithTraceParent(target, toolName string, args map[string]any, background bool, timeout time.Duration, traceID, traceParent string) map[string]any {
+	return s.callShellToolWithTraceParentAndSecrets(target, toolName, args, background, timeout, traceID, traceParent, nil)
+}
+
+func (s *Server) callShellToolWithTraceParentAndSecrets(target, toolName string, args map[string]any, background bool, timeout time.Duration, traceID, traceParent string, secretValues []string) map[string]any {
 	server := canonicalShellQueueName(strings.TrimPrefix(target, "shell:"))
 	if toolName == "" {
 		return map[string]any{"server_id": target, "status": "failed", "error": "missing tool name"}
 	}
-	job := &shellJob{ID: newID(), Server: server, TraceID: traceID, TraceParent: traceParent, ToolName: toolName, Arguments: cloneMap(args), CreatedAt: nowFloat(), Status: "queued"}
+	job := &shellJob{ID: newID(), Server: server, TraceID: traceID, TraceParent: traceParent, ToolName: toolName, Arguments: cloneMap(args), SecretValues: append([]string(nil), secretValues...), CreatedAt: nowFloat(), Status: "queued"}
 	if toolName == "shell_exec" {
 		job.Cmd = firstString(args, "cmd", "command")
 		if job.Cmd == "" {
@@ -2755,13 +2812,14 @@ func hubTools() []map[string]any {
 		{"name": "approve_pending_server", "description": "Approve one ShellMCP device awaiting enrollment", "inputSchema": map[string]any{"type": "object", "properties": map[string]any{"server_id": map[string]any{"type": "string", "description": "Exact shell:<name> returned by pending"}}, "required": []string{"server_id"}, "additionalProperties": false}},
 		{"name": "status", "description": "Return Hub status", "inputSchema": map[string]any{"type": "object", "properties": map[string]any{}}},
 	}
-	return append(tools, networkProxyHubTools()...)
+	tools = append(tools, networkProxyHubTools()...)
+	return append(tools, secretHubTools()...)
 }
 
 func shellTools() []map[string]any {
 	return []map[string]any{
 		{"name": "system_inspect", "description": "Read bounded redacted files/directories; no commands", "inputSchema": map[string]any{"type": "object", "properties": map[string]any{"action": map[string]any{"type": "string", "enum": []string{"read_file", "list_directory"}}, "path": map[string]any{"type": "string"}, "max_bytes": map[string]any{"type": []string{"integer", "null"}, "minimum": 1, "maximum": 1048576}}, "required": []string{"action", "path"}, "additionalProperties": false}},
-		{"name": "shell_exec", "description": "Run one command as the default non-root user", "inputSchema": map[string]any{"type": "object", "properties": map[string]any{"cmd": map[string]any{"type": "string"}, "cwd": map[string]any{"type": []string{"string", "null"}}, "timeout": map[string]any{"type": []string{"integer", "null"}}, "run_as_user": map[string]any{"type": []string{"string", "null"}, "description": "Use root only when intentional"}}, "required": []string{"cmd"}}},
+		{"name": "shell_exec", "description": "Run one command as the default non-root user; secret_env references are resolved by the Hub and never returned", "inputSchema": map[string]any{"type": "object", "properties": map[string]any{"cmd": map[string]any{"type": "string"}, "cwd": map[string]any{"type": []string{"string", "null"}}, "timeout": map[string]any{"type": []string{"integer", "null"}}, "run_as_user": map[string]any{"type": []string{"string", "null"}, "description": "Use root only when intentional"}, "secret_env": map[string]any{"type": "object", "additionalProperties": map[string]any{"type": "string"}, "description": "Map environment names to opaque secret_ref values"}}, "required": []string{"cmd"}}},
 		{"name": "mcp_manage", "description": "Manage child MCPs", "inputSchema": map[string]any{"type": "object", "properties": map[string]any{"action": map[string]any{"type": "string", "enum": []string{"list", "upsert", "remove", "enable", "disable", "restart", "status", "config"}}, "ref": map[string]any{"type": []string{"string", "null"}}, "config": map[string]any{"type": []string{"object", "null"}, "additionalProperties": true}}, "required": []string{"action"}, "additionalProperties": false}},
 		{"name": "mcp_tools", "description": "List child MCP tools", "inputSchema": map[string]any{"type": "object", "properties": map[string]any{"ref": map[string]any{"type": "string"}}, "required": []string{"ref"}, "additionalProperties": false}},
 		{"name": "mcp_call", "description": "Call a child MCP tool", "inputSchema": map[string]any{"type": "object", "properties": map[string]any{"ref": map[string]any{"type": "string"}, "name": map[string]any{"type": "string"}, "arguments": map[string]any{"type": []string{"object", "null"}, "additionalProperties": true}}, "required": []string{"ref", "name"}, "additionalProperties": false}},
@@ -2781,7 +2839,7 @@ func (s *Server) tasksEndpoint(w http.ResponseWriter, r *http.Request) {
 		items := []map[string]any{}
 		for _, j := range s.shellJobs {
 			if j.Server == srv {
-				items = append(items, map[string]any{"task_id": j.ID, "job_id": j.ID, "server": j.Server, "cmd": j.Cmd, "status": j.Status, "result": j.Result, "error": j.Error, "created_at": j.CreatedAt, "started_at": j.StartedAt, "completed_at": j.DoneAt})
+				items = append(items, map[string]any{"task_id": j.ID, "job_id": j.ID, "server": j.Server, "cmd": redactSecretValues(j.Cmd, j.SecretValues), "status": j.Status, "result": redactSecretValues(j.Result, j.SecretValues), "error": redactSecretValues(j.Error, j.SecretValues), "created_at": j.CreatedAt, "started_at": j.StartedAt, "completed_at": j.DoneAt})
 			}
 		}
 		s.mu.Unlock()
@@ -4955,6 +5013,8 @@ func (s *Server) mcpPromptCall(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) appsSDKCall(name string, args map[string]any) any {
 	switch name {
+	case "secret_request", "secret_status":
+		return s.secretToolForRequest(nil, name, args)
 	case "ui", "render_gptadmin_dashboard", "renderGptadminDashboard":
 		s.mu.Lock()
 		servers := s.publicServersLocked(nil)
@@ -5030,6 +5090,9 @@ func (s *Server) appsSDKCall(name string, args map[string]any) any {
 }
 
 func (s *Server) appsSDKCallForRequest(r *http.Request, name string, args map[string]any) any {
+	if name == "secret_request" || name == "secret_status" {
+		return s.secretToolForRequest(r, name, args)
+	}
 	if name == "demo" {
 		result, _ := s.callHubToolForRequest(r, name, args)
 		return result
@@ -5106,7 +5169,7 @@ func appsSDKTools() []map[string]any {
 		"openai/toolInvocation/invoking": "Opening GPTAdmin…",
 		"openai/toolInvocation/invoked":  "GPTAdmin ready.",
 	}
-	return []map[string]any{
+	tools := []map[string]any{
 		{
 			"name":            "ui",
 			"title":           "Open UI",
@@ -5193,6 +5256,7 @@ func appsSDKTools() []map[string]any {
 			"_meta":           readMeta,
 		},
 	}
+	return append(tools, secretAppsTools()...)
 }
 
 const startupInstructionsResourceURI = "gptadmin://startup-instructions"

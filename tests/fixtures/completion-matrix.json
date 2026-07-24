@@ -112,6 +112,11 @@
       "id": "supply-chain-policy",
       "command": "python3 -m pytest tests/test_supply_chain_policy.py tests/test_release_workflow_contract.py tests/test_release_provenance.py tests/test_update_semantics.py -q",
       "evidence": "release manifest/SBOM verification, installer fail-closed metadata, CI attestation/vulnerability gates and operator response policy"
+    },
+    {
+      "id": "remote-secret-ingress",
+      "command": "cd go-hub && go test ./internal/hub -run 'Test(Secret(Store|Ingress)|MCPSecret|ShellExecResolvesSecret|ReadonlyMCP)' -count=1 && cd .. && python3 -m pytest tests/test_secret_ingress_contract.py -q",
+      "evidence": "encrypted one-time browser input, owner/TTL checks, MCP metadata-only status, server-side secret_env injection, readonly denial and response redaction"
     }
   ],
   "file_sharing": [

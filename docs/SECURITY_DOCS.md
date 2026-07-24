@@ -31,6 +31,29 @@ Plus `SHELLMCP_TOKEN` for agent → hub registration.
   with a TTL. Critical files (nginx, systemd, networking) get longer TTLs by
   default.
 
+### Remote secret ingress
+
+Remote MCP clients use `secret_request` to create a one-time browser entry
+flow and `secret_status` to read metadata only. Values must never be sent in
+MCP JSON, logs, audit records, job inspection or public responses. A managed
+`shell_exec` may receive an opaque `secret_env` mapping; the Hub resolves it
+server-side and redacts the value again at every response boundary.
+
+The secure defaults are:
+
+| Variable | Default | Contract |
+|----------|---------|----------|
+| `GPTADMIN_SECRET_STORE_DIR` | `$GPTADMIN_CONFIG_DIR/secrets` | Directory mode `0700`; contains encrypted records only |
+| `GPTADMIN_SECRET_STORE_KEY_FILE` | `$GPTADMIN_CONFIG_DIR/secret-store.key` | AES-256 key mode `0600`; missing/invalid key fails closed |
+| `GPTADMIN_SECRET_INGRESS_STATE_FILE` | `$GPTADMIN_CONFIG_DIR/secrets/requests.json` | Request metadata mode `0600`; token hashes only |
+| `GPTADMIN_SECRET_INGRESS_TTL` | `900` seconds | Bounded to 60–3600 seconds; requests are single-use |
+
+Back up the key and encrypted store together using the existing protected
+backup procedure. If the key is lost or invalid, restore it from a protected
+backup or recreate the request; GPTAdmin never falls back to plaintext files
+or environment variables. Rotate the key only with a planned migration that
+re-encrypts records before removing the old key.
+
 ## Approve mode
 
 For critical operations (deleting files, changing network config), the hub

@@ -18,6 +18,34 @@ shellmcp agents, handles auth, and serves the web panel.
 7. **Exposes OpenAPI** — `/api.json` and `/openapi.yaml` for Custom GPT import.
 8. **Accepts webhooks** — authenticated `/webhooks/v1/{route}` ingress can dispatch a configured MCP, prompt, or Shell action.
 
+## Remote secret ingress
+
+An authorized full-access MCP client can call `secret_request` with a label
+and optional `env_name`. The Hub returns an opaque `secret_ref` and a short-
+lived one-time `input_url`; it never returns the token separately or accepts
+the value in MCP JSON. Open `input_url` in a browser, submit the value once, then call
+`secret_status` to confirm `ready` without receiving plaintext.
+
+To use the value in a managed shell job, pass only the reference:
+
+```json
+{
+  "target": "shell:example",
+  "tool": "shell_exec",
+  "args": {
+    "cmd": "printenv EXAMPLE_TOKEN",
+    "secret_env": {"EXAMPLE_TOKEN": "secret-ref-from-secret_request"}
+  }
+}
+```
+
+The Hub resolves the reference server-side, injects it only into the approved
+job, and redacts it from MCP results, job inspection, audit records and logs.
+Readonly profiles cannot request or inspect secrets. The `file` metadata is an
+opaque Hub-managed storage reference, not permission to read the file through
+`system_inspect`. The public router keeps the existing Hub origin and does not
+expose the internal 2.1 route.
+
 ## Running
 
 ```bash
@@ -43,6 +71,7 @@ By default it listens on `0.0.0.0:25900`. Change with `--port` or `HUB_PORT`.
 | `GET/POST /webhook-routes` | Hub control auth | List or create route definitions without returning secrets |
 | `PUT/DELETE /webhook-routes/{route}` | Hub control auth | Replace or remove an operator-owned route |
 | `POST /oauth/token` | client credentials | OAuth token endpoint |
+| `GET/POST /secret-input/{token}` | One-time browser token | Enter a secret value once; responses never include it |
 
 See [API Reference](./API_REFERENCE.md) for full details.
 See [Webhooks](./WEBHOOKS.md) for route configuration and delivery semantics.

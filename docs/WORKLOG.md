@@ -1056,6 +1056,33 @@ plan is [`PROJECT_PLAN.md`](./PROJECT_PLAN.md).
   backups.
 - Next: Push the integrated commit and keep the existing admin password stable.
 
+## 2026-07-24 - Remote secret ingress - completed
+
+- Milestone: `S0.5`
+- Owner: Codex
+- Scope: Hub-owned encrypted one-time browser secret entry, MCP request/status
+  tools, server-side `secret_env` injection, redaction, documentation and
+  executable completion-matrix coverage.
+- Baseline / red evidence: New exact Apps SDK capability test first rejected
+  the two advertised secret tools; a new persistence regression first found
+  that pre-existing state/record files were not restored to mode `0600`.
+- Change: Added AES-256-GCM records, hashed one-time owner-bound tokens,
+  expiry/single-use state, fail-closed recovery validation, secure browser
+  ingress headers/form handling, full-access-only MCP tools, shell job
+  resolution and response redaction. Added focused Go/Python tests and
+  configuration/API/security docs; malformed CSP was recorded and fixed in
+  `docs/BUGS.md`.
+- Verification: Focused secret gate `2 Go scenarios + 2 Python contract tests`;
+  full Python `183 passed, 2 skipped`; Hub and ShellMCP `go test ./...` and
+  `go test -race ./...` passed; Hub/ShellMCP `go vet ./...` passed; proxy-relay
+  tests/vet passed; Hub Darwin arm64/amd64 builds passed; completion matrix
+  `11 passed`; `git diff --check` passed.
+- Delivery: Commit `5807739` (`feat: add secure remote secret ingress`);
+  no push or deployment performed. The user-owned untracked plan
+  `docs/superpowers/plans/2026-07-24-remote-secret-ingress.md` was preserved.
+- Next: Exercise the flow on a real deployed Hub/client and record external
+  runtime evidence before claiming the remaining platform gates complete.
+
 ## 2026-07-24 - Clean-host backup restore drill - completed
 
 - Milestone: `S3.3`
