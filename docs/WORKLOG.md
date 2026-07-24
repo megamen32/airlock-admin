@@ -2729,3 +2729,14 @@ plan is [`PROJECT_PLAN.md`](./PROJECT_PLAN.md).
 - Verification: `trash/logs/webui-login-repair-20260724.md` records Hub direct/LAN/public HTTP 200 responses for `/healthz`, `/version` and `/admin/login`, OAuth discovery HTTP 200, and a real Playwright login-page snapshot with password field and `Войти` button. No password was submitted.
 - Delivery: Primary WebUI availability restored in the current linear worktree; remote mutation is rollback-preserved and separately evidenced.
 - Next: User signs in manually with the existing AdminPassword; then run authenticated live acceptance and continue the remaining Tunnel/ShellMCP runtime gates.
+
+## 2026-07-24 - Deployment probe rejects historical Tunnel noise - completed
+
+- Milestone: `S1.1`, `S3.5`
+- Owner: Codex
+- Scope: Keep the secret-safe Hub runtime probe truthful after the primary Hub recovery.
+- Baseline / red evidence: Real server-100 probe reported `tunnel_router_conflict` although Hub was active and healthy; the runner searched an unbounded historical journal tail.
+- Change: Anchored Tunnel conflict detection to the service `ExecMainStartTimestamp`; added regression coverage before implementation.
+- Verification: RED then GREEN; `python3 -m pytest tests/test_deployment_runtime.py -q` -> `5 passed`; real server-100 probe -> `status=passed`, Hub active/running, port 9001 HTTP 200, `router_conflict=false`.
+- Delivery: Commit `366290a`; no additional remote mutation.
+- Next: Run the completion matrix, then perform the remaining authenticated and non-WebUI runtime acceptance.

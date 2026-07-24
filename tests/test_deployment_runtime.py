@@ -52,6 +52,15 @@ def test_hub_probe_accepts_a_configured_non_default_port() -> None:
     assert report["issues"] == []
 
 
+def test_hub_probe_anchors_tunnel_conflict_to_current_service_start() -> None:
+    """Historical Tunnel journal entries must not fail a current Hub probe."""
+    script = deployment_runtime.REMOTE_SCRIPTS["hub"]
+
+    assert "ExecMainStartTimestamp" in script
+    assert "journalctl -u gptadmin-tunnel-frpc.service --since" in script
+    assert "-n 200" not in script
+
+
 def test_shellmcp_probe_rejects_legacy_binary_and_queue_auth_failure() -> None:
     """ShellMCP readiness must detect stale binary and queue authentication drift."""
     report = deployment_runtime.parse_probe_output(

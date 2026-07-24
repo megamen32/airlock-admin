@@ -639,3 +639,13 @@ Rules:
 - Fix / verification: Immutable evidence `trash/logs/webui-login-repair-20260724.md` records a private server-100 rollback artifact, one Hub start, direct/LAN/public HTTP 200 responses for the login surface, and a real browser snapshot showing the password field and `Войти` button. No password was entered or submitted.
 - Status: fixed for primary-origin availability and the unauthenticated browser login surface; authenticated acceptance remains pending.
 - Next action: Sign in manually with the existing AdminPassword, then run the authenticated live acceptance runner; keep the separate Tunnel/ShellMCP runtime drift under `LIVE-RUNTIME-INACTIVE-20260724`.
+
+## 2026-07-24 - DEPLOYMENT-PROBE-HISTORICAL-JOURNAL-20260724 - Runtime probe reports stale Tunnel conflicts - fixed
+
+- Component: `tests/e2e/deployment_runtime.py` Hub probe.
+- First observed: 2026-07-24, immediately after the authorized server-100 Hub start; immutable evidence `trash/logs/webui-login-repair-20260724.md` records the Hub as healthy while the fresh probe reported `tunnel_router_conflict`.
+- Confirmed fact: The probe searches the last 200 Tunnel journal lines without anchoring them to the current Tunnel process start, so an old conflict can fail an otherwise healthy Hub check.
+- Root-cause hypothesis: The fixed-size journal tail was added as a convenient failure detector but has no temporal boundary.
+- Fix / verification: Added the RED regression `test_hub_probe_anchors_tunnel_conflict_to_current_service_start`, anchored the remote journal query to `ExecMainStartTimestamp`, and reran the real server-100 probe; it now passes with Hub active/running, port 9001 HTTP 200, and `router_conflict=false`.
+- Status: fixed.
+- Next action: Preserve the start-anchored probe in the completion-matrix acceptance run.

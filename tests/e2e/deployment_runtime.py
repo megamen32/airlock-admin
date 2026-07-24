@@ -20,7 +20,8 @@ printf 'unit|%s|%s|%s\n' "$unit" "$state" "$sub"
 port="${HUB_PORT:-9001}"
 code=$(curl -sS --max-time 3 -o /dev/null -w '%{http_code}' "http://127.0.0.1:${port}/healthz" 2>/dev/null || true)
 printf 'port|%s|%s\n' "$port" "$code"
-if journalctl -u gptadmin-tunnel-frpc.service -n 200 --no-pager -o cat 2>/dev/null | grep -qi 'router config conflict'; then
+tunnel_started=$(systemctl show gptadmin-tunnel-frpc.service -p ExecMainStartTimestamp --value 2>/dev/null || true)
+if [ -n "$tunnel_started" ] && journalctl -u gptadmin-tunnel-frpc.service --since "$tunnel_started" --no-pager -o cat 2>/dev/null | grep -qi 'router config conflict'; then
   printf 'router_conflict|true\n'
 else
   printf 'router_conflict|false\n'
