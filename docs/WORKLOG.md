@@ -1150,6 +1150,27 @@ plan is [`PROJECT_PLAN.md`](./PROJECT_PLAN.md).
 - Next: Keep fresh-host install and live physical Tunnel takeover as separate
   S1.1/S3.4 evidence; doctor does not claim either.
 
+## 2026-07-24 - Remove internal credential names from auth pages - completed
+
+- Milestone: `S2.1`
+- Owner: `Codex`
+- Scope: Sanitize normal `/admin/login` and `/authorize` copy while preserving
+  the internal migration implementation and scoped JWT/OAuth behavior.
+- Baseline / pre-fix evidence: Auth templates visibly referenced `CTL_TOKEN`;
+  the existing test required that string in the authorize page.
+- RED/GREEN evidence: The updated auth-page regression first failed on the
+  login page's `CTL_TOKEN` hint, then passed after both templates changed to
+  product-facing OAuth/Hub/scoped-JWT wording.
+- Change: Removed internal credential names from `/admin/login` and
+  `/authorize`; migration behavior remains unchanged behind the API.
+- Verification: Focused Hub auth and admin UI tests pass; full Hub, contract and
+  Python gates are the remaining handoff check.
+- Write scope: `go-hub/internal/hub/server.go`, targeted auth tests,
+  `docs/BUGS.md` and worklog only. Preserve proxy/relay and unrelated plan.
+- Delivery: Pending integration commit on `codex/haos-addon-public`; no deploy,
+  push or merge. The unrelated remote-secret plan remains preserved.
+- Next: Keep internal migration names out of normal setup/status/UI surfaces.
+
 
 ## 2026-07-24 - Typed admin security controls and Apps SDK contract - completed
 

@@ -154,6 +154,23 @@ Rules:
 - Fix / verification: GPTAdmin update eventually completed without resetting Job Manager state; add-on `1.0.4` is started and the failover drill passed. The unrelated recovery HAProxy app remains in `error` with a separate missing `mgmt_auth` userlist and certificate-rate-limit errors.
 - Next action: Repair `local_bezrabotnyi_recovery_haproxy` in its owning deployment task; it no longer blocks GPTAdmin failover acceptance.
 
+## 2026-07-24 - AUTH-UI-INTERNAL-NAMES-20260724 - Auth pages expose internal credential name - fixed
+
+- Component: Hub `/admin/login` and `/authorize` HTML pages.
+- First observed: 2026-07-24, immutable source evidence from
+  `go-hub/internal/hub/server.go` and the auth-page regression contract.
+- Symptom / evidence: Normal browser-facing copy names `CTL_TOKEN`, exposing an
+  internal credential vocabulary even though the one-password product contract
+  requires OAuth/AdminPassword/scoped JWT language.
+- Root cause: Legacy migration hint was retained in the login and OAuth consent
+  templates after the public admin UI was sanitized.
+- Fix / verification: Replaced the legacy hints with OAuth/Hub/scoped-JWT
+  wording; the auth-page regression now rejects `CTL_TOKEN`, bridge, OAuth
+  secret and ShellMCP token names. Focused Hub auth and admin UI boundary tests
+  pass; full Hub/contract is the remaining handoff gate.
+- Next action: None for this bug; internal migration support remains hidden from
+  normal auth-page copy until its documented deadline.
+
 ## 2026-07-24 - CLI-PLATFORM-CONSTANT-20260724 - Missing Windows platform constant - fixed
 
 - Component: `cli.py` platform detection and cross-platform service helpers.

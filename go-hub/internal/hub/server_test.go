@@ -985,9 +985,14 @@ func TestAuthPagesExplainAdminPasswordAndBearerOptions(t *testing.T) {
 		t.Fatalf("admin login status=%d body=%s", w.Code, w.Body.String())
 	}
 	loginPage := w.Body.String()
-	for _, want := range []string{"admin-пароль", "CTL_TOKEN", "JWT"} {
+	for _, want := range []string{"admin-пароль", "OAuth", "JWT"} {
 		if !strings.Contains(loginPage, want) {
 			t.Fatalf("admin login page missing %q: %s", want, loginPage)
+		}
+	}
+	for _, forbidden := range []string{"CTL_TOKEN", "MCP_BRIDGE_KEY", "OAUTH_CLIENT_SECRET", "SHELLMCP_TOKEN"} {
+		if strings.Contains(loginPage, forbidden) {
+			t.Fatalf("admin login page exposed internal credential name %q: %s", forbidden, loginPage)
 		}
 	}
 
@@ -998,9 +1003,14 @@ func TestAuthPagesExplainAdminPasswordAndBearerOptions(t *testing.T) {
 		t.Fatalf("authorize page status=%d body=%s", w.Code, w.Body.String())
 	}
 	authorizePage := w.Body.String()
-	for _, want := range []string{"Admin password", "CTL_TOKEN", "JWT"} {
+	for _, want := range []string{"Admin password", "OAuth", "JWT"} {
 		if !strings.Contains(authorizePage, want) {
 			t.Fatalf("authorize page missing %q: %s", want, authorizePage)
+		}
+	}
+	for _, forbidden := range []string{"CTL_TOKEN", "MCP_BRIDGE_KEY", "OAUTH_CLIENT_SECRET", "SHELLMCP_TOKEN"} {
+		if strings.Contains(authorizePage, forbidden) {
+			t.Fatalf("authorize page exposed internal credential name %q: %s", forbidden, authorizePage)
 		}
 	}
 }
