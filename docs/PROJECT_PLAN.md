@@ -61,7 +61,7 @@ evidence unambiguous before adding surface area.
 | Milestone | Deliverable | Exit gate | Status |
 | --- | --- | --- | --- |
 | S1.1 One-command working Hub | Idempotent install/update that starts Hub, creates/verifies Tunnel and outputs one Hub URL | Fresh supported host completes with minimal questions and no manual topology/token configuration | Planned |
-| S1.2 `gptadmin doctor` | Structured local and remote readiness diagnosis | Detects version, service health, Tunnel reachability, auth, clock and permissions; has machine-readable JSON | In progress |
+| S1.2 `gptadmin doctor` | Structured local and remote readiness diagnosis | Detects version, service health, Tunnel reachability, auth, clock and permissions; has machine-readable JSON | Complete |
 | S1.3 Universal connection page | One Hub URL that detects/configures local MCP clients and derives protocol details | Codex, Claude-compatible and ChatGPT-compatible paths complete a harmless action without documentation lookup | In progress |
 | S1.3a Admin profile workspace | Configure versioned instructions, access mode, allowed targets/tools, external machine/workspace references and client bindings as one user-facing profile; follow [`ADMIN_PROFILES.md`](./ADMIN_PROFILES.md) | A profile survives restart, updates effective MCP instructions without restart, filters the real tool list and rejects a forbidden call in black-box tests; referenced private repositories remain separate sources of truth | Complete |
 | S1.4 Safe demo capability | Built-in read-only demo/diagnostics tool and explicit destructive-action boundary | A user can validate connection without shell execution or credentials beyond setup | Complete |

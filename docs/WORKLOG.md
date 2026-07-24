@@ -1132,6 +1132,24 @@ plan is [`PROJECT_PLAN.md`](./PROJECT_PLAN.md).
 - Next: Keep S2.1 identity migration and S2.1a passkey/OIDC verification as
   separate open gates; do not conflate them with policy/autonomy completion.
 
+## 2026-07-24 - Doctor readiness exit gate - completed
+
+- Milestone: `S1.2`
+- Owner: `Codex`
+- Scope: Close the doctor milestone after adding local service runtime state
+  and authenticated public Hub readiness evidence.
+- Evidence: JSON report covers local version, unit presence/runtime,
+  AdminPassword, Hub URL/port, public health (Tunnel path), authenticated
+  overview, remote clock and env permissions; missing credentials/managers are
+  explicit warnings/errors rather than silent success.
+- Verification: Doctor tests `4 passed`; full Python `176 passed, 2 skipped`;
+  Windows contract `1 passed`; real `gptadmin doctor --json` parses; matrix
+  `11 passed`.
+- Delivery: Pending integration commit on `codex/haos-addon-public`; no deploy,
+  push or merge. The unrelated remote-secret-ingress plan remains preserved.
+- Next: Keep fresh-host install and live physical Tunnel takeover as separate
+  S1.1/S3.4 evidence; doctor does not claim either.
+
 
 ## 2026-07-24 - Typed admin security controls and Apps SDK contract - completed
 
