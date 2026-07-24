@@ -160,6 +160,11 @@
       "evidence": "preset persistence, locked-down fail-closed behavior, TOTP enrollment/verification, fresh security re-auth and MFA-required admin login"
     },
     {
+      "id": "auth-failure-rate-limit",
+      "command": "cd go-hub && go test ./internal/hub -run 'TestAuthFailuresAreRateLimitedPerClient' -count=1",
+      "evidence": "failed admin/control authentication is bounded per client with Retry-After while successful auth remains outside the failure budget"
+    },
+    {
       "id": "typed-heartbeat-endpoint",
       "command": "cd go-hub && go test ./internal/hub -run 'TestSecurityHeartbeatUsesTypedAdminEndpoint' -count=1",
       "evidence": "heartbeat preference changes use a typed boolean endpoint and never accept an operator shell command"

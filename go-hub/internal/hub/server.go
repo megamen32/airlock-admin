@@ -58,6 +58,7 @@ type Config struct {
 	OAuthPermissiveRedirects   bool
 	OAuthPermissiveResources   bool
 	AuthLogSecrets             bool
+	AuthRateLimit              int
 	BridgeKey                  string
 	LegacyCtlTokenDeadline     time.Time
 	Now                        func() time.Time
@@ -105,6 +106,7 @@ func FromEnv() Config {
 		OAuthPermissiveRedirects:   truthyString(env("OAUTH_PERMISSIVE_REDIRECTS", "0")),
 		OAuthPermissiveResources:   truthyString(env("OAUTH_PERMISSIVE_RESOURCES", "0")),
 		AuthLogSecrets:             truthyString(env("AUTH_LOG_SECRETS", "0")),
+		AuthRateLimit:              positiveIntEnv("GPTADMIN_AUTH_RATE_LIMIT", 60),
 		BridgeKey:                  env("MCP_BRIDGE_KEY", env("CTL_TOKEN", "")),
 		LegacyCtlTokenDeadline:     legacyCtlTokenDeadline,
 		Now:                        time.Now,
@@ -133,6 +135,14 @@ func env(k, d string) string {
 }
 
 func secondsEnv(k string, d int) int {
+	v, err := strconv.Atoi(env(k, ""))
+	if err != nil || v <= 0 {
+		return d
+	}
+	return v
+}
+
+func positiveIntEnv(k string, d int) int {
 	v, err := strconv.Atoi(env(k, ""))
 	if err != nil || v <= 0 {
 		return d
@@ -275,6 +285,11 @@ type managedMCPTokenState struct {
 	Tokens map[string]managedMCPToken `json:"tokens"`
 }
 
+type authRateWindow struct {
+	Started time.Time
+	Count   int
+}
+
 type idempotencyEntry struct {
 	Fingerprint string
 	CreatedAt   time.Time
@@ -288,6 +303,7 @@ type Server struct {
 	cfg Config
 
 	mu             sync.Mutex
+	authRateMu     sync.Mutex
 	cond           *sync.Cond
 	agents         map[string]*Agent
 	relayQueues    map[string][]string
@@ -306,6 +322,7 @@ type Server struct {
 	telemetry      telemetryState
 	telemetryPath  string
 	audit          []auditEvent
+	authRate       map[string]authRateWindow
 	failover       FailoverConfig
 
 	updateStatePath     string
@@ -323,6 +340,9 @@ type Server struct {
 }
 
 func New(cfg Config) *Server {
+	if cfg.AuthRateLimit <= 0 {
+		cfg.AuthRateLimit = 60
+	}
 	webhookRoutes := append([]WebhookRoute(nil), cfg.WebhookRoutes...)
 	if loadedRoutes, err := loadWebhookRoutes(cfg.WebhookConfigFile); err != nil {
 		log.Printf("webhook config load failed path=%s err=%v", cfg.WebhookConfigFile, err)
@@ -371,6 +391,7 @@ func New(cfg Config) *Server {
 		telemetry:         telemetry,
 		telemetryPath:     telemetryPath,
 		audit:             []auditEvent{},
+		authRate:          map[string]authRateWindow{},
 		webhookRoutes:     webhookRouteMap(webhookRoutes),
 		webhookJobs:       map[string]*webhookJob{},
 		webhookDeliveries: map[string]*webhookDelivery{},
@@ -868,6 +889,9 @@ func (s *Server) requireCtl(next http.HandlerFunc) http.HandlerFunc {
 			return
 		} else {
 			s.authAudit("ctl_auth_denied", r, map[string]any{"reason": err.Error()})
+		}
+		if s.authFailureRateLimited(w, r) {
+			return
 		}
 		s.writeCtlUnauthorized(w, r)
 	}
@@ -3570,11 +3594,17 @@ func (s *Server) adminLogin(w http.ResponseWriter, r *http.Request) {
 		password := r.FormValue("password")
 		if s.cfg.AdminPassword == "" || !hmac.Equal([]byte(password), []byte(s.cfg.AdminPassword)) {
 			s.authAudit("admin_login_denied", r, map[string]any{"reason": "bad_password"})
+			if s.authFailureRateLimited(w, r) {
+				return
+			}
 			s.renderAdminLogin(w, r, "неверный пароль")
 			return
 		}
 		if s.securityRequiresMFA() && !s.verifyAdminMFA(r.FormValue("mfa_code")) {
 			s.authAudit("admin_login_denied", r, map[string]any{"reason": "mfa_required_or_invalid"})
+			if s.authFailureRateLimited(w, r) {
+				return
+			}
 			s.renderAdminLogin(w, r, "нужен корректный MFA-код")
 			return
 		}
@@ -5432,6 +5462,9 @@ func (s *Server) mcpAuth(w http.ResponseWriter, r *http.Request) bool {
 		s.authAudit("mcp_auth_denied", r, map[string]any{"reason": "missing authorization header"})
 	} else {
 		s.authAudit("mcp_auth_denied", r, map[string]any{"reason": "unsupported authorization scheme"})
+	}
+	if s.authFailureRateLimited(w, r) {
+		return false
 	}
 	w.Header().Set("WWW-Authenticate", `Bearer resource_metadata="`+s.origin(r)+`/.well-known/oauth-protected-resource", scope="gptadmin.read gptadmin.exec"`)
 	writeJSON(w, http.StatusUnauthorized, map[string]any{"error": "unauthorized"})

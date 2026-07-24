@@ -48,6 +48,17 @@ plan is [`PROJECT_PLAN.md`](./PROJECT_PLAN.md).
 
 ## Entries
 
+## 2026-07-24 - Hub auth failure rate limiting - completed
+
+- Milestone: `S1.6`
+- Owner: `Codex`
+- Scope: Add bounded per-client authentication-failure limiting to Hub admin/MCP/control auth paths; preserve successful auth and existing credential contracts.
+- Baseline / red evidence: `TestAuthFailuresAreRateLimitedPerClient` failed to compile because `Config` had no rate-limit policy and no auth-failure limiter.
+- Change: Added configurable `GPTADMIN_AUTH_RATE_LIMIT` (default 60 failed attempts/client/minute), bounded client-window storage, `Retry-After` 429 responses and coverage for admin/control/MCP authentication failures. Documented the setting without exposing internal credentials in normal UI vocabulary.
+- Verification: `cd go-hub && go test ./...` -> pass; `go test -race ./...` -> pass; `go vet ./...` -> pass; `python3 -m pytest tests/test_completion_matrix.py -q` -> `11 passed`.
+- Delivery: Pending commit on the single linear branch; no runtime deployment. Preserve the unrelated untracked remote-secret-ingress plan.
+- Next: Keep HTTPS/no-public-port and external verification as separate deployment/identity gates; do not claim S1.6 complete from rate limiting alone.
+
 ## 2026-07-24 - ProxyRelay bounded metrics - completed
 
 - Milestone: `S3.1`
