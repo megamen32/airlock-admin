@@ -2699,3 +2699,12 @@ plan is [`PROJECT_PLAN.md`](./PROJECT_PLAN.md).
 - Verification: RED then GREEN; `python3 -m pytest tests/test_deployment_runtime.py -q` -> `4 passed`.
 - Delivery: Custom `HUB_PORT` deployments are now diagnosed without a false failure or relaxed health requirement.
 - Next: Re-run the runner after external repair on the actual configured ports.
+
+## 2026-07-24 - Final Go acceptance after runtime probe hardening - completed locally
+
+- Milestone: `S0.2`, `S0.3`
+- Owner: Codex
+- Scope: Re-run both Go components and supported Hub cross-builds after the deployment probe correction.
+- Verification: `go-hub go test ./...`, `go test -race ./...`, `go vet ./...`, `go-shellmcp go test ./...`, and Darwin arm64/amd64 Hub builds all pass.
+- Delivery: Source and cross-platform local evidence remain green; external deployment/Tunnel/client evidence remains separate.
+- Next: Attach this baseline to the authorized deployment repair and public live acceptance.
