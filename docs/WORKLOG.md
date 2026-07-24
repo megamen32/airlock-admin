@@ -2463,3 +2463,14 @@ plan is [`PROJECT_PLAN.md`](./PROJECT_PLAN.md).
 - Verification: `cd go-proxyrelay && go test ./blackbox -run TestProxyRelayProcessMetricsAndStreamRoundTrip -count=1` passes; the test builds and launches the actual binary, checks `/metrics`, and verifies a signed frame round trip.
 - Delivery: Local process evidence only; public Tunnel routing and authorized external client proof remain separate.
 - Next: Run the same relay path through the authorized public Tunnel during the live deployment session.
+
+## 2026-07-24 - Current-head clean-clone acceptance - completed locally
+
+- Milestone: `S0.1`, `S3.5`, `S4.1`
+- Owner: Codex
+- Scope: Reproduce the current linear vertex from a fresh local clone without worktree modifications.
+- Baseline / red evidence: Previous clean-clone evidence referenced an earlier OAuth checkpoint; current process and matrix gates needed proof at the latest ProxyRelay commit.
+- Change: No source change; cloned branch `codex/haos-addon-public` at commit `32aa0a6d1c4982d9d3fdc9a13dc78bac232d05ec` into `/tmp/gptadmin-clean-current.eL0qRp` and ran the complete Go module tests plus completion matrix.
+- Verification: Clone status was clean; `go test ./...` passed in `go-hub`, `go-shellmcp`, and `go-proxyrelay`; `python3 -m pytest tests/test_completion_matrix.py -q` passed (`12 passed`).
+- Delivery: Reproducible local source evidence only; signed CI artifacts, deployed hosts, public Tunnel and real client proof remain external gaps.
+- Next: Use the authorized deployment/CI session to obtain immutable external evidence rather than inferring it from this clean clone.
