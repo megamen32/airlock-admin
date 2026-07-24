@@ -48,6 +48,17 @@ plan is [`PROJECT_PLAN.md`](./PROJECT_PLAN.md).
 
 ## Entries
 
+## 2026-07-24 - Real MCP-client handshake delivery identity - completed
+
+- Milestone: `S1.3`
+- Owner: `Codex`
+- Scope: Attach the exact immutable commit to the real local MCP-client acceptance entry below.
+- Baseline / red evidence: The acceptance entry was written before its implementation commit was created.
+- Change: No production change; record the current linear delivery identity.
+- Verification: `git show --no-patch --format='%H %s' 939797b` identifies `test: verify real MCP client handshakes`.
+- Delivery: Commit `939797b`; no push, deployment or merge performed.
+- Next: Keep ChatGPT/external Tunnel and fresh-host certification separate from this local proof.
+
 ## 2026-07-24 - Real local MCP-client handshake contract - completed
 
 - Milestone: `S1.3`
