@@ -331,7 +331,8 @@ func New(cfg Config) *Server {
 	if securityPath == "" && cfg.ConfigDir != "" {
 		securityPath = filepath.Join(cfg.ConfigDir, securityStateFilename)
 	}
-	security, err := loadSecuritySettings(securityPath)
+	securityKey := firstNonEmpty(cfg.AdminPassword, cfg.OAuthClientSecret, cfg.CtlToken, "gptadmin-security-state")
+	security, err := loadSecuritySettings(securityPath, securityKey)
 	if err != nil {
 		log.Printf("security settings load failed path=%s err=%v", securityPath, err)
 		security = defaultSecuritySettings()
