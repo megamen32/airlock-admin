@@ -48,6 +48,17 @@ plan is [`PROJECT_PLAN.md`](./PROJECT_PLAN.md).
 
 ## Entries
 
+## 2026-07-24 - Current-head extended acceptance - completed
+
+- Milestone: `S1.3a` / `S2.1a` / `S4.1-S4.4`
+- Owner: `Codex`
+- Scope: Re-run the full local acceptance after named profile instructions, MCP conformance, passkey enrollment UI, capability catalog and extension manifest changes.
+- Baseline / red evidence: Named profile and MCP conformance RED tests exposed missing runtime instruction selection and the nil-request execute panic; passkey/catalog/extension RED contracts exposed missing user-facing surfaces.
+- Change: No additional production change in this evidence entry; record the current linear acceptance result.
+- Verification: Python `197 passed, 3 skipped`; completion matrix `12 passed`; Hub/ShellMCP/ProxyRelay full tests, race and vet passed; real Chromium virtual-authenticator enrollment `1 passed`; `git diff --check` passed.
+- Delivery: Current linear commits include `9f9769d`, `54a10f0`, `d3e8fdd`, `b650515`, `69d0642` and `2568eef`; no push, deployment or merge. Preserve the untracked remote-secret-ingress plan.
+- Next: Obtain external OIDC/verification, public client/Tunnel, real collector, clean-host canary, native CI, signed catalog publication and physical fallback-host evidence before closing remaining roadmap gates.
+
 ## 2026-07-24 - S4.4 extension conformance delivery identity - completed
 
 - Milestone: `S4.4`
