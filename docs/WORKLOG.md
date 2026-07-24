@@ -2331,3 +2331,14 @@ plan is [`PROJECT_PLAN.md`](./PROJECT_PLAN.md).
 - Verification: `cd go-hub && go test ./internal/hub -run '^TestBrowserExtensionOAuthUsesSameOriginCallbackWithoutCredentialCopy$' -count=1`, `pytest -q tests/test_browser_extension_oauth.py`, and `node --check public/mcp-bridge.user.js` pass.
 - Delivery: Local uncommitted slice on the single linear branch; no deployment or push.
 - Next: Run Hub full/race/vet and full Python acceptance, then commit this browser-connection slice.
+
+## 2026-07-24 - Browser OAuth final-head clean-clone proof - completed
+
+- Milestone: `S0.2`, `S1.3`, `S3.4`, `S4.1`
+- Owner: Codex
+- Scope: Reproducibility from fresh clone at commit `b6cae04bc32bea8c5a8c003b0e5a87bc41282367`.
+- Baseline / red evidence: N/A; post-commit acceptance.
+- Change: No additional runtime change; validated the committed browser OAuth and security surfaces without the source worktree.
+- Verification: Clone `/tmp/gptadmin-clean-oauth-KaynGY` passed Hub `go test ./...`, browser/product contracts `11 passed`, completion matrix `12 passed`, userscript `node --check`, and `bash tests/e2e/failover/run.sh` with all scenarios passed.
+- Delivery: Local evidence only; no push, deploy or external-host claim.
+- Next: Obtain real client/host, tagged CI, collector and physical fallback evidence before declaring the 1.0 gate complete.
