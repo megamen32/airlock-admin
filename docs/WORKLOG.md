@@ -56,7 +56,7 @@ plan is [`PROJECT_PLAN.md`](./PROJECT_PLAN.md).
 - Baseline / red evidence: `TestSecurityPresetRejectsExternalHTTPOrigin` observed `private_access` accepted with `http://hub.example`.
 - Change: Added origin parsing/userinfo rejection, HTTPS requirement for external origins, loopback exceptions, handler regression coverage and completion-matrix entry.
 - Verification: `cd go-hub && go test ./...` -> pass; `go test -race ./...` -> pass; `go vet ./...` -> pass; `python3 -m pytest tests/test_completion_matrix.py -q` -> `11 passed`.
-- Delivery: Pending commit on the single linear branch; no runtime deployment. Preserve the unrelated untracked remote-secret-ingress plan.
+- Delivery: Commit `11db6ce` on the single linear branch; no runtime deployment. Preserve the unrelated untracked remote-secret-ingress plan.
 - Next: S1.6 still needs real external identity verification and deployment-level TLS proof.
 
 ## 2026-07-24 - Hub loopback bind default - completed
