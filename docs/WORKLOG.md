@@ -48,6 +48,17 @@ plan is [`PROJECT_PLAN.md`](./PROJECT_PLAN.md).
 
 ## Entries
 
+## 2026-07-24 - Safe delivery status delivery identity - completed
+
+- Milestone: `S3.5`
+- Owner: `Codex`
+- Scope: Attach the exact plan-status commit to the rollback worklog sequence.
+- Baseline / red evidence: The plan status was updated after the rollback implementation entry had already been committed.
+- Change: No production change; record the immutable documentation commit that moved S3.5 from Planned to In progress.
+- Verification: `git show --no-patch --format='%H %s' d5b8152` identifies `docs: mark safe delivery in progress`.
+- Delivery: Commit `d5b8152`; no push, deployment or merge performed.
+- Next: Prove signed-artifact canary, client reconnection and rollback on a clean host.
+
 ## 2026-07-24 - Transactional rollback delivery identity - completed
 
 - Milestone: `S3.5`
