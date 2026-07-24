@@ -630,11 +630,12 @@ Rules:
 - Status: fixed.
 - Next action: Preserve non-default port coverage in the deployment runtime matrix.
 
-## 2026-07-24 - WEBUI-LOGIN-OUTAGE-20260724 - Primary WebUI origin returns 502 - open
+## 2026-07-24 - WEBUI-LOGIN-OUTAGE-20260724 - Primary WebUI origin returns 502 - fixed
 
 - Component: Primary public Hub origin and WebUI login path.
 - First observed: 2026-07-24, user report that WebUI login is unavailable; immutable evidence `trash/logs/webui-login-probe-20260724.md`.
 - Confirmed fact: `https://gptadminmcp.bezrabotnyi.com` returns nginx HTTP `502` for `/admin/login`, `/healthz`, OAuth discovery and `/connect.json`. A personal Tunnel returns an old `1.0.5` Hub with `/connect.json` `404` and is not a current-build replacement.
 - Root-cause hypothesis: Primary origin has no healthy current Hub backend, consistent with the server-100 Hub inactive and Tunnel router conflict evidence.
-- Status: open.
-- Next action: In an authorized deployment session, restore the current Hub/Tunnel behind the primary origin and verify browser login plus the authenticated live acceptance runner.
+- Fix / verification: Immutable evidence `trash/logs/webui-login-repair-20260724.md` records a private server-100 rollback artifact, one Hub start, direct/LAN/public HTTP 200 responses for the login surface, and a real browser snapshot showing the password field and `Войти` button. No password was entered or submitted.
+- Status: fixed for primary-origin availability and the unauthenticated browser login surface; authenticated acceptance remains pending.
+- Next action: Sign in manually with the existing AdminPassword, then run the authenticated live acceptance runner; keep the separate Tunnel/ShellMCP runtime drift under `LIVE-RUNTIME-INACTIVE-20260724`.

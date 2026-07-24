@@ -2718,3 +2718,14 @@ plan is [`PROJECT_PLAN.md`](./PROJECT_PLAN.md).
 - Confirmed: Primary origin returns nginx `502` for every Hub/WebUI/OAuth path; personal Tunnel serves an older `1.0.5` Hub with a password form but missing current `/connect.json`.
 - Delivery: Login failure is an upstream availability/deployment issue, not a browser password validation issue; no remote state changed.
 - Next: Authorized owner must restore the current backend and verify the primary WebUI login end-to-end.
+
+## 2026-07-24 - Primary WebUI backend restored - completed
+
+- Milestone: `S1.1`, `S1.3`
+- Owner: Codex
+- Scope: Restore the primary Hub backend and verify the unauthenticated WebUI login path without handling credentials.
+- Baseline / red evidence: `trash/logs/webui-login-probe-20260724.md` recorded HTTP 502 from the primary origin; server-100 Hub was inactive and Tunnel was failed.
+- Change: Created private rollback artifact `/var/backups/gptadmin/server100-webui-20260724T214223Z` and started only `gptadmin-hub.service` once; nginx, Tunnel, DNS, credentials, configs and standby were left unchanged.
+- Verification: `trash/logs/webui-login-repair-20260724.md` records Hub direct/LAN/public HTTP 200 responses for `/healthz`, `/version` and `/admin/login`, OAuth discovery HTTP 200, and a real Playwright login-page snapshot with password field and `Войти` button. No password was submitted.
+- Delivery: Primary WebUI availability restored in the current linear worktree; remote mutation is rollback-preserved and separately evidenced.
+- Next: User signs in manually with the existing AdminPassword; then run authenticated live acceptance and continue the remaining Tunnel/ShellMCP runtime gates.
