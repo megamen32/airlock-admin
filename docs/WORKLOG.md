@@ -2540,3 +2540,14 @@ plan is [`PROJECT_PLAN.md`](./PROJECT_PLAN.md).
 - Verification: `python3 -m pytest tests/test_shellmcp_contract.py -k symlink_escape_through_process -q` passes (`1 passed`); the process returns a structured MCP error and never returns the outside file content.
 - Delivery: Local ShellMCP process evidence only; native-host file-sharing and public client evidence remain external.
 - Next: Retain this gate in the full ShellMCP and completion-matrix runs.
+
+## 2026-07-24 - File-security full acceptance - completed locally
+
+- Milestone: `S2.2`, `S4.1`
+- Owner: Codex
+- Scope: Re-run the full executable matrix and Python suite after adding process-level symlink protection coverage.
+- Baseline / red evidence: The new public-process security test initially asserted `symlink` while the runtime correctly returned `symbolic links`; the assertion was aligned to the existing fail-closed error contract.
+- Change: No production behavior change; retained the exact process fixture and matrix evidence.
+- Verification: `python3 -m pytest tests/test_shellmcp_contract.py -q` passed (`10 passed`); completion matrix passed (`12 passed`); final Python suite passed (`236 passed, 3 skipped`, 238 collected / 1 collection skip).
+- Delivery: Local current-tree evidence only; native host and public Tunnel file-security proof remain external.
+- Next: Run the same file/profile/policy probes against the authorized deployed commit.
