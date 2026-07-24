@@ -48,6 +48,28 @@ plan is [`PROJECT_PLAN.md`](./PROJECT_PLAN.md).
 
 ## Entries
 
+## 2026-07-24 - Clean-clone failover script mode - completed
+
+- Milestone: `S0.1` / `S3.4`
+- Owner: `Codex`
+- Scope: Make the documented clean-clone failover drill and directly launched FRP fixture executable.
+- Baseline / red evidence: Clean clone `/tmp/gptadmin-clean-audit-hYNrLP` ran 32 focused tests and Go gates, then `tests/e2e/failover/run.sh` returned exit `126`; Git recorded mode `100644`.
+- Change: Restored executable modes for `tests/e2e/failover/run.sh` and `tests/e2e/failover/fake-frpc`, added mode regressions, made source checkout execution self-contained, and made test ports configurable.
+- Verification: Focused mode tests pass; all seven direct black-box scenarios pass.
+- Delivery: Commit `2a1eb4ee4d298a412c37b73ad7733e266e7ef2c4`; no push, deployment or merge; preserve the unrelated untracked remote-secret-ingress plan.
+- Next: Keep the mode and direct-drill checks in the acceptance gate.
+
+## 2026-07-24 - Failover reclaim authentication - completed
+
+- Milestone: `S3.4`
+- Owner: `Codex`
+- Scope: Make the signed primary reclaim helper satisfy the Hub's authenticated endpoint contract and preserve a real black-box regression.
+- Baseline / red evidence: Direct failover drill reached `scenario_primary_reclaim`, then the fallback Hub returned unauthorized because the helper sent no `Authorization` header.
+- Change: Added an optional authorization parameter to the reclaim POST helper and passed the shared control credential as a bearer header without exposing it in output.
+- Verification: RED request-header regression now passes; all seven direct black-box scenarios pass.
+- Delivery: Commit `2a1eb4ee4d298a412c37b73ad7733e266e7ef2c4`; no push, deployment or merge; preserve the unrelated untracked remote-secret-ingress plan.
+- Next: Keep the reclaim request test and black-box scenario in the acceptance gate.
+
 ## 2026-07-24 - Bug ledger status correction - completed
 
 - Milestone: `S2.2` / `S2.3`

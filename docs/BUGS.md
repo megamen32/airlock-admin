@@ -62,6 +62,34 @@ Rules:
 - Status: fixed.
 - Next action: Retain a virtual-authenticator browser smoke in the security acceptance lane.
 
+## 2026-07-24 - CLEAN-CLONE-FAILOVER-MODE-20260724 - Failover drill fixtures were not executable - fixed
+
+- Component: `tests/e2e/failover/run.sh` and `tests/e2e/failover/fake-frpc` tracked file modes.
+- First observed: 2026-07-24, clean-clone audit in `/tmp/gptadmin-clean-audit-hYNrLP`; 32 focused tests and Go gates passed, then the documented direct script invocation returned exit `126`.
+- Confirmed fact: Git mode was `100644` for both the drill and its directly launched FRP fixture, so a fresh clone could not execute the failover path as documented.
+- Fix / verification: Restored both executable bits, added mode regressions, and ran all seven black-box scenarios successfully.
+- Status: fixed.
+- Next action: Keep script mode in the repository acceptance gate.
+
+## 2026-07-24 - FAILOVER-DRILL-READY-20260724 - Direct failover drill was not self-contained - fixed
+
+- Component: `tests/e2e/failover/run.sh` disposable Hub startup/readiness and port allocation path.
+- First observed: 2026-07-24, current-tree direct invocation after restoring executable mode; the script repeatedly received connection refused from `127.0.0.1:9001/healthz` and exited before the failover scenarios.
+- Confirmed fact: The script deleted its locally built Hub binary during topology reset and hard-coded ports already owned by unrelated local services.
+- Fix / verification: Keep the temporary binary until process teardown, resolve source-local scripts/binaries, support `GPTADMIN_FAILOVER_E2E_PORT_BASE`, and run all seven black-box scenarios successfully.
+- Status: fixed.
+- Next action: Retain the direct drill in the clean-clone acceptance gate.
+
+## 2026-07-24 - FAILOVER-RECLAIM-AUTH-20260724 - Reclaim helper omitted Hub authentication - fixed
+
+- Component: `scripts/gptadmin_failover_reclaim_push.py` and the signed reclaim endpoint.
+- First observed: 2026-07-24, direct black-box failover scenario `scenario_primary_reclaim`.
+- Confirmed fact: The fallback Hub rejected the reclaim POST as unauthenticated before validating its signed payload.
+- Root cause: The helper used the shared signing secret to create the body signature but did not send the same operator credential as the required bearer authorization.
+- Fix / verification: Added a request-header regression, sent the bearer credential without logging it, and ran all seven black-box scenarios successfully.
+- Status: fixed.
+- Next action: Retain the reclaim request test and black-box scenario in the acceptance gate.
+
 ## 2026-07-24 - INSTALL-QUICKSTART-INTERNAL-AUTH-20260724 - Installer help exposed legacy credential name - fixed
 
 - Component: `deploy/install.sh` post-install quickstart.
