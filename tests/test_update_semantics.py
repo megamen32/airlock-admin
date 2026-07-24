@@ -100,7 +100,7 @@ def test_update_restores_auth_material_if_package_install_rewrites_env(monkeypat
     monkeypatch.setattr(cli, "write_shellmcp_unit", lambda *_args: None)
     monkeypatch.setattr(cli, "svc_daemon_reload", lambda: None)
     monkeypatch.setattr(cli, "svc_enable_start", lambda *_args: None)
-    monkeypatch.setattr(cli, "wait_local_hub_health", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(cli, "wait_local_hub_health", lambda *_args, **_kwargs: True)
     monkeypatch.setattr(cli, "svc_autoupdate_enable_start", lambda *_args: None)
     monkeypatch.setattr(cli, "auto_configure_ai_mcp_clients", lambda *_args: None)
 
@@ -179,6 +179,29 @@ def test_update_refreshes_automatic_client_registration_without_autoapprove():
     block = text[start:end]
     assert "maybe_autoapprove_local_shellmcp(" not in block
     assert "auto_configure_ai_mcp_clients(env_read(), install_hub)" in block
+
+
+def test_update_transaction_restores_runtime_snapshot_after_failed_canary(tmp_path: Path):
+    """A failed update must restore replaced runtime files before rethrowing."""
+
+    binary = tmp_path / "bin" / "gptadmin_hub"
+    binary.parent.mkdir()
+    binary.write_bytes(b"version-old")
+    rollback_callbacks: list[str] = []
+
+    def failed_update() -> None:
+        binary.write_bytes(b"version-new")
+        raise RuntimeError("health check failed")
+
+    with pytest.raises(RuntimeError, match="health check failed"):
+        cli._run_update_transaction(
+            [binary],
+            failed_update,
+            rollback_callback=lambda: rollback_callbacks.append("restarted"),
+        )
+
+    assert binary.read_bytes() == b"version-old"
+    assert rollback_callbacks == ["restarted"]
 
 
 def test_macos_launchd_bootout_is_not_duplicated_before_bootstrap():

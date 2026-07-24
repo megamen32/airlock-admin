@@ -12,6 +12,16 @@ Rules:
 - At the end of the current goal, resolve every actionable open entry before
   final handoff, unless a concrete external blocker is recorded.
 
+## 2026-07-24 - UPDATE-HEALTH-IGNORED-20260724 - Failed update health did not abort - fixed
+
+- Component: `cli.py:cmd_update` in-place update flow.
+- First observed: 2026-07-24, immutable RED evidence from the new transactional update test and inspection of the `wait_local_hub_health` call site.
+- Confirmed fact: The update called `wait_local_hub_health` but ignored its false result, so a failed Hub health gate did not abort the update or restore the previous runtime.
+- Root cause: Health was treated as an informational warning instead of the canary acceptance gate; package replacement had no transaction snapshot.
+- Fix / verification: Added a private runtime snapshot/restore transaction, restored services after failure, and made a false Hub health result raise and trigger rollback. `tests/test_update_semantics.py` passes `10` tests.
+- Status: fixed.
+- Next action: Prove the same transaction with a clean-host update and real client reconnection before closing S3.5.
+
 ## 2026-07-24 - WEBAUTHN-CEREMONY-EXPIRY-20260724 - Ceremony sessions rejected immediately - fixed
 
 - Component: `go-hub/internal/hub/webauthn.go` WebAuthn registration/login ceremony store.

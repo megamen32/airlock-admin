@@ -48,6 +48,17 @@ plan is [`PROJECT_PLAN.md`](./PROJECT_PLAN.md).
 
 ## Entries
 
+## 2026-07-24 - Transactional update rollback contract - completed
+
+- Milestone: `S3.5`
+- Owner: `Codex`
+- Scope: Make the existing CLI in-place update abort on failed Hub health and restore the pre-update runtime/configuration before restarting services.
+- Baseline / red evidence: `tests/test_update_semantics.py` exposed that `cmd_update` ignored a false `wait_local_hub_health` result; no runtime snapshot existed for package replacement failures.
+- Change: Added a private bounded runtime snapshot/restore transaction around `cmd_update`, restart of restored services after post-stop failure, and a hard health gate after Hub restart. Added focused rollback regression coverage and BUGS evidence.
+- Verification: `python3 -m pytest tests/test_update_semantics.py -q` -> `10 passed`; `python3 -m py_compile cli.py` passes. Clean-host, real client reconnection and signed canary evidence remain separate.
+- Delivery: Pending the current linear integration commit; no push, deployment or merge performed. Preserve the unrelated untracked remote-secret-ingress plan.
+- Next: Add a successful/failed end-to-end update rehearsal using two verified local artifacts, then keep physical/CI rollout proof separate.
+
 ## 2026-07-24 - Real MCP-client handshake delivery identity - completed
 
 - Milestone: `S1.3`

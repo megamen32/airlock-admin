@@ -23,6 +23,7 @@ import time
 import urllib.request
 import urllib.error
 import pwd
+from functools import wraps
 from email.utils import parsedate_to_datetime
 from pathlib import Path, PurePosixPath
 try:
@@ -4046,6 +4047,151 @@ def _service_pairs_for_update(install_hub: bool, install_shellmcp: bool, env: di
     return pairs
 
 
+class _UpdateRuntimeSnapshot:
+    """Private snapshot of files that an in-place update can replace."""
+
+    def __init__(self, paths: list[Path]):
+        self.root = Path(tempfile.mkdtemp(prefix='gptadmin-update-rollback-'))
+        self.entries: list[tuple[Path, Path, str, bool]] = []
+        self.runtime_stopped = False
+        try:
+            for index, source in enumerate(dict.fromkeys(Path(path) for path in paths)):
+                backup = self.root / str(index)
+                if source.is_symlink():
+                    raise ValueError(f'update rollback source cannot be a symlink: {source}')
+                if source.is_dir():
+                    shutil.copytree(source, backup, symlinks=True)
+                    kind, existed = 'directory', True
+                elif source.is_file():
+                    backup.parent.mkdir(parents=True, exist_ok=True)
+                    shutil.copy2(source, backup)
+                    kind, existed = 'file', True
+                else:
+                    kind, existed = 'missing', False
+                self.entries.append((source, backup, kind, existed))
+        except BaseException:
+            self.cleanup()
+            raise
+
+    def restore(self) -> None:
+        """Restore the pre-update paths, removing files created by the failed update."""
+
+        for source, backup, kind, existed in reversed(self.entries):
+            if source.is_dir() and not source.is_symlink():
+                shutil.rmtree(source)
+            elif source.exists() or source.is_symlink():
+                source.unlink()
+            if not existed:
+                continue
+            source.parent.mkdir(parents=True, exist_ok=True)
+            if kind == 'directory':
+                shutil.copytree(backup, source, symlinks=True)
+            else:
+                shutil.copy2(backup, source)
+
+    def cleanup(self) -> None:
+        """Remove the private snapshot directory after success or rollback."""
+
+        shutil.rmtree(self.root, ignore_errors=True)
+
+
+def _run_update_transaction(paths: list[Path], operation, *, rollback_callback=None):
+    """Run an update operation with file restoration on any failure.
+
+    The callback is intentionally invoked only after the snapshot has been
+    restored, so service restart observes the previous binaries/configuration.
+    """
+
+    snapshot = _UpdateRuntimeSnapshot(paths)
+    try:
+        return operation()
+    except BaseException:
+        try:
+            snapshot.restore()
+        except BaseException as restore_error:
+            print('WARNING: update rollback could not restore the previous runtime', file=sys.stderr)
+            if rollback_callback is None:
+                raise restore_error
+        if rollback_callback is not None:
+            rollback_callback()
+        raise
+    finally:
+        snapshot.cleanup()
+
+
+_active_update_snapshot: _UpdateRuntimeSnapshot | None = None
+
+
+def _mark_update_runtime_started() -> None:
+    """Mark the point after which a failed update must restart old services."""
+
+    if _active_update_snapshot is not None:
+        _active_update_snapshot.runtime_stopped = True
+
+
+def _update_runtime_paths() -> list[Path]:
+    """Return the installed paths touched by package replacement or restart."""
+
+    return [
+        INSTALL_DIR / 'cli',
+        INSTALL_DIR / 'agents',
+        INSTALL_DIR / 'client',
+        INSTALL_DIR / 'public',
+        BIN_DIR,
+        CLI_PATH,
+        ENV_FILE,
+        INSTALLED_BUILD_FILE,
+        FRPC_CONF,
+        UNIT_PATH_HUB,
+        UNIT_PATH_SHELLMCP,
+        UNIT_PATH_FRPC,
+        UNIT_PATH_CLOUDFLARED,
+        UNIT_PATH_AUTO_UPDATE,
+        globals().get('UNIT_PATH_AUTO_UPDATE_TIMER', UNIT_PATH_AUTO_UPDATE),
+    ]
+
+
+def _restart_update_services_after_rollback() -> None:
+    """Best-effort restart of the restored service set after a failed update."""
+
+    try:
+        env = env_read()
+        svc_daemon_reload()
+        install_hub = env.get('INSTALL_HUB') == 'true' or UNIT_PATH_HUB.exists()
+        install_shellmcp = env.get('INSTALL_SHELLMCP') == 'true' or UNIT_PATH_SHELLMCP.exists()
+        for name, path in _service_pairs_for_update(install_hub, install_shellmcp, env):
+            svc_enable_start(name, path)
+    except BaseException:
+        print('WARNING: restored runtime could not be restarted automatically', file=sys.stderr)
+
+
+def _transactional_update(func):
+    """Decorate the update command with rollback-safe runtime restoration."""
+
+    @wraps(func)
+    def wrapped(args):
+        global _active_update_snapshot
+        need_root()
+        snapshot = _UpdateRuntimeSnapshot(_update_runtime_paths())
+        _active_update_snapshot = snapshot
+        try:
+            return func(args)
+        except BaseException:
+            try:
+                snapshot.restore()
+            except BaseException:
+                print('WARNING: update rollback could not restore the previous runtime', file=sys.stderr)
+            if snapshot.runtime_stopped:
+                _restart_update_services_after_rollback()
+            raise
+        finally:
+            _active_update_snapshot = None
+            snapshot.cleanup()
+
+    return wrapped
+
+
+@_transactional_update
 def cmd_update(args):
     """In-place upgrade for existing installs.
 
@@ -4115,6 +4261,7 @@ def cmd_update(args):
             return
 
     print('Stopping installed GPTAdmin services for safe in-place update...')
+    _mark_update_runtime_started()
     svc_stop_multi(_service_pairs_for_update(install_hub, install_shellmcp, env))
 
     with tempfile.TemporaryDirectory() as td:
@@ -4180,7 +4327,8 @@ def cmd_update(args):
     svc_daemon_reload()
     if install_hub:
         svc_enable_start(svc_hub_name(), UNIT_PATH_HUB)
-        wait_local_hub_health(env, timeout_s=90)
+        if not wait_local_hub_health(env, timeout_s=90):
+            raise RuntimeError('local Hub health check failed after update')
     if env.get('FRP_ENABLE', 'false') == 'true':
         svc_frpc_enable_start_all(env)
     if env.get('TUNNEL_MODE') == 'cloudflare' or env.get('CLOUDFLARE_TUNNEL_ENABLE', 'false') == 'true':
