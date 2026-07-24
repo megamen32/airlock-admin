@@ -48,6 +48,17 @@ plan is [`PROJECT_PLAN.md`](./PROJECT_PLAN.md).
 
 ## Entries
 
+## 2026-07-24 - Installer quickstart auth vocabulary - completed
+
+- Milestone: `S0.5` / `S1.1`
+- Owner: `Codex`
+- Scope: Remove the legacy credential name from the shell installer completion help and protect the one-password product vocabulary with a regression.
+- Baseline / red evidence: Current-head Docker installer log `trash/logs/setup-e2e-ef31e3d.txt` contains `gptadmin tokens # покажет ТОЛЬКО CTL_TOKEN (хаб)`.
+- Change: Replaced the legacy credential wording with AdminPassword/OAuth migration-status language and added an installer quickstart regression.
+- Verification: RED/green focused installer tests pass; the preceding current-head Docker run captured the offending output and remains the pre-fix evidence.
+- Delivery: Pending the current linear integration commit; no push or deployment.
+- Next: Add the focused installer contract to the completion matrix and rerun the from-scratch Docker acceptance after commit.
+
 ## 2026-07-24 - Setup health acceptance gate - completed
 
 - Milestone: `S1.1`

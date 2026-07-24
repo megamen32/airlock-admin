@@ -32,6 +32,16 @@ Rules:
 - Status: fixed.
 - Next action: Retain the setup health gate in the from-scratch installer acceptance run.
 
+## 2026-07-24 - INSTALL-QUICKSTART-INTERNAL-AUTH-20260724 - Installer help exposed legacy credential name - fixed
+
+- Component: `deploy/install.sh` post-install quickstart.
+- First observed: 2026-07-24, immutable artifact `trash/logs/setup-e2e-ef31e3d.txt` from the current-head from-scratch Docker installer run.
+- Confirmed fact: The completion help tells operators that `gptadmin tokens` shows `CTL_TOKEN`, exposing an internal legacy credential name in normal setup output.
+- Root-cause hypothesis: The shell installer quickstart was not updated when the AdminPassword/OAuth product contract replaced user-managed bearer credentials.
+- Fix / verification: Replaced the legacy credential wording with AdminPassword/OAuth migration-status language and added `test_install_completion_uses_product_auth_vocabulary`; focused installer tests pass.
+- Status: fixed.
+- Next action: Keep the from-scratch installer output contract in the completion matrix.
+
 ## 2026-07-24 - WEBAUTHN-CEREMONY-EXPIRY-20260724 - Ceremony sessions rejected immediately - fixed
 
 - Component: `go-hub/internal/hub/webauthn.go` WebAuthn registration/login ceremony store.

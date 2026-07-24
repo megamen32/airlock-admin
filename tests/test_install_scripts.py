@@ -92,6 +92,13 @@ def test_cli_setup_completion_does_not_print_raw_bearer_credentials():
     assert "вставьте ключ" not in content
 
 
+def test_install_completion_uses_product_auth_vocabulary():
+    """The installer quickstart must not teach operators legacy credential names."""
+    content = (DEPLOY / "install.sh").read_text(encoding="utf-8")
+    assert "CTL_TOKEN" not in content
+    assert "AdminPassword/OAuth" in content
+
+
 def test_openapi_schema_exists():
     """OpenAPI schema should be available for Custom GPT import."""
     p = ROOT / "public" / "openapi.yaml"
