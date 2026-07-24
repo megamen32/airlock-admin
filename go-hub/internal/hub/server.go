@@ -762,8 +762,12 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/admin/api/security/mfa/totp/verify", s.requireCtl(s.adminTOTPVerify))
 	mux.HandleFunc("/admin/api/security/mfa/webauthn/register/begin", s.requireCtl(s.adminWebAuthnRegisterBegin))
 	mux.HandleFunc("/admin/api/security/mfa/webauthn/register/finish", s.requireCtl(s.adminWebAuthnRegisterFinish))
-	mux.HandleFunc("/admin/api/security/mfa/webauthn/login/begin", s.requireCtl(s.adminWebAuthnLoginBegin))
-	mux.HandleFunc("/admin/api/security/mfa/webauthn/login/finish", s.requireCtl(s.adminWebAuthnLoginFinish))
+	// Login ceremonies are the one admin surface reachable before the admin
+	// session exists. The handler still requires an exact same-origin browser
+	// request (or an existing internal credential), so it cannot become a
+	// cross-site credential oracle.
+	mux.HandleFunc("/admin/api/security/mfa/webauthn/login/begin", s.requireWebAuthnBrowser(s.adminWebAuthnLoginBegin))
+	mux.HandleFunc("/admin/api/security/mfa/webauthn/login/finish", s.requireWebAuthnBrowser(s.adminWebAuthnLoginFinish))
 	mux.HandleFunc("/admin/api/telemetry", s.requireCtl(s.adminTelemetry))
 	mux.HandleFunc("/admin/api/telemetry/event", s.requireCtl(s.adminTelemetry))
 	mux.HandleFunc("/admin/api/clients/revoke-all", s.requireCtl(s.adminClientsRevokeAll))
@@ -959,6 +963,32 @@ func (s *Server) requireCtl(next http.HandlerFunc) http.HandlerFunc {
 			return
 		}
 		s.writeCtlUnauthorized(w, r)
+	}
+}
+
+func (s *Server) requireWebAuthnBrowser(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if s.cfg.CtlToken != "" && tokenMatches(r, s.cfg.CtlToken) {
+			next(w, r)
+			return
+		}
+		if s.cfg.AdminPassword != "" && s.adminSessionValid(r) {
+			next(w, r)
+			return
+		}
+		expected := strings.TrimRight(s.origin(r), "/")
+		requestOrigin := strings.TrimRight(strings.TrimSpace(r.Header.Get("Origin")), "/")
+		if requestOrigin == "" {
+			if referer, err := url.Parse(r.Referer()); err == nil && referer.Scheme != "" && referer.Host != "" {
+				requestOrigin = strings.TrimRight(referer.Scheme+"://"+referer.Host, "/")
+			}
+		}
+		if requestOrigin != expected {
+			s.authAudit("webauthn_browser_denied", r, map[string]any{"reason": "same-origin required"})
+			writeJSON(w, http.StatusForbidden, map[string]any{"detail": "same-origin browser request required"})
+			return
+		}
+		next(w, r)
 	}
 }
 
@@ -3864,6 +3894,8 @@ func (s *Server) adminLogout(w http.ResponseWriter, r *http.Request) {
 func (s *Server) renderAdminLogin(w http.ResponseWriter, r *http.Request, errMsg string) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-store")
+	w.Header().Set("Referrer-Policy", "no-referrer")
+	w.Header().Set("Content-Security-Policy", "default-src 'none'; connect-src 'self'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; form-action 'self'; base-uri 'none'")
 	next := safeAdminNext(r.URL.Query().Get("next"))
 	if next == "/admin/login" || next == "/admin/logout" {
 		next = "/admin/"
@@ -3874,10 +3906,46 @@ func (s *Server) renderAdminLogin(w http.ResponseWriter, r *http.Request, errMsg
 	}
 	mfaHTML := ""
 	if s.securityRequiresMFA() {
-		mfaHTML = `<label for="mfa_code">MFA-код</label><input id="mfa_code" name="mfa_code" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" required>`
+		passkeyEnrolled := s.webAuthnEnrolled()
+		mfaRequired := " required"
+		if passkeyEnrolled {
+			mfaRequired = ""
+		}
+		mfaHTML = `<label for="mfa_code">MFA-код</label><input id="mfa_code" name="mfa_code" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}"` + mfaRequired + `>`
+		if passkeyEnrolled {
+			mfaHTML += `<button id="webauthn-login" type="button">Войти с passkey</button><div id="webauthn-status" class="foot" role="status" aria-live="polite"></div><script>
+(function () {
+  const form = document.getElementById('login-form');
+  const button = document.getElementById('webauthn-login');
+  const status = document.getElementById('webauthn-status');
+  const decode = (value) => Uint8Array.from(atob(value.replace(/-/g, '+').replace(/_/g, '/') + '='.repeat((4 - value.length % 4) % 4)), (char) => char.charCodeAt(0));
+  const encode = (value) => { let binary = ''; new Uint8Array(value).forEach((byte) => { binary += String.fromCharCode(byte); }); return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, ''); };
+  const fail = (error) => { status.textContent = error instanceof Error ? error.message : 'Passkey не подтверждён'; button.disabled = false; };
+  button.addEventListener('click', async () => {
+    button.disabled = true;
+    status.textContent = 'Подтвердите passkey в браузере';
+    try {
+      if (!window.PublicKeyCredential || !navigator.credentials) throw new Error('Этот браузер не поддерживает passkey');
+      const begin = await fetch('/admin/api/security/mfa/webauthn/login/begin', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+      if (!begin.ok) throw new Error('Не удалось начать проверку passkey');
+      const options = (await begin.json()).publicKey;
+      options.challenge = decode(options.challenge);
+      if (options.allowCredentials) options.allowCredentials = options.allowCredentials.map((item) => ({ ...item, id: decode(item.id) }));
+      const credential = await navigator.credentials.get({ publicKey: options });
+      if (!credential) throw new Error('Passkey не выбран');
+      const response = credential.response;
+      const finish = await fetch('/admin/api/security/mfa/webauthn/login/finish', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: credential.id, rawId: encode(credential.rawId), response: { clientDataJSON: encode(response.clientDataJSON), authenticatorData: encode(response.authenticatorData), signature: encode(response.signature), userHandle: response.userHandle ? encode(response.userHandle) : null }, type: credential.type }) });
+      if (!finish.ok) throw new Error('Сервер отклонил passkey');
+      document.getElementById('mfa_code').required = false;
+      form.submit();
+    } catch (error) { fail(error); }
+  });
+}());
+</script>`
+		}
 	}
 	page := `<!doctype html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>GPTAdmin Login</title><style>
-:root{color-scheme:dark}*{box-sizing:border-box}body{margin:0;min-height:100vh;display:grid;place-items:center;background:radial-gradient(circle at 20% 0,#1d2b64 0,#090d18 36%,#05070c 100%);color:#e5eefc;font-family:Inter,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}.card{width:min(460px,calc(100vw - 32px));padding:30px;border:1px solid rgba(148,163,184,.24);border-radius:26px;background:rgba(15,23,42,.86);box-shadow:0 24px 80px rgba(0,0,0,.42);backdrop-filter:blur(16px)}h1{margin:0 0 8px;font-size:28px}.muted{margin:0 0 22px;color:#94a3b8;line-height:1.45}.hint{margin:0 0 18px;padding:12px 14px;border-radius:16px;background:rgba(56,189,248,.08);border:1px solid rgba(56,189,248,.18);color:#cbd5e1;line-height:1.45}.hint code{color:#fff}.err{margin:0 0 14px;padding:10px 12px;border-radius:14px;background:rgba(239,68,68,.14);border:1px solid rgba(239,68,68,.35);color:#fecaca}label{display:block;margin-bottom:8px;color:#cbd5e1;font-size:14px}input,button{width:100%;padding:14px 15px;border-radius:16px;font-size:16px}input{border:1px solid #334155;background:#0b1220;color:#fff;outline:none}input:focus{border-color:#38bdf8;box-shadow:0 0 0 3px rgba(56,189,248,.16)}button{margin-top:14px;border:0;background:linear-gradient(135deg,#7c3aed,#06b6d4);color:white;font-weight:800;cursor:pointer}.foot{margin-top:16px;color:#64748b;font-size:12px;text-align:center}</style></head><body><main class="card"><h1>GPTAdmin</h1><p class="muted">Введите admin-пароль. Без cookie-сессии админка и её API не отдаются.</p><div class="hint">Для браузерной админки нужен <strong>admin-пароль</strong>. Для Custom GPT / generated Action schema используйте OAuth или Bearer JWT, выпущенный через Hub.</div>` + errHTML + `<form method="post" action="/admin/login"><input type="hidden" name="next" value="` + html.EscapeString(next) + `"><label for="password">Пароль</label><input id="password" name="password" type="password" autocomplete="current-password" autofocus required>` + mfaHTML + `<button type="submit">Войти</button></form><div class="foot">session cookie · 12h</div></main></body></html>`
+:root{color-scheme:dark}*{box-sizing:border-box}body{margin:0;min-height:100vh;display:grid;place-items:center;background:radial-gradient(circle at 20% 0,#1d2b64 0,#090d18 36%,#05070c 100%);color:#e5eefc;font-family:Inter,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}.card{width:min(460px,calc(100vw - 32px));padding:30px;border:1px solid rgba(148,163,184,.24);border-radius:26px;background:rgba(15,23,42,.86);box-shadow:0 24px 80px rgba(0,0,0,.42);backdrop-filter:blur(16px)}h1{margin:0 0 8px;font-size:28px}.muted{margin:0 0 22px;color:#94a3b8;line-height:1.45}.hint{margin:0 0 18px;padding:12px 14px;border-radius:16px;background:rgba(56,189,248,.08);border:1px solid rgba(56,189,248,.18);color:#cbd5e1;line-height:1.45}.hint code{color:#fff}.err{margin:0 0 14px;padding:10px 12px;border-radius:14px;background:rgba(239,68,68,.14);border:1px solid rgba(239,68,68,.35);color:#fecaca}label{display:block;margin-bottom:8px;color:#cbd5e1;font-size:14px}input,button{width:100%;padding:14px 15px;border-radius:16px;font-size:16px}input{border:1px solid #334155;background:#0b1220;color:#fff;outline:none}input:focus{border-color:#38bdf8;box-shadow:0 0 0 3px rgba(56,189,248,.16)}button{margin-top:14px;border:0;background:linear-gradient(135deg,#7c3aed,#06b6d4);color:white;font-weight:800;cursor:pointer}.foot{margin-top:16px;color:#64748b;font-size:12px;text-align:center}</style></head><body><main class="card"><h1>GPTAdmin</h1><p class="muted">Введите admin-пароль. Без cookie-сессии админка и её API не отдаются.</p><div class="hint">Для браузерной админки нужен <strong>admin-пароль</strong>. Для Custom GPT / generated Action schema используйте OAuth или Bearer JWT, выпущенный через Hub.</div>` + errHTML + `<form id="login-form" method="post" action="/admin/login"><input type="hidden" name="next" value="` + html.EscapeString(next) + `"><label for="password">Пароль</label><input id="password" name="password" type="password" autocomplete="current-password" autofocus required>` + mfaHTML + `<button type="submit">Войти</button></form><div class="foot">session cookie · 12h</div></main></body></html>`
 	_, _ = io.WriteString(w, page)
 }
 

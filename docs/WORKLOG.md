@@ -48,6 +48,28 @@ plan is [`PROJECT_PLAN.md`](./PROJECT_PLAN.md).
 
 ## Entries
 
+## 2026-07-24 - WebAuthn browser acceptance and ceremony hardening - completed
+
+- Milestone: `S2.1a`
+- Owner: `Codex`
+- Scope: Complete the locked-down admin passkey browser flow and its same-origin/CSP boundaries on the single integration branch.
+- Baseline / red evidence: The new browser contract first failed because login HTML had no ceremony controls; real Chromium then exposed two runtime defects: login endpoints were inaccessible without internal credentials, and the library's zero ceremony expiry was rejected immediately. CSP also initially blocked same-origin fetches.
+- Change: Added the passkey browser ceremony to `/admin/login`, restricted pre-session begin/finish to same-origin browser requests or existing internal/admin credentials, allowed only same-origin API connections in the login CSP, and made zero expiry conditional while retaining one-time server-side ceremony state.
+- Verification: Focused WebAuthn/policy tests pass; Chromium virtual-authenticator run completed registration, WebAuthn proof, `locked_down` transition, logout and passkey login to `/admin/`; full Hub, race/vet, Python, matrix, Darwin and Docker gates pass. No secret material was emitted.
+- Delivery: Pending the current linear integration commit; no push, deployment or merge performed. Preserve the unrelated untracked remote-secret-ingress plan.
+- Next: Obtain external OIDC, real MCP-client, physical-standby, OTEL-backend and CI-publication evidence before closing the remaining roadmap gates.
+
+## 2026-07-24 - Worklog delivery hash correction - completed
+
+- Milestone: `S2.1a` / `S2.2`
+- Owner: `Codex`
+- Scope: Correct the immutable commit reference for the prior policy/passkey entry without rewriting its historical content.
+- Baseline / red evidence: The earlier entry retained pre-amend hash `069bdc4` after the feature commit was amended to `fdb2608`.
+- Change: Record the corrected delivery identity here; the historical entry remains append-only.
+- Verification: `git show --no-patch --format='%H %s' fdb2608` identifies the policy/passkey feature commit.
+- Delivery: Documentation correction in the current linear integration work; no push or deployment.
+- Next: Use exact commit IDs for subsequent handoffs.
+
 ## 2026-07-24 - Docker install and failover acceptance - completed
 
 - Milestone: `S0.1/S3.4`

@@ -173,7 +173,7 @@ func (s *Server) takeWebAuthnSession(r *http.Request, kind string) (webauthnlib.
 	session, ok := s.webauthnSessions[cookie.Value]
 	delete(s.webauthnSessions, cookie.Value)
 	s.mu.Unlock()
-	if !ok || session.Kind != kind || time.Now().After(session.Session.Expires) {
+	if !ok || session.Kind != kind || (!session.Session.Expires.IsZero() && time.Now().After(session.Session.Expires)) {
 		return webauthnlib.SessionData{}, false
 	}
 	return session.Session, true

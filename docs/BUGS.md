@@ -12,6 +12,16 @@ Rules:
 - At the end of the current goal, resolve every actionable open entry before
   final handoff, unless a concrete external blocker is recorded.
 
+## 2026-07-24 - WEBAUTHN-CEREMONY-EXPIRY-20260724 - Ceremony sessions rejected immediately - fixed
+
+- Component: `go-hub/internal/hub/webauthn.go` WebAuthn registration/login ceremony store.
+- First observed: 2026-07-24, immutable browser evidence from the Playwright session `gptadmin-webauthn` and the `go-webauthn` v0.15.0 `SessionData.Expires` contract.
+- Confirmed fact: A begin request returns 200 and stores a ceremony, but the matching finish request returns `WebAuthn registration ceremony is missing or expired` immediately.
+- Root-cause hypothesis: The Hub checks `time.Now().After(session.Session.Expires)` without allowing the library's zero expiry sentinel, so a valid session is rejected before credential validation.
+- Fix / verification: Expiry validation now treats the library's zero expiry as unset; the focused Hub test passes, and Chromium completed registration, passkey verification, and locked-down browser login.
+- Status: fixed.
+- Next action: Retain the browser-backed ceremony regression evidence in the release acceptance gate.
+
 ## 2026-07-24 - POLICY-BOUNDARY-BYPASS-20260724 - Legacy write entrypoints skip central policy - open
 
 - Component: `go-hub/internal/hub/server.go` bridge/prompt, bulk execution and
