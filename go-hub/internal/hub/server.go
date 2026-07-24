@@ -752,6 +752,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/mcp", s.mcpEndpoint)
 	mux.HandleFunc("/connect", s.connectionPage)
 	mux.HandleFunc("/connect.json", s.connectionPage)
+	mux.HandleFunc("/connect/callback", s.browserOAuthCallback)
 	mux.HandleFunc("/secret-input/", s.secretIngress)
 	mux.HandleFunc("/_services/", s.httpServiceEndpoint)
 	mux.HandleFunc("/server/", s.serverMCPEndpoint)
@@ -5929,6 +5930,9 @@ func (s *Server) allowedRedirect(uri string) bool {
 	if err != nil || u.Scheme == "" || u.Host == "" {
 		return false
 	}
+	if s.sameOriginOAuthCallback(u) {
+		return true
+	}
 	host := strings.ToLower(u.Hostname())
 	if (host == "localhost" || host == "127.0.0.1") && (u.Scheme == "http" || u.Scheme == "https") {
 		return true
@@ -5943,6 +5947,17 @@ func (s *Server) allowedRedirect(uri string) bool {
 		return true
 	}
 	return false
+}
+
+func (s *Server) sameOriginOAuthCallback(uri *url.URL) bool {
+	if uri == nil || uri.Path != "/connect/callback" || uri.RawQuery != "" || uri.Fragment != "" {
+		return false
+	}
+	origin, err := url.Parse(strings.TrimRight(s.cfg.PublicOrigin, "/"))
+	if err != nil || origin.Scheme == "" || origin.Host == "" {
+		return false
+	}
+	return uri.Scheme == origin.Scheme && strings.EqualFold(uri.Host, origin.Host)
 }
 
 func (s *Server) allowedResource(resource string, r *http.Request) bool {

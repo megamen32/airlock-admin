@@ -15,6 +15,7 @@ PRODUCT_DOCS = (
     ROOT / "docs" / "SHELLMCP.md",
     ROOT / "docs" / "FAQ.md",
     ROOT / "public" / "admin_dashboard.html",
+    ROOT / "public" / "mcp-bridge.user.js",
 )
 FORBIDDEN_PRODUCT_NAMES = (
     "CTL_TOKEN",

@@ -2320,3 +2320,14 @@ plan is [`PROJECT_PLAN.md`](./PROJECT_PLAN.md).
 - Verification: `pytest -q tests/test_product_auth_language.py tests/test_admin_dashboard_js.py tests/test_admin_ui.py` passes `20 passed`.
 - Delivery: Local uncommitted slice on the single linear branch; no deployment or push.
 - Next: Run the full Python suite once more, then commit the combined documentation/UI security correction.
+
+## 2026-07-24 - Browser extension OAuth connection - completed
+
+- Milestone: `S1.3`, `S4.1`
+- Owner: Codex
+- Scope: Browser extension OAuth client and Hub same-origin callback.
+- Baseline / red evidence: `tests/test_browser_extension_oauth.py` failed because the userscript stored a manual bridge key and called legacy query-key prompt endpoints.
+- Change: Added `/connect/callback`, same-origin redirect validation, browser-safe code handoff, PKCE registration/exchange, and OAuth JSON-RPC calls to `/mcp`; removed manual credential entry and legacy prompt calls from the userscript.
+- Verification: `cd go-hub && go test ./internal/hub -run '^TestBrowserExtensionOAuthUsesSameOriginCallbackWithoutCredentialCopy$' -count=1`, `pytest -q tests/test_browser_extension_oauth.py`, and `node --check public/mcp-bridge.user.js` pass.
+- Delivery: Local uncommitted slice on the single linear branch; no deployment or push.
+- Next: Run Hub full/race/vet and full Python acceptance, then commit this browser-connection slice.

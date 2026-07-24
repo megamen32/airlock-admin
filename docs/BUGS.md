@@ -538,3 +538,13 @@ Rules:
 - Fix / verification: Replaced credential-copy instructions with AdminPassword, OAuth and managed connection language; removed internal names from setup/tokens CLI help and normal error messages; made the legacy dashboard read only typed security preset state and removed shell-based credential mutation/export. Product/UI regressions pass (`20 passed`).
 - Status: fixed.
 - Next action: Keep advanced implementation names confined to security/configuration reference docs and test new onboarding pages through the product-language regression.
+
+## 2026-07-24 - BROWSER-EXTENSION-MANUAL-CREDENTIAL-20260724 - Browser bridge required manual credential entry - fixed
+
+- Component: `public/mcp-bridge.user.js` and the Hub OAuth redirect surface.
+- First observed: 2026-07-24, product-surface audit; RED regression `tests/test_browser_extension_oauth.py` found the extension stored a bridge key and called `/mcp-prompt` with it.
+- Confirmed fact: The browser extension asked users to paste an internal connection credential and sent it as a URL query parameter.
+- Root cause: The legacy extension predated the Hub connection page and OAuth PKCE flow.
+- Fix / verification: Added same-origin `/connect/callback` OAuth handoff, PKCE client registration/exchange in the extension, and OAuth JSON-RPC calls to `/mcp`; removed manual key storage and legacy prompt endpoints. Hub focused OAuth regression, `pytest -q tests/test_browser_extension_oauth.py` (`2 passed`) and `node --check public/mcp-bridge.user.js` pass.
+- Status: fixed.
+- Next action: Keep browser extension OAuth callback and message-origin checks in the client acceptance gate.
