@@ -48,6 +48,17 @@ plan is [`PROJECT_PLAN.md`](./PROJECT_PLAN.md).
 
 ## Entries
 
+## 2026-07-24 - Final linear acceptance after failover delivery - completed
+
+- Milestone: `S0.1` / `S3.4` / repository acceptance gate
+- Owner: `Codex`
+- Scope: Verify the current single-branch vertex after the clean-clone failover delivery.
+- Baseline / red evidence: The prior failover drill exposed executable-mode, source-checkout path, port-collision, binary-lifetime and reclaim-authentication defects; each now has a recorded regression or black-box scenario.
+- Change: No additional runtime change; record final acceptance for the current vertex.
+- Verification: Python `200 passed, 3 skipped`; completion matrix `12 passed`; Hub/ShellMCP/ProxyRelay full tests, race and vet passed; Darwin Hub arm64/amd64 cross-builds passed; clean clone `/tmp/gptadmin-final-clean-4nf5uC` at commit `0bd860a91f7d3670e03e8c38ba7e6f3b570cacb4` ran all seven failover black-box scenarios successfully; `git diff --check` passed.
+- Delivery: Linear commits `4d26a3e43963c5197d95faca86949da5ddfe637f` and `0bd860a91f7d3670e03e8c38ba7e6f3b570cacb4`; no push, deployment or merge; preserve the unrelated untracked remote-secret-ingress plan.
+- Next: Close only external acceptance gates (native hosts, real collector, physical fallback hosts, signed/public release and third-party adapters) when their owning environments provide evidence.
+
 ## 2026-07-24 - Clean-clone failover script mode - completed
 
 - Milestone: `S0.1` / `S3.4`
