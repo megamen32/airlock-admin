@@ -100,6 +100,112 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Job"
+  /webhooks/v1/{route}:
+    post:
+      operationId: webhookIngress
+      summary: Accept one authenticated webhook event
+      description: The route configuration selects the MCP or Shell action; the event cannot select a target or callback URL.
+      security:
+        - webhookToken: []
+      parameters:
+        - name: route
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: Idempotency-Key
+          in: header
+          required: false
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json: {}
+      responses:
+        "202":
+          description: Accepted webhook job
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WebhookAccepted"
+  /webhook-jobs/{job_id}:
+    get:
+      operationId: webhookJob
+      summary: Read an authenticated webhook job
+      security:
+        - webhookToken: []
+      parameters:
+        - name: job_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Durable webhook job state
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WebhookJob"
+  /webhook-routes:
+    get:
+      operationId: listWebhookRoutes
+      summary: List webhook route metadata
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Route metadata without secrets
+    post:
+      operationId: createWebhookRoute
+      summary: Create an operator-owned webhook route
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WebhookRoute"
+      responses:
+        "201":
+          description: Created route metadata without secrets
+  /webhook-routes/{route}:
+    put:
+      operationId: replaceWebhookRoute
+      summary: Replace an operator-owned webhook route
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: route
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WebhookRoute"
+      responses:
+        "200":
+          description: Updated route metadata without secrets
+    delete:
+      operationId: deleteWebhookRoute
+      summary: Delete an operator-owned webhook route
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: route
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Route deleted
   /proxy-control/v1/request:
     post:
       operationId: networkProxyRequest
@@ -242,6 +348,9 @@ components:
     bearerAuth:
       type: http
       scheme: bearer
+    webhookToken:
+      type: http
+      scheme: bearer
   schemas:
     NetworkProxyPolicy:
       type: object
@@ -276,6 +385,51 @@ components:
           type: integer
           minimum: 1
           description: Lease duration in nanoseconds in the Go JSON contract
+    WebhookRoute:
+      type: object
+      additionalProperties: false
+      required: [id, action]
+      properties:
+        id:
+          type: string
+        token:
+          type: string
+        hmac_secret:
+          type: string
+        action:
+          type: object
+          additionalProperties: true
+    WebhookAccepted:
+      type: object
+      required: [route_id, job_id, status]
+      properties:
+        route_id:
+          type: string
+        job_id:
+          type: string
+        status:
+          type: string
+          enum: [accepted]
+        duplicate:
+          type: boolean
+    WebhookJob:
+      type: object
+      required: [job_id, route_id, status, created_at]
+      properties:
+        job_id:
+          type: string
+        route_id:
+          type: string
+        status:
+          type: string
+          enum: [accepted, running, completed, failed]
+        created_at:
+          type: string
+          format: date-time
+        result:
+          type: object
+        error:
+          type: string
     NetworkProxyCapability:
       type: object
       additionalProperties: false

@@ -48,7 +48,7 @@ evidence unambiguous before adding surface area.
 | Milestone | Deliverable | Exit gate | Status |
 | --- | --- | --- | --- |
 | S0.1 Supported golden paths | One matrix for Linux/macOS/Windows/Android and Codex/ChatGPT/Claude-style clients | Each path has install, auth, first tool call and uninstall/rollback commands | Planned |
-| S0.2 Contract suite | Language-neutral Hub and ShellMCP contract suite with implementation matrix | Go is required green; alternative implementation can be run by env-configured command | In progress |
+| S0.2 Contract suite | Language-neutral Hub and ShellMCP contract suite with implementation matrix | Go is required green; alternative implementation can be run by env-configured command | Complete |
 | S0.3 Release provenance | Version, commit, checksum and platform architecture are observable from the artifact | CI verifies every release artifact, manifest and installer link before publish | In progress |
 | S0.4 Engineering governance | This plan, worklog and agent handoff discipline | New work records scope, evidence, CI link and next owner action | Active |
 | S0.5 One-password product contract | Implementable design and migration from visible token sprawl to AdminPassword + scoped JWT connections | Security model, migration phases and black-box acceptance suite are approved before runtime migration | Active |

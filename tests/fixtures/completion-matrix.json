@@ -1,0 +1,91 @@
+{
+  "proxy": [
+    {
+      "id": "go-shellmcp-network-policy",
+      "command": "cd go-shellmcp && go test ./internal/networkproxy -run 'TestPolicy|TestPullAndWebhook' -count=1",
+      "evidence": "allowlisted LAN/internet proxy targets and signed offer verification"
+    },
+    {
+      "id": "go-proxyrelay-blackbox",
+      "command": "cd go-proxyrelay && go test ./blackbox ./internal/relay ./internal/ticket -count=1",
+      "evidence": "real relay stream and ticket contract"
+    }
+  ],
+  "endpoints": [
+    {
+      "id": "hub-http-contract",
+      "command": "python3 -m pytest tests/test_hub_contract.py -q",
+      "evidence": "health/version/auth/OpenAPI/MCP endpoint behavior"
+    },
+    {
+      "id": "shellmcp-http-contract",
+      "command": "python3 -m pytest tests/test_shellmcp_contract.py -q",
+      "evidence": "ShellMCP authenticated endpoint and service contract"
+    }
+  ],
+  "hooks": [
+    {
+      "id": "webhook-gateway",
+      "command": "cd go-hub && go test ./internal/hub -run 'TestWebhookGateway' -count=1",
+      "evidence": "token/HMAC ingress, replay window, dispatch and callback"
+    },
+    {
+      "id": "webhook-http-surface",
+      "command": "cd go-hub && go test ./internal/hub -run 'TestWebhook(RoutesCRUD|JobsSurviveRestart|JobEndpointRequiresRouteAuth|CallbackRetries)' -count=1",
+      "evidence": "authenticated job endpoint and durable delivery state"
+    }
+  ],
+  "mcp_forwarding": [
+    {
+      "id": "hub-mcp-forwarding",
+      "command": "python3 -m pytest tests/test_hub_contract.py -k 'global_mcp or per_server_mcp_and_action_proxy' -q",
+      "evidence": "global/per-server list and call result propagation"
+    },
+    {
+      "id": "queued-mcp-forwarding",
+      "command": "cd go-shellmcp && go test ./internal/server -run 'TestQueueExecutesGenericMCPToolAndPostsResult' -count=1",
+      "evidence": "queue-to-MCP tool execution and result postback"
+    }
+  ],
+  "file_sharing": [
+    {
+      "id": "readonly-inspection",
+      "command": "cd go-shellmcp && go test ./internal/inspect -run 'TestReadFile|TestListDirectory' -count=1",
+      "evidence": "bounded reads, redaction and metadata-only listing"
+    },
+    {
+      "id": "safe-file-state",
+      "command": "cd go-shellmcp && go test ./internal/shell -run 'TestSnapshot|TestRestore' -count=1",
+      "evidence": "bounded snapshot and safe restore behavior"
+    },
+    {
+      "id": "managed-file-backup",
+      "command": "cd go-shellmcp && go test ./internal/server -run 'TestMCPFileBackupBackupListRestoreCleanup' -count=1",
+      "evidence": "MCP file_backup create/list/restore/cleanup contract"
+    }
+  ],
+  "profiles": [
+    {
+      "id": "admin-access-profile",
+      "command": "cd go-hub && go test ./internal/hub -run 'TestManagedClientAccessProfile|TestAccessProfileCASInventoryAndAuthContext|TestAccessProfileSharedConfigRefreshAndWorkspacePersistence|TestAccessProfileRejectsUnsupportedInstructionSet' -count=1",
+      "evidence": "profile persistence, live refresh, bindings and effective tool filtering"
+    }
+  ],
+  "security_policies": [
+    {
+      "id": "capability-policy",
+      "command": "cd go-hub && go test ./internal/hub -run 'Test.*Policy|Test.*AuthContext|Test.*Nonce' -count=1",
+      "evidence": "fail-closed capability decisions and replay-safe auth"
+    },
+    {
+      "id": "readonly-security",
+      "command": "cd go-shellmcp && go test ./internal/inspect ./internal/redact ./internal/security -count=1",
+      "evidence": "path boundary, symlink/credential rejection and secret redaction"
+    },
+    {
+      "id": "repository-secret-boundary",
+      "command": "python3 -m pytest tests/test_no_secrets.py tests/test_public_mirror.py -q",
+      "evidence": "tracked-tree public/private and credential scan"
+    }
+  ]
+}

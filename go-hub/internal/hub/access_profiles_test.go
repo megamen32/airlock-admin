@@ -419,3 +419,15 @@ func accessProfileTestRequest(t *testing.T, server *Server, method, path string,
 	server.Handler().ServeHTTP(w, req)
 	return w
 }
+
+func TestAccessProfileRejectsUnsupportedInstructionSet(t *testing.T) {
+	_, err := normalizeAccessProfile(AccessProfile{
+		ID:               "ops",
+		InstructionSetID: "custom-operator-v2",
+		AccessMode:       accessModeFull,
+		Version:          1,
+	})
+	if err == nil || !strings.Contains(err.Error(), "instruction_set_id") {
+		t.Fatalf("normalizeAccessProfile error = %v, want unsupported instruction_set_id", err)
+	}
+}

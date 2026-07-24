@@ -87,3 +87,29 @@ func TestReadFileRejectsSymlinkEscapeAndCredentialDirectories(t *testing.T) {
 		t.Fatal("inspection entered a credential directory")
 	}
 }
+
+func TestListDirectoryRejectsPathsOutsideAllowedRoots(t *testing.T) {
+	allowed := t.TempDir()
+	outside := t.TempDir()
+	if _, err := Run(Request{Action: "list_directory", Path: outside, AllowedRoots: []string{allowed}}); err == nil {
+		t.Fatal("directory inspection escaped its allowed roots")
+	}
+}
+
+func TestListDirectoryRejectsSymlinkEscapeAndCredentialDirectories(t *testing.T) {
+	root := t.TempDir()
+	outside := t.TempDir()
+	link := filepath.Join(root, "escape")
+	if err := os.Symlink(outside, link); err == nil {
+		if _, err := Run(Request{Action: "list_directory", Path: link, AllowedRoots: []string{root}}); err == nil {
+			t.Fatal("directory inspection followed a symlink outside its allowed roots")
+		}
+	}
+	sshDir := filepath.Join(root, ".ssh")
+	if err := os.MkdirAll(sshDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Run(Request{Action: "list_directory", Path: sshDir, AllowedRoots: []string{root}}); err == nil {
+		t.Fatal("directory inspection entered a credential directory")
+	}
+}

@@ -16,6 +16,7 @@ shellmcp agents, handles auth, and serves the web panel.
 5. **Serves the panel** — web UI at `/admin` (queue, agent health, logs).
 6. **Exposes MCP** — MCP remote SSE at `/mcp` for MCP clients.
 7. **Exposes OpenAPI** — `/api.json` and `/openapi.yaml` for Custom GPT import.
+8. **Accepts webhooks** — authenticated `/webhooks/v1/{route}` ingress can dispatch a configured MCP, prompt, or Shell action.
 
 ## Running
 
@@ -37,9 +38,14 @@ By default it listens on `0.0.0.0:25900`. Change with `--port` or `HUB_PORT`.
 | `GET /api.json` | none | OpenAPI schema (for Custom GPT import) |
 | `GET /openapi.yaml` | none | OpenAPI YAML |
 | `POST /authorize` | `ADMIN_PASSWORD` form | OAuth authorize endpoint |
+| `POST /webhooks/v1/{route}` | Route token or HMAC signature | Universal event ingress |
+| `GET /webhook-jobs/{job_id}` | Same route credential | Read webhook job status/result |
+| `GET/POST /webhook-routes` | Hub control auth | List or create route definitions without returning secrets |
+| `PUT/DELETE /webhook-routes/{route}` | Hub control auth | Replace or remove an operator-owned route |
 | `POST /oauth/token` | client credentials | OAuth token endpoint |
 
 See [API Reference](./API_REFERENCE.md) for full details.
+See [Webhooks](./WEBHOOKS.md) for route configuration and delivery semantics.
 
 ## Web panel (`/admin`)
 

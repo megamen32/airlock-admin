@@ -48,6 +48,40 @@ plan is [`PROJECT_PLAN.md`](./PROJECT_PLAN.md).
 
 ## Entries
 
+## 2026-07-24 - Platform completion gate and single integration vertex - completed
+
+- Milestone: `S0.2` / `S0.3` / acceptance gates for proxy, endpoints, hooks, MCP, file sharing, profiles and security
+- Owner: `Codex`
+- Scope: `/home/roomhacker/gptadmin`; preserve pre-existing dirty webhook/docs work while building one automated completion matrix and closing only evidence-backed runtime gaps.
+- Baseline / red evidence: Canonical `docs/PROJECT_PLAN.md` still lists multiple roadmap milestones as planned/in progress; the pre-fix webhook tree had no durable state, no route CRUD, the matrix was structural-only, and the Docker installer scenario exhausted stale input.
+- Change: Added the executable `tests/test_completion_matrix.py` and fixture; completed webhook route CRUD, secret-free metadata, atomic `0600` config/state persistence, restart-safe jobs/idempotency and bounded callback retries; added OpenAPI parity, profile instruction-set fail-closed validation, readonly/file-backup/symlink regressions and policy-denial audit attribution; synchronized disposable installer E2E with the checked-in CLI and current service contracts.
+- Verification: `python3 -m pytest tests/ --ignore=tests/e2e -q` -> `157 passed, 2 skipped`; `cd go-hub && go test -race ./...` -> pass; `cd go-shellmcp && go test -race ./...` -> pass; `cd go-proxyrelay && go test -race ./...` -> pass; all modules `go vet` -> pass; Go Hub and ShellMCP Darwin arm64 builds -> pass; Hub/ShellMCP black-box contracts -> `12 passed`; completion matrix -> `9 passed`; Docker failover -> 7 scenarios passed; Docker installer/tunnel -> user install, system/FRP and backend scenarios passed with exit code 0; public/security scan -> `3 passed`.
+- Delivery: Final integration commit on `codex/haos-addon-public`; no production restart or external deploy performed. The unrelated pre-existing `docs/superpowers/plans/2026-07-24-remote-secret-ingress.md` remains uncommitted by design.
+- Next: Merge the single final commit into `main` after review; external open bug entries still require elevated Windows cleanup and the owning HAOS deployment task.
+
+## 2026-07-24 - Universal Webhook/Event Gateway - completed
+
+- Milestone: `S4.1`
+- Owner: `Codex`
+- Scope: Add the Hub-owned universal webhook ingress and dispatcher. A configured route authenticates a JSON event, renders configured MCP/prompt/Shell actions, creates a Hub job, deduplicates repeated deliveries, and optionally posts the terminal result to a configured callback. Agent Herder remains an ordinary MCP target.
+- Baseline / red evidence: `go test ./internal/hub -run TestWebhookGateway -count=1` initially failed because the webhook route/config/job contract did not exist.
+- Change: Added `go-hub/internal/hub/webhook_gateway.go` and focused tests, registered `/webhooks/v1/{route}` and `/webhook-jobs/{job_id}`, loaded operator routes from `GPTADMIN_WEBHOOK_CONFIG_FILE`, and documented the universal MCP/prompt/Shell action contract.
+- Acceptance: `go test -race ./...` passes; the focused tests prove token/HMAC auth, raw-body signatures and replay window, JSON template rendering, route-scoped idempotency, asynchronous Shell/MCP dispatch and callback delivery. Python suite passes `148`, skips `2`.
+- Delivery: Local source and docs only; no commit, push, deploy, or runtime restart was performed. Pre-existing dirty `docs/BUGS.md`, historical `docs/WORKLOG.md` entries, and `docs/superpowers/plans/2026-07-24-remote-secret-ingress.md` were preserved.
+- Known dirty files: Preserve the pre-existing `docs/BUGS.md`, `docs/WORKLOG.md` changes and `docs/superpowers/plans/2026-07-24-remote-secret-ingress.md`; do not merge secret-ingress work into this slice.
+- Next: Add admin-managed route CRUD and durable webhook delivery state before enabling production webhook configuration.
+
+## 2026-07-23 - Public HAOS standby migration and physical drill - completed
+
+- Milestone: `S3.4`
+- Owner: `Codex`
+- Scope: Add the public Apps repository on HAOS, preserve Supervisor options and `/data`, migrate only the standby app to image `1.0.5`, verify Hub/fallback/credential boundaries, and run promotion plus signed reclaim before removing the old local add-on backup.
+- Baseline / red evidence: HAOS host `a0d7b954-ssh` ran `local_gptadmin_hub_standby` image `1.0.4`; public image digest and repository commit are recorded in the handed-off entry above. The immutable runtime evidence is `trash/logs/haos-public-drill-20260723-01.txt`.
+- Change: Registered public repository slug `21623b8c`, installed public `gptadmin_hub_standby` `1.0.5`, preserved Supervisor options and `/data` through `/backup/gptadmin-hub-standby-migration-20260723T184032Z`, configured direct primary health plus fallback `9101`, preserved only the cross-node reclaim bridge key in protected data, and removed the stopped local add-on after the drill.
+- Verification: Public app is `started` on repository `21623b8c`; Hub `:9001` and origin-form fallback `:9101` return `200`; credential-only scan reports `0` exact secret hits with options/internal secrets mode `600`; stopping only `gptadmin-hub.service` promoted public build `1.0.5`; starting Hub yielded `accepted=true` and `reclaimed_primary=true`; restoring primary FRP returned public build `128`. Primary Hub and FRP are active; old local container/image are absent; rollback data and image archives remain present.
+- Delivery: Live HAOS migration and full physical drill completed. Source/docs changes are local in `/home/roomhacker/gptadmin`; no new commit or push was created in this operational slice.
+- Next: Run the separate second-physical-fallback drill required by `S3.4`.
+
 ## 2026-07-23 - Public HAOS app installation and acceptance - handed-off
 
 - Milestone: `S3.4`

@@ -396,6 +396,9 @@ func normalizeAccessProfile(profile AccessProfile) (AccessProfile, error) {
 	if instructionSetID == "" {
 		instructionSetID = defaultInstructionSetID
 	}
+	if instructionSetID != defaultInstructionSetID {
+		return AccessProfile{}, fmt.Errorf("instruction_set_id %q is not supported; use %q", instructionSetID, defaultInstructionSetID)
+	}
 	if profile.AccessMode != accessModeFull && profile.AccessMode != accessModeReadonly {
 		return AccessProfile{}, errors.New("access_mode must be full or readonly")
 	}

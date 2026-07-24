@@ -32,6 +32,8 @@ Full environment-variable reference, auth model, and OAuth setup.
 | `BACKGROUND_TASK_TTL` | 3600 | How long completed background jobs are kept (seconds) |
 | `GPTADMIN_STARTUP_INSTRUCTIONS_FILE` | `$GPTADMIN_CONFIG_DIR/startup_instructions.md` | Optional local Markdown startup instructions for MCP clients. |
 | `GPTADMIN_STARTUP_INSTRUCTIONS` | — | Optional environment override for startup instructions; takes precedence over the file. |
+| `GPTADMIN_WEBHOOK_CONFIG_FILE` | `$GPTADMIN_CONFIG_DIR/webhooks.json` | Operator-owned universal webhook route definitions. |
+| `GPTADMIN_WEBHOOK_STATE_FILE` | `$GPTADMIN_CONFIG_DIR/webhook_state.json` | Durable webhook jobs and replay keys; written with mode `0600`. |
 
 ### MCP startup instructions
 

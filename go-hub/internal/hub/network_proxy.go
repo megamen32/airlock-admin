@@ -1116,13 +1116,19 @@ func networkProxyErrorStatus(err error) int {
 }
 
 func (s *Server) callNetworkProxyTool(callerProfileID, name string, args map[string]any) (map[string]any, int) {
-	s.addNetworkProxyAudit("hub_tool", map[string]any{"tool": name})
+	s.addNetworkProxyAudit("hub_tool", map[string]any{"tool": name, "profile_id": callerProfileID, "decision": "evaluate"})
+	denied := func(err error) (map[string]any, int) {
+		if errors.Is(err, ErrNetworkProxyUnauthorized) {
+			s.addNetworkProxyAudit("hub_tool_denied", map[string]any{"tool": name, "profile_id": callerProfileID, "decision": "deny", "reason": err.Error()})
+		}
+		return map[string]any{"error": err.Error()}, networkProxyErrorStatus(err)
+	}
 	if callerProfileID == "" {
-		return map[string]any{"error": ErrNetworkProxyUnauthorized.Error()}, http.StatusForbidden
+		return denied(ErrNetworkProxyUnauthorized)
 	}
 	canonical, alias := networkAccessCanonicalTool(name)
 	if alias && !s.networkAccessAliasAuthorized(callerProfileID, name, canonical) {
-		return map[string]any{"error": ErrNetworkProxyUnauthorized.Error()}, http.StatusForbidden
+		return denied(ErrNetworkProxyUnauthorized)
 	}
 	switch name {
 	case "network_proxy_request":
@@ -1135,7 +1141,7 @@ func (s *Server) callNetworkProxyTool(callerProfileID, name string, args map[str
 		}
 		capability, err := s.requestNetworkProxyCapability(callerProfileID, policy)
 		if err != nil {
-			return map[string]any{"error": err.Error()}, networkProxyErrorStatus(err)
+			return denied(err)
 		}
 		return map[string]any{"capability": capability}, http.StatusCreated
 	case "network_access_plan":
@@ -1145,13 +1151,13 @@ func (s *Server) callNetworkProxyTool(callerProfileID, name string, args map[str
 		}
 		capability, err := s.requestNetworkProxyCapability(callerProfileID, policy)
 		if err != nil {
-			return map[string]any{"error": err.Error()}, networkProxyErrorStatus(err)
+			return denied(err)
 		}
 		return map[string]any{"capability": capability}, http.StatusCreated
 	case "network_proxy_approve":
 		capability, err := s.approveNetworkProxyCapabilityForProfile(callerProfileID, firstString(args, "capability_id"))
 		if err != nil {
-			return map[string]any{"error": err.Error()}, networkProxyErrorStatus(err)
+			return denied(err)
 		}
 		return map[string]any{"capability": capability}, http.StatusOK
 	case "network_access_enable":
@@ -1160,13 +1166,13 @@ func (s *Server) callNetworkProxyTool(callerProfileID, name string, args map[str
 		}
 		capability, err := s.approveNetworkProxyCapabilityForProfile(callerProfileID, firstString(args, "capability_id"))
 		if err != nil {
-			return map[string]any{"error": err.Error()}, networkProxyErrorStatus(err)
+			return denied(err)
 		}
 		return map[string]any{"capability": capability}, http.StatusOK
 	case "network_proxy_issue":
 		clientGrant, agentGrant, err := s.issueNetworkProxyGrants(callerProfileID, firstString(args, "capability_id"), firstString(args, "target"))
 		if err != nil {
-			return map[string]any{"error": err.Error()}, networkProxyErrorStatus(err)
+			return denied(err)
 		}
 		return map[string]any{"client_grant": clientGrant, "agent_grant": agentGrant}, http.StatusOK
 	case "network_proxy_open":
@@ -1178,19 +1184,19 @@ func (s *Server) callNetworkProxyTool(callerProfileID, name string, args map[str
 	case "network_proxy_status":
 		capability, err := s.statusNetworkProxyCapabilityForProfile(callerProfileID, firstString(args, "capability_id"))
 		if err != nil {
-			return map[string]any{"error": err.Error()}, networkProxyErrorStatus(err)
+			return denied(err)
 		}
 		return map[string]any{"capability": capability}, http.StatusOK
 	case "network_access_status":
 		capability, err := s.statusNetworkProxyCapabilityForProfile(callerProfileID, firstString(args, "capability_id"))
 		if err != nil {
-			return map[string]any{"error": err.Error()}, networkProxyErrorStatus(err)
+			return denied(err)
 		}
 		return map[string]any{"capability": capability}, http.StatusOK
 	case "network_proxy_revoke":
 		capability, err := s.revokeNetworkProxyCapabilityForProfile(callerProfileID, firstString(args, "capability_id"))
 		if err != nil {
-			return map[string]any{"error": err.Error()}, networkProxyErrorStatus(err)
+			return denied(err)
 		}
 		return map[string]any{"capability": capability}, http.StatusOK
 	case "network_access_disable":
@@ -1199,7 +1205,7 @@ func (s *Server) callNetworkProxyTool(callerProfileID, name string, args map[str
 		}
 		capability, err := s.revokeNetworkProxyCapabilityForProfile(callerProfileID, firstString(args, "capability_id"))
 		if err != nil {
-			return map[string]any{"error": err.Error()}, networkProxyErrorStatus(err)
+			return denied(err)
 		}
 		return map[string]any{"capability": capability}, http.StatusOK
 	default:

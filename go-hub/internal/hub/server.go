@@ -65,6 +65,9 @@ type Config struct {
 	NetworkProxyStateFile      string
 	NetworkProxyRelayKeyFile   string
 	NetworkProxyRelayRevokeURL string
+	WebhookConfigFile          string
+	WebhookStateFile           string
+	WebhookRoutes              []WebhookRoute
 }
 
 func FromEnv() Config {
@@ -105,6 +108,8 @@ func FromEnv() Config {
 		NetworkProxyStateFile:      env("GPTADMIN_NETWORK_PROXY_STATE_FILE", filepath.Join(cfgDir, "network_proxy_state.json")),
 		NetworkProxyRelayKeyFile:   env("GPTADMIN_NETWORK_PROXY_RELAY_KEY_FILE", ""),
 		NetworkProxyRelayRevokeURL: strings.TrimRight(env("GPTADMIN_NETWORK_PROXY_RELAY_REVOKE_URL", ""), "/"),
+		WebhookConfigFile:          env("GPTADMIN_WEBHOOK_CONFIG_FILE", filepath.Join(cfgDir, "webhooks.json")),
+		WebhookStateFile:           env("GPTADMIN_WEBHOOK_STATE_FILE", filepath.Join(cfgDir, "webhook_state.json")),
 	}
 }
 
@@ -261,10 +266,14 @@ type Server struct {
 	audit          []auditEvent
 	failover       FailoverConfig
 
-	updateStatePath string
-	updateLockPath  string
-	updateLauncher  *UpdateLauncher
-	networkProxy    *NetworkProxyController
+	updateStatePath     string
+	updateLockPath      string
+	updateLauncher      *UpdateLauncher
+	networkProxy        *NetworkProxyController
+	webhookRoutes       map[string]WebhookRoute
+	webhookJobs         map[string]*webhookJob
+	webhookDeliveries   map[string]*webhookDelivery
+	webhookStateWriteMu sync.Mutex
 
 	instructionMu      sync.RWMutex
 	instructionWriteMu sync.Mutex
@@ -272,19 +281,32 @@ type Server struct {
 }
 
 func New(cfg Config) *Server {
+	webhookRoutes := append([]WebhookRoute(nil), cfg.WebhookRoutes...)
+	if loadedRoutes, err := loadWebhookRoutes(cfg.WebhookConfigFile); err != nil {
+		log.Printf("webhook config load failed path=%s err=%v", cfg.WebhookConfigFile, err)
+	} else {
+		webhookRoutes = append(webhookRoutes, loadedRoutes...)
+	}
+	if err := validateWebhookRoutes(webhookRoutes); err != nil {
+		log.Printf("webhook config rejected path=%s err=%v", cfg.WebhookConfigFile, err)
+		webhookRoutes = nil
+	}
 	s := &Server{
-		cfg:            cfg,
-		agents:         map[string]*Agent{},
-		relayQueues:    map[string][]string{},
-		relayJobs:      map[string]*relayJob{},
-		shellQueues:    map[string][]string{},
-		shellJobs:      map[string]*shellJob{},
-		idempotency:    map[string]*idempotencyEntry{},
-		oauthCodes:     map[string]oauthCode{},
-		managedMCP:     map[string]managedMCPToken{},
-		oauthClients:   map[string]oauthClientMetadata{},
-		accessProfiles: map[string]AccessProfile{},
-		audit:          []auditEvent{},
+		cfg:               cfg,
+		agents:            map[string]*Agent{},
+		relayQueues:       map[string][]string{},
+		relayJobs:         map[string]*relayJob{},
+		shellQueues:       map[string][]string{},
+		shellJobs:         map[string]*shellJob{},
+		idempotency:       map[string]*idempotencyEntry{},
+		oauthCodes:        map[string]oauthCode{},
+		managedMCP:        map[string]managedMCPToken{},
+		oauthClients:      map[string]oauthClientMetadata{},
+		accessProfiles:    map[string]AccessProfile{},
+		audit:             []auditEvent{},
+		webhookRoutes:     webhookRouteMap(webhookRoutes),
+		webhookJobs:       map[string]*webhookJob{},
+		webhookDeliveries: map[string]*webhookDelivery{},
 	}
 	s.cond = sync.NewCond(&s.mu)
 	networkProxyStatePath := cfg.NetworkProxyStateFile
@@ -327,6 +349,9 @@ func New(cfg Config) *Server {
 	}
 	if err := s.loadAccessProfilesState(); err != nil {
 		log.Printf("access profile state load failed path=%s err=%v", s.accessProfilesStatePath(), err)
+	}
+	if err := s.loadWebhookState(); err != nil {
+		log.Printf("webhook state load failed path=%s err=%v", s.webhookStatePath(), err)
 	}
 	s.failover = s.loadFailoverConfig()
 	home := os.Getenv("GPTADMIN_HOME")
@@ -544,6 +569,10 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/mcp-relay/shell_exec", s.requireCtl(s.mcpRelayShellExec))
 	mux.HandleFunc("/mcp-relay/get_mcp_job/", s.requireCtl(s.mcpRelayJob))
 	mux.HandleFunc("/mcp-relay/job/", s.requireCtl(s.mcpRelayJob))
+	mux.HandleFunc("/webhooks/v1/", s.webhookEndpoint)
+	mux.HandleFunc("/webhook-jobs/", s.webhookJobEndpoint)
+	mux.HandleFunc("/webhook-routes", s.requireCtl(s.webhookRoutesEndpoint))
+	mux.HandleFunc("/webhook-routes/", s.requireCtl(s.webhookRoutesEndpoint))
 	mux.HandleFunc("/.well-known/oauth-protected-resource", s.oauthProtectedResource)
 	mux.HandleFunc("/.well-known/oauth-authorization-server", s.oauthAuthorizationServer)
 	mux.HandleFunc("/register", s.oauthRegister)
@@ -913,9 +942,54 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Job"
+  /webhooks/v1/{route}:
+    post:
+      operationId: webhookIngress
+      summary: Accept one authenticated webhook event
+      description: The configured route selects the target action; the event cannot select a target or callback URL.
+      security:
+        - webhookToken: []
+      parameters:
+        - name: route
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json: {}
+      responses:
+        "202":
+          description: Accepted webhook job
+  /webhook-jobs/{job_id}:
+    get:
+      operationId: webhookJob
+      summary: Read an authenticated webhook job
+      security:
+        - webhookToken: []
+      parameters:
+        - name: job_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Durable webhook job state
+  /webhook-routes/{route}:
+    put:
+      operationId: replaceWebhookRoute
+      summary: Replace an operator-owned webhook route
+    delete:
+      operationId: deleteWebhookRoute
+      summary: Delete an operator-owned webhook route
 components:
   securitySchemes:
     bearerAuth:
+      type: http
+      scheme: bearer
+    webhookToken:
       type: http
       scheme: bearer
   schemas:

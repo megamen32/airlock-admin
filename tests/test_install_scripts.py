@@ -85,6 +85,13 @@ def test_cli_has_version():
     assert v.read_text().strip(), "VERSION file is empty"
 
 
+def test_cli_setup_completion_does_not_print_raw_bearer_credentials():
+    """Setup completion must keep the AdminPassword/OAuth boundary secret-safe."""
+    content = (ROOT / "cli.py").read_text(encoding="utf-8")
+    assert "API-Ключ (Bearer)" not in content
+    assert "вставьте ключ" not in content
+
+
 def test_openapi_schema_exists():
     """OpenAPI schema should be available for Custom GPT import."""
     p = ROOT / "public" / "openapi.yaml"

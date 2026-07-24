@@ -316,6 +316,9 @@ def test_hub_contract_relay_and_openapi(hub_contract: HubProcess) -> None:
     assert "required: [target]" in schema
     assert 'Never use target="default"' in schema
     assert "default: default" not in schema
+    assert "/webhooks/v1/{route}" in schema
+    assert "/webhook-jobs/{job_id}" in schema
+    assert "/webhook-routes/{route}" in schema
 
 
 def test_hub_contract_global_mcp(hub_contract: HubProcess) -> None:

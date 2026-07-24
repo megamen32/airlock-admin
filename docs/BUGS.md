@@ -12,6 +12,24 @@ Rules:
 - At the end of the current goal, resolve every actionable open entry before
   final handoff, unless a concrete external blocker is recorded.
 
+## 2026-07-24 - DOCKER-SETUP-PROMPT-20260724 - ShellMCP installer E2E input drift - fixed
+
+- Component: `tests/e2e/docker/scenarios/user-public-hub-shellmcp.sh` and the interactive setup contract in `cli.py`.
+- First observed: 2026-07-24, immutable evidence ID `docker-shellmcp-e2e-20260724-01` from `docker compose -f tests/e2e/docker/docker-compose.yml up --build --abort-on-container-exit --exit-code-from shellmcp-e2e`.
+- Symptom / evidence: The disposable scenario reaches the new “How will ShellMCP connect to the Hub?” prompt and then exits with `EOFError`; scripted stdin is exhausted before setup completes.
+- Root cause: The scenario's prompt/answer sequence is stale relative to the current installer flow and does not provide the connection-mode answer.
+- Fix / verification: Synchronized the scenario with transport and auto-update prompts, added a deterministic local `/version` health stub, used the checked-in CLI, and reran the compose suite; all user, system/FRP and tunnel-backend scenarios passed with exit code 0.
+- Next action: None for this bug.
+
+## 2026-07-24 - DOCKER-SETUP-SECRET-20260724 - Installer E2E prints generated bearer credential - fixed
+
+- Component: Interactive `cli.py` setup completion output.
+- First observed: 2026-07-24, immutable evidence ID `docker-shellmcp-e2e-20260724-02` from the repaired disposable installer scenario.
+- Symptom / evidence: Setup completion output includes a generated bearer credential in the terminal transcript; the value is intentionally omitted from this register.
+- Root cause: The E2E bootstrap downloaded a stale remote CLI that still printed a raw API-key line; the checked-in CLI already uses the AdminPassword/OAuth completion copy.
+- Fix / verification: The E2E image now runs the checked-in `cli.py` via a local file URL; the final compose run exited 0 and its completion output contains no raw bearer value.
+- Next action: None for this bug.
+
 ## 2026-07-23 - ANDROID-LAN-PROXY-FW-20260723 - LAN proxy blocked by host firewall - fixed
 
 - Component: `android-4g-lan-proxy.service` on roomhacker-server-100.
@@ -99,3 +117,39 @@ Rules:
 - Root cause: Hypothesis is a stale/failing recovery HAProxy app job serializing the Supervisor app job group; this is outside the GPTAdmin add-on image but blocks its normal update/start path.
 - Fix / verification: GPTAdmin update eventually completed without resetting Job Manager state; add-on `1.0.4` is started and the failover drill passed. The unrelated recovery HAProxy app remains in `error` with a separate missing `mgmt_auth` userlist and certificate-rate-limit errors.
 - Next action: Repair `local_bezrabotnyi_recovery_haproxy` in its owning deployment task; it no longer blocks GPTAdmin failover acceptance.
+
+## 2026-07-23 - HAOS-PUBLIC-FALLBACK-PROXY-20260723 - Forward-proxy probe used the wrong listener contract - wont_fix
+
+- Component: Public HAOS `gptadmin_hub_standby` `1.0.5`, fallback listener `:9101`.
+- First observed: 2026-07-23.
+- Symptom / evidence: Immutable probe artifact `trash/logs/haos-public-fallback-probe-20260723-01.txt` records Hub `:9001/healthz` and `/version` success, TCP `:9101` open, but an HTTP request routed through `:9101` returned `502`.
+- Root cause: The `:9101` listener expects origin-form requests from the FRP/reverse-proxy path, while `curl -x` sent an absolute-form forward-proxy request that the tiny proxy concatenated into an invalid upstream URL.
+- Fix / verification: No runtime fix required; artifact `trash/logs/haos-public-fallback-probe-20260723-02.txt` records TCP open and direct origin-form `/healthz` returning `200`.
+- Next action: Use the origin-form probe for the physical drill and keep forward-proxy semantics out of the acceptance command.
+
+## 2026-07-23 - HAOS-PUBLIC-CREDENTIAL-SCAN-20260723 - Initial scan counted public values as credentials - wont_fix
+
+- Component: Public HAOS `gptadmin_hub_standby` `1.0.5` persisted/build/output surface.
+- First observed: 2026-07-23.
+- Symptom / evidence: Artifact `trash/logs/haos-public-credential-scan-20260723-01.txt` recorded one match, but the follow-up identified only public `public_origin` and numeric `hub_port` values in `failover_state.json`.
+- Root cause: The initial scanner treated every option value as a credential instead of using the explicit credential-key allowlist.
+- Fix / verification: Artifact `trash/logs/haos-public-credential-scan-20260723-02.txt` records zero exact matches for all seven credential keys; protected files remain mode `600` and recent logs contain zero sensitive-keyword lines.
+- Next action: Keep the credential-key allowlist in future acceptance probes; no runtime leak remains.
+
+## 2026-07-23 - SERVER100-PRIMARY-BASELINE-20260723 - Primary Hub baseline was already down - fixed
+
+- Component: `roomhacker-server-100` primary Hub/FRP units and listeners.
+- First observed: 2026-07-23.
+- Symptom / evidence: Immutable artifact `trash/logs/server100-primary-baseline-20260723-01.txt` records `gptadmin-hub.service=inactive`, `gptadmin-tunnel-frpc.service=failed`, watchdog timer `bad`, port `9001` owned by nginx, and port `7000` owned by frps; no `gptadmin_hub` process is present.
+- Root cause: Under investigation; likely stale edge ownership after the previous physical drill, with nginx retaining the Hub port while the systemd Hub unit is dead.
+- Fix / verification: Restored only the Hub and its dependent primary FRP unit; artifact `trash/logs/server100-primary-baseline-20260723-02.txt` records both units active and public primary build `128` before the drill.
+- Next action: Keep the primary units under normal service supervision; the promotion/reclaim drill is complete.
+
+## 2026-07-23 - SIGNED-RECLAIM-PUBLIC-20260723 - Public migration initially blocked signed reclaim - fixed
+
+- Component: Server-100 `gptadmin-failover-reclaim-push` and public HAOS standby `1.0.5` reclaim path.
+- First observed: 2026-07-23.
+- Symptom / evidence: Immutable artifact `trash/logs/server100-signed-reclaim-20260723-01.txt` records primary Hub/FRP active, reclaim push HTTP `401` with missing authorization header, public `/version` still returning standby build `1.0.5` instead of primary build `128`.
+- Root cause: Public FRP was mapped to `9001` instead of the fallback proxy `9101`, the watchdog health check used the public route and could race promotion, and generated standby internal credentials did not share the primary bridge key.
+- Fix / verification: Set the instance failover port to `9101`, moved health checking to the direct primary LAN endpoint, preserved only the shared bridge key in protected `/data`, and verified artifacts `trash/logs/server100-signed-reclaim-20260723-02.txt` and `trash/logs/haos-public-drill-20260723-01.txt`.
+- Next action: Keep this compatibility contract in the release/runbook before the next public app version.

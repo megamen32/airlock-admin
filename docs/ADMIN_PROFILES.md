@@ -14,9 +14,11 @@ A persisted profile will contain:
 - client bindings;
 - zero or more external workspace references.
 
-The current `S1.3a` slice implements the versioned default instruction set.
-Profile persistence, bindings and policy enforcement remain exit-gate work and
-must not be represented as active until their black-box tests pass.
+The current `S1.3a` slice implements the versioned `default` instruction set.
+Profiles reject other instruction-set IDs until a named instruction-set CRUD
+surface exists, so a stored reference can never silently select a document
+that runtime initialization ignores. Updates to the default set affect
+subsequent MCP initialization without restarting Hub.
 
 ## Network Tunnel capability boundary
 

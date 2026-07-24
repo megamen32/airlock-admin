@@ -880,3 +880,37 @@ func TestNetworkAccessAliasesDoNotTouchCommandQueuesOrHeartbeat(t *testing.T) {
 		t.Fatalf("network access aliases reused heartbeat liveness: last_seen=%v", got)
 	}
 }
+
+func TestNetworkProxyDeniedPolicyAuditIncludesCallerAndDecision(t *testing.T) {
+	clock := &proxyTestClock{now: time.Date(2026, 7, 22, 12, 0, 0, 0, time.UTC)}
+	s := newNetworkProxyTestServer(t, clock)
+	s.mu.Lock()
+	s.accessProfiles["denied-profile"] = AccessProfile{
+		ID:             "denied-profile",
+		AccessMode:     accessModeFull,
+		AllowedTargets: []string{"hub"},
+		AllowedTools:   []string{"network_proxy_request"},
+		Version:        1,
+	}
+	s.mu.Unlock()
+	_, status := s.callNetworkProxyTool("denied-profile", "network_proxy_request", map[string]any{"policy": testNetworkProxyPolicy()})
+	if status != http.StatusForbidden {
+		t.Fatalf("denied proxy request status = %d, want 403", status)
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for i := len(s.audit) - 1; i >= 0; i-- {
+		if s.audit[i].Name != "hub_tool_denied" {
+			continue
+		}
+		if s.audit[i].Fields["profile_id"] != "denied-profile" || s.audit[i].Fields["decision"] != "deny" {
+			t.Fatalf("denial audit fields = %#v", s.audit[i].Fields)
+		}
+		if s.audit[i].Fields["reason"] == "" {
+			t.Fatal("denial audit omitted reason")
+		}
+		return
+	}
+	t.Fatal("no hub_tool_denied audit event recorded")
+}
