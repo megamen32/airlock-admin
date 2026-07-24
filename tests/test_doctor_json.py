@@ -1,5 +1,6 @@
 import json
 import socket
+import subprocess
 from datetime import datetime, timezone
 from argparse import Namespace
 
@@ -33,6 +34,12 @@ def test_doctor_json_is_machine_readable_and_secret_free(monkeypatch, capsys, tm
     monkeypatch.setattr(cli, "installed_units", lambda: [("Hub", unit)])
     monkeypatch.setattr(cli, "ENV_FILE", env_file)
     monkeypatch.setattr(cli.urllib.request, "urlopen", lambda *_args, **_kwargs: RemoteHealth())
+    def fake_run(command, **_kwargs):
+        if "is-active" in command:
+            return subprocess.CompletedProcess(command, 0, stdout="active\n", stderr="")
+        return subprocess.CompletedProcess(command, 0, stdout="", stderr="")
+
+    monkeypatch.setattr(cli, "run", fake_run)
     monkeypatch.setattr(
         cli,
         "env_read",
@@ -56,6 +63,7 @@ def test_doctor_json_is_machine_readable_and_secret_free(monkeypatch, capsys, tm
         "remote_health",
         "remote_clock",
         "env_permissions",
+        "service_runtime:Hub",
     }
     assert "must-not-appear" not in json.dumps(report)
     assert "legacy-token-must-not-appear" not in json.dumps(report)
@@ -71,6 +79,30 @@ def test_doctor_json_reports_missing_password(monkeypatch, capsys):
     assert report["ok"] is False
     assert report["issues"] >= 2
     assert any(check["name"] == "admin_password" and check["status"] == "error" for check in report["checks"])
+
+
+def test_doctor_json_marks_failed_service_runtime_as_issue(monkeypatch, capsys, tmp_path):
+    """A present unit must not count as healthy when its service has failed."""
+    unit = tmp_path / "gptadmin-hub.service"
+    unit.write_text("unit", encoding="utf-8")
+    env_file = tmp_path / "gptadmin.env"
+    env_file.write_text("ADMIN_PASSWORD=hidden\n", encoding="utf-8")
+    env_file.chmod(0o600)
+
+    def failed_run(command, **_kwargs):
+        if "is-active" in command:
+            return subprocess.CompletedProcess(command, 3, stdout="failed\n", stderr="")
+        return subprocess.CompletedProcess(command, 0, stdout="", stderr="")
+
+    monkeypatch.setattr(cli, "installed_units", lambda: [("Hub", unit)])
+    monkeypatch.setattr(cli, "ENV_FILE", env_file)
+    monkeypatch.setattr(cli, "run", failed_run)
+    monkeypatch.setattr(cli, "env_read", lambda: {"ADMIN_PASSWORD": "hidden", "HUB_PORT": "1"})
+
+    cli.cmd_doctor(Namespace(json=True))
+    report = json.loads(capsys.readouterr().out)
+    assert report["ok"] is False
+    assert any(check["name"] == "service_runtime:Hub" and check["status"] == "error" for check in report["checks"])
 
 
 def test_doctor_probes_authenticated_hub_readiness_without_echoing_token(monkeypatch, capsys, tmp_path):

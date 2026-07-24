@@ -1048,6 +1048,29 @@ plan is [`PROJECT_PLAN.md`](./PROJECT_PLAN.md).
 - Next: Keep passkeys/WebAuthn and OIDC/external verification as separate
   outstanding S2.1a gates; do not infer them from this TOTP reauth slice.
 
+## 2026-07-24 - Doctor service runtime probe - completed
+
+- Milestone: `S1.2`
+- Owner: `Codex`
+- Scope: Extend machine-readable doctor output from unit-file presence to
+  platform service runtime state without leaking command output or secrets.
+- Baseline / pre-fix evidence: `_doctor_report()` marked every existing unit
+  `ok` with `unit installed` even when the service was inactive or failed.
+- RED/GREEN evidence: The doctor regression first lacked
+  `service_runtime:Hub`, then passed with mocked active and failed service
+  states.
+- Change: Added systemd/launchd/Windows-task runtime probes that return
+  secret-free ok/error/warning states and count failed services as doctor
+  issues; defined the missing `IS_WINDOWS` platform constant.
+- Verification: Doctor tests `4 passed`; full Python `175 passed, 2 skipped`;
+  Windows contract `1 passed`; completion matrix `11 passed`.
+- Write scope: `cli.py`, `tests/test_doctor_json.py`, matrix/docs only. Preserve
+  all Go/proxy/relay files and the unrelated secret-ingress plan.
+- Delivery: Pending integration commit on `codex/haos-addon-public`; no deploy,
+  push or merge. The unrelated remote-secret-ingress plan remains preserved.
+- Next: Retain live host service/Tunnel checks as explicit deployment evidence;
+  do not infer clean-host runtime health from this mocked/local gate.
+
 ## 2026-07-24 - Typed admin security controls and Apps SDK contract - completed
 
 - Milestone: `S2.1` / `S1.4`

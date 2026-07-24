@@ -154,6 +154,21 @@ Rules:
 - Fix / verification: GPTAdmin update eventually completed without resetting Job Manager state; add-on `1.0.4` is started and the failover drill passed. The unrelated recovery HAProxy app remains in `error` with a separate missing `mgmt_auth` userlist and certificate-rate-limit errors.
 - Next action: Repair `local_bezrabotnyi_recovery_haproxy` in its owning deployment task; it no longer blocks GPTAdmin failover acceptance.
 
+## 2026-07-24 - CLI-PLATFORM-CONSTANT-20260724 - Missing Windows platform constant - fixed
+
+- Component: `cli.py` platform detection and cross-platform service helpers.
+- First observed: 2026-07-24, immutable RED evidence from
+  `tests/test_doctor_json.py` after adding the service runtime probe: the
+  existing `IS_WINDOWS` reference raised `NameError` during doctor execution.
+- Symptom / evidence: Windows-specific setup branching and the new doctor
+  runtime branch could not evaluate the platform guard.
+- Root cause: `IS_MACOS` and `IS_USER_INSTALL` were defined at module scope,
+  but `IS_WINDOWS` was referenced without a declaration.
+- Fix / verification: Defined the explicit `sys.platform == 'win32'` constant;
+  doctor runtime tests `4 passed`, full Python `175 passed, 2 skipped`, and
+  Windows Hub contract `1 passed`.
+- Next action: None for this bug.
+
 ## 2026-07-23 - HAOS-PUBLIC-FALLBACK-PROXY-20260723 - Forward-proxy probe used the wrong listener contract - wont_fix
 
 - Component: Public HAOS `gptadmin_hub_standby` `1.0.5`, fallback listener `:9101`.

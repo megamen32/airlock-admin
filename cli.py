@@ -37,6 +37,7 @@ LEGACY_CTL_TOKEN_DEADLINE = '2026-07-27'
 
 # ===== Platform =====
 IS_MACOS = sys.platform == 'darwin'
+IS_WINDOWS = sys.platform == 'win32'
 
 # ===== ANSI Colors =====
 _IS_TTY = sys.stderr.isatty() if hasattr(sys, 'stderr') else False
@@ -2962,6 +2963,37 @@ def cmd_version(_):
     home = str(INSTALL_DIR) if INSTALL_DIR else 'not set'
     print(f'  {c_dim("Home:")}      {home}')
 
+def _doctor_service_runtime(label: str) -> tuple[str, str]:
+    """Probe one installed service without exposing service-manager output."""
+    try:
+        if IS_MACOS:
+            result = run(['launchctl', 'list', label], check=False, capture=True, timeout=3)
+            if result.returncode == 0:
+                return 'ok', 'launchd job is loaded'
+            return 'error', 'launchd job is not loaded'
+        if IS_WINDOWS:
+            result = run(['schtasks', '/Query', '/TN', label, '/FO', 'LIST', '/NH'], check=False, capture=True, timeout=3)
+            output = (result.stdout or '').lower()
+            if result.returncode == 0 and ('running' in output or 'выполняется' in output):
+                return 'ok', 'Windows task is running'
+            if result.returncode == 0:
+                return 'warning', 'Windows task is registered but not reported running'
+            return 'error', 'Windows task is not available'
+        command = ['systemctl']
+        if IS_USER_INSTALL:
+            command.append('--user')
+        command.extend(['is-active', label])
+        result = run(command, check=False, capture=True, timeout=3)
+        state = (result.stdout or '').strip().lower()
+        if result.returncode == 0 and state == 'active':
+            return 'ok', 'systemd service is active'
+        if state in {'failed', 'inactive', 'deactivating', 'dead'}:
+            return 'error', f'systemd service is {state}'
+        return 'warning', 'systemd runtime state is unavailable'
+    except (OSError, subprocess.SubprocessError):
+        return 'warning', 'service manager is unavailable'
+
+
 def _doctor_report() -> dict:
     """Collect service, configuration and local Hub readiness checks."""
     checks = []
@@ -2975,6 +3007,10 @@ def _doctor_report() -> dict:
         for label, path in units:
             if path.exists():
                 checks.append({'name': f'service:{label}', 'status': 'ok', 'message': 'unit installed'})
+                runtime_status, runtime_message = _doctor_service_runtime(label)
+                checks.append({'name': f'service_runtime:{label}', 'status': runtime_status, 'message': runtime_message})
+                if runtime_status == 'error':
+                    issues += 1
             else:
                 checks.append({'name': f'service:{label}', 'status': 'error', 'message': 'unit missing'})
                 issues += 1
