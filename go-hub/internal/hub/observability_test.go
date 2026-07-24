@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 )
 
 func TestRequestTraceIDIsReturnedAndCorrelatesMCPAudit(t *testing.T) {
@@ -99,4 +100,48 @@ func TestRequestTraceIDFollowsQueuedMCPJobAndResultAudit(t *testing.T) {
 	if !seenEnqueue || !seenResult {
 		t.Fatalf("trace was not retained across enqueue/result audit: enqueue=%v result=%v audit=%v", seenEnqueue, seenResult, s.audit)
 	}
+}
+
+func TestRequestTraceIDCrossesShellQueuePollAndResult(t *testing.T) {
+	s := New(Config{CtlToken: "ctl", ShellToken: "shell", DefaultTimeout: 1, PollMaxTimeout: 1})
+	queued := s.callShellToolWithTrace("shell:demo", "shell_exec", map[string]any{"cmd": "printf safe"}, true, time.Second, "trace-shell-789")
+	jobID, _ := queued["job_id"].(string)
+	if jobID == "" {
+		t.Fatalf("missing shell job id: %v", queued)
+	}
+
+	poll := httptest.NewRequest(http.MethodGet, "/queue/demo?timeout=0", nil)
+	poll.Header.Set("Authorization", "Bearer shell")
+	pollWriter := httptest.NewRecorder()
+	s.Handler().ServeHTTP(pollWriter, poll)
+	if pollWriter.Code != http.StatusOK {
+		t.Fatalf("poll status=%d body=%s", pollWriter.Code, pollWriter.Body.String())
+	}
+	var job map[string]any
+	if err := json.Unmarshal(pollWriter.Body.Bytes(), &job); err != nil {
+		t.Fatal(err)
+	}
+	if job["id"] != jobID || job["trace_id"] != "trace-shell-789" {
+		t.Fatalf("poll lost trace: %v", job)
+	}
+
+	result := httptest.NewRequest(http.MethodPost, "/queue/demo/result", bytes.NewBufferString(`{"id":"`+jobID+`","result":{"returncode":0}}`))
+	result.Header.Set("Authorization", "Bearer shell")
+	resultWriter := httptest.NewRecorder()
+	s.Handler().ServeHTTP(resultWriter, result)
+	if resultWriter.Code != http.StatusOK {
+		t.Fatalf("result status=%d body=%s", resultWriter.Code, resultWriter.Body.String())
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, event := range s.audit {
+		if event.Name == "shell_result" && event.Fields["job_id"] == jobID {
+			if event.Fields["trace_id"] != "trace-shell-789" {
+				t.Fatalf("shell result audit lost trace: %v", event.Fields)
+			}
+			return
+		}
+	}
+	t.Fatalf("shell result audit missing for job %s", jobID)
 }

@@ -49,6 +49,7 @@ type Beat struct {
 
 type QueueJob struct {
 	ID        string            `json:"id"`
+	TraceID   string            `json:"trace_id,omitempty"`
 	ToolName  string            `json:"tool_name,omitempty"`
 	Arguments map[string]any    `json:"arguments,omitempty"`
 	Cmd       string            `json:"cmd,omitempty"`
@@ -58,8 +59,9 @@ type QueueJob struct {
 }
 
 type TaskResult struct {
-	ID     string `json:"id"`
-	Result any    `json:"result"`
+	ID      string `json:"id"`
+	TraceID string `json:"trace_id,omitempty"`
+	Result  any    `json:"result"`
 }
 
 func (c *Client) Heartbeat(ctx context.Context, beat Beat) (*http.Response, []byte, error) {

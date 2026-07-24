@@ -196,6 +196,19 @@ func firstToken(s string) string {
 	return s
 }
 
+func normalizeTraceID(value string) string {
+	value = strings.TrimSpace(value)
+	if value == "" || len(value) > 64 {
+		return ""
+	}
+	for _, char := range value {
+		if (char < 'a' || char > 'z') && (char < 'A' || char > 'Z') && (char < '0' || char > '9') && char != '-' && char != '_' && char != '.' {
+			return ""
+		}
+	}
+	return value
+}
+
 type Server struct {
 	cfg          Config
 	jobs         *job.Manager
@@ -500,6 +513,7 @@ func (s *Server) decodeExec(w http.ResponseWriter, r *http.Request) (shell.Reque
 		return req, false
 	}
 	s.applyDefaults(&req)
+	req.TraceID = normalizeTraceID(req.TraceID)
 	return req, true
 }
 func (s *Server) applyDefaults(req *shell.Request) {
@@ -685,6 +699,7 @@ func (s *Server) execCallback(w http.ResponseWriter, r *http.Request) {
 	}
 	req := body.Request
 	s.applyDefaults(&req)
+	req.TraceID = normalizeTraceID(req.TraceID)
 	jobID := body.JobID
 	if jobID == "" {
 		j := s.jobs.Start(req)
@@ -840,7 +855,7 @@ func (s *Server) queueLoop(ctx context.Context) {
 		}
 		if ok {
 			if q.ToolName != "" && q.ToolName != "shell_exec" {
-				go s.runCallbackTool(q.ID, q.ToolName, q.Arguments)
+				go s.runCallbackTool(q.ID, q.TraceID, q.ToolName, q.Arguments)
 			} else {
 				req := shellRequestFromQueueJob(q, s.cfg.SpillDir)
 				s.applyDefaults(&req)
@@ -855,15 +870,21 @@ func shellRequestFromQueueJob(q hub.QueueJob, spillDir string) shell.Request {
 	if runAsUser == "" {
 		runAsUser, _ = q.Arguments["user"].(string)
 	}
-	return shell.Request{Cmd: q.Cmd, Cwd: q.Cwd, Timeout: q.Timeout, Env: q.Env, SpillDir: spillDir, RunAsUser: runAsUser}
+	return shell.Request{Cmd: q.Cmd, TraceID: normalizeTraceID(q.TraceID), Cwd: q.Cwd, Timeout: q.Timeout, Env: q.Env, SpillDir: spillDir, RunAsUser: runAsUser}
 }
 
-func (s *Server) runCallbackTool(jobID, name string, args map[string]any) {
+func (s *Server) runCallbackTool(jobID, traceID, name string, args map[string]any) {
+	traceID = normalizeTraceID(traceID)
 	result, err := s.callMCPTool(context.Background(), name, args)
-	payload := hub.TaskResult{ID: jobID, Result: result}
+	payload := hub.TaskResult{ID: jobID, TraceID: traceID, Result: result}
 	if err != nil {
 		payload.Result = map[string]any{"error": err.Error()}
 	}
+	status := "completed"
+	if err != nil {
+		status = "failed"
+	}
+	s.auditLog.Event(audit.PollJob, map[string]any{"job_id": jobID, "tool": name, "trace_id": traceID, "status": status})
 	if s.hub == nil {
 		return
 	}
@@ -874,11 +895,14 @@ func (s *Server) runCallbackTool(jobID, name string, args map[string]any) {
 }
 
 func (s *Server) runCallbackJob(jobID string, req shell.Request) {
+	req.TraceID = normalizeTraceID(req.TraceID)
+	s.auditLog.Event(audit.ExecStart, map[string]any{"job_id": jobID, "trace_id": req.TraceID, "background": true})
 	res := s.runShell(context.Background(), req)
+	s.auditLog.Event(audit.ExecEnd, map[string]any{"job_id": jobID, "trace_id": req.TraceID, "return_code": res.ReturnCode, "elapsed_ms": res.DurationMS})
 	if s.hub == nil {
 		return
 	}
-	payload := hub.TaskResult{ID: jobID, Result: res}
+	payload := hub.TaskResult{ID: jobID, TraceID: req.TraceID, Result: res}
 	if err := s.hub.PostResult(context.Background(), s.cfg.Name, payload); err != nil {
 		log.Printf("callback result failed job=%s err=%v", jobID, err)
 		s.spoolOutbox(jobID, payload, err)

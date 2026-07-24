@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -21,7 +23,7 @@ func TestQueueExecutesGenericMCPToolAndPostsResult(t *testing.T) {
 		case r.Method == http.MethodGet && strings.HasPrefix(r.URL.Path, "/queue/queue-agent"):
 			w.Header().Set("Content-Type", "application/json")
 			if polls.Add(1) == 1 {
-				_ = json.NewEncoder(w).Encode(map[string]any{"id": "generic-1", "tool_name": "system_info", "arguments": map[string]any{}})
+				_ = json.NewEncoder(w).Encode(map[string]any{"id": "generic-1", "trace_id": "trace-shell-789", "tool_name": "system_info", "arguments": map[string]any{}})
 				return
 			}
 			_, _ = w.Write([]byte("{}"))
@@ -40,18 +42,26 @@ func TestQueueExecutesGenericMCPToolAndPostsResult(t *testing.T) {
 	}))
 	defer hubServer.Close()
 
-	s := New(Config{Name: "queue-agent", HubURL: hubServer.URL, QueueEnabled: true, QueueTimeout: 1, IdentityDir: t.TempDir(), SpillDir: t.TempDir(), OutboxDir: t.TempDir()})
+	auditPath := filepath.Join(t.TempDir(), "audit.jsonl")
+	s := New(Config{Name: "queue-agent", HubURL: hubServer.URL, QueueEnabled: true, QueueTimeout: 1, IdentityDir: t.TempDir(), SpillDir: t.TempDir(), OutboxDir: t.TempDir(), AuditLog: auditPath})
 	defer s.Close()
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	go s.queueLoop(ctx)
 	select {
 	case result := <-resultCh:
-		if result.ID != "generic-1" || !strings.Contains(strings.ToLower(toJSON(result.Result)), "capability_registry") {
+		if result.ID != "generic-1" || result.TraceID != "trace-shell-789" || !strings.Contains(strings.ToLower(toJSON(result.Result)), "capability_registry") {
 			t.Fatalf("unexpected generic result: %#v", result)
 		}
 	case <-time.After(3 * time.Second):
 		t.Fatal("generic MCP queue result was not posted")
+	}
+	auditData, err := os.ReadFile(auditPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(auditData), `"trace_id":"trace-shell-789"`) {
+		t.Fatalf("ShellMCP audit lost queue trace: %s", auditData)
 	}
 }
 
