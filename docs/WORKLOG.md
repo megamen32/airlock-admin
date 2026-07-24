@@ -48,6 +48,17 @@ plan is [`PROJECT_PLAN.md`](./PROJECT_PLAN.md).
 
 ## Entries
 
+## 2026-07-24 - Transactional rollback delivery identity - completed
+
+- Milestone: `S3.5`
+- Owner: `Codex`
+- Scope: Attach the exact immutable commit to the transactional update rollback entry below.
+- Baseline / red evidence: The rollback entry was written before its implementation commit was created.
+- Change: No production change; record the current linear delivery identity.
+- Verification: `git show --no-patch --format='%H %s' 05cba42` identifies `feat: make updates rollback-safe on health failure`.
+- Delivery: Commit `05cba42`; no push, deployment or merge performed.
+- Next: Prove clean-host, signed-artifact canary and actual client reconnection before closing S3.5.
+
 ## 2026-07-24 - Transactional update rollback contract - completed
 
 - Milestone: `S3.5`
