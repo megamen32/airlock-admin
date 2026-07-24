@@ -48,6 +48,17 @@ plan is [`PROJECT_PLAN.md`](./PROJECT_PLAN.md).
 
 ## Entries
 
+## 2026-07-24 - Hub bounded metrics endpoint - completed
+
+- Milestone: `S3.1`
+- Owner: `Codex`
+- Scope: Add the Hub `/metrics` operational probe with aggregate counts only; keep it independent from admin auth and exclude secrets, MCP arguments and file contents.
+- Baseline / red evidence: `TestHubMetricsEndpointIsBoundedAndSecretFree` failed with HTTP 404 because the Hub had no metrics route.
+- Change: Added bounded agent/queue/job/audit/telemetry/preset aggregates, API documentation and completion-matrix coverage.
+- Verification: Focused Hub metrics test -> pass; full Hub/race/vet and completion matrix are the integration gate for this slice.
+- Delivery: Pending commit on the single linear branch; no runtime deployment. Preserve the unrelated untracked remote-secret-ingress plan.
+- Next: Complete standard telemetry export/correlation across remaining services before marking S3.1 complete.
+
 ## 2026-07-24 - HTTPS public-origin preset gate - completed
 
 - Milestone: `S1.6`

@@ -1,5 +1,13 @@
 # API Reference
 
+## Operational probes
+
+| Method | Path | Auth | Purpose |
+| --- | --- | --- | --- |
+| `GET` | `/healthz` | none | Liveness only; returns `ok`. |
+| `GET` | `/version` | none | Build version and commit identity. |
+| `GET` | `/metrics` | none | Bounded aggregate Hub counts; never includes credentials, arguments or file contents. |
+
 REST + MCP endpoints exposed by the hub.
 
 ## Auth quick reference

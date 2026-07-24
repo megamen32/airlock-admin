@@ -635,6 +635,7 @@ func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/version", s.version)
 	mux.HandleFunc("/healthz", s.healthz)
+	mux.HandleFunc("/metrics", s.hubMetrics)
 	mux.HandleFunc("/actions/openapi.yaml", s.actionsOpenAPI)
 	mux.HandleFunc("/artifacts/shellmcp.json", s.requireArtifact(s.shellmcpArtifactManifest))
 	mux.HandleFunc("/artifacts/shellmcp.tar.gz", s.requireArtifact(s.shellmcpArtifactDownload))
