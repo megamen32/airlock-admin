@@ -85,7 +85,7 @@ experience, not an expert-only configuration exercise.
 | S2.1a Admin MFA | WebAuthn/passkeys first, TOTP fallback, recovery codes and optional OIDC proxy identity | Locked down admin sessions cannot be enabled without MFA; enrollment, recovery and sensitive-setting re-auth are black-box tested | In progress |
 | S2.2 Capability policy | Per-agent, per-server and per-tool allow rules with explicit deny behavior | Policy decision is included in every audit event and covered by API/MCP tests | In progress |
 | S2.3 Progressive autonomy | Approval modes: read-only, ask-before-write, bounded autonomous | Dangerous calls require the configured approval and cannot bypass it through aliases or relay targets | In progress |
-| S2.4 Operator audit trail | Searchable immutable-enough action log with actor, target, policy, arguments digest and result reference | Incident drill can answer who did what, where, why and with what result | In progress |
+| S2.4 Operator audit trail | Searchable immutable-enough action log with actor, target, policy, arguments digest and result reference | Incident drill can answer who did what, where, why and with what result | Complete |
 
 ## Stage 3 - Operable and recoverable control plane
 
