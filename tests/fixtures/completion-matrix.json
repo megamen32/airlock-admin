@@ -165,6 +165,11 @@
       "evidence": "failed admin/control authentication is bounded per client with Retry-After while successful auth remains outside the failure budget"
     },
     {
+      "id": "loopback-bind-default",
+      "command": "cd go-hub && go test ./internal/hub -run 'TestFromEnvDefaultsHubToLoopbackAndHonorsHubBind' -count=1",
+      "evidence": "unset Hub bind fails closed to loopback and explicit installer/HAOS bind overrides remain honored"
+    },
+    {
       "id": "typed-heartbeat-endpoint",
       "command": "cd go-hub && go test ./internal/hub -run 'TestSecurityHeartbeatUsesTypedAdminEndpoint' -count=1",
       "evidence": "heartbeat preference changes use a typed boolean endpoint and never accept an operator shell command"

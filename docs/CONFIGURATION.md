@@ -20,7 +20,7 @@ Full environment-variable reference, auth model, and OAuth setup.
 | Var | Default | Purpose |
 |-----|---------|---------|
 | `HUB_PORT` | 25900 | Listen port |
-| `HUB_HOST` | 0.0.0.0 | Listen host |
+| `HUB_HOST` | `127.0.0.1` | Listen host; public deployments must set an explicit boundary host at the Tunnel/HAOS layer. `HUB_BIND` remains an installer compatibility alias. |
 | `CORS_ORIGINS` | `*` | Allowed CORS origins (comma-separated) |
 
 ### Behavior

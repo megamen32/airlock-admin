@@ -48,6 +48,17 @@ plan is [`PROJECT_PLAN.md`](./PROJECT_PLAN.md).
 
 ## Entries
 
+## 2026-07-24 - Hub loopback bind default - completed
+
+- Milestone: `S1.6`
+- Owner: `Codex`
+- Scope: Close the Hub direct-listener exposure found in the installer/Go environment contract while preserving explicit HAOS/failover host overrides.
+- Baseline / red evidence: `TestFromEnvDefaultsHubToLoopbackAndHonorsHubBind` failed because unset host produced `:9001` and `HUB_BIND` was ignored.
+- Change: Go Hub now falls back through `HUB_BIND` and fails closed to `127.0.0.1`; configuration documentation and completion matrix cover the contract.
+- Verification: `cd go-hub && go test ./...` -> pass; `go test -race ./...` -> pass; `go vet ./...` -> pass; `python3 -m pytest tests/test_completion_matrix.py -q` -> `11 passed`.
+- Delivery: Pending commit on the single linear branch; no runtime deployment. Preserve the unrelated untracked remote-secret-ingress plan.
+- Next: S1.6 still needs HTTPS enforcement and external identity verification; this closes only the direct-listener portion.
+
 ## 2026-07-24 - Hub auth failure rate limiting - completed
 
 - Milestone: `S1.6`

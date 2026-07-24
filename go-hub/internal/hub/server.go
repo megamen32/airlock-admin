@@ -81,7 +81,10 @@ type Config struct {
 
 func FromEnv() Config {
 	port := env("GPTADMIN_HUB_PORT", env("HUB_PORT", env("PORT", "9001")))
-	host := env("GPTADMIN_HUB_HOST", env("HUB_HOST", ""))
+	// Keep the installer/legacy HUB_BIND input while failing closed to the
+	// loopback interface when no explicit deployment host is configured. Public
+	// HAOS/failover deployments set HUB_HOST explicitly at their boundary.
+	host := env("GPTADMIN_HUB_HOST", env("HUB_HOST", env("HUB_BIND", "127.0.0.1")))
 	root := env("GPTADMIN_ROOT", ".")
 	cfgDir := env("GPTADMIN_CONFIG_DIR", filepath.Join(root, "config"))
 	defTimeout := secondsEnv("MCP_RELAY_DEFAULT_TIMEOUT", 30)

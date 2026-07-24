@@ -12,6 +12,16 @@ Rules:
 - At the end of the current goal, resolve every actionable open entry before
   final handoff, unless a concrete external blocker is recorded.
 
+## 2026-07-24 - HUB-BIND-LOOPBACK-20260724 - Go Hub ignored installer loopback bind - fixed
+
+- Component: `cli.py` Hub service environment and `go-hub/internal/hub.FromEnv`.
+- First observed: 2026-07-24, immutable regression evidence `TestFromEnvDefaultsHubToLoopbackAndHonorsHubBind` added before the fix.
+- Symptom / evidence: The installer writes `HUB_BIND=127.0.0.1`, but Go Hub only reads `GPTADMIN_HUB_HOST`/`HUB_HOST`; with neither set it builds `:9001`, exposing the service listener beyond the Tunnel boundary.
+- Root cause hypothesis: The Go runtime renamed the bind variable without retaining the installer’s canonical `HUB_BIND` compatibility input, and its empty-host default is not fail-closed.
+- Fix / verification: `FromEnv` now honors `GPTADMIN_HUB_HOST`, `HUB_HOST`, then installer-compatible `HUB_BIND`, and defaults to `127.0.0.1`. `TestFromEnvDefaultsHubToLoopbackAndHonorsHubBind`, full Hub test/race/vet and the completion matrix pass. HAOS runtime keeps its explicit `GPTADMIN_HUB_HOST` override.
+- Status: fixed.
+- Next action: Keep public ingress at the Tunnel/HAOS boundary; do not expose the Hub listener directly.
+
 ## 2026-07-24 - ADMIN-ENV-SHELL-20260724 - Legacy admin env mutation bypass - fixed
 
 - Component: `public/admin/index.html` and `public/admin/app.js:setEnvVar`.
