@@ -1158,6 +1158,24 @@ plan is [`PROJECT_PLAN.md`](./PROJECT_PLAN.md).
 - Next: implement passkey/OIDC external verification before claiming the full
   S2.1a exit gate.
 
+## 2026-07-24 - Local activation telemetry - completed
+
+- Milestone: `S1.5`
+- Owner: `Codex`
+- Scope: Add opt-in, local-only activation event counters without retaining
+  command contents, URLs, tokens or user-agent data.
+- Baseline / red evidence: No telemetry preference or event-summary endpoint
+  existed; activation funnel failures could not be inspected as an aggregate.
+- Change: `0600` persisted opt-in state, allowlisted event names,
+  bounded counters and admin GET/PUT/POST endpoints.
+- Verification: Hub full/race/vet pass; ShellMCP and ProxyRelay race/vet pass;
+  Python `169 passed, 2 skipped`; completion matrix `11 passed`; focused test
+  covers opt-in denial, payload exclusion and restart persistence.
+- Delivery: Pending integration commit on `codex/haos-addon-public`; no deploy
+  or push. The unrelated untracked remote-secret plan remains preserved.
+- Next: wire only explicitly selected funnel events and add cross-process
+  telemetry aggregation if the product needs it; no remote telemetry is sent.
+
 ## 2026-07-22 - Isolated Network Tunnel proxy relay - completed
 
 - Milestone: `S2.2`

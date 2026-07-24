@@ -74,6 +74,7 @@ type Config struct {
 	WebhookStateFile           string
 	AuditStateFile             string
 	SecurityStateFile          string
+	TelemetryStateFile         string
 	WebhookRoutes              []WebhookRoute
 }
 
@@ -120,6 +121,7 @@ func FromEnv() Config {
 		WebhookStateFile:           env("GPTADMIN_WEBHOOK_STATE_FILE", filepath.Join(cfgDir, "webhook_state.json")),
 		AuditStateFile:             env("GPTADMIN_AUDIT_STATE_FILE", filepath.Join(cfgDir, "audit.jsonl")),
 		SecurityStateFile:          env("GPTADMIN_SECURITY_STATE_FILE", filepath.Join(cfgDir, securityStateFilename)),
+		TelemetryStateFile:         env("GPTADMIN_TELEMETRY_STATE_FILE", filepath.Join(cfgDir, telemetryStateFilename)),
 	}
 }
 
@@ -299,6 +301,8 @@ type Server struct {
 	autonomous     map[string]*autonomousBudget
 	security       securitySettings
 	securityPath   string
+	telemetry      telemetryState
+	telemetryPath  string
 	audit          []auditEvent
 	failover       FailoverConfig
 
@@ -337,6 +341,15 @@ func New(cfg Config) *Server {
 		log.Printf("security settings load failed path=%s err=%v", securityPath, err)
 		security = defaultSecuritySettings()
 	}
+	telemetryPath := cfg.TelemetryStateFile
+	if telemetryPath == "" && cfg.ConfigDir != "" {
+		telemetryPath = filepath.Join(cfg.ConfigDir, telemetryStateFilename)
+	}
+	telemetry, err := loadTelemetryState(telemetryPath)
+	if err != nil {
+		log.Printf("telemetry state load failed path=%s err=%v", telemetryPath, err)
+		telemetry = defaultTelemetryState()
+	}
 	s := &Server{
 		cfg:               cfg,
 		agents:            map[string]*Agent{},
@@ -353,6 +366,8 @@ func New(cfg Config) *Server {
 		autonomous:        map[string]*autonomousBudget{},
 		security:          security,
 		securityPath:      securityPath,
+		telemetry:         telemetry,
+		telemetryPath:     telemetryPath,
 		audit:             []auditEvent{},
 		webhookRoutes:     webhookRouteMap(webhookRoutes),
 		webhookJobs:       map[string]*webhookJob{},
@@ -659,6 +674,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/admin/api/security/preset", s.requireCtl(s.adminSecurityPreset))
 	mux.HandleFunc("/admin/api/security/mfa/totp/enroll", s.requireCtl(s.adminTOTPEnroll))
 	mux.HandleFunc("/admin/api/security/mfa/totp/verify", s.requireCtl(s.adminTOTPVerify))
+	mux.HandleFunc("/admin/api/telemetry", s.requireCtl(s.adminTelemetry))
+	mux.HandleFunc("/admin/api/telemetry/event", s.requireCtl(s.adminTelemetry))
 	mux.HandleFunc("/admin/api/clients/revoke-all", s.requireCtl(s.adminClientsRevokeAll))
 	mux.HandleFunc("/admin/api/clients/", s.requireCtl(s.adminClientDelete))
 	mux.HandleFunc("/admin/api/overview", s.requireCtl(s.adminOverview))
