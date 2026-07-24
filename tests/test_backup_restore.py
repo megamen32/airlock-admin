@@ -3,6 +3,9 @@
 from __future__ import annotations
 
 import json
+import os
+import subprocess
+import sys
 import tarfile
 from pathlib import Path
 
@@ -50,3 +53,38 @@ def test_backup_verifier_rejects_path_traversal_and_restore_does_not_escape(tmp_
     with pytest.raises(ValueError, match="unsafe archive member"):
         cli.restore_backup_archive(archive, tmp_path / "restored")
     assert not (tmp_path / "escape").exists()
+
+
+def test_cli_clean_host_restore_drill_preserves_integrity_and_current_owner(tmp_path: Path) -> None:
+    """Exercise the documented backup workflow through the real CLI process."""
+    source = tmp_path / "source-config"
+    source.mkdir()
+    secret = "do-not-print-this-secret"
+    (source / "gptadmin.env").write_text(f"ADMIN_PASSWORD={secret}\n", encoding="utf-8")
+    (source / "gptadmin.env").chmod(0o600)
+    (source / "state.json").write_text('{"schema":1}\n', encoding="utf-8")
+    (source / "state.json").chmod(0o640)
+    archive = tmp_path / "clean-host-backup.tgz"
+    target = tmp_path / "fresh-config"
+    cli_path = Path(cli.__file__).resolve()
+
+    def run_cli(*args: str) -> subprocess.CompletedProcess[str]:
+        return subprocess.run(
+            [sys.executable, str(cli_path), *args],
+            cwd=cli_path.parent,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+
+    created = run_cli("backup", "create", str(archive), "--source", str(source))
+    assert secret not in created.stdout
+    verified = run_cli("backup", "verify", str(archive))
+    assert secret not in verified.stdout
+    restored = run_cli("backup", "restore", str(archive), str(target))
+    assert secret not in restored.stdout
+    assert (target / "gptadmin.env").read_text(encoding="utf-8") == (source / "gptadmin.env").read_text(encoding="utf-8")
+    assert (target / "state.json").read_text(encoding="utf-8") == (source / "state.json").read_text(encoding="utf-8")
+    assert (target / "gptadmin.env").stat().st_mode & 0o777 == 0o600
+    assert (target / "state.json").stat().st_mode & 0o777 == 0o640
+    assert all(path.stat().st_uid == os.geteuid() for path in target.rglob("*"))

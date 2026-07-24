@@ -924,6 +924,25 @@ plan is [`PROJECT_PLAN.md`](./PROJECT_PLAN.md).
   backups.
 - Next: Push the integrated commit and keep the existing admin password stable.
 
+## 2026-07-24 - Clean-host backup restore drill - completed
+
+- Milestone: `S3.3`
+- Owner: `Codex`
+- Scope: Prove the documented backup workflow through the real CLI process on
+  a fresh target directory.
+- Baseline / red evidence: The existing backup tests covered Python helpers
+  directly but did not execute `gptadmin backup create`, `verify` and `restore`
+  as a clean-host sequence or assert ownership/output hygiene.
+- Change: Added `test_cli_clean_host_restore_drill_preserves_integrity_and_current_owner`;
+  it creates a fresh temporary config, runs all three CLI commands, checks
+  bytes/modes/current-user ownership and rejects secret output.
+- Verification: `python3 -m pytest tests/test_backup_restore.py -q` passed
+  (`3 passed`); CLI backup help remains available.
+- Delivery: Pending integration commit on `codex/haos-addon-public`; no deploy,
+  push or merge. The unrelated remote-secret-ingress plan remains preserved.
+- Next: Execute the same ownership/restart procedure on each real supported
+  host when deployment access is explicitly in scope.
+
 ## 2026-07-24 - Typed admin security controls and Apps SDK contract - completed
 
 - Milestone: `S2.1` / `S1.4`

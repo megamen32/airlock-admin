@@ -19,4 +19,7 @@ manifest and renames it atomically.
 This is a configuration-level drill. Service stop/start, filesystem ownership
 and host-specific Tunnel credentials remain deployment steps and must be
 verified by the platform acceptance runbook; the CLI does not chown restored
-files or restart services implicitly.
+files or restart services implicitly. The automated clean-host gate runs the
+three CLI commands in a fresh temporary target, checks bytes, modes and
+current-user ownership, and asserts that command output never contains the
+stored admin password.
