@@ -2677,3 +2677,14 @@ plan is [`PROJECT_PLAN.md`](./PROJECT_PLAN.md).
 - Verification: RED then GREEN regression; `python3 -m pytest tests/test_doctor_json.py -q` -> `6 passed`.
 - Delivery: The observed server-100 stale `:9001` listener will now be diagnosable by the product without exposing response data or credentials.
 - Next: Re-run `gptadmin doctor --json` during the authorized external repair.
+
+## 2026-07-24 - Secret-safe deployment runtime runner - completed locally
+
+- Milestone: `S1.1`, `S3.5`
+- Owner: Codex
+- Scope: Automate read-only diagnosis of canonical Hub/Tunnel and ShellMCP deployment state before any external repair.
+- Baseline / red evidence: No service-level runner existed; new tests initially failed on the missing parser/SSH probe API.
+- Change: Added `tests/e2e/deployment_runtime.py` with fixed remote scripts, whitelist-only parsing and redacted JSON; added the operation to `tests/fixtures/completion-matrix.json` and documented it in `docs/LIVE_ACCEPTANCE.md`.
+- Verification: runner/docs tests `8 passed`; completion matrix `12 passed`; actual probes report server-100 issues `hub_service_not_running`, `hub_health_failed`, `tunnel_router_conflict` and server-88 issues `legacy_shellmcp_binary`, `queue_auth_failed`.
+- Delivery: The remaining external repair now has a repeatable, non-mutating evidence command; no credentials, stderr or remote state are returned or changed.
+- Next: After authorized repair, rerun both probes and `tests/e2e/live_acceptance.py` with a short-lived scoped connection.
