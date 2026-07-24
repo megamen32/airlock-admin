@@ -659,3 +659,13 @@ Rules:
 - Fix / verification: Added the RED regression `test_hub_probe_rejects_failed_tunnel_even_when_hub_is_healthy`, made the probe include Tunnel unit state, and reran server-100; it now fails truthfully with `tunnel_service_not_running` while Hub remains active and port 9001 returns HTTP 200.
 - Status: fixed.
 - Next action: Preserve the explicit Tunnel-state gate in the completion-matrix acceptance run; repair the external Tunnel separately under the approved reclaim safety sequence.
+
+## 2026-07-24 - PERSONAL-TUNNEL-ROUTE-20260724 - Personal Tunnel has no Hub route - fixed
+
+- Component: Personal Tunnel edge and server-100 `gptadmin-tunnel-frpc.service`.
+- First observed: 2026-07-24, user report for `/admin/`; immutable evidence `trash/logs/personal-tunnel-route-probe-20260724.md`.
+- Confirmed fact: Browser and HTTP probes receive the FRP 404 page for `/admin/`; all tested Hub paths return 404 across the hostname's observed DNS addresses. Server-100 Hub is healthy, while the canonical Tunnel service is failed.
+- Root-cause hypothesis: The personal Tunnel route is absent because the canonical FRP client is not running; the edge response is therefore not reaching Hub.
+- Fix / verification: After private backup and HAOS reclaim checks, started the canonical Tunnel exactly once. Immutable evidence `trash/logs/personal-tunnel-route-repair-20260724.md` records three successful proxy registrations, zero conflicts/failures, all observed personal-edge addresses returning HTTP 200, and build `128` / commit `fdca78d` on both origins.
+- Status: fixed for the personal Tunnel route and unauthenticated WebUI availability; authenticated acceptance remains pending.
+- Next action: Refresh the supplied `/admin/` page and sign in manually with the existing AdminPassword, then run the authenticated live acceptance runner.

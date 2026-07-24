@@ -2751,3 +2751,25 @@ plan is [`PROJECT_PLAN.md`](./PROJECT_PLAN.md).
 - Verification: RED then GREEN; `python3 -m pytest tests/test_deployment_runtime.py -q` -> `6 passed`; real server-100 probe now truthfully reports `tunnel_service_not_running`.
 - Delivery: Commit `a1c5b66`; no additional remote mutation.
 - Next: Run completion-matrix verification, then repair Tunnel only after signed reclaim/lease evidence is available.
+
+## 2026-07-24 - Personal Tunnel route outage diagnosed - handed-off
+
+- Milestone: `S1.1`, `S3.4`
+- Owner: Codex
+- Scope: Diagnose the user-reported personal Tunnel `/admin/` 404 without touching credentials or edge configuration.
+- Baseline / red evidence: `trash/logs/personal-tunnel-route-probe-20260724.md` records a real browser FRP 404 page and HTTP 404 for all tested Hub paths across all observed DNS addresses.
+- Change: No remote mutation; compared the edge response with the healthy server-100 Hub and reran the secret-safe deployment probe.
+- Verification: Hub is `active/running` with port 9001 HTTP 200; canonical Tunnel is `failed/failed` and the probe reports `tunnel_service_not_running`.
+- Delivery: Root cause is narrowed to the missing/failed Tunnel route; preserve the current healthy Hub.
+- Next: After manual WebUI authentication, perform the backup-first signed-reclaim Tunnel repair and repeat public/browser acceptance.
+
+## 2026-07-24 - Personal Tunnel route restored - completed
+
+- Milestone: `S1.1`, `S3.4`
+- Owner: Codex
+- Scope: Restore the missing personal Tunnel route without changing credentials, configs, nginx, DNS, standby or Hub.
+- Baseline / red evidence: `trash/logs/personal-tunnel-route-probe-20260724.md` recorded the browser FRP 404 page and failed server-100 Tunnel unit.
+- Change: Verified private backup/hash continuity and HAOS reclaim ownership, then started `gptadmin-tunnel-frpc.service` exactly once at `2026-07-24T22:52:21Z`.
+- Verification: `trash/logs/personal-tunnel-route-repair-20260724.md` records 3 successful proxy registrations, 0 conflicts/failures/restarts, HTTP 200 on all observed personal-edge addresses, and build `128` / commit `fdca78d` on personal and primary origins.
+- Delivery: Personal Tunnel and primary Hub are healthy; HAOS has no fallback `frpc` process.
+- Next: User refreshes `/admin/` and signs in manually; then run authenticated live acceptance.
