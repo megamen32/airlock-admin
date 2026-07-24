@@ -18,6 +18,14 @@ queued relay and ShellMCP jobs carry the same correlation fields through poll
 and result delivery. Invalid trace headers are discarded and replaced. Trace
 metadata never contains command arguments, credentials or file contents.
 
+An operator may opt in to OTLP/HTTP log export with
+`GPTADMIN_OTLP_ENDPOINT`. External collectors must use HTTPS; plain HTTP is
+accepted only for loopback development collectors. The exporter uses a
+bounded asynchronous queue and exports allowlisted event fields such as
+policy decision, tool, result reference and trace IDs. It never exports raw
+arguments, commands, credentials, URLs or file contents, and collector
+delivery failures do not fail the originating Hub request.
+
 ## Remote secret ingress
 
 Full-access MCP clients can call `secret_request` and `secret_status`. The

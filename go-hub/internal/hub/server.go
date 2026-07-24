@@ -76,6 +76,7 @@ type Config struct {
 	AuditStateFile             string
 	SecurityStateFile          string
 	TelemetryStateFile         string
+	TelemetryOTLPEndpoint      string
 	SecretStoreDir             string
 	SecretStoreKeyFile         string
 	SecretIngressStateFile     string
@@ -135,6 +136,7 @@ func FromEnv() Config {
 		AuditStateFile:             env("GPTADMIN_AUDIT_STATE_FILE", filepath.Join(cfgDir, "audit.jsonl")),
 		SecurityStateFile:          env("GPTADMIN_SECURITY_STATE_FILE", filepath.Join(cfgDir, securityStateFilename)),
 		TelemetryStateFile:         env("GPTADMIN_TELEMETRY_STATE_FILE", filepath.Join(cfgDir, telemetryStateFilename)),
+		TelemetryOTLPEndpoint:      env("GPTADMIN_OTLP_ENDPOINT", ""),
 		SecretStoreDir:             env("GPTADMIN_SECRET_STORE_DIR", filepath.Join(cfgDir, "secrets")),
 		SecretStoreKeyFile:         env("GPTADMIN_SECRET_STORE_KEY_FILE", filepath.Join(cfgDir, "secret-store.key")),
 		SecretIngressStateFile:     env("GPTADMIN_SECRET_INGRESS_STATE_FILE", filepath.Join(cfgDir, "secrets", "requests.json")),
@@ -320,33 +322,34 @@ type idempotencyEntry struct {
 type Server struct {
 	cfg Config
 
-	mu               sync.Mutex
-	authRateMu       sync.Mutex
-	cond             *sync.Cond
-	agents           map[string]*Agent
-	relayQueues      map[string][]string
-	relayJobs        map[string]*relayJob
-	shellQueues      map[string][]string
-	shellJobs        map[string]*shellJob
-	idempotency      map[string]*idempotencyEntry
-	oauthCodes       map[string]oauthCode
-	managedMCP       map[string]managedMCPToken
-	oauthClients     map[string]oauthClientMetadata
-	accessProfiles   map[string]AccessProfile
-	approvals        map[string]*approvalRequest
-	autonomous       map[string]*autonomousBudget
-	security         securitySettings
-	securityPath     string
-	webauthnState    webAuthnState
-	webauthnPath     string
-	webauthnSessions map[string]webAuthnSession
-	telemetry        telemetryState
-	telemetryPath    string
-	secretStore      *SecretStore
-	secretStoreErr   error
-	audit            []auditEvent
-	authRate         map[string]authRateWindow
-	failover         FailoverConfig
+	mu                sync.Mutex
+	authRateMu        sync.Mutex
+	cond              *sync.Cond
+	agents            map[string]*Agent
+	relayQueues       map[string][]string
+	relayJobs         map[string]*relayJob
+	shellQueues       map[string][]string
+	shellJobs         map[string]*shellJob
+	idempotency       map[string]*idempotencyEntry
+	oauthCodes        map[string]oauthCode
+	managedMCP        map[string]managedMCPToken
+	oauthClients      map[string]oauthClientMetadata
+	accessProfiles    map[string]AccessProfile
+	approvals         map[string]*approvalRequest
+	autonomous        map[string]*autonomousBudget
+	security          securitySettings
+	securityPath      string
+	webauthnState     webAuthnState
+	webauthnPath      string
+	webauthnSessions  map[string]webAuthnSession
+	telemetry         telemetryState
+	telemetryPath     string
+	telemetryExporter *telemetryExporter
+	secretStore       *SecretStore
+	secretStoreErr    error
+	audit             []auditEvent
+	authRate          map[string]authRateWindow
+	failover          FailoverConfig
 
 	updateStatePath     string
 	updateLockPath      string
@@ -395,6 +398,10 @@ func New(cfg Config) *Server {
 		log.Printf("telemetry state load failed path=%s err=%v", telemetryPath, err)
 		telemetry = defaultTelemetryState()
 	}
+	telemetryExporter, err := newTelemetryExporter(cfg.TelemetryOTLPEndpoint)
+	if err != nil {
+		log.Printf("OTLP telemetry disabled: %v", err)
+	}
 	webauthnPath := ""
 	if cfg.ConfigDir != "" {
 		webauthnPath = filepath.Join(cfg.ConfigDir, webAuthnStateFilename)
@@ -425,6 +432,7 @@ func New(cfg Config) *Server {
 		webauthnSessions:  map[string]webAuthnSession{},
 		telemetry:         telemetry,
 		telemetryPath:     telemetryPath,
+		telemetryExporter: telemetryExporter,
 		audit:             []auditEvent{},
 		authRate:          map[string]authRateWindow{},
 		webhookRoutes:     webhookRouteMap(webhookRoutes),
@@ -4007,6 +4015,7 @@ func safeAdminNext(v string) string {
 func (s *Server) addAuditLocked(name string, fields map[string]any) {
 	event := auditEvent{Time: time.Now().Format(time.RFC3339), Name: name, Fields: fields}
 	s.audit = append(s.audit, event)
+	s.enqueueTelemetryAudit(event)
 	if len(s.audit) > 500 {
 		s.audit = s.audit[len(s.audit)-500:]
 	}

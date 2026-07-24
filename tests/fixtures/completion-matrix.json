@@ -104,6 +104,11 @@
       "evidence": "bounded X-Request-ID and W3C traceparent correlation joins MCP policy, queued job and result audit without payloads"
     },
     {
+      "id": "otlp-structured-export",
+      "command": "cd go-hub && go test ./internal/hub -run 'TestOTLPExporter' -count=1",
+      "evidence": "opt-in loopback OTLP/HTTP export correlates policy/tool/trace fields, rejects insecure external endpoints and excludes sensitive payloads"
+    },
+    {
       "id": "shellmcp-trace-propagation",
       "command": "cd go-shellmcp && go test ./internal/server -run 'TestQueueExecutesGenericMCPToolAndPostsResult' -count=1",
       "evidence": "Hub queue trace_id and traceparent cross ShellMCP polling, TaskResult and ShellMCP audit without command payloads"

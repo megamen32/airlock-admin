@@ -48,6 +48,17 @@ plan is [`PROJECT_PLAN.md`](./PROJECT_PLAN.md).
 
 ## Entries
 
+## 2026-07-24 - Opt-in OTLP structured telemetry contract - completed
+
+- Milestone: `S3.1`
+- Owner: `Codex`
+- Scope: Add a bounded opt-in OTLP/HTTP exporter over the existing Hub audit/trace correlation boundary; keep production collector/backend proof separate.
+- Baseline / red evidence: `TestOTLPExporter` initially failed to compile because no exporter/config/flush contract existed. During verification a collector backpressure test deadlocked; the test was corrected to consume all audit records before asserting the policy record.
+- Change: Added `GPTADMIN_OTLP_ENDPOINT`, HTTPS-only external endpoint validation (loopback HTTP allowed for development), a bounded asynchronous queue, allowlisted structured event fields, URL/control-character filtering and fail-open delivery. Added API/security documentation and completion-matrix coverage.
+- Verification: Focused OTLP tests, full Hub tests, Hub race/vet and completion matrix `11 passed` are green; `git diff --check` passes. Export payload checks prove policy/tool/trace correlation without raw arguments, commands, credentials, URLs or file contents.
+- Delivery: Pending the current linear integration commit; no push, deployment or merge performed. Preserve the unrelated untracked remote-secret-ingress plan.
+- Next: Prove a real collector/backend and cross-service retention/access policy before marking S3.1 complete.
+
 ## 2026-07-24 - WebAuthn browser acceptance and ceremony hardening - completed
 
 - Milestone: `S2.1a`

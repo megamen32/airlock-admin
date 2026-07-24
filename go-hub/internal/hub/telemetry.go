@@ -1,20 +1,253 @@
 package hub
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
+	"io"
 	"log"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 )
 
 const (
-	telemetryStateFilename = "telemetry_state.json"
-	telemetryStateMaxBytes = 16 << 10
+	telemetryStateFilename     = "telemetry_state.json"
+	telemetryStateMaxBytes     = 16 << 10
+	telemetryExporterQueueSize = 64
 )
+
+type telemetryRecord struct {
+	Name       string
+	Timestamp  time.Time
+	Attributes map[string]string
+}
+
+type telemetryExportItem struct {
+	Record *telemetryRecord
+	Done   chan struct{}
+}
+
+type telemetryExporter struct {
+	client   *http.Client
+	endpoint string
+	queue    chan telemetryExportItem
+}
+
+type otlpAttribute struct {
+	Key   string `json:"key"`
+	Value struct {
+		StringValue string `json:"stringValue"`
+	} `json:"value"`
+}
+
+type otlpLogRecord struct {
+	TimeUnixNano string            `json:"timeUnixNano"`
+	SeverityText string            `json:"severityText"`
+	Body         map[string]string `json:"body"`
+	Attributes   []otlpAttribute   `json:"attributes,omitempty"`
+}
+
+type otlpScopeLogs struct {
+	Scope struct {
+		Name string `json:"name"`
+	} `json:"scope"`
+	LogRecords []otlpLogRecord `json:"logRecords"`
+}
+
+type otlpResourceLogs struct {
+	Resource struct {
+		Attributes []otlpAttribute `json:"attributes"`
+	} `json:"resource"`
+	ScopeLogs []otlpScopeLogs `json:"scopeLogs"`
+}
+
+type otlpLogsPayload struct {
+	ResourceLogs []otlpResourceLogs `json:"resourceLogs"`
+}
+
+var telemetryExportAttributeKeys = map[string]struct{}{
+	"access_mode":      {},
+	"actor":            {},
+	"approval_mode":    {},
+	"job_id":           {},
+	"method":           {},
+	"policy_decision":  {},
+	"profile_id":       {},
+	"result_reference": {},
+	"server_id":        {},
+	"status":           {},
+	"target":           {},
+	"tool":             {},
+	"trace_id":         {},
+	"traceparent":      {},
+	"retry_count":      {},
+	"retry_outcome":    {},
+}
+
+func newTelemetryExporter(endpoint string) (*telemetryExporter, error) {
+	endpoint = strings.TrimSpace(endpoint)
+	if endpoint == "" {
+		return nil, nil
+	}
+	parsed, err := url.Parse(endpoint)
+	if err != nil || parsed.Scheme == "" || parsed.Hostname() == "" || parsed.User != nil || parsed.RawQuery != "" || parsed.Fragment != "" {
+		return nil, errors.New("OTLP endpoint must be an absolute URL without credentials, query or fragment")
+	}
+	if parsed.Scheme != "https" && !(parsed.Scheme == "http" && isLoopbackServiceHost(parsed.Hostname())) {
+		return nil, errors.New("OTLP endpoint must use HTTPS outside loopback")
+	}
+	if parsed.Path == "" || parsed.Path == "/" {
+		parsed.Path = "/v1/logs"
+	}
+	exporter := &telemetryExporter{client: &http.Client{Timeout: 2 * time.Second}, endpoint: parsed.String(), queue: make(chan telemetryExportItem, telemetryExporterQueueSize)}
+	go exporter.run()
+	return exporter, nil
+}
+
+func (e *telemetryExporter) run() {
+	for item := range e.queue {
+		if item.Record != nil {
+			e.post(*item.Record)
+		}
+		if item.Done != nil {
+			close(item.Done)
+		}
+	}
+}
+
+func (e *telemetryExporter) submit(record telemetryRecord) {
+	select {
+	case e.queue <- telemetryExportItem{Record: &record}:
+	default:
+		log.Printf("OTLP telemetry queue full; dropping record")
+	}
+}
+
+func (e *telemetryExporter) flush(timeout time.Duration) bool {
+	if timeout <= 0 {
+		timeout = time.Second
+	}
+	done := make(chan struct{})
+	timer := time.NewTimer(timeout)
+	defer timer.Stop()
+	select {
+	case e.queue <- telemetryExportItem{Done: done}:
+	case <-timer.C:
+		return false
+	}
+	select {
+	case <-done:
+		return true
+	case <-timer.C:
+		return false
+	}
+}
+
+func (e *telemetryExporter) post(record telemetryRecord) {
+	var payload otlpLogsPayload
+	entry := otlpResourceLogs{}
+	entry.Resource.Attributes = []otlpAttribute{{Key: "service.name", Value: struct {
+		StringValue string `json:"stringValue"`
+	}{StringValue: "gptadmin-hub"}}}
+	scope := otlpScopeLogs{}
+	scope.Scope.Name = "gptadmin/telemetry"
+	attributes := make([]otlpAttribute, 0, len(record.Attributes))
+	for key, value := range record.Attributes {
+		attribute := otlpAttribute{Key: "gptadmin." + key}
+		attribute.Value.StringValue = value
+		attributes = append(attributes, attribute)
+	}
+	scope.LogRecords = []otlpLogRecord{{TimeUnixNano: strconv.FormatInt(record.Timestamp.UnixNano(), 10), SeverityText: "INFO", Body: map[string]string{"stringValue": record.Name}, Attributes: attributes}}
+	entry.ScopeLogs = []otlpScopeLogs{scope}
+	payload.ResourceLogs = []otlpResourceLogs{entry}
+	data, err := json.Marshal(payload)
+	if err != nil {
+		log.Printf("OTLP telemetry encode failed")
+		return
+	}
+	req, err := http.NewRequest(http.MethodPost, e.endpoint, bytes.NewReader(data))
+	if err != nil {
+		log.Printf("OTLP telemetry request construction failed")
+		return
+	}
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := e.client.Do(req)
+	if err != nil {
+		log.Printf("OTLP telemetry export failed")
+		return
+	}
+	_, _ = io.Copy(io.Discard, resp.Body)
+	_ = resp.Body.Close()
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		log.Printf("OTLP telemetry export returned status=%d", resp.StatusCode)
+	}
+}
+
+func telemetryScalar(value any) (string, bool) {
+	switch value := value.(type) {
+	case string:
+		return value, true
+	case bool:
+		return strconv.FormatBool(value), true
+	case int:
+		return strconv.Itoa(value), true
+	case int64:
+		return strconv.FormatInt(value, 10), true
+	case float64:
+		return strconv.FormatFloat(value, 'f', -1, 64), true
+	default:
+		return "", false
+	}
+}
+
+func sanitizeTelemetryValue(value string) string {
+	if strings.Contains(strings.ToLower(value), "://") {
+		return ""
+	}
+	value = strings.Map(func(r rune) rune {
+		if r < 0x20 || r == 0x7f {
+			return -1
+		}
+		return r
+	}, strings.TrimSpace(value))
+	if len(value) > 256 {
+		return value[:256]
+	}
+	return value
+}
+
+func telemetryRecordFromAudit(event auditEvent) telemetryRecord {
+	attributes := map[string]string{}
+	for key, value := range event.Fields {
+		if _, ok := telemetryExportAttributeKeys[key]; !ok {
+			continue
+		}
+		if scalar, ok := telemetryScalar(value); ok {
+			if sanitized := sanitizeTelemetryValue(scalar); sanitized != "" {
+				attributes[key] = sanitized
+			}
+		}
+	}
+	return telemetryRecord{Name: event.Name, Timestamp: time.Now().UTC(), Attributes: attributes}
+}
+
+func (s *Server) enqueueTelemetryAudit(event auditEvent) {
+	if s.telemetryExporter != nil {
+		s.telemetryExporter.submit(telemetryRecordFromAudit(event))
+	}
+}
+
+func (s *Server) flushTelemetry(timeout time.Duration) bool {
+	if s.telemetryExporter == nil {
+		return true
+	}
+	return s.telemetryExporter.flush(timeout)
+}
 
 var activationTelemetryEvents = map[string]struct{}{
 	"connection_page_viewed": {},

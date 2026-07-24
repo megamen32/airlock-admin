@@ -65,6 +65,15 @@ backup or recreate the request; GPTAdmin never falls back to plaintext files
 or environment variables. Rotate the key only with a planned migration that
 re-encrypts records before removing the old key.
 
+### OTLP telemetry export
+
+OTLP export is opt-in through `GPTADMIN_OTLP_ENDPOINT`. External endpoints
+must use HTTPS; HTTP is allowed only for loopback development collectors. The
+Hub exports only an allowlisted structured event envelope and bounded
+correlation fields. Arguments, commands, credentials, URLs, file contents and
+raw payloads are excluded. The queue is bounded and export errors are
+fail-open for the originating control-plane request.
+
 ## Approve mode
 
 For critical operations (deleting files, changing network config), the hub
