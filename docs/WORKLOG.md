@@ -2386,3 +2386,14 @@ plan is [`PROJECT_PLAN.md`](./PROJECT_PLAN.md).
 - Verification: Both SSH probes completed in BatchMode and returned the same inactive/unreachable runtime result.
 - Delivery: External blocker; no deploy, restart or credential change.
 - Next: In an explicitly authorized deployment session, restore the supported release and run the authenticated endpoint/proxy/MCP/file/profile smoke.
+
+## 2026-07-24 - Secret-safe live acceptance runner - completed locally
+
+- Milestone: `S0.1`, `S1.1`, `S4.1`
+- Owner: Codex
+- Scope: One bounded runner for deployed Hub health/version, connection/OAuth discovery, OpenAPI and authenticated safe MCP call.
+- Baseline / red evidence: `tests/test_live_acceptance.py` initially failed during collection because the runner did not exist.
+- Change: Added `tests/e2e/live_acceptance.py`, its in-process HTTP regression, documentation and completion-matrix entry; bearer values and response bodies are excluded from summaries/errors.
+- Verification: runner/docs tests pass (`4 passed`); completion matrix passes (`12 passed`); live execution remains opt-in and was not falsely claimed against inactive hosts.
+- Delivery: Local acceptance tooling only; no service restart or public endpoint mutation.
+- Next: Run the runner in the authorized deployment session, then append authenticated endpoint/proxy/MCP/file/profile evidence.

@@ -22,6 +22,7 @@ def test_documentation_map_names_one_canonical_page_per_supported_surface() -> N
         "network proxy",
         "security",
         "deployment blueprints",
+        "live acceptance",
         "changelog.md",
     ):
         assert required in document, f"documentation map is missing {required!r}"

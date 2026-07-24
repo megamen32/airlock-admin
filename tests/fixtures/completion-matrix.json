@@ -147,6 +147,11 @@
       "id": "mcp-extension-conformance",
       "command": "python3 -m pytest tests/test_extension_sdk.py -q",
       "evidence": "third-party-shaped manifest and stdio lifecycle validate, then discover -> schema -> execute crosses a live Hub and generic relay"
+    },
+    {
+      "id": "live-hub-acceptance-runner",
+      "command": "python3 -m pytest tests/test_live_acceptance.py -q",
+      "evidence": "secret-safe deployment runner covers health/version, connection and OAuth discovery, OpenAPI and authenticated safe MCP call"
     }
   ],
   "file_sharing": [
