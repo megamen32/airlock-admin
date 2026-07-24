@@ -983,6 +983,32 @@ func TestAuthPagesExplainAdminPasswordAndBearerOptions(t *testing.T) {
 	}
 }
 
+func TestConnectionPageExposesCanonicalClientChoicesWithoutSecrets(t *testing.T) {
+	s := New(Config{PublicOrigin: "https://hub.example", MCPResource: "https://hub.example", CtlToken: "hidden-ctl", AdminPassword: "hidden-password"})
+	for _, path := range []string{"/connect", "/connect.json"} {
+		req := httptest.NewRequest(http.MethodGet, path, nil)
+		if path == "/connect.json" {
+			req.Header.Set("Accept", "application/json")
+		}
+		w := httptest.NewRecorder()
+		s.Handler().ServeHTTP(w, req)
+		if w.Code != http.StatusOK {
+			t.Fatalf("connection page %s status=%d body=%s", path, w.Code, w.Body.String())
+		}
+		body := w.Body.String()
+		for _, forbidden := range []string{"hidden-ctl", "hidden-password", "access_token", "client_secret"} {
+			if strings.Contains(body, forbidden) {
+				t.Fatalf("connection page %s leaked %q: %s", path, forbidden, body)
+			}
+		}
+		for _, required := range []string{"https://hub.example", "/mcp", "/.well-known/oauth-authorization-server", "codex", "claude", "chatgpt"} {
+			if !strings.Contains(body, required) {
+				t.Fatalf("connection page %s missing %q: %s", path, required, body)
+			}
+		}
+	}
+}
+
 func TestRegistryStatePersistsAgentsAcrossRestart(t *testing.T) {
 	tmp := t.TempDir()
 	cfg := Config{CtlToken: "ctl", RelayAgentToken: "relay", ConfigDir: tmp, RegistryStateFile: filepath.Join(tmp, "registry_state.json"), DefaultTimeout: time.Second, PollMaxTimeout: time.Second}

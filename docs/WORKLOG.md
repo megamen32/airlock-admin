@@ -1114,6 +1114,26 @@ plan is [`PROJECT_PLAN.md`](./PROJECT_PLAN.md).
 - Next: implement passkey/recovery-code/external-verification support and the
   remaining connection-page gate; TOTP alone is not full MFA completion.
 
+## 2026-07-24 - Canonical connection page - completed
+
+- Milestone: `S1.3`
+- Owner: `Codex`
+- Scope: Expose one secret-free Hub connection page and JSON contract with
+  canonical MCP/OAuth discovery links and named Codex, Claude-compatible,
+  ChatGPT and custom-client choices.
+- Baseline / red evidence: `/connect` and `/connect.json` were not registered;
+  a new client had no single Hub-owned discovery surface to start from.
+- Change: Added public no-store HTML/JSON page derived only from the request
+  origin and configured resource, with no token or password material.
+- Verification: Hub full/race/vet pass; focused connection test passes; public
+  Hub contract and golden-path tests pass (`6 passed`); completion matrix
+  passes (`11 passed`); `git diff --check` passes.
+- Delivery: Pending integration commit on `codex/haos-addon-public`; no deploy
+  or push. The unrelated untracked remote-secret plan remains preserved.
+- Next: implement local client auto-configuration and connection telemetry;
+  this page is the canonical discovery surface, not a claim that those flows
+  are complete.
+
 ## 2026-07-22 - Isolated Network Tunnel proxy relay - completed
 
 - Milestone: `S2.2`

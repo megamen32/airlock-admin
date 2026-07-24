@@ -21,6 +21,11 @@
       "id": "shellmcp-http-contract",
       "command": "python3 -m pytest tests/test_shellmcp_contract.py -q",
       "evidence": "ShellMCP authenticated endpoint and service contract"
+    },
+    {
+      "id": "canonical-connection-page",
+      "command": "cd go-hub && go test ./internal/hub -run 'TestConnectionPageExposesCanonicalClientChoicesWithoutSecrets' -count=1",
+      "evidence": "one Hub URL, MCP/OAuth discovery links and Codex/Claude/ChatGPT choices without bearer or password material"
     }
   ],
   "hooks": [

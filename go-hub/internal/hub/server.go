@@ -631,6 +631,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/authorize", s.oauthAuthorize)
 	mux.HandleFunc("/token", s.oauthToken)
 	mux.HandleFunc("/mcp", s.mcpEndpoint)
+	mux.HandleFunc("/connect", s.connectionPage)
+	mux.HandleFunc("/connect.json", s.connectionPage)
 	mux.HandleFunc("/_services/", s.httpServiceEndpoint)
 	mux.HandleFunc("/server/", s.serverMCPEndpoint)
 	// Legacy alias kept for old pinned MCP URLs.
