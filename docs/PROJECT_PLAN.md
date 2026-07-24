@@ -81,7 +81,7 @@ experience, not an expert-only configuration exercise.
 
 | Milestone | Deliverable | Exit gate | Status |
 | --- | --- | --- | --- |
-| S2.1 One-password identity and connection hygiene | `AdminPassword` for humans; hidden internal keys and short-lived scoped JWT connections | Black-box tests reject wrong audience, expired token and token forwarding; normal user flows reveal no raw token | In progress |
+| S2.1 One-password identity and connection hygiene | `AdminPassword` for humans; hidden internal keys and short-lived scoped JWT connections | Black-box tests reject wrong audience, expired token and token forwarding; normal user flows reveal no raw token | Complete |
 | S2.1a Admin MFA | WebAuthn/passkeys first, TOTP fallback, recovery codes and optional OIDC proxy identity | Locked down admin sessions cannot be enabled without MFA; enrollment, recovery and sensitive-setting re-auth are black-box tested | In progress |
 | S2.2 Capability policy | Per-agent, per-server and per-tool allow rules with explicit deny behavior | Policy decision is included in every audit event and covered by API/MCP tests | Complete |
 | S2.3 Progressive autonomy | Approval modes: read-only, ask-before-write, bounded autonomous | Dangerous calls require the configured approval and cannot bypass it through aliases or relay targets | Complete |

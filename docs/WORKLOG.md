@@ -1171,6 +1171,23 @@ plan is [`PROJECT_PLAN.md`](./PROJECT_PLAN.md).
   push or merge. The unrelated remote-secret plan remains preserved.
 - Next: Keep internal migration names out of normal setup/status/UI surfaces.
 
+## 2026-07-24 - One-password identity exit gate - completed
+
+- Milestone: `S2.1`
+- Owner: `Codex`
+- Scope: Close the normal-flow identity hygiene gate after strict JWT claim
+  validation, scoped connection tests and auth-page sanitization.
+- Evidence: Wrong audience/resource, expired and incomplete scoped JWTs,
+  admin-token forwarding and raw-token exclusion are covered by Hub tests;
+  `/admin/login`, `/authorize`, `/connect(.json)` and production admin UI now
+  use AdminPassword/OAuth/scoped-JWT vocabulary without internal key names.
+- Verification: Focused auth-page test passes; Hub package and black-box auth
+  contract pass; full Python and matrix gates are green from the current audit.
+- Delivery: Pending integration commit on `codex/haos-addon-public`; no deploy,
+  push or merge. The unrelated remote-secret plan remains preserved.
+- Next: Keep legacy migration expiry and S2.1a passkeys/WebAuthn/OIDC as
+  separate security follow-up gates.
+
 
 ## 2026-07-24 - Typed admin security controls and Apps SDK contract - completed
 
