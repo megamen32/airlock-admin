@@ -2419,3 +2419,14 @@ plan is [`PROJECT_PLAN.md`](./PROJECT_PLAN.md).
 - Verification: contract and integration certification tests pass (`3 passed`); the canonical docs map now exposes the contract.
 - Delivery: Local documentation alignment only; no new session-oriented adapter or external certification was claimed.
 - Next: Obtain a real third-party/session adapter certification after the external client/host gate is available.
+
+## 2026-07-24 - Process-level live runner verification - completed locally
+
+- Milestone: `S0.1`, `S1.1`, `S4.1`
+- Owner: Codex
+- Scope: Run the secret-safe live acceptance runner against an actual disposable Go Hub binary.
+- Baseline / red evidence: `tests/test_live_acceptance.py::test_live_runner_checks_actual_go_hub_process` failed because the runner expected `connect.json.mcp` instead of the authoritative `mcp_endpoint` field.
+- Change: Corrected the runner and mock contract, and added process startup/readiness/cleanup coverage using a real Hub binary.
+- Verification: `python3 -m pytest tests/test_live_acceptance.py -q` passes (`2 passed`); the full smoke covers health, version, connection/OAuth discovery, OpenAPI and authenticated safe MCP call.
+- Delivery: Disposable local process evidence only; it does not certify the inactive external hosts, public Tunnel or third-party clients.
+- Next: Run the same runner against the authorized live Hub URL and attach the redacted result artifact.

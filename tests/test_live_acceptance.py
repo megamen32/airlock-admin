@@ -4,10 +4,19 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import os
+import signal
+import socket
+import subprocess
 import threading
+import time
+import urllib.error
+import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
+
+import pytest
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -33,7 +42,7 @@ class _Handler(BaseHTTPRequestHandler):
         if self.path == "/actions/openapi.yaml":
             self._send(200, b"openapi: 3.1.0\n", "application/yaml")
         elif self.path == "/connect.json":
-            self._send(200, {"mcp": "/mcp", "oauth_authorization_server": "/.well-known/oauth-authorization-server"})
+            self._send(200, {"mcp_endpoint": "/mcp", "oauth_authorization_server": "/.well-known/oauth-authorization-server"})
         elif self.path == "/.well-known/oauth-authorization-server":
             self._send(200, {"authorization_endpoint": "http://127.0.0.1/oauth/authorize", "token_endpoint": "http://127.0.0.1/oauth/token"})
         elif self.path in {"/healthz", "/version"}:
@@ -76,3 +85,80 @@ def test_live_runner_checks_public_and_authenticated_surfaces_without_echoing_be
     assert summary["stages"] == ["health", "version", "connection", "oauth", "openapi", "mcp"]
     assert "test-bearer" not in json.dumps(summary)
 
+
+@pytest.fixture
+def disposable_real_hub(tmp_path: Path):
+    """Build and run the actual Go Hub for a process-level live smoke."""
+
+    binary = tmp_path / "gptadmin-hub"
+    subprocess.run(
+        ["go", "build", "-buildvcs=false", "-o", str(binary), "./cmd/gptadmin-hub"],
+        cwd=ROOT / "go-hub",
+        check=True,
+        timeout=120,
+    )
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+        sock.bind(("127.0.0.1", 0))
+        port = int(sock.getsockname()[1])
+    config_dir = tmp_path / "config"
+    config_dir.mkdir()
+    env = os.environ.copy()
+    env.update(
+        {
+            "GPTADMIN_HUB_HOST": "127.0.0.1",
+            "GPTADMIN_HUB_PORT": str(port),
+            "HUB_HOST": "127.0.0.1",
+            "HUB_PORT": str(port),
+            "PORT": str(port),
+            "CTL_TOKEN": "ctl",
+            "ADMIN_PASSWORD": "pw",
+            "PUBLIC_ORIGIN": f"http://127.0.0.1:{port}",
+            "MCP_RESOURCE": f"http://127.0.0.1:{port}",
+            "GPTADMIN_CONFIG_DIR": str(config_dir),
+            "GPTADMIN_ROOT": str(ROOT),
+            "NO_PROXY": "localhost,127.0.0.1",
+            "no_proxy": "localhost,127.0.0.1",
+            "HTTP_PROXY": "",
+            "HTTPS_PROXY": "",
+            "ALL_PROXY": "",
+        }
+    )
+    process = subprocess.Popen(
+        [str(binary)],
+        cwd=ROOT,
+        env=env,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        start_new_session=True,
+    )
+    base_url = f"http://127.0.0.1:{port}"
+    deadline = time.monotonic() + 15
+    while time.monotonic() < deadline:
+        try:
+            with urllib.request.urlopen(f"{base_url}/version", timeout=1) as response:
+                if response.status == 200:
+                    break
+        except (OSError, urllib.error.URLError):
+            time.sleep(0.1)
+    else:
+        process.kill()
+        process.wait(timeout=5)
+        pytest.fail("disposable Go Hub did not become ready")
+    try:
+        yield base_url
+    finally:
+        if process.poll() is None:
+            os.killpg(os.getpgid(process.pid), signal.SIGTERM)
+            try:
+                process.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                os.killpg(os.getpgid(process.pid), signal.SIGKILL)
+                process.wait(timeout=5)
+
+
+def test_live_runner_checks_actual_go_hub_process(disposable_real_hub: str) -> None:
+    """The deployment runner must work against the real Hub binary, not only a mock."""
+
+    summary = live_acceptance.run_acceptance(disposable_real_hub, "ctl", required_tools={"demo"})
+    assert summary["status"] == "passed"
+    assert summary["tool_count"] > 0

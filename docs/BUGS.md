@@ -577,3 +577,13 @@ Rules:
 - Fix / verification: Added per-run roots, dynamic free-port selection, process-group cleanup and an `E2E_RUNNER_PID` parent-watch in `fake-frpc`; `tests/test_failover_harness.py` passes, all seven failover scenarios pass, and a post-run process check finds no repository-owned fake FRP orphan.
 - Status: fixed.
 - Next action: Keep the parent-watch contract whenever the failover runner launches a new long-lived test double.
+
+## 2026-07-24 - LIVE-RUNNER-CONNECTION-FIELD-20260724 - Live runner expected the wrong connection manifest field - fixed
+
+- Component: `tests/e2e/live_acceptance.py`.
+- First observed: 2026-07-24, process-level smoke against a real disposable Go Hub; RED evidence `tests/test_live_acceptance.py::test_live_runner_checks_actual_go_hub_process`.
+- Confirmed fact: The runner looked for `connect.json.mcp`, while the Hub contract publishes `mcp_endpoint`; the mock test concealed the mismatch.
+- Root cause: The new runner's fixture used an invented shorthand instead of the authoritative connection manifest field.
+- Fix / verification: Aligned the runner and mock with the authoritative `mcp_endpoint` field; `python3 -m pytest tests/test_live_acceptance.py -q` passes (`2 passed`) against both the in-process surface and a real Go Hub process.
+- Status: fixed.
+- Next action: Keep the live runner contract synchronized with `connection_page.go` when discovery fields change.

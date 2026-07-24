@@ -89,7 +89,7 @@ def run_acceptance(base_url: str, bearer: str, required_tools: set[str] | None =
     stages.append("version")
 
     connection = _json_response(base_url, "/connect.json")
-    if not connection.get("mcp") or not connection.get("oauth_authorization_server"):
+    if not connection.get("mcp_endpoint") or not connection.get("oauth_authorization_server"):
         raise LiveAcceptanceError("/connect.json: MCP/OAuth discovery is incomplete")
     stages.append("connection")
 
