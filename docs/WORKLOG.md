@@ -48,6 +48,16 @@ plan is [`PROJECT_PLAN.md`](./PROJECT_PLAN.md).
 
 ## Entries
 
+## 2026-07-24 - Extension manifest conformance - active
+
+- Milestone: `S4.4`
+- Owner: `Codex`
+- Scope: Define and validate a stable `gptadmin.mcp-extension/v1` manifest for third-party MCP adapters without executing untrusted entrypoints or bypassing Hub policy.
+- Baseline / red evidence: `tests/test_extension_sdk.py` first failed because no validator or extension contract existed.
+- Intended verification: Reference fixture validation, malformed-manifest rejection, CLI validation smoke, completion matrix and full Python suite.
+- Delivery: No commit yet; preserve the unrelated untracked remote-secret-ingress plan.
+- Next: Complete the conformance validator/docs, then record the delivery identity and keep live third-party extension certification open.
+
 ## 2026-07-24 - Curated MCP capability catalog - active
 
 - Milestone: `S4.2`

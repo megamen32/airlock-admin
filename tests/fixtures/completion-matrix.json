@@ -137,6 +137,11 @@
       "id": "mcp-capability-catalog",
       "command": "python3 -m pytest tests/test_mcp_catalog.py -q",
       "evidence": "curated MCP definitions expose provenance, scopes, network needs and risk before activation; catalog-bound installs require explicit acceptance"
+    },
+    {
+      "id": "mcp-extension-conformance",
+      "command": "python3 -m pytest tests/test_extension_sdk.py -q",
+      "evidence": "third-party-shaped MCP extension manifests validate against a stable schema without executing untrusted entrypoints"
     }
   ],
   "file_sharing": [

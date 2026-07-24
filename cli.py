@@ -2433,6 +2433,56 @@ def cmd_mcp_catalog(args):
         print(f"  network_needs={'; '.join(definition['network_needs']) or 'none'} owner={definition['maintenance_owner']}")
 
 
+def _validate_mcp_extension_manifest(path: Path) -> dict:
+    """Validate a third-party MCP extension manifest without executing it."""
+    try:
+        raw = path.read_bytes()
+    except OSError as exc:
+        raise ValueError(f'cannot read extension manifest: {exc}') from exc
+    if len(raw) > 128 * 1024:
+        raise ValueError('extension manifest exceeds 128 KiB')
+    try:
+        manifest = json.loads(raw.decode('utf-8'))
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise ValueError(f'extension manifest is not valid UTF-8 JSON: {exc}') from exc
+    if not isinstance(manifest, dict):
+        raise ValueError('extension manifest must be a JSON object')
+    required = ('schema', 'id', 'version', 'kind', 'protocol', 'entrypoint', 'capabilities', 'scopes', 'network_needs', 'provenance', 'risk_level', 'maintenance_owner')
+    for key in required:
+        if key not in manifest:
+            raise ValueError(f'extension manifest requires {key}')
+    if manifest['schema'] != 'gptadmin.mcp-extension/v1':
+        raise ValueError('unsupported extension manifest schema')
+    for key in ('id', 'version', 'kind', 'protocol', 'maintenance_owner', 'provenance'):
+        if not isinstance(manifest[key], str) or not manifest[key].strip():
+            raise ValueError(f'extension manifest {key} must be a non-empty string')
+    if manifest['kind'] not in {'stdio', 'http'} or manifest['protocol'] != 'mcp-jsonrpc':
+        raise ValueError('extension manifest kind/protocol is unsupported')
+    if not isinstance(manifest['entrypoint'], list) or not manifest['entrypoint'] or not all(isinstance(item, str) and item for item in manifest['entrypoint']):
+        raise ValueError('extension manifest entrypoint must be a non-empty string list')
+    if not isinstance(manifest['capabilities'], list) or not manifest['capabilities']:
+        raise ValueError('extension manifest capabilities must be a non-empty list')
+    for capability in manifest['capabilities']:
+        if not isinstance(capability, dict) or not isinstance(capability.get('name'), str) or not capability['name'].strip():
+            raise ValueError('extension capability name is required')
+        if not isinstance(capability.get('description'), str) or not capability['description'].strip():
+            raise ValueError('extension capability description is required')
+        if not isinstance(capability.get('input_schema'), dict):
+            raise ValueError('extension capability input_schema is required')
+    for key in ('scopes', 'network_needs'):
+        if not isinstance(manifest[key], list) or not all(isinstance(item, str) for item in manifest[key]):
+            raise ValueError(f'extension manifest {key} must be a string list')
+    if manifest['risk_level'] not in {'low', 'medium', 'high'}:
+        raise ValueError('extension manifest risk_level must be low, medium or high')
+    return manifest
+
+
+def cmd_mcp_extension_validate(args):
+    """Validate and print an extension manifest without installing it."""
+    manifest = _validate_mcp_extension_manifest(Path(args.manifest).expanduser())
+    print(json.dumps({'valid': True, 'manifest': manifest}, ensure_ascii=False, indent=2))
+
+
 
 def _mcp_extract_tail_options(args):
     # argparse.REMAINDER is used so command tails like "npx -y ..." survive.
@@ -5133,6 +5183,10 @@ def main():
     ap_mcp_catalog = mcp_sub.add_parser('catalog', help='Показать атрибутированный каталог MCP capability')
     ap_mcp_catalog.add_argument('--json', action='store_true')
     ap_mcp_catalog.set_defaults(func=cmd_mcp_catalog)
+
+    ap_mcp_extension = mcp_sub.add_parser('extension-validate', aliases=['validate-extension'], help='Проверить manifest стороннего MCP extension')
+    ap_mcp_extension.add_argument('manifest')
+    ap_mcp_extension.set_defaults(func=cmd_mcp_extension_validate)
 
     ap_mcp_add = mcp_sub.add_parser('add', help='Добавить MCP-сервер (стиль Claude/Codex)')
     ap_mcp_add.add_argument('name')
