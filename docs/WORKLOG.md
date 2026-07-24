@@ -2606,3 +2606,14 @@ plan is [`PROJECT_PLAN.md`](./PROJECT_PLAN.md).
 - Verification: Hub `go test ./...`, `go test -race ./...`, `go vet ./...` pass; Darwin arm64/amd64 builds pass; completion matrix `12 passed`; full Python `237 passed, 3 skipped` (239 collected / 1 collection skip).
 - Delivery: Current local schema/endpoint evidence is green; external adapter/client/Tunnel certification remains open.
 - Next: Run schema-bound execute through the authorized public adapter/client smoke.
+
+## 2026-07-24 - Schema metadata argument-boundary regression - completed locally
+
+- Milestone: `S2.2`, `S4.1`
+- Owner: Codex
+- Scope: Ensure schema freshness metadata remains control-plane data and is never forwarded as downstream tool arguments.
+- Baseline / red evidence: The new conformance assertion showed `schema_version` and `schema_digest_sha256` in an unsupported Hub tool's argument echo when top-level `arguments` was omitted; recorded as `MCP-SCHEMA-METADATA-ARG-20260724`.
+- Change: Added both fields to the reserved top-level routing set.
+- Verification: `go test ./internal/hub -run TestMCPIntegrationDiscoverSchemaExecuteConformance -count=1` passes; the test asserts no schema metadata leak.
+- Delivery: Local Hub boundary evidence only; external adapter/client evidence remains separate.
+- Next: Preserve the regression in the full Hub and completion-matrix gates.

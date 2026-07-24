@@ -277,6 +277,14 @@ func TestMCPIntegrationDiscoverSchemaExecuteConformance(t *testing.T) {
 	if !strings.Contains(string(mismatchJSON), `"schema_mismatch"`) {
 		t.Fatalf("execute accepted a stale schema digest: %s", mismatchJSON)
 	}
+	metadataLeak := call(5, "execute", fmt.Sprintf(`{"target":"hub","tool":"unsupported-schema-probe","schema_version":%q,"schema_digest_sha256":%q}`, schemaVersion, schemaDigest))
+	metadataLeakJSON, err := json.Marshal(metadataLeak)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(metadataLeakJSON), "schema_version") || strings.Contains(string(metadataLeakJSON), "schema_digest_sha256") {
+		t.Fatalf("schema metadata leaked into tool arguments: %s", metadataLeakJSON)
+	}
 }
 
 func registerRelayAgent(t *testing.T, s *Server, agentID string) {

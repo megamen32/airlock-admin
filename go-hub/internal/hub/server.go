@@ -2657,8 +2657,10 @@ func toolArgsFromTopLevel(req map[string]any) map[string]any {
 		"target": true, "server_id": true, "agent_id": true,
 		"tool": true, "tool_name": true, "name": true,
 		"arguments": true, "args": true,
-		"background":      true,
-		"idempotency_key": true,
+		"background":           true,
+		"idempotency_key":      true,
+		"schema_version":       true,
+		"schema_digest_sha256": true,
 	}
 	args := map[string]any{}
 	for k, v := range req {

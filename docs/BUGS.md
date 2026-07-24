@@ -607,3 +607,13 @@ Rules:
 - Fix / verification: Digest calculation now covers the stable policy-filtered tool schema and adds transport hints afterward; Go conformance and Hub process endpoint regressions pass.
 - Status: fixed.
 - Next action: Retain schema version/digest freshness checks in the integration and endpoint acceptance matrix.
+
+## 2026-07-24 - MCP-SCHEMA-METADATA-ARG-20260724 - Schema metadata leaked through top-level argument extraction - fixed
+
+- Component: Hub legacy top-level MCP argument extraction.
+- First observed: 2026-07-24, RED assertion in `TestMCPIntegrationDiscoverSchemaExecuteConformance` after adding schema-bound execute fields.
+- Confirmed fact: When `arguments` was omitted, `schema_version` and `schema_digest_sha256` were copied into the downstream tool argument map.
+- Root cause: `toolArgsFromTopLevel` reserved routing and idempotency fields but did not yet know the new schema-control fields.
+- Fix / verification: Added both schema fields to the reserved set; the conformance regression passes and metadata is absent from the downstream unsupported-tool response.
+- Status: fixed.
+- Next action: Keep schema-control metadata out of tool arguments in the MCP security regression.
