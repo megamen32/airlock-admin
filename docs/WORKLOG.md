@@ -2584,3 +2584,14 @@ plan is [`PROJECT_PLAN.md`](./PROJECT_PLAN.md).
 - Verification: Completion matrix passed (`12 passed` in `127.85s`); full Python passed (`237 passed, 3 skipped`, 239 collected / 1 collection skip).
 - Delivery: Current local docs acceptance is green; translation review and external adoption evidence remain open.
 - Next: Use the docs snippets in the authorized deployment/client evidence session.
+
+## 2026-07-24 - Schema version and digest control contract - completed locally
+
+- Milestone: `S4.1`
+- Owner: Codex
+- Scope: Bind `discover -> schema -> execute` to a deterministic effective-schema version/digest across MCP and REST relay paths.
+- Baseline / red evidence: The canonical integration contract explicitly listed schema version/digest as a future gap; new Go and process regressions first failed because metadata was absent, then exposed a digest mismatch caused by action hints.
+- Change: Added `gptadmin.mcp-schema/v1`, SHA-256 metadata, optional execute freshness validation with `409 schema_mismatch`, OpenAPI/Apps SDK fields, docs and matrix coverage.
+- Verification: Go conformance passes; `python3 -m pytest tests/test_hub_contract.py -k relay_and_openapi -q` passes (`1 passed`); stale digest is rejected before tool execution.
+- Delivery: Local Hub/relay contract evidence only; external adapter certification and public client/Tunnel evidence remain separate.
+- Next: Add the schema identity to the authorized external adapter/client smoke when deployment access is available.

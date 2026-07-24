@@ -33,6 +33,11 @@
       "evidence": "health/version/auth/OpenAPI/MCP endpoint behavior"
     },
     {
+      "id": "schema-digest-process",
+      "command": "python3 -m pytest tests/test_hub_contract.py -k relay_and_openapi -q",
+      "evidence": "real Hub schema endpoint returns version/digest and execute rejects a stale digest before tool invocation"
+    },
+    {
       "id": "shellmcp-http-contract",
       "command": "python3 -m pytest tests/test_shellmcp_contract.py -q",
       "evidence": "ShellMCP authenticated endpoint and service contract"

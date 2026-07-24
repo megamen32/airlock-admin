@@ -328,6 +328,38 @@ def test_hub_contract_relay_and_openapi(hub_contract: HubProcess) -> None:
     assert tools_body.get("server_id") == "hub"
     tools = tools_body.get("response", {}).get("tools")
     assert isinstance(tools, list) and any(tool.get("name") == "discover" for tool in tools)
+    schema_version = tools_body["response"].get("schema_version")
+    schema_digest = tools_body["response"].get("schema_digest_sha256")
+    assert schema_version == "gptadmin.mcp-schema/v1"
+    assert isinstance(schema_digest, str) and len(schema_digest) == 64
+
+    status, executed, _ = hub_contract.request(
+        "POST",
+        "/mcp-relay/call",
+        payload={
+            "target": "hub",
+            "tool_name": "demo",
+            "arguments": {},
+            "schema_version": schema_version,
+            "schema_digest_sha256": schema_digest,
+        },
+    )
+    assert status == 200, executed
+    assert executed.get("status") == "completed", executed
+
+    status, stale, _ = hub_contract.request(
+        "POST",
+        "/mcp-relay/call",
+        payload={
+            "target": "hub",
+            "tool_name": "demo",
+            "arguments": {},
+            "schema_version": schema_version,
+            "schema_digest_sha256": "0" * 64,
+        },
+    )
+    assert status == 409, stale
+    assert stale.get("error", {}).get("code") == "schema_mismatch", stale
 
     for path, payload in (
         ("/mcp-relay/tools", {"target": "default"}),
@@ -346,6 +378,7 @@ def test_hub_contract_relay_and_openapi(hub_contract: HubProcess) -> None:
     assert "/webhooks/v1/{route}" in schema
     assert "/webhook-jobs/{job_id}" in schema
     assert "/webhook-routes/{route}" in schema
+    assert "schema_digest_sha256" in schema
 
 
 def test_hub_contract_global_mcp(hub_contract: HubProcess) -> None:

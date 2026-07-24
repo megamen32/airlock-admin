@@ -597,3 +597,13 @@ Rules:
 - Fix / verification: Added the isolated fixture value; the process profile test passes (`1 passed`) and no production credential or source fallback was introduced.
 - Status: fixed.
 - Next action: Keep managed-token profile binding in the process acceptance matrix.
+
+## 2026-07-24 - MCP-SCHEMA-DIGEST-HINT-20260724 - Fresh schema digest was rejected by relay execute - fixed
+
+- Component: Hub `schema`/`execute` integration-control contract.
+- First observed: 2026-07-24, RED process regression `tests/test_hub_contract.py::test_hub_contract_relay_and_openapi` after adding schema version/digest binding.
+- Confirmed fact: A digest copied directly from `/mcp-relay/tools` was rejected with `409 schema_mismatch` by `/mcp-relay/call`.
+- Root cause: The schema endpoint hashed policy-filtered tools after adding Action shortcut hints, while execute recomputed the digest from the underlying tool schema without those transport hints.
+- Fix / verification: Digest calculation now covers the stable policy-filtered tool schema and adds transport hints afterward; Go conformance and Hub process endpoint regressions pass.
+- Status: fixed.
+- Next action: Retain schema version/digest freshness checks in the integration and endpoint acceptance matrix.

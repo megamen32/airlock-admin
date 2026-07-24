@@ -255,14 +255,27 @@ func TestMCPIntegrationDiscoverSchemaExecuteConformance(t *testing.T) {
 	if len(tools) == 0 {
 		t.Fatalf("schema returned no tools: %v", schemaContent)
 	}
+	schemaVersion := firstString(response, "schema_version")
+	schemaDigest := firstString(response, "schema_digest_sha256")
+	if schemaVersion == "" || len(schemaDigest) != 64 {
+		t.Fatalf("schema omitted stable version/digest: %v", response)
+	}
 
-	execute := call(3, "execute", `{"target":"hub","tool":"demo","arguments":{"probe":"conformance"},"idempotency_key":"conformance-demo-1"}`)
+	execute := call(3, "execute", fmt.Sprintf(`{"target":"hub","tool":"demo","arguments":{"probe":"conformance"},"schema_version":%q,"schema_digest_sha256":%q,"idempotency_key":"conformance-demo-1"}`, schemaVersion, schemaDigest))
 	executeJSON, err := json.Marshal(execute)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if !strings.Contains(string(executeJSON), `"status":"ok"`) {
 		t.Fatalf("execute did not return the safe demo result: %s", executeJSON)
+	}
+	mismatch := call(4, "execute", fmt.Sprintf(`{"target":"hub","tool":"demo","arguments":{},"schema_version":%q,"schema_digest_sha256":"%064d"}`, schemaVersion, 0))
+	mismatchJSON, err := json.Marshal(mismatch)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(mismatchJSON), `"schema_mismatch"`) {
+		t.Fatalf("execute accepted a stale schema digest: %s", mismatchJSON)
 	}
 }
 

@@ -40,6 +40,14 @@ decision is applied before schema lookup and execution, and the same target
 identity is carried through queued calls and results.
 In short, the implemented contract is `discover -> schema -> execute`.
 
+Every schema response now includes schema version/digest metadata: a
+`schema_version` and a deterministic
+`schema_digest_sha256` for the effective, policy-filtered tool list. An
+`execute` call may carry both values; the Hub rejects an incomplete or stale
+pair with `409 schema_mismatch` before invoking the selected tool. Transport
+shortcut hints are added after digest calculation and therefore cannot make a
+fresh schema appear stale.
+
 ## Remaining Gaps
 
 `execute` accepts an optional caller-stable `idempotency_key`. The Hub
@@ -50,9 +58,9 @@ The bounded record is in-memory for the current Hub process and expires after a
 short TTL, so this is retry safety, not a claim of exactly-once execution after
 a Hub restart. Background `job_id` remains the completion handle.
 
-The flow does not yet attach a schema version/digest to a call. This is a
-targeted future extension, not a reason to create a second copy of the Hub
-relay API.
+The schema identity is recomputed against the selected target for each
+version-bound execute call. It is a freshness guard, not a claim of durable
+exactly-once execution or a replacement for the existing idempotency key.
 
 ## GPTAdmin Scope
 

@@ -1453,6 +1453,15 @@ components:
           minLength: 1
           maxLength: 200
           description: Reuse only for the same operation.
+        schema_version:
+          type: string
+          description: Version returned by the selected target schema.
+        schema_digest_sha256:
+          type: string
+          minLength: 64
+          maxLength: 64
+          pattern: '^[a-f0-9]{64}$'
+          description: Digest returned by the selected target schema.
     Result:
       type: object
       additionalProperties: true
@@ -1466,6 +1475,7 @@ components:
         response:
           type: object
           nullable: true
+          description: Schema responses include schema_version and schema_digest_sha256.
           additionalProperties: true
         background:
           type: boolean
@@ -2278,11 +2288,11 @@ func (s *Server) mcpRelayTools(w http.ResponseWriter, r *http.Request) {
 	}
 	target = selectedTarget
 	if target == "hub" {
-		writeJSON(w, http.StatusOK, withActionToolHints(map[string]any{"server_id": target, "status": "completed", "response": map[string]any{"tools": toolsForRequest(r, target, hubTools())}}, target))
+		writeJSON(w, http.StatusOK, withActionToolHints(withSchemaContractMetadata(map[string]any{"server_id": target, "status": "completed", "response": map[string]any{"tools": toolsForRequest(r, target, hubTools())}}), target))
 		return
 	}
 	if strings.HasPrefix(target, "shell:") {
-		writeJSON(w, http.StatusOK, withActionToolHints(map[string]any{"server_id": target, "status": "completed", "response": map[string]any{"tools": toolsForRequest(r, target, shellTools())}}, target))
+		writeJSON(w, http.StatusOK, withActionToolHints(withSchemaContractMetadata(map[string]any{"server_id": target, "status": "completed", "response": map[string]any{"tools": toolsForRequest(r, target, shellTools())}}), target))
 		return
 	}
 	if requestAccessMode(r) == accessModeReadonly {
@@ -2294,7 +2304,8 @@ func (s *Server) mcpRelayTools(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]any{"server_id": target, "status": "running", "background": true, "job_id": jobID})
 		return
 	}
-	resp := withActionToolHints(s.waitRelay(jobID, timeoutFromReq(req, s.cfg.DefaultTimeout)), target)
+	resp := withSchemaContractMetadata(s.waitRelay(jobID, timeoutFromReq(req, s.cfg.DefaultTimeout)))
+	resp = withActionToolHints(resp, target)
 	writeJSON(w, http.StatusOK, resp)
 }
 
@@ -2332,6 +2343,10 @@ func (s *Server) mcpRelayCall(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	target = selectedTarget
+	if response, blocked := s.validateSchemaContract(r, target, req); blocked {
+		writeJSON(w, http.StatusConflict, response)
+		return
+	}
 	resp, status := s.executeMCPTool(r, target, toolName, args, truthy(req["background"]), timeoutFromReq(req, s.cfg.DefaultTimeout), firstString(req, "idempotency_key"))
 	writeJSON(w, status, resp)
 }
@@ -5316,13 +5331,13 @@ func (s *Server) appsSDKCall(name string, args map[string]any) any {
 		}
 		target = selectedTarget
 		if target == "hub" {
-			return map[string]any{"server_id": target, "status": "completed", "response": map[string]any{"tools": hubTools()}}
+			return withSchemaContractMetadata(map[string]any{"server_id": target, "status": "completed", "response": map[string]any{"tools": hubTools()}})
 		}
 		if strings.HasPrefix(target, "shell:") {
-			return map[string]any{"server_id": target, "status": "completed", "response": map[string]any{"tools": shellTools()}}
+			return withSchemaContractMetadata(map[string]any{"server_id": target, "status": "completed", "response": map[string]any{"tools": shellTools()}})
 		}
 		jobID := s.enqueueRelay(target, "tools/list", map[string]any{})
-		return s.waitRelay(jobID, s.cfg.DefaultTimeout)
+		return withSchemaContractMetadata(s.waitRelay(jobID, s.cfg.DefaultTimeout))
 	case "inspect", "inspect_system", "inspectSystem":
 		target := firstString(args, "target", "server_id", "agent_id")
 		selectedTarget, status, detail := s.selectMCPRelayTarget(target)
@@ -5440,7 +5455,7 @@ func (s *Server) appsSDKSchemaForRequest(r *http.Request, args map[string]any) a
 			response["tools"] = toolsForRequest(r, target, raw)
 		}
 	}
-	return result
+	return withSchemaContractMetadata(result)
 }
 
 func (s *Server) appsSDKCallMCP(r *http.Request, name string, args map[string]any) any {
@@ -5459,6 +5474,9 @@ func (s *Server) appsSDKCallMCP(r *http.Request, name string, args map[string]an
 	selectedTarget, status, detail := s.selectMCPRelayTarget(target)
 	if status != http.StatusOK {
 		return map[string]any{"server_id": target, "status": "failed", "error": map[string]any{"status_code": status, "message": detail}}
+	}
+	if response, blocked := s.validateSchemaContract(r, selectedTarget, args); blocked {
+		return response
 	}
 	response, status := s.executeMCPTool(r, selectedTarget, toolName, callArgs, truthy(args["background"]), s.cfg.DefaultTimeout, firstString(args, "idempotency_key"))
 	if status >= http.StatusBadRequest {
@@ -5536,7 +5554,7 @@ func appsSDKTools() []map[string]any {
 			"title":           "Schema",
 			"description":     "List tools for one target selected by discover. Never use target=default.",
 			"inputSchema":     map[string]any{"type": "object", "properties": map[string]any{"target": map[string]any{"type": "string"}}, "required": []string{"target"}, "additionalProperties": false},
-			"outputSchema":    map[string]any{"type": "object", "properties": map[string]any{"server_id": map[string]any{"type": "string"}, "status": map[string]any{"type": "string"}, "response": map[string]any{"type": "object", "additionalProperties": true}}, "additionalProperties": true},
+			"outputSchema":    map[string]any{"type": "object", "properties": map[string]any{"server_id": map[string]any{"type": "string"}, "status": map[string]any{"type": "string"}, "response": map[string]any{"type": "object", "description": "Includes schema_version and schema_digest_sha256 when listing tools.", "additionalProperties": true}}, "additionalProperties": true},
 			"annotations":     map[string]any{"readOnlyHint": true, "destructiveHint": false, "openWorldHint": false},
 			"securitySchemes": readSecurity,
 			"_meta":           readMeta,
@@ -5560,7 +5578,7 @@ func appsSDKTools() []map[string]any {
 			"name":            "execute",
 			"title":           "Execute",
 			"description":     "Execute one tool on one target. Use schema first. Retry the same operation with the same idempotency_key.",
-			"inputSchema":     map[string]any{"type": "object", "properties": map[string]any{"target": map[string]any{"type": "string"}, "tool": map[string]any{"type": "string"}, "args": map[string]any{"type": "object", "additionalProperties": true}, "background": map[string]any{"type": "boolean"}, "idempotency_key": map[string]any{"type": "string", "minLength": 1, "maxLength": idempotencyKeyMax}}, "required": []string{"target", "tool"}, "additionalProperties": true},
+			"inputSchema":     map[string]any{"type": "object", "properties": map[string]any{"target": map[string]any{"type": "string"}, "tool": map[string]any{"type": "string"}, "args": map[string]any{"type": "object", "additionalProperties": true}, "background": map[string]any{"type": "boolean"}, "idempotency_key": map[string]any{"type": "string", "minLength": 1, "maxLength": idempotencyKeyMax}, "schema_version": map[string]any{"type": "string"}, "schema_digest_sha256": map[string]any{"type": "string", "minLength": 64, "maxLength": 64, "pattern": "^[a-f0-9]{64}$"}}, "required": []string{"target", "tool"}, "additionalProperties": true},
 			"outputSchema":    map[string]any{"type": "object", "additionalProperties": true},
 			"annotations":     map[string]any{"readOnlyHint": false, "destructiveHint": true, "openWorldHint": true},
 			"securitySchemes": execSecurity,
