@@ -48,6 +48,17 @@ plan is [`PROJECT_PLAN.md`](./PROJECT_PLAN.md).
 
 ## Entries
 
+## 2026-07-24 - Bug ledger status correction - completed
+
+- Milestone: `S2.2` / `S2.3`
+- Owner: `Codex`
+- Scope: Align the policy-boundary bug title with its already verified fixed status; no runtime behavior changed.
+- Baseline / red evidence: The entry body contained the completed RED/green fix and `Status: fixed`, while its title still ended in `open`.
+- Change: Corrected the status label only; retained all historical evidence and next-action text.
+- Verification: Hub policy tests and the full current acceptance gates remain green; only the unrelated external Windows legacy task and HAOS Supervisor entries remain actionable/open.
+- Delivery: Documentation correction on the current linear vertex; no push, deployment or merge.
+- Next: Resolve external blockers only in their owning host/deployment tasks.
+
 ## 2026-07-24 - Current-head extended acceptance - completed
 
 - Milestone: `S1.3a` / `S2.1a` / `S4.1-S4.4`

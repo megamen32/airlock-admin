@@ -82,7 +82,7 @@ Rules:
 - Status: fixed.
 - Next action: Retain the browser-backed ceremony regression evidence in the release acceptance gate.
 
-## 2026-07-24 - POLICY-BOUNDARY-BYPASS-20260724 - Legacy write entrypoints skip central policy - open
+## 2026-07-24 - POLICY-BOUNDARY-BYPASS-20260724 - Legacy write entrypoints skip central policy - fixed
 
 - Component: `go-hub/internal/hub/server.go` bridge/prompt, bulk execution and
   admin MCP resource routes; `go-hub/internal/hub/webhook_gateway.go` action
