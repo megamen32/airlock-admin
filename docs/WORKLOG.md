@@ -48,6 +48,17 @@ plan is [`PROJECT_PLAN.md`](./PROJECT_PLAN.md).
 
 ## Entries
 
+## 2026-07-24 - S4.1 conformance delivery identity - completed
+
+- Milestone: `S4.1`
+- Owner: `Codex`
+- Scope: Attach the immutable commit to the MCP integration control/conformance slice.
+- Baseline / red evidence: The local `discover -> schema -> execute` regression exposed the nil-request execute panic before the fix.
+- Change: No additional production change; record the delivery identity for the control contract, support inventory and request-scoped execute fix.
+- Verification: `git show --no-patch --format='%H %s' 54a10f0` identifies `test: certify MCP integration control flow`; focused conformance and inventory tests pass.
+- Delivery: Commit `54a10f0`; no push, deployment or merge performed.
+- Next: Add catalog provenance and extension conformance, while retaining external adapter evidence as open.
+
 ## 2026-07-24 - MCP integration conformance and execute safety - completed
 
 - Milestone: `S4.1` / `S2.2`
