@@ -531,10 +531,10 @@ Rules:
 
 ## 2026-07-24 - PUBLIC-AUTH-DOCS-20260724 - Product onboarding docs taught internal credentials - fixed
 
-- Component: public README, Getting Started, Hub, Integrations, ShellMCP and FAQ documentation plus CLI setup/help surfaces.
+- Component: public README, Getting Started, Hub, Integrations, ShellMCP and FAQ documentation, CLI setup/help surfaces, and the legacy admin dashboard.
 - First observed: 2026-07-24, completion audit against `docs/AUTH_SIMPLIFICATION.md`; RED regression `tests/test_product_auth_language.py` failed for all six product documents.
-- Confirmed fact: Normal onboarding copy instructed operators to copy legacy bearer, agent, bridge or signing-secret names instead of using the Hub connection page.
-- Root cause: Earlier credential cleanup covered installer/UI surfaces but not the public documentation set.
-- Fix / verification: Replaced credential-copy instructions with AdminPassword, OAuth and managed connection language, and removed internal names from setup/tokens CLI help and normal error messages; the six-document plus CLI regression passes (`15 passed`).
+- Confirmed fact: Normal onboarding copy and the legacy dashboard instructed operators to copy legacy bearer, agent, bridge or signing-secret names; the dashboard also read and mutated environment files through `shell_exec`.
+- Root cause: Earlier credential cleanup covered the production SPA and installer but not the public documentation set or legacy dashboard.
+- Fix / verification: Replaced credential-copy instructions with AdminPassword, OAuth and managed connection language; removed internal names from setup/tokens CLI help and normal error messages; made the legacy dashboard read only typed security preset state and removed shell-based credential mutation/export. Product/UI regressions pass (`20 passed`).
 - Status: fixed.
 - Next action: Keep advanced implementation names confined to security/configuration reference docs and test new onboarding pages through the product-language regression.

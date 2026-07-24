@@ -2309,3 +2309,14 @@ plan is [`PROJECT_PLAN.md`](./PROJECT_PLAN.md).
 - Verification: `pytest -q tests/test_product_auth_language.py tests/test_integration_certification.py tests/test_secret_ingress_contract.py tests/test_cli_token_deprecation.py` passes `15 passed`; targeted forbidden-name scan is empty.
 - Delivery: Local uncommitted slice on the single linear branch; no deployment or push.
 - Next: Run the full Python suite and commit this documentation/security correction.
+
+## 2026-07-24 - Legacy dashboard credential boundary correction - completed
+
+- Milestone: `S0.5`, `S1.6`
+- Owner: Codex
+- Scope: `public/admin_dashboard.html` legacy admin surface.
+- Baseline / red evidence: Product-language regression failed because the dashboard displayed internal credential names and used `shell_exec` to read/write the Hub environment file.
+- Change: Replaced the legacy security panel with typed `/admin/api/security/preset` state and a Hub connection-page link; removed client-side credential generation, export and shell-based environment mutation.
+- Verification: `pytest -q tests/test_product_auth_language.py tests/test_admin_dashboard_js.py tests/test_admin_ui.py` passes `20 passed`.
+- Delivery: Local uncommitted slice on the single linear branch; no deployment or push.
+- Next: Run the full Python suite once more, then commit the combined documentation/UI security correction.

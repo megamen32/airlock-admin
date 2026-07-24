@@ -14,6 +14,7 @@ PRODUCT_DOCS = (
     ROOT / "docs" / "INTEGRATIONS.md",
     ROOT / "docs" / "SHELLMCP.md",
     ROOT / "docs" / "FAQ.md",
+    ROOT / "public" / "admin_dashboard.html",
 )
 FORBIDDEN_PRODUCT_NAMES = (
     "CTL_TOKEN",
