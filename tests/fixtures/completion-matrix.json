@@ -237,6 +237,11 @@
       "id": "platform-client-paths",
       "command": "python3 -m pytest tests/test_golden_paths.py -q",
       "evidence": "Linux/macOS/Windows/Android and Codex/Claude/ChatGPT install/auth/tool/rollback contract"
+    },
+    {
+      "id": "installed-mcp-client-handshake",
+      "command": "python3 -m pytest tests/test_real_mcp_clients.py -q",
+      "evidence": "isolated real Codex, Claude Code and OpenCode configs connect to a disposable canonical Hub and exercise safe demo MCP behavior"
     }
   ]
 }

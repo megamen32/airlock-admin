@@ -48,6 +48,17 @@ plan is [`PROJECT_PLAN.md`](./PROJECT_PLAN.md).
 
 ## Entries
 
+## 2026-07-24 - Real local MCP-client handshake contract - completed
+
+- Milestone: `S1.3`
+- Owner: `Codex`
+- Scope: Turn the local Codex/Claude Code/OpenCode canonical MCP-client check into an isolated automated acceptance test without touching user configuration.
+- Baseline / red evidence: The first test run failed because Codex requires its isolated `CODEX_HOME` directory to exist; the harness was corrected and rerun.
+- Change: Added `tests/test_real_mcp_clients.py`: it builds a disposable Hub, configures temporary client homes, verifies Codex registration, Claude Code and OpenCode health connections, and performs the readonly-safe `demo` MCP action. Added the check to `tests/fixtures/completion-matrix.json`.
+- Verification: `python3 -m pytest tests/test_real_mcp_clients.py -q` -> `1 passed in 14.33s`; no user config, token or persistent runtime was changed.
+- Delivery: Pending the current linear integration commit; no push, deployment or merge performed. Preserve the unrelated untracked remote-secret-ingress plan.
+- Next: Add external/fresh-host and ChatGPT/OIDC evidence separately; this local client proof does not close S1.3 by itself.
+
 ## 2026-07-24 - OTLP telemetry delivery identity - completed
 
 - Milestone: `S3.1`
