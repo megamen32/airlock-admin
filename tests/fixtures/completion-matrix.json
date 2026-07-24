@@ -107,6 +107,11 @@
       "id": "shellmcp-trace-propagation",
       "command": "cd go-shellmcp && go test ./internal/server -run 'TestQueueExecutesGenericMCPToolAndPostsResult' -count=1",
       "evidence": "Hub queue trace_id and traceparent cross ShellMCP polling, TaskResult and ShellMCP audit without command payloads"
+    },
+    {
+      "id": "supply-chain-policy",
+      "command": "python3 -m pytest tests/test_supply_chain_policy.py tests/test_release_workflow_contract.py tests/test_release_provenance.py tests/test_update_semantics.py -q",
+      "evidence": "release manifest/SBOM verification, installer fail-closed metadata, CI attestation/vulnerability gates and operator response policy"
     }
   ],
   "file_sharing": [

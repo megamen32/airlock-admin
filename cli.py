@@ -3957,8 +3957,13 @@ def _artifact_name_from_url(url: str) -> str:
     return url.rstrip('/').rsplit('/', 1)[-1]
 
 
+def _release_manifest_bypass_enabled() -> bool:
+    """Return whether the operator explicitly disabled release verification."""
+    return os.environ.get('GPTADMIN_UPDATE_SKIP_MANIFEST', '').strip().lower() in {'1', 'true', 'yes', 'on'}
+
+
 def _remote_artifact_build_info(pkg_url: str) -> dict:
-    if os.environ.get('GPTADMIN_UPDATE_SKIP_MANIFEST', '').strip().lower() in {'1', 'true', 'yes', 'on'}:
+    if _release_manifest_bypass_enabled():
         return {}
     base = pkg_url.rsplit('/', 1)[0]
     manifest_url = os.environ.get('GPTADMIN_MANIFEST_URL') or (base.rstrip('/') + '/manifest.json')
@@ -3989,10 +3994,12 @@ def _remote_artifact_build_info(pkg_url: str) -> dict:
     }
 
 
-def _verify_downloaded_artifact(path: Path, metadata: dict) -> None:
+def _verify_downloaded_artifact(path: Path, metadata: dict, *, require_metadata: bool = False) -> None:
     """Reject a downloaded package when a published digest/size disagrees."""
     expected_sha = str(metadata.get('sha256') or '').strip().lower()
     expected_size = metadata.get('size')
+    if require_metadata and (not expected_sha or expected_size is None) and not _release_manifest_bypass_enabled():
+        die(f'Проверка релиза не пройдена: manifest не содержит полный digest/size ({path.name})')
     if not expected_sha and expected_size is None:
         return
     actual_size = path.stat().st_size
@@ -4092,6 +4099,8 @@ def cmd_update(args):
 
     target_pkg = pkg_all if (install_hub and install_shellmcp) else (pkg_hub if install_hub else pkg_shellmcp)
     remote_info = _remote_artifact_build_info(target_pkg)
+    if not _release_manifest_bypass_enabled() and (not remote_info.get('sha256') or remote_info.get('size') is None):
+        die(f'Проверка релиза не пройдена: manifest недоступен или не содержит полный digest/size ({Path(target_pkg).name})')
     if not getattr(args, 'force', False):
         installed_info = _installed_build_info(env, install_hub)
         if _should_skip_update(installed_info, remote_info):
@@ -4113,8 +4122,9 @@ def cmd_update(args):
 
         def download_release(url: str, destination: Path) -> None:
             """Download one package and enforce its published manifest digest."""
+            metadata = _remote_artifact_build_info(url)
             download(url, destination)
-            _verify_downloaded_artifact(destination, _remote_artifact_build_info(url))
+            _verify_downloaded_artifact(destination, metadata, require_metadata=True)
 
         if install_hub and install_shellmcp:
             print('[Update] downloading full package...')

@@ -50,8 +50,24 @@ def test_update_rejects_download_that_does_not_match_manifest(tmp_path: Path):
         cli._verify_downloaded_artifact(package, metadata)
 
 
+def test_update_rejects_missing_manifest_metadata_when_required(monkeypatch, tmp_path: Path):
+    """Normal updates must not install an artifact that has no published digest."""
+    monkeypatch.delenv("GPTADMIN_UPDATE_SKIP_MANIFEST", raising=False)
+    package = tmp_path / "package.tar.gz"
+    package.write_bytes(b"unsigned bytes")
+
+    with pytest.raises(SystemExit):
+        try:
+            cli._verify_downloaded_artifact(package, {}, require_metadata=True)
+        except SystemExit:
+            raise
+        except Exception as exc:
+            pytest.fail(f"missing metadata raised the wrong error: {exc}")
+
+
 def test_update_restores_auth_material_if_package_install_rewrites_env(monkeypatch, tmp_path):
     """An interrupted/package update must not invalidate existing JWTs."""
+    monkeypatch.setenv("GPTADMIN_UPDATE_SKIP_MANIFEST", "1")
     env_file = tmp_path / "gptadmin.env"
     original = {
         "CTL_TOKEN": "ctl-before",

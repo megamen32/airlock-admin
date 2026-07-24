@@ -48,6 +48,28 @@ plan is [`PROJECT_PLAN.md`](./PROJECT_PLAN.md).
 
 ## Entries
 
+## 2026-07-24 - Docker install and failover acceptance - completed
+
+- Milestone: `S0.1/S3.4`
+- Owner: `Codex`
+- Scope: Re-run from-scratch installer/Tunnel scenarios and the Hub failover black-box suite on the current linear vertex.
+- Baseline / red evidence: N/A; this was an acceptance rerun after the CLI release-verification change.
+- Change: No product code changed; retained the runtime evidence as the gate for the existing install, FRP/Tunnel and failover contracts.
+- Verification: `docker compose -f tests/e2e/docker/docker-compose.yml up --build --abort-on-container-exit --exit-code-from shellmcp-e2e` -> exit 0 with `ALL SHELLMCP E2E SCENARIOS PASSED`; `docker compose -f tests/e2e/failover/docker-compose.yml up --build --abort-on-container-exit --exit-code-from failover-e2e` -> exit 0 with `ALL FAILOVER BLACK-BOX SCENARIOS PASSED`, including rank 1/rank 2 promotion and MCP re-registration.
+- Delivery: Evidence is local Docker runtime only; no public deployment or second physical fallback host. Preserve the unrelated untracked remote-secret-ingress plan.
+- Next: Obtain native client/platform and physical-standby evidence before changing S0.1/S3.4 from In Progress.
+
+## 2026-07-24 - Supply-chain release gates - completed
+
+- Milestone: `S4.3`
+- Owner: `Codex`
+- Scope: Make normal CLI updates fail closed without release digest metadata; add CI provenance attestation, Go/npm vulnerability checks and operator response policy.
+- Baseline / red evidence: `test_update_rejects_missing_manifest_metadata_when_required` failed because the verifier had no strict metadata contract; the new workflow contract failed because the release job had no attestation/vulnerability steps or write permissions.
+- Change: Added strict artifact verification for normal updates, retained the explicit diagnostic bypass, added `govulncheck`/`npm audit` and `actions/attest-build-provenance@v2` before publication, and added `docs/SUPPLY_CHAIN.md` plus matrix coverage.
+- Verification: Focused update tests -> `9 passed`; release/provenance/policy tests -> `5 passed`; full Python suite -> `181 passed, 2 skipped`; completion matrix -> `11 passed`; full CI workflow execution and public publication remain external evidence.
+- Delivery: Commit `3628303` on the single linear branch; no runtime deployment. Preserve the unrelated untracked remote-secret-ingress plan.
+- Next: Verify the workflow in GitHub Actions and record the attestation/vulnerability run before changing S4.3 status.
+
 ## 2026-07-24 - W3C traceparent relay propagation - completed
 
 - Milestone: `S3.1`
