@@ -1096,6 +1096,25 @@ plan is [`PROJECT_PLAN.md`](./PROJECT_PLAN.md).
 - Next: Verify real Codex, Claude-compatible and ChatGPT clients through the
   public Tunnel; this contract does not claim those live paths.
 
+## 2026-07-24 - Safe demo connection flow - completed
+
+- Milestone: `S1.4`
+- Owner: `Codex`
+- Scope: Finish the safe demo path from the canonical connection manifest to a
+  real direct MCP harmless action.
+- Baseline / evidence: The safe `demo` tool and readonly policy existed, but
+  the connection manifest did not declare the first action; clients still
+  needed prose to find it.
+- Change: Added the manifest `first_action` descriptor and an external Hub
+  contract test that consumes it and calls `demo` through `/mcp`.
+- Verification: Focused first-action test and full Hub contract tests (`5
+  passed`) pass; the existing readonly no-argument/credential-leak regression
+  remains green.
+- Delivery: Pending integration commit on `codex/haos-addon-public`; no deploy,
+  push or merge. The unrelated remote-secret-ingress plan remains preserved.
+- Next: Keep S1.3 real client/Tunnel acceptance separate; do not treat this
+  generic contract as Codex/Claude/ChatGPT live proof.
+
 
 ## 2026-07-24 - Typed admin security controls and Apps SDK contract - completed
 
