@@ -2573,3 +2573,14 @@ plan is [`PROJECT_PLAN.md`](./PROJECT_PLAN.md).
 - Verification: RED then GREEN docs contract `5 passed`; the referenced integration conformance command passes; catalog command passes (`4 passed`).
 - Delivery: Local docs/command evidence only; translation review and real external usage outcomes remain open.
 - Next: Keep snippet and link checks in the release workflow while external S5.2 evidence is gathered.
+
+## 2026-07-24 - Documentation snippet full acceptance - completed locally
+
+- Milestone: `S5.3`
+- Owner: Codex
+- Scope: Re-run the completion matrix and complete Python suite after the executable-snippet contract change.
+- Baseline / red evidence: The docs contract had been updated after the previous full-suite run, so its matrix and full-suite evidence needed refresh.
+- Change: No additional product change; preserved the separate bounded test runs.
+- Verification: Completion matrix passed (`12 passed` in `127.85s`); full Python passed (`237 passed, 3 skipped`, 239 collected / 1 collection skip).
+- Delivery: Current local docs acceptance is green; translation review and external adoption evidence remain open.
+- Next: Use the docs snippets in the authorized deployment/client evidence session.
