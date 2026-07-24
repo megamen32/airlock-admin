@@ -9,8 +9,8 @@ shellmcp agents, handles auth, and serves the web panel.
    the hub tracks them and marks offline if heartbeat stops.
 2. **Routes commands** — when an AI calls a tool, the hub looks up the target
    agent and forwards the command.
-3. **Authenticates** — Bearer (`CTL_TOKEN`) for admin API, OAuth bearer for
-   `/mcp`, `ADMIN_PASSWORD` for the OAuth authorize form.
+3. **Authenticates** — `AdminPassword` for human administration, OAuth for
+   MCP clients, and managed device connections for agents.
 4. **Truncates output** — long stdout/stderr is chunked to save tokens (the AI
    can read more on demand).
 5. **Serves the panel** — web UI at `/admin` (queue, agent health, logs).
@@ -49,7 +49,7 @@ expose the internal 2.1 route.
 ## Running
 
 ```bash
-CTL_TOKEN=your-token go run ./go-hub/cmd/gptadmin-hub
+python3 cli.py setup --hub --tunnel none --user
 ```
 
 By default it listens on `0.0.0.0:25900`. Change with `--port` or `HUB_PORT`.
@@ -58,11 +58,11 @@ By default it listens on `0.0.0.0:25900`. Change with `--port` or `HUB_PORT`.
 
 | Endpoint | Auth | Purpose |
 |----------|------|---------|
-| `GET /admin` | `CTL_TOKEN` (basic) | Web panel |
-| `GET /admin/api/*` | Bearer `CTL_TOKEN` | Admin REST API |
+| `GET /admin` | Admin session | Web panel |
+| `GET /admin/api/*` | Admin session | Admin REST API |
 | `POST /mcp` | OAuth bearer | MCP remote SSE (for MCP clients) |
-| `POST /heartbeat` | Bearer `SHELLMCP_TOKEN` | Agent registration |
-| `GET /servers` | Bearer `CTL_TOKEN` | List registered agents |
+| `POST /heartbeat` | Managed device connection | Agent registration |
+| `GET /servers` | Admin session | List registered agents |
 | `GET /api.json` | none | OpenAPI schema (for Custom GPT import) |
 | `GET /openapi.yaml` | none | OpenAPI YAML |
 | `POST /oauth/authorize` | `ADMIN_PASSWORD` form | Canonical OAuth authorize endpoint |
@@ -78,8 +78,8 @@ See [Webhooks](./WEBHOOKS.md) for route configuration and delivery semantics.
 
 ## Web panel (`/admin`)
 
-Open `https://your-hub.bezrabotnyi.com/admin` in a browser, auth with
-`CTL_TOKEN`. You'll see:
+Open the Hub URL printed by setup and choose **Admin**. Sign in with your
+`AdminPassword`. You'll see:
 
 - **Queue** — active and completed tasks per agent (status, time, result)
 - **Agent health** — list of shellmcp agents + connected MCPs (openmemory,
@@ -92,9 +92,6 @@ See [Configuration](./CONFIGURATION.md) for the full list. The essentials:
 
 | Var | Required | Default | Purpose |
 |-----|----------|---------|---------|
-| `CTL_TOKEN` | yes | — | Bearer token for admin API + panel |
-| `ADMIN_PASSWORD` | for OAuth | — | Password for the `/oauth/authorize` form |
-| `OAUTH_CLIENT_SECRET` | for `/mcp` | — | Signs OAuth bearer tokens |
 | `PUBLIC_ORIGIN` | recommended | — | Public base URL (for OAuth, OpenAPI) |
 | `HUB_PORT` | no | 25900 | Listen port |
 

@@ -2215,8 +2215,8 @@ def _mcp_ensure_token_file():
         return
     if not token:
         die(
-            'MCP relay token is not configured. Re-run setup with --mcp-relay-token TOKEN '
-            'or set MCP_RELAY_AGENT_TOKEN in gptadmin.env; this must be the token of the target Hub.'
+            'Managed Hub connection is not configured. Re-run setup for the '
+            'target Hub or complete pairing from its connection page.'
         )
     token = token.strip()
     if MCP_TOKEN_FILE.exists() and MCP_TOKEN_FILE.read_text(encoding='utf-8').strip() == token:
@@ -3976,7 +3976,7 @@ def cmd_urls(args):
                 print(f'    action: {_join_url(public_hub, f"/server/{slug}/actions/openapi.yaml")}')
     else:
         print()
-        print_warn('server list is unavailable; set CTL_TOKEN in config or run with sudo/--system')
+        print_warn('server list is unavailable; open the Hub connection page or run with sudo/--system')
 
 def cmd_tunnel_logs(_):
     env = env_read()
@@ -5067,7 +5067,7 @@ def main():
     sub = ap.add_subparsers(dest='cmd')
 
     sub.add_parser('version', help='Показать версию и информацию о сборке').set_defaults(func=cmd_version)
-    ap_doctor = sub.add_parser('doctor', help='Проверка здоровья: сервисы, порты, конфиг, токены')
+    ap_doctor = sub.add_parser('doctor', help='Проверка здоровья: Hub, MCP clients, Tunnel и конфиг')
     ap_doctor.add_argument('--json', action='store_true', help='Вывести машиночитаемый JSON без секретов')
     ap_doctor.set_defaults(func=cmd_doctor)
 
@@ -5095,7 +5095,7 @@ def main():
     ap_setup.add_argument('--no-shellmcp', '--no-shell', dest='no_shellmcp', action='store_true', help='Do not install ShellMCP/rootd component')
     ap_setup.add_argument('--tunnel', choices=['frp', 'manual', 'cloudflare', 'none'], help='Public hub tunnel mode; --silent defaults to frp')
     ap_setup.add_argument('--hub-url', help='Existing public hub URL for manual tunnel or shell-only install')
-    ap_setup.add_argument('--mcp-relay-token', help='MCP_RELAY_AGENT_TOKEN of an existing Hub for shell-only installs')
+    ap_setup.add_argument('--mcp-relay-token', help='Managed connection for an existing Hub in shell-only installs')
     ap_setup.add_argument('--hub-port', help='Local hub port; default 9001')
     ap_setup.add_argument('--shell-transport', choices=['polling', 'webhook', 'websocket'], default='polling', help='Internal hub↔ShellMCP transport; default polling')
     ap_setup.add_argument('--shell-heartbeat', action='store_true', help='Enable optional ShellMCP heartbeat (disabled by default)')
@@ -5171,8 +5171,8 @@ def main():
     ap_logs.add_argument('service', nargs='?', default='all', metavar='service', help='hub | shell | frpc | all')
     ap_logs.set_defaults(func=cmd_logs)
 
-    ap_tok = sub.add_parser('tokens', help='Показать все токены GPTAdmin')
-    ap_tok.add_argument('--show-shellmcp', action='store_true', help='Показать SHELLMCP_TOKEN (опасно!)')
+    ap_tok = sub.add_parser('tokens', help='Показать состояние подключений GPTAdmin')
+    ap_tok.add_argument('--show-shellmcp', action='store_true', help='Показать состояние подключения агента; секрет не выводится')
     ap_tok.set_defaults(func=cmd_tokens)
 
     ap_mcp_token_top = sub.add_parser('issue-token', aliases=['token'], help='Выпустить JWT для MCP-клиента без OAuth')

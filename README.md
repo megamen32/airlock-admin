@@ -136,10 +136,10 @@ python3 -m venv .venv && source .venv/bin/activate
 pip install fastapi uvicorn requests
 
 # hub (terminal 1)
-ADMIN_PASSWORD=choose-a-password OAUTH_CLIENT_SECRET=internal-signing-secret go run ./go-hub/cmd/gptadmin-hub
+python3 cli.py setup --hub --tunnel none --user
 
 # agent on a target machine (terminal 2)
-SHELLMCP_TOKEN=agent-token HUB_URL=http://127.0.0.1:9001 go run ./go-shellmcp/cmd/shellmcp-go
+python3 cli.py setup --no-hub --shellmcp --hub-url http://127.0.0.1:9001 --user
 
 # smoke test (terminal 3)
 python tests/test_hub.py

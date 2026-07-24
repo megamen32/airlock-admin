@@ -1428,6 +1428,17 @@ plan is [`PROJECT_PLAN.md`](./PROJECT_PLAN.md).
   backups.
 - Next: Push the integrated commit and keep the existing admin password stable.
 
+## 2026-07-24 - Public product-auth documentation boundary - completed
+
+- Milestone: `S0.5`, `S1.1`, `S1.3`
+- Owner: Codex
+- Scope: Public README and onboarding/integration docs; no runtime credential names or deployment secrets changed.
+- Baseline / red evidence: New `tests/test_product_auth_language.py` failed for README, Getting Started, Hub, Integrations, ShellMCP and FAQ because normal copy exposed internal credentials.
+- Change: Replaced token-copy and bridge-key instructions with Hub URL, AdminPassword, OAuth and managed device-connection flows.
+- Verification: `pytest -q tests/test_product_auth_language.py` passes `6 passed`; targeted forbidden-name scan is empty.
+- Delivery: Uncommitted local documentation/test slice on the single linear branch; no deployment or push.
+- Next: Run the documentation-boundary tests with the full suite and commit with the next integration vertex.
+
 ## 2026-07-24 - Request-scoped MCP and file-boundary security - completed
 
 - Milestone: `S0.4`, `S1.6`, `S3.1`
@@ -2287,3 +2298,14 @@ plan is [`PROJECT_PLAN.md`](./PROJECT_PLAN.md).
   OAuth row's `access_mode` omitted and managed/legacy rows retaining valid
   modes. Existing admin password was not changed.
 - Next: Push the integrated commit and keep the existing admin password stable.
+
+## 2026-07-24 - Public product-auth documentation boundary correction - completed
+
+- Milestone: `S0.5`, `S1.1`, `S1.3`
+- Owner: Codex
+- Scope: Public README/onboarding/integration docs and CLI setup/help surfaces.
+- Baseline / red evidence: `tests/test_product_auth_language.py` failed for six product documents and then failed on `setup --help` exposing an internal relay credential name.
+- Change: Replaced credential-copy instructions and CLI help/error wording with Hub URL, AdminPassword, OAuth and managed connection language.
+- Verification: `pytest -q tests/test_product_auth_language.py tests/test_integration_certification.py tests/test_secret_ingress_contract.py tests/test_cli_token_deprecation.py` passes `15 passed`; targeted forbidden-name scan is empty.
+- Delivery: Local uncommitted slice on the single linear branch; no deployment or push.
+- Next: Run the full Python suite and commit this documentation/security correction.

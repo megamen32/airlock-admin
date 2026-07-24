@@ -528,3 +528,13 @@ Rules:
 - Root cause: The tool assumed a Python 3.11-only standard-library parser despite the project supporting Python 3.10 environments used by the test runner.
 - Fix / verification: Replaced the parser dependency with a bounded manifest parser for the checked-in dependency arrays; `tests/test_sbom.py` passes and output remains byte-for-byte deterministic.
 - Next action: Keep the release tool compatible with the oldest supported Python runtime; no code-side blocker remains.
+
+## 2026-07-24 - PUBLIC-AUTH-DOCS-20260724 - Product onboarding docs taught internal credentials - fixed
+
+- Component: public README, Getting Started, Hub, Integrations, ShellMCP and FAQ documentation plus CLI setup/help surfaces.
+- First observed: 2026-07-24, completion audit against `docs/AUTH_SIMPLIFICATION.md`; RED regression `tests/test_product_auth_language.py` failed for all six product documents.
+- Confirmed fact: Normal onboarding copy instructed operators to copy legacy bearer, agent, bridge or signing-secret names instead of using the Hub connection page.
+- Root cause: Earlier credential cleanup covered installer/UI surfaces but not the public documentation set.
+- Fix / verification: Replaced credential-copy instructions with AdminPassword, OAuth and managed connection language, and removed internal names from setup/tokens CLI help and normal error messages; the six-document plus CLI regression passes (`15 passed`).
+- Status: fixed.
+- Next action: Keep advanced implementation names confined to security/configuration reference docs and test new onboarding pages through the product-language regression.
