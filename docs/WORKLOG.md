@@ -48,6 +48,17 @@ plan is [`PROJECT_PLAN.md`](./PROJECT_PLAN.md).
 
 ## Entries
 
+## 2026-07-24 - S1.1 plan status correction - completed
+
+- Milestone: `S1.1`
+- Owner: `Codex`
+- Scope: Align the canonical plan with the implemented setup health gate and current from-scratch Docker evidence.
+- Baseline / red evidence: `docs/PROJECT_PLAN.md` still labeled S1.1 `Planned` after the setup and installer acceptance work was completed.
+- Change: Moved S1.1 to `In progress`; local setup/health/Tunnel proof exists, while native clean-host and public deployment evidence remain open.
+- Verification: Current-head Docker installer/Tunnel run exited `0`; full Python and completion matrix gates are green.
+- Delivery: Documentation correction on the current linear vertex; no push, deployment or merge.
+- Next: Use native clean-host evidence to decide whether S1.1 can move to Complete.
+
 ## 2026-07-24 - Current-head repository acceptance - completed
 
 - Milestone: `S0.1` / `S0.2` / `S1.1` / `S3.5`
