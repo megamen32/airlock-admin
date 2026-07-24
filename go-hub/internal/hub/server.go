@@ -186,6 +186,7 @@ type persistentRegistryState struct {
 type relayJob struct {
 	ID        string         `json:"id"`
 	AgentID   string         `json:"agent_id,omitempty"`
+	TraceID   string         `json:"trace_id,omitempty"`
 	Method    string         `json:"method"`
 	Params    map[string]any `json:"params,omitempty"`
 	CreatedAt float64        `json:"created_at"`
@@ -199,6 +200,7 @@ type relayJob struct {
 type shellJob struct {
 	ID        string         `json:"id"`
 	Server    string         `json:"server,omitempty"`
+	TraceID   string         `json:"trace_id,omitempty"`
 	ToolName  string         `json:"tool_name,omitempty"`
 	Arguments map[string]any `json:"arguments,omitempty"`
 	Cmd       string         `json:"cmd,omitempty"`
@@ -697,7 +699,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/admin/legacy/", s.adminLegacyStatic)
 	mux.HandleFunc("/admin/", s.adminStatic)
 	mux.HandleFunc("/admin", s.adminIndex)
-	return withCORS(mux)
+	return withRequestTrace(withCORS(mux))
 }
 
 func (s *Server) httpServiceEndpoint(w http.ResponseWriter, r *http.Request) {
@@ -1654,7 +1656,11 @@ func (s *Server) shellQueueResult(w http.ResponseWriter, r *http.Request, name s
 		job.Status = "failed"
 		job.Error = res.Error
 	}
-	s.addAuditLocked("shell_result", map[string]any{"server": name, "job_id": res.ID, "status": job.Status})
+	fields := map[string]any{"server": name, "job_id": res.ID, "status": job.Status}
+	if job.TraceID != "" {
+		fields["trace_id"] = job.TraceID
+	}
+	s.addAuditLocked("shell_result", fields)
 	s.cond.Broadcast()
 	s.mu.Unlock()
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
@@ -1792,7 +1798,11 @@ func (s *Server) mcpRelayResult(w http.ResponseWriter, r *http.Request) {
 			entry.Response = cloneMap(relayJobResponse(job))
 		}
 	}
-	s.addAuditLocked("mcp_result", map[string]any{"server_id": agentID, "job_id": res.ID, "status": job.Status})
+	fields := map[string]any{"server_id": agentID, "job_id": res.ID, "status": job.Status}
+	if job.TraceID != "" {
+		fields["trace_id"] = job.TraceID
+	}
+	s.addAuditLocked("mcp_result", fields)
 	s.cond.Broadcast()
 	s.mu.Unlock()
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
@@ -2075,11 +2085,15 @@ func (s *Server) executeMCPTool(r *http.Request, target, toolName string, args m
 			return map[string]any{"server_id": target, "status": "completed", "response": resp}, status
 		}
 		if strings.HasPrefix(target, "shell:") {
-			return s.callShellTool(target, toolName, args, background, timeout), http.StatusOK
+			return s.callShellToolWithTrace(target, toolName, args, background, timeout, requestTraceID(r)), http.StatusOK
 		}
-		jobID := s.enqueueRelay(target, "tools/call", map[string]any{"name": toolName, "arguments": args})
+		jobID := s.enqueueRelayWithTrace(target, "tools/call", map[string]any{"name": toolName, "arguments": args}, requestTraceID(r))
 		if background {
-			return map[string]any{"server_id": target, "status": "running", "background": true, "job_id": jobID}, http.StatusOK
+			response := map[string]any{"server_id": target, "status": "running", "background": true, "job_id": jobID}
+			if traceID := requestTraceID(r); traceID != "" {
+				response["trace_id"] = traceID
+			}
+			return response, http.StatusOK
 		}
 		return s.waitRelay(jobID, timeout), http.StatusOK
 	}
@@ -2320,6 +2334,9 @@ func (s *Server) auditToolDecision(r *http.Request, target, toolName string, arg
 	if reason != "" {
 		fields["policy_reason"] = reason
 	}
+	if traceID := requestTraceID(r); traceID != "" {
+		fields["trace_id"] = traceID
+	}
 	for key, value := range identityFields {
 		if value != "" {
 			fields[key] = value
@@ -2460,11 +2477,19 @@ func (s *Server) mcpRelayJob(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) enqueueRelay(agentID, method string, params map[string]any) string {
+	return s.enqueueRelayWithTrace(agentID, method, params, "")
+}
+
+func (s *Server) enqueueRelayWithTrace(agentID, method string, params map[string]any, traceID string) string {
 	id := newID()
 	s.mu.Lock()
-	s.relayJobs[id] = &relayJob{ID: id, AgentID: agentID, Method: method, Params: params, CreatedAt: nowFloat(), Status: "queued"}
+	s.relayJobs[id] = &relayJob{ID: id, AgentID: agentID, TraceID: traceID, Method: method, Params: params, CreatedAt: nowFloat(), Status: "queued"}
 	s.relayQueues[agentID] = append(s.relayQueues[agentID], id)
-	s.addAuditLocked("mcp_enqueue", map[string]any{"server_id": agentID, "job_id": id, "method": method})
+	fields := map[string]any{"server_id": agentID, "job_id": id, "method": method}
+	if traceID != "" {
+		fields["trace_id"] = traceID
+	}
+	s.addAuditLocked("mcp_enqueue", fields)
 	s.cond.Broadcast()
 	s.mu.Unlock()
 	return id
@@ -2491,14 +2516,23 @@ func (s *Server) waitRelay(jobID string, timeout time.Duration) map[string]any {
 }
 
 func relayJobResponse(job *relayJob) map[string]any {
-	if job.Status == "failed" {
-		return map[string]any{"server_id": job.AgentID, "status": "failed", "job_id": job.ID, "error": job.Error}
+	response := map[string]any{"server_id": job.AgentID, "status": job.Status, "job_id": job.ID}
+	if job.TraceID != "" {
+		response["trace_id"] = job.TraceID
 	}
-	return map[string]any{"server_id": job.AgentID, "status": job.Status, "job_id": job.ID, "response": spillFriendly(job.Result)}
+	if job.Status == "failed" {
+		response["error"] = job.Error
+		return response
+	}
+	response["response"] = spillFriendly(job.Result)
+	return response
 }
 
 func shellJobResponse(job *shellJob) map[string]any {
 	out := map[string]any{"server_id": "shell:" + job.Server, "status": job.Status, "job_id": job.ID, "task_id": job.ID}
+	if job.TraceID != "" {
+		out["trace_id"] = job.TraceID
+	}
 	if job.Result != nil {
 		out["response"] = map[string]any{"content": []map[string]any{{"type": "text", "text": "shell_exec completed on " + job.Server}}, "structuredContent": map[string]any{"server": job.Server, "result": job.Result}}
 	}
@@ -2518,7 +2552,11 @@ func (s *Server) callHubToolForRequest(r *http.Request, name string, args map[st
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.addAuditLocked("hub_tool", map[string]any{"tool": name})
+	fields := map[string]any{"tool": name}
+	if traceID := requestTraceID(r); traceID != "" {
+		fields["trace_id"] = traceID
+	}
+	s.addAuditLocked("hub_tool", fields)
 	switch name {
 	case "discover", "listMcpServers", "list_mcp_servers":
 		servers := s.publicServersLockedWithDetail(nil, fullDetailRequested(args["detail"]))
@@ -2589,11 +2627,15 @@ func canonicalShellQueueName(name string) string {
 }
 
 func (s *Server) callShellTool(target, toolName string, args map[string]any, background bool, timeout time.Duration) map[string]any {
+	return s.callShellToolWithTrace(target, toolName, args, background, timeout, "")
+}
+
+func (s *Server) callShellToolWithTrace(target, toolName string, args map[string]any, background bool, timeout time.Duration, traceID string) map[string]any {
 	server := canonicalShellQueueName(strings.TrimPrefix(target, "shell:"))
 	if toolName == "" {
 		return map[string]any{"server_id": target, "status": "failed", "error": "missing tool name"}
 	}
-	job := &shellJob{ID: newID(), Server: server, ToolName: toolName, Arguments: cloneMap(args), CreatedAt: nowFloat(), Status: "queued"}
+	job := &shellJob{ID: newID(), Server: server, TraceID: traceID, ToolName: toolName, Arguments: cloneMap(args), CreatedAt: nowFloat(), Status: "queued"}
 	if toolName == "shell_exec" {
 		job.Cmd = firstString(args, "cmd", "command")
 		if job.Cmd == "" {
@@ -2606,11 +2648,19 @@ func (s *Server) callShellTool(target, toolName string, args map[string]any, bac
 	s.mu.Lock()
 	s.shellJobs[job.ID] = job
 	s.shellQueues[server] = append(s.shellQueues[server], job.ID)
-	s.addAuditLocked("shell_enqueue", map[string]any{"server": server, "job_id": job.ID})
+	fields := map[string]any{"server": server, "job_id": job.ID}
+	if traceID != "" {
+		fields["trace_id"] = traceID
+	}
+	s.addAuditLocked("shell_enqueue", fields)
 	s.cond.Broadcast()
 	s.mu.Unlock()
 	if background {
-		return map[string]any{"server_id": target, "status": "running", "background": true, "job_id": job.ID, "task_id": job.ID, "message": "shell job queued"}
+		response := map[string]any{"server_id": target, "status": "running", "background": true, "job_id": job.ID, "task_id": job.ID, "message": "shell job queued"}
+		if traceID != "" {
+			response["trace_id"] = traceID
+		}
+		return response
 	}
 	deadline := time.Now().Add(timeout)
 	s.mu.Lock()
@@ -4345,7 +4395,7 @@ func (s *Server) serverActionToolCall(w http.ResponseWriter, r *http.Request, ag
 		writeJSON(w, http.StatusTooManyRequests, budgetResponse)
 		return
 	}
-	result, rpcErr := s.agentToolCall(agent, toolName, callArgs)
+	result, rpcErr := s.agentToolCall(r, agent, toolName, callArgs)
 	if rpcErr != nil {
 		writeJSON(w, http.StatusBadGateway, map[string]any{"server_id": agent.AgentID, "tool_name": toolName, "status": "failed", "error": rpcErr})
 		return
@@ -4558,7 +4608,7 @@ func (s *Server) agentMCPJSONRPC(r *http.Request, agent Agent, body map[string]a
 		if budgetResponse, blocked := s.boundedAutonomousGate(r, agent.AgentID, name); blocked {
 			return nil, map[string]any{"code": -32005, "message": "bounded autonomous budget exhausted", "data": budgetResponse}, false
 		}
-		result, err := s.agentToolCall(agent, name, callArgs)
+		result, err := s.agentToolCall(r, agent, name, callArgs)
 		return result, err, false
 	case "resources/list":
 		result, err := s.agentResourcesList(r, agent)
@@ -4605,14 +4655,14 @@ func (s *Server) agentToolsListForRequest(r *http.Request, agent Agent) (any, an
 	return map[string]any{"tools": []map[string]any{}}, nil
 }
 
-func (s *Server) agentToolCall(agent Agent, name string, args map[string]any) (any, any) {
+func (s *Server) agentToolCall(r *http.Request, agent Agent, name string, args map[string]any) (any, any) {
 	if agent.AgentID == "hub" {
 		return mcpToolResult(s.appsSDKCall(name, args)), nil
 	}
 	if strings.HasPrefix(agent.AgentID, "shell:") {
-		return unwrapMCPUpstream(s.callShellTool(agent.AgentID, name, args, false, s.cfg.DefaultTimeout))
+		return unwrapMCPUpstream(s.callShellToolWithTrace(agent.AgentID, name, args, false, s.cfg.DefaultTimeout, requestTraceID(r)))
 	}
-	jobID := s.enqueueRelay(agent.AgentID, "tools/call", map[string]any{"name": name, "arguments": args})
+	jobID := s.enqueueRelayWithTrace(agent.AgentID, "tools/call", map[string]any{"name": name, "arguments": args}, requestTraceID(r))
 	return unwrapMCPUpstream(s.waitRelay(jobID, s.cfg.DefaultTimeout))
 }
 

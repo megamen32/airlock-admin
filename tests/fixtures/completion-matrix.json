@@ -82,6 +82,11 @@
       "id": "slo-alert-runbook",
       "command": "python3 -m pytest tests/test_slo_docs.py -q",
       "evidence": "operator SLO, error-budget and alert recovery contract is present and tied to machine-readable probes"
+    },
+    {
+      "id": "request-trace-correlation",
+      "command": "cd go-hub && go test ./internal/hub -run 'TestRequestTraceID' -count=1",
+      "evidence": "bounded X-Request-ID correlation joins MCP policy, queued job and result audit without payloads"
     }
   ],
   "file_sharing": [
