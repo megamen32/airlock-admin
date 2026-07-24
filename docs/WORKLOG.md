@@ -984,6 +984,25 @@ plan is [`PROJECT_PLAN.md`](./PROJECT_PLAN.md).
 - Next: Keep the full audit incident drill in the release gate and separately
   obtain external client/target-host evidence for the remaining proof gaps.
 
+## 2026-07-24 - Secret-free client configuration manifest - completed
+
+- Milestone: `S1.3`
+- Owner: `Codex`
+- Scope: Extend `/connect` and `/connect.json` with machine-readable setup
+  descriptors for Codex, Claude-compatible, ChatGPT and custom MCP clients.
+- Baseline / red evidence: The canonical page exposed the Hub URL and OAuth
+  links but had no `client_configs` payload, so a client could not consume a
+  single safe setup contract without parsing prose.
+- Change: Added per-client `streamable_http`, `/mcp`, `oauth2_pkce`, resource,
+  authorization-server and ChatGPT Action-schema fields; no bearer token,
+  password or client secret is returned.
+- Verification: Connection page focused Go test passes; public Hub contract
+  tests pass (`4 passed`); existing connection matrix row remains green.
+- Delivery: Pending integration commit on `codex/haos-addon-public`; no deploy,
+  push or merge. The unrelated remote-secret-ingress plan remains preserved.
+- Next: Implement/verify local client auto-configuration and real Codex,
+  Claude-compatible and ChatGPT harmless-action golden paths separately.
+
 ## 2026-07-24 - Typed admin security controls and Apps SDK contract - completed
 
 - Milestone: `S2.1` / `S1.4`

@@ -1023,7 +1023,7 @@ func TestConnectionPageExposesCanonicalClientChoicesWithoutSecrets(t *testing.T)
 				t.Fatalf("connection page %s leaked %q: %s", path, forbidden, body)
 			}
 		}
-		for _, required := range []string{"https://hub.example", "/mcp", "/.well-known/oauth-authorization-server", "codex", "claude", "chatgpt"} {
+		for _, required := range []string{"https://hub.example", "/mcp", "/.well-known/oauth-authorization-server", "codex", "claude", "chatgpt", "client_configs", "oauth2_pkce", "streamable_http"} {
 			if !strings.Contains(body, required) {
 				t.Fatalf("connection page %s missing %q: %s", path, required, body)
 			}

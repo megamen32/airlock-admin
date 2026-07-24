@@ -13,6 +13,20 @@ func (s *Server) connectionPage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	origin := s.origin(r)
+	clientConfigs := map[string]any{}
+	for _, clientID := range []string{"codex", "claude", "chatgpt", "custom"} {
+		config := map[string]any{
+			"transport":            "streamable_http",
+			"url":                  origin + "/mcp",
+			"authentication":       "oauth2_pkce",
+			"authorization_server": origin + "/.well-known/oauth-authorization-server",
+			"resource":             origin,
+		}
+		if clientID == "chatgpt" {
+			config["actions_openapi"] = origin + "/actions/openapi.yaml"
+		}
+		clientConfigs[clientID] = config
+	}
 	payload := map[string]any{
 		"hub_url":                    origin,
 		"mcp_endpoint":               origin + "/mcp",
@@ -20,6 +34,7 @@ func (s *Server) connectionPage(w http.ResponseWriter, r *http.Request) {
 		"oauth_protected_resource":   origin + "/.well-known/oauth-protected-resource",
 		"actions_openapi":            origin + "/actions/openapi.yaml",
 		"connection_principle":       "Use this Hub URL; the client-specific protocol details are derived here.",
+		"client_configs":             clientConfigs,
 		"clients": []map[string]any{
 			{"id": "codex", "label": "Codex", "method": "OAuth Authorization Code + PKCE", "endpoint": origin + "/mcp"},
 			{"id": "claude", "label": "Claude-compatible", "method": "OAuth Authorization Code + PKCE", "endpoint": origin + "/mcp"},
