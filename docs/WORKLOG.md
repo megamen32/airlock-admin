@@ -2740,3 +2740,14 @@ plan is [`PROJECT_PLAN.md`](./PROJECT_PLAN.md).
 - Verification: RED then GREEN; `python3 -m pytest tests/test_deployment_runtime.py -q` -> `5 passed`; real server-100 probe -> `status=passed`, Hub active/running, port 9001 HTTP 200, `router_conflict=false`.
 - Delivery: Commit `366290a`; no additional remote mutation.
 - Next: Run the completion matrix, then perform the remaining authenticated and non-WebUI runtime acceptance.
+
+## 2026-07-24 - Deployment probe requires live Tunnel state - completed
+
+- Milestone: `S1.1`, `S3.5`
+- Owner: Codex
+- Scope: Ensure the Hub/Tunnel deployment probe cannot report success while the canonical Tunnel unit is failed.
+- Baseline / red evidence: Real server-100 probe reported `status=passed` with Hub healthy but `gptadmin-tunnel-frpc.service=failed`.
+- Change: Added Tunnel unit state to the fixed remote protocol and made `active/running` a Hub probe requirement; added a failing regression before implementation.
+- Verification: RED then GREEN; `python3 -m pytest tests/test_deployment_runtime.py -q` -> `6 passed`; real server-100 probe now truthfully reports `tunnel_service_not_running`.
+- Delivery: Commit `a1c5b66`; no additional remote mutation.
+- Next: Run completion-matrix verification, then repair Tunnel only after signed reclaim/lease evidence is available.

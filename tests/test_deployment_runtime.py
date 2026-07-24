@@ -22,6 +22,7 @@ def test_hub_probe_rejects_router_conflict_and_stale_listener() -> None:
         "\n".join(
             [
                 "unit|gptadmin-hub.service|inactive|dead",
+                "unit|gptadmin-tunnel-frpc.service|failed|failed",
                 "port|9001|000",
                 "router_conflict|true",
             ]
@@ -41,6 +42,7 @@ def test_hub_probe_accepts_a_configured_non_default_port() -> None:
         "\n".join(
             [
                 "unit|gptadmin-hub.service|active|running",
+                "unit|gptadmin-tunnel-frpc.service|active|running",
                 "port|9101|200",
                 "router_conflict|false",
             ]
@@ -50,6 +52,24 @@ def test_hub_probe_accepts_a_configured_non_default_port() -> None:
 
     assert report["status"] == "passed"
     assert report["issues"] == []
+
+
+def test_hub_probe_rejects_failed_tunnel_even_when_hub_is_healthy() -> None:
+    """A Hub/Tunnel deployment is not ready while its Tunnel unit is failed."""
+    report = deployment_runtime.parse_probe_output(
+        "\n".join(
+            [
+                "unit|gptadmin-hub.service|active|running",
+                "unit|gptadmin-tunnel-frpc.service|failed|failed",
+                "port|9001|200",
+                "router_conflict|false",
+            ]
+        ),
+        kind="hub",
+    )
+
+    assert report["status"] == "failed"
+    assert "tunnel_service_not_running" in report["issues"]
 
 
 def test_hub_probe_anchors_tunnel_conflict_to_current_service_start() -> None:
@@ -88,7 +108,7 @@ def test_remote_probe_returns_redacted_json_without_remote_output(monkeypatch) -
         return subprocess.CompletedProcess(
             command,
             0,
-            stdout="unit|gptadmin-hub.service|active|running\nport|9001|200\nrouter_conflict|false\n",
+            stdout="unit|gptadmin-hub.service|active|running\nunit|gptadmin-tunnel-frpc.service|active|running\nport|9001|200\nrouter_conflict|false\n",
             stderr="remote-token=must-not-return",
         )
 

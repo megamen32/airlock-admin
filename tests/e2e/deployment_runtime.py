@@ -17,6 +17,9 @@ unit='gptadmin-hub.service'
 state=$(systemctl show "$unit" -p ActiveState --value 2>/dev/null || true)
 sub=$(systemctl show "$unit" -p SubState --value 2>/dev/null || true)
 printf 'unit|%s|%s|%s\n' "$unit" "$state" "$sub"
+tunnel_state=$(systemctl show gptadmin-tunnel-frpc.service -p ActiveState --value 2>/dev/null || true)
+tunnel_sub=$(systemctl show gptadmin-tunnel-frpc.service -p SubState --value 2>/dev/null || true)
+printf 'unit|gptadmin-tunnel-frpc.service|%s|%s\n' "$tunnel_state" "$tunnel_sub"
 port="${HUB_PORT:-9001}"
 code=$(curl -sS --max-time 3 -o /dev/null -w '%{http_code}' "http://127.0.0.1:${port}/healthz" 2>/dev/null || true)
 printf 'port|%s|%s\n' "$port" "$code"
@@ -75,8 +78,11 @@ def parse_probe_output(output: str, *, kind: str) -> dict[str, Any]:
     issues: list[str] = []
     if kind == "hub":
         state, substate = _unit_observation(observations, "gptadmin-hub.service")
+        tunnel_state, tunnel_substate = _unit_observation(observations, "gptadmin-tunnel-frpc.service")
         if (state, substate) != ("active", "running"):
             issues.append("hub_service_not_running")
+        if (tunnel_state, tunnel_substate) != ("active", "running"):
+            issues.append("tunnel_service_not_running")
         port_statuses = [value for key, value in observations.items() if key.startswith("port:")]
         if len(port_statuses) != 1 or port_statuses[0] != "200":
             issues.append("hub_health_failed")

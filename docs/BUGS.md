@@ -649,3 +649,13 @@ Rules:
 - Fix / verification: Added the RED regression `test_hub_probe_anchors_tunnel_conflict_to_current_service_start`, anchored the remote journal query to `ExecMainStartTimestamp`, and reran the real server-100 probe; it now passes with Hub active/running, port 9001 HTTP 200, and `router_conflict=false`.
 - Status: fixed.
 - Next action: Preserve the start-anchored probe in the completion-matrix acceptance run.
+
+## 2026-07-24 - DEPLOYMENT-PROBE-TUNNEL-STATE-20260724 - Hub probe can pass with Tunnel failed - fixed
+
+- Component: `tests/e2e/deployment_runtime.py` Hub probe.
+- First observed: 2026-07-24, immediately after the primary Hub recovery; the real probe returned `status=passed` while `gptadmin-tunnel-frpc.service` remained failed and intentionally untouched.
+- Confirmed fact: The Hub probe checks Hub health and conflict text but does not include the Tunnel unit state in its readiness decision.
+- Root-cause hypothesis: The probe contract treated Tunnel conflict text as the only proxy signal, so a failed Tunnel with no current conflict was indistinguishable from a healthy one.
+- Fix / verification: Added the RED regression `test_hub_probe_rejects_failed_tunnel_even_when_hub_is_healthy`, made the probe include Tunnel unit state, and reran server-100; it now fails truthfully with `tunnel_service_not_running` while Hub remains active and port 9001 returns HTTP 200.
+- Status: fixed.
+- Next action: Preserve the explicit Tunnel-state gate in the completion-matrix acceptance run; repair the external Tunnel separately under the approved reclaim safety sequence.
