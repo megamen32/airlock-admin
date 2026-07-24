@@ -100,13 +100,13 @@
     },
     {
       "id": "request-trace-correlation",
-      "command": "cd go-hub && go test ./internal/hub -run 'TestRequestTraceID' -count=1",
-      "evidence": "bounded X-Request-ID correlation joins MCP policy, queued job and result audit without payloads"
+      "command": "cd go-hub && go test ./internal/hub -run 'TestRequestTraceID|TestTraceParent' -count=1",
+      "evidence": "bounded X-Request-ID and W3C traceparent correlation joins MCP policy, queued job and result audit without payloads"
     },
     {
       "id": "shellmcp-trace-propagation",
       "command": "cd go-shellmcp && go test ./internal/server -run 'TestQueueExecutesGenericMCPToolAndPostsResult' -count=1",
-      "evidence": "Hub queue trace_id crosses ShellMCP polling, TaskResult and ShellMCP audit without command payloads"
+      "evidence": "Hub queue trace_id and traceparent cross ShellMCP polling, TaskResult and ShellMCP audit without command payloads"
     }
   ],
   "file_sharing": [
