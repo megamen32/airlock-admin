@@ -1083,6 +1083,29 @@ plan is [`PROJECT_PLAN.md`](./PROJECT_PLAN.md).
 - Next: Exercise the flow on a real deployed Hub/client and record external
   runtime evidence before claiming the remaining platform gates complete.
 
+## 2026-07-24 - Black-box and Docker acceptance re-run - completed
+
+- Milestone: `S0.2` / `S3.4`
+- Owner: Codex
+- Scope: Re-run the requested proxy, endpoints, hooks, MCP forwarding,
+  file-sharing, profiles, policy and failover surfaces from commit `75a25c0`.
+- Baseline / red evidence: The first aggregate parallel Compose capture mixed
+  expected failover connection-refused probes with the installer output, so it
+  was discarded as insufficient evidence and both test projects were cleaned.
+- Change: No production code change; reran the authoritative black-box suite
+  and isolated Docker acceptance with explicit exit-code capture.
+- Verification: `python3 -m pytest tests/test_hub_contract.py
+  tests/test_shellmcp_contract.py tests/test_tunnels.py
+  tests/test_mcp_relay_setup.py tests/test_android_4g_lan_proxy.py -q` ->
+  `47 passed`; Docker installer/tunnel E2E -> exit `0`,
+  `ALL SHELLMCP E2E SCENARIOS PASSED`; isolated Docker failover E2E -> exit
+  `0`, all 7 scenarios and `ALL FAILOVER BLACK-BOX SCENARIOS PASSED`.
+- Delivery: Evidence only; no deployment or push. Test containers and
+  networks were removed after the run.
+- Next: Obtain real Codex/Claude/ChatGPT client, physical fallback-host,
+  CI-publication, WebAuthn/OIDC and OTEL-backend evidence; do not mark those
+  roadmap gates complete from this local run.
+
 ## 2026-07-24 - Clean-host backup restore drill - completed
 
 - Milestone: `S3.3`
