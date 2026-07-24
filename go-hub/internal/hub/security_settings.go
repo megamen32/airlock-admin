@@ -292,11 +292,20 @@ func (s *Server) securitySnapshot() securitySettings {
 
 func (s *Server) securityPublicSnapshot() map[string]any {
 	state := s.securitySnapshot()
+	webauthnEnrolled := s.webAuthnEnrolled()
+	mfaEnrolled := !state.MFAEnrolledAt.IsZero()
+	mfaMethod := "none"
+	if webauthnEnrolled {
+		mfaEnrolled = true
+		mfaMethod = "webauthn"
+	} else if mfaEnrolled {
+		mfaMethod = "totp"
+	}
 	return map[string]any{
 		"preset":                   state.Preset,
-		"mfa_enrolled":             !state.MFAEnrolledAt.IsZero(),
+		"mfa_enrolled":             mfaEnrolled,
 		"updated_at":               state.UpdatedAt,
-		"mfa_method":               map[bool]string{true: "totp", false: "none"}[!state.MFAEnrolledAt.IsZero()],
+		"mfa_method":               mfaMethod,
 		"recovery_codes_remaining": len(state.RecoveryCodeHashes),
 		"restart_bound":            true,
 	}
@@ -370,7 +379,7 @@ func (s *Server) adminSecurityReauth(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	state := s.securitySnapshot()
-	if !state.MFAEnrolledAt.IsZero() && !s.verifyAdminMFA(req.Code) {
+	if (!state.MFAEnrolledAt.IsZero() || s.webAuthnEnrolled()) && !s.verifyAdminMFARequest(r, req.Code) {
 		s.addSecurityAudit("security_reauth_denied", map[string]any{"reason": "invalid_mfa"})
 		writeJSON(w, http.StatusUnauthorized, map[string]any{"detail": "invalid reauthentication"})
 		return
@@ -420,7 +429,7 @@ func (s *Server) adminSecurityPreset(w http.ResponseWriter, r *http.Request) {
 		}
 		s.mu.Lock()
 		state := s.security
-		if preset == securityPresetLockedDown && (state.TOTPSecret == "" || state.MFAEnrolledAt.IsZero()) {
+		if preset == securityPresetLockedDown && !s.mfaEnrolledLockedState(state) {
 			s.mu.Unlock()
 			writeJSON(w, http.StatusPreconditionFailed, map[string]any{"detail": "Locked down requires enrolled MFA"})
 			return
@@ -565,4 +574,25 @@ func (s *Server) verifyAdminMFA(code string) bool {
 	}
 	s.mu.Unlock()
 	return false
+}
+
+func (s *Server) verifyAdminMFARequest(r *http.Request, code string) bool {
+	if s.webAuthnMFACookieValid(r) {
+		return true
+	}
+	return s.verifyAdminMFA(code)
+}
+
+func (s *Server) webAuthnEnrolled() bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.webAuthnEnrolledLocked()
+}
+
+func (s *Server) mfaEnrolledLockedState(state securitySettings) bool {
+	return (!state.MFAEnrolledAt.IsZero() && state.TOTPSecret != "") || s.webAuthnEnrolledLocked()
+}
+
+func (s *Server) webAuthnEnrolledLocked() bool {
+	return len(s.webauthnState.Credentials) > 0 && !s.webauthnState.EnrolledAt.IsZero()
 }

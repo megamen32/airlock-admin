@@ -53,6 +53,7 @@ mode `0600`. Completed jobs and replay keys are stored in
       "action": {
         "kind": "shell",
         "target": "shell:runner",
+        "approval_mode": "bounded_autonomous",
         "command": "/usr/local/bin/process-build '{{event.repository.name}}' '{{event.number}}'",
         "cwd": "/srv/project"
       },
@@ -74,6 +75,14 @@ Supported actions:
   other MCP server exposing the desired operation.
 - `shell`: queues `shell_exec` on the configured `shell:<name>` target and
   renders `command` and `cwd`.
+
+Write-capable webhook actions are policy-controlled. The default
+`approval_mode` is `ask_before_write`, so the action is rejected with an
+approval-required result and no job is queued until an explicit workflow is
+added. Routes that are intentionally allowed to run unattended may set
+`approval_mode: "bounded_autonomous"`; the Hub still applies the bounded
+per-actor write budget and records the policy decision in the audit trail.
+Read-only actions do not consume the write budget.
 
 Templates use `{{event.path.to.value}}` for nested fields and `{{json}}` for
 the complete event. The target and operation are always taken from the route

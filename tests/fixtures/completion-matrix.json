@@ -165,6 +165,16 @@
       "evidence": "write-capable MCP calls and aliases enforce approval, one-time consume, and bounded-autonomous per-actor budgets"
     },
     {
+      "id": "legacy-policy-boundaries",
+      "command": "cd go-hub && go test ./internal/hub -run 'Test(MCPPromptCallCannotBypassProfilePolicy|WebhookActionCannotBypassApprovalPolicy|BulkExecUsesPolicyGate|AdminMCPResourceReadHonorsTargetPolicy)' -count=1",
+      "evidence": "legacy bridge, webhook, bulk and admin resource entrypoints cannot enqueue work outside the central policy boundary"
+    },
+    {
+      "id": "runtime-actions-openapi-proxy-contract",
+      "command": "cd go-hub && go test ./internal/hub -run 'TestActionsOpenAPIIncludesNetworkProxyContract' -count=1",
+      "evidence": "runtime generated Actions OpenAPI advertises the same Network Tunnel control paths as the static contract"
+    },
+    {
       "id": "readonly-security",
       "command": "cd go-shellmcp && go test ./internal/inspect ./internal/redact ./internal/security -count=1",
       "evidence": "path boundary, symlink/credential rejection and secret redaction"
@@ -178,6 +188,11 @@
       "id": "security-preset-mfa",
       "command": "cd go-hub && go test ./internal/hub -run 'Test(SecurityPresetAndTOTPFailClosedUntilEnrollment|SensitiveSecurityMutationRequiresFreshAdminReauth)' -count=1",
       "evidence": "preset persistence, locked-down fail-closed behavior, TOTP enrollment/verification, fresh security re-auth and MFA-required admin login"
+    },
+    {
+      "id": "webauthn-passkey-mfa",
+      "command": "cd go-hub && go test ./internal/hub -run 'Test(WebAuthnRegistrationBeginReturnsPublicKeyChallenge|LockedDownAcceptsEnrolledWebAuthnCredential|WebAuthnLoginBeginFailsClosedWithoutCredential|LockedDownAdminLoginRequiresWebAuthnProofCookie)' -count=1",
+      "evidence": "passkey registration/login ceremony boundaries, restrictive credential state and locked-down MFA acceptance"
     },
     {
       "id": "auth-failure-rate-limit",

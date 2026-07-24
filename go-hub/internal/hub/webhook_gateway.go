@@ -39,14 +39,15 @@ type WebhookRoute struct {
 // Agent Herder, ShellMCP, or any other registered MCP target can be selected
 // by configuration without becoming a special dependency of the gateway.
 type WebhookAction struct {
-	Kind      string         `json:"kind"`
-	Target    string         `json:"target"`
-	Tool      string         `json:"tool,omitempty"`
-	Arguments map[string]any `json:"arguments,omitempty"`
-	Prompt    string         `json:"prompt,omitempty"`
-	PromptArg string         `json:"prompt_arg,omitempty"`
-	Command   string         `json:"command,omitempty"`
-	Cwd       string         `json:"cwd,omitempty"`
+	Kind         string         `json:"kind"`
+	Target       string         `json:"target"`
+	ApprovalMode string         `json:"approval_mode,omitempty"`
+	Tool         string         `json:"tool,omitempty"`
+	Arguments    map[string]any `json:"arguments,omitempty"`
+	Prompt       string         `json:"prompt,omitempty"`
+	PromptArg    string         `json:"prompt_arg,omitempty"`
+	Command      string         `json:"command,omitempty"`
+	Cwd          string         `json:"cwd,omitempty"`
 }
 
 type WebhookCallback struct {
@@ -127,6 +128,9 @@ func validateWebhookRoutes(routes []WebhookRoute) error {
 func validateWebhookAction(routeID string, action WebhookAction) error {
 	if action.Target == "" {
 		return fmt.Errorf("webhook route %q action target is required", routeID)
+	}
+	if action.ApprovalMode != "" && action.ApprovalMode != approvalModeAskBeforeWrite && action.ApprovalMode != approvalModeBoundedAutonomous {
+		return fmt.Errorf("webhook route %q has invalid approval_mode", routeID)
 	}
 	switch action.Kind {
 	case "mcp":
@@ -407,7 +411,12 @@ func (s *Server) dispatchWebhookAction(action WebhookAction, event any) (map[str
 		if err != nil {
 			return nil, err
 		}
-		return s.callShellTool(action.Target, "shell_exec", map[string]any{"cmd": command, "cwd": cwd}, false, timeout), nil
+		policyRequest := requestWithAutomationProfile(nil, "webhook", action.Target, "shell_exec", action.ApprovalMode)
+		result, status := s.executeMCPTool(policyRequest, action.Target, "shell_exec", map[string]any{"cmd": command, "cwd": cwd}, false, timeout, "")
+		if status >= http.StatusBadRequest {
+			return nil, fmt.Errorf("webhook shell action failed policy with status %d: %v", status, result)
+		}
+		return result, nil
 	case "mcp", "prompt":
 		args, err := renderWebhookValue(action.Arguments, event)
 		if err != nil {
@@ -429,7 +438,8 @@ func (s *Server) dispatchWebhookAction(action WebhookAction, event any) (map[str
 		if status != http.StatusOK {
 			return nil, fmt.Errorf("webhook target rejected: %s", detail)
 		}
-		result, resultStatus := s.executeMCPTool(nil, selectedTarget, action.Tool, arguments, false, timeout, "")
+		policyRequest := requestWithAutomationProfile(nil, "webhook", selectedTarget, action.Tool, action.ApprovalMode)
+		result, resultStatus := s.executeMCPTool(policyRequest, selectedTarget, action.Tool, arguments, false, timeout, "")
 		if resultStatus < http.StatusOK || resultStatus >= http.StatusMultipleChoices {
 			return nil, fmt.Errorf("webhook MCP action failed with status %d: %v", resultStatus, result)
 		}

@@ -320,30 +320,33 @@ type idempotencyEntry struct {
 type Server struct {
 	cfg Config
 
-	mu             sync.Mutex
-	authRateMu     sync.Mutex
-	cond           *sync.Cond
-	agents         map[string]*Agent
-	relayQueues    map[string][]string
-	relayJobs      map[string]*relayJob
-	shellQueues    map[string][]string
-	shellJobs      map[string]*shellJob
-	idempotency    map[string]*idempotencyEntry
-	oauthCodes     map[string]oauthCode
-	managedMCP     map[string]managedMCPToken
-	oauthClients   map[string]oauthClientMetadata
-	accessProfiles map[string]AccessProfile
-	approvals      map[string]*approvalRequest
-	autonomous     map[string]*autonomousBudget
-	security       securitySettings
-	securityPath   string
-	telemetry      telemetryState
-	telemetryPath  string
-	secretStore    *SecretStore
-	secretStoreErr error
-	audit          []auditEvent
-	authRate       map[string]authRateWindow
-	failover       FailoverConfig
+	mu               sync.Mutex
+	authRateMu       sync.Mutex
+	cond             *sync.Cond
+	agents           map[string]*Agent
+	relayQueues      map[string][]string
+	relayJobs        map[string]*relayJob
+	shellQueues      map[string][]string
+	shellJobs        map[string]*shellJob
+	idempotency      map[string]*idempotencyEntry
+	oauthCodes       map[string]oauthCode
+	managedMCP       map[string]managedMCPToken
+	oauthClients     map[string]oauthClientMetadata
+	accessProfiles   map[string]AccessProfile
+	approvals        map[string]*approvalRequest
+	autonomous       map[string]*autonomousBudget
+	security         securitySettings
+	securityPath     string
+	webauthnState    webAuthnState
+	webauthnPath     string
+	webauthnSessions map[string]webAuthnSession
+	telemetry        telemetryState
+	telemetryPath    string
+	secretStore      *SecretStore
+	secretStoreErr   error
+	audit            []auditEvent
+	authRate         map[string]authRateWindow
+	failover         FailoverConfig
 
 	updateStatePath     string
 	updateLockPath      string
@@ -392,6 +395,15 @@ func New(cfg Config) *Server {
 		log.Printf("telemetry state load failed path=%s err=%v", telemetryPath, err)
 		telemetry = defaultTelemetryState()
 	}
+	webauthnPath := ""
+	if cfg.ConfigDir != "" {
+		webauthnPath = filepath.Join(cfg.ConfigDir, webAuthnStateFilename)
+	}
+	webauthnState, err := loadWebAuthnState(webauthnPath)
+	if err != nil {
+		log.Printf("webauthn state load failed path=%s err=%v", webauthnPath, err)
+		webauthnState = defaultWebAuthnState()
+	}
 	s := &Server{
 		cfg:               cfg,
 		agents:            map[string]*Agent{},
@@ -408,6 +420,9 @@ func New(cfg Config) *Server {
 		autonomous:        map[string]*autonomousBudget{},
 		security:          security,
 		securityPath:      securityPath,
+		webauthnState:     webauthnState,
+		webauthnPath:      webauthnPath,
+		webauthnSessions:  map[string]webAuthnSession{},
 		telemetry:         telemetry,
 		telemetryPath:     telemetryPath,
 		audit:             []auditEvent{},
@@ -745,6 +760,10 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/admin/api/security/preset", s.requireCtl(s.adminSecurityPreset))
 	mux.HandleFunc("/admin/api/security/mfa/totp/enroll", s.requireCtl(s.adminTOTPEnroll))
 	mux.HandleFunc("/admin/api/security/mfa/totp/verify", s.requireCtl(s.adminTOTPVerify))
+	mux.HandleFunc("/admin/api/security/mfa/webauthn/register/begin", s.requireCtl(s.adminWebAuthnRegisterBegin))
+	mux.HandleFunc("/admin/api/security/mfa/webauthn/register/finish", s.requireCtl(s.adminWebAuthnRegisterFinish))
+	mux.HandleFunc("/admin/api/security/mfa/webauthn/login/begin", s.requireCtl(s.adminWebAuthnLoginBegin))
+	mux.HandleFunc("/admin/api/security/mfa/webauthn/login/finish", s.requireCtl(s.adminWebAuthnLoginFinish))
 	mux.HandleFunc("/admin/api/telemetry", s.requireCtl(s.adminTelemetry))
 	mux.HandleFunc("/admin/api/telemetry/event", s.requireCtl(s.adminTelemetry))
 	mux.HandleFunc("/admin/api/clients/revoke-all", s.requireCtl(s.adminClientsRevokeAll))
@@ -1143,6 +1162,95 @@ paths:
     delete:
       operationId: deleteWebhookRoute
       summary: Delete an operator-owned webhook route
+  /proxy-control/v1/request:
+    post:
+      operationId: networkProxyRequest
+      summary: Request a bounded Network Tunnel capability
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [profile_id, policy]
+              properties:
+                profile_id: {type: string}
+                policy: {type: object, additionalProperties: true}
+      responses:
+        "201": {description: Pending capability}
+  /proxy-control/v1/approve:
+    post:
+      operationId: networkProxyApprove
+      summary: Approve a pending Network Tunnel capability
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [capability_id]
+              properties:
+                capability_id: {type: string}
+      responses:
+        "200": {description: Active capability}
+  /proxy-control/v1/issue:
+    post:
+      operationId: networkProxyIssue
+      summary: Issue one client and one agent stream grant
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [capability_id, target]
+              properties:
+                capability_id: {type: string}
+                target: {type: string}
+      responses:
+        "200": {description: Short-lived role-bound grants}
+  /proxy-control/v1/open:
+    post:
+      operationId: networkProxyOpen
+      summary: Consume a one-time stream grant
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [token, role]
+              properties:
+                token: {type: string}
+                role: {type: string, enum: [client, agent]}
+      responses:
+        "200": {description: Consumed grant metadata without the bearer token}
+  /proxy-control/v1/status:
+    get:
+      operationId: networkProxyStatus
+      summary: Read Network Tunnel capability state
+      parameters:
+        - name: capability_id
+          in: query
+          required: true
+          schema: {type: string}
+      responses:
+        "200": {description: Capability state}
+  /proxy-control/v1/revoke:
+    post:
+      operationId: networkProxyRevoke
+      summary: Revoke and drain a Network Tunnel capability
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [capability_id]
+              properties:
+                capability_id: {type: string}
+      responses:
+        "200": {description: Draining capability}
 components:
   securitySchemes:
     bearerAuth:
@@ -1483,10 +1591,22 @@ func (s *Server) bulkExec(w http.ResponseWriter, r *http.Request) {
 		s.mu.Unlock()
 	}
 	results := map[string]any{}
+	responseStatus := http.StatusOK
+	approvalID := firstString(req, "approval_id")
 	for _, srv := range targets {
-		results[srv] = s.callShellTool("shell:"+strings.TrimPrefix(srv, "shell:"), "shell_exec", map[string]any{"cmd": cmd, "cwd": firstString(req, "cwd"), "timeout": req["timeout"]}, true, s.cfg.DefaultTimeout)
+		target := "shell:" + strings.TrimPrefix(srv, "shell:")
+		args := map[string]any{"cmd": cmd, "cwd": firstString(req, "cwd"), "timeout": req["timeout"]}
+		if approvalID != "" {
+			args["approval_id"] = approvalID
+		}
+		policyRequest := requestWithAutomationProfile(r, "bulk-exec", target, "shell_exec", approvalModeAskBeforeWrite)
+		result, status := s.executeMCPTool(policyRequest, target, "shell_exec", args, true, s.cfg.DefaultTimeout, "")
+		results[srv] = result
+		if status > responseStatus {
+			responseStatus = status
+		}
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "results": results})
+	writeJSON(w, responseStatus, map[string]any{"ok": responseStatus < http.StatusBadRequest, "results": results})
 }
 
 func sha256File(path string) (string, error) {
@@ -2352,6 +2472,9 @@ func (s *Server) boundedAutonomousGate(r *http.Request, target, toolName string)
 }
 
 func isReadOnlyTool(target, toolName string) bool {
+	if toolName == "resources/list" || toolName == "resources/read" {
+		return true
+	}
 	if target == "hub" {
 		switch toolName {
 		case "discover", "demo", "list_mcp_servers", "listMcpServers", "list_mcp_agents", "listMcpAgents", "pending", "list_pending_servers", "hub_status", "status", "schema", "list_mcp_tools", "listMcpTools", "job", "get_mcp_job", "getMcpJob":
@@ -2968,12 +3091,14 @@ func (s *Server) adminMCPResourcesList(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, map[string]any{"detail": "missing target"})
 		return
 	}
-	jobID := s.enqueueRelay(target, "resources/list", map[string]any{})
-	if truthy(req["background"]) {
-		writeJSON(w, http.StatusOK, map[string]any{"server_id": target, "status": "running", "background": true, "job_id": jobID})
+	if err := authorizeToolCall(r, target, "resources/list"); err != nil {
+		s.auditToolDecision(r, target, "resources/list", nil, "deny", err.Error(), nil, http.StatusForbidden)
+		writeJSON(w, http.StatusForbidden, map[string]any{"detail": err.Error()})
 		return
 	}
-	writeJSON(w, http.StatusOK, s.waitRelay(jobID, timeoutFromReq(req, s.cfg.DefaultTimeout)))
+	args := map[string]any{}
+	result, status := s.executeMCPTool(r, target, "resources/list", args, truthy(req["background"]), timeoutFromReq(req, s.cfg.DefaultTimeout), "")
+	writeJSON(w, status, result)
 }
 
 func (s *Server) adminMCPResourceRead(w http.ResponseWriter, r *http.Request) {
@@ -2992,12 +3117,13 @@ func (s *Server) adminMCPResourceRead(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, map[string]any{"detail": "missing target or uri"})
 		return
 	}
-	jobID := s.enqueueRelay(target, "resources/read", map[string]any{"uri": uri})
-	if truthy(req["background"]) {
-		writeJSON(w, http.StatusOK, map[string]any{"server_id": target, "status": "running", "background": true, "job_id": jobID})
+	if err := authorizeToolCall(r, target, "resources/read"); err != nil {
+		s.auditToolDecision(r, target, "resources/read", map[string]any{"uri": uri}, "deny", err.Error(), nil, http.StatusForbidden)
+		writeJSON(w, http.StatusForbidden, map[string]any{"detail": err.Error()})
 		return
 	}
-	writeJSON(w, http.StatusOK, s.waitRelay(jobID, timeoutFromReq(req, s.cfg.DefaultTimeout)))
+	result, status := s.executeMCPTool(r, target, "resources/read", map[string]any{"uri": uri}, truthy(req["background"]), timeoutFromReq(req, s.cfg.DefaultTimeout), "")
+	writeJSON(w, status, result)
 }
 
 func (s *Server) adminOverview(w http.ResponseWriter, r *http.Request) {
@@ -3703,7 +3829,7 @@ func (s *Server) adminLogin(w http.ResponseWriter, r *http.Request) {
 			s.renderAdminLogin(w, r, "неверный пароль")
 			return
 		}
-		if s.securityRequiresMFA() && !s.verifyAdminMFA(r.FormValue("mfa_code")) {
+		if s.securityRequiresMFA() && !s.verifyAdminMFARequest(r, r.FormValue("mfa_code")) {
 			s.authAudit("admin_login_denied", r, map[string]any{"reason": "mfa_required_or_invalid"})
 			if s.authFailureRateLimited(w, r) {
 				return
@@ -5008,7 +5134,21 @@ func (s *Server) mcpPromptCall(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "tool is required"})
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"status": "completed", "result": s.appsSDKCall(tool, args)})
+	// The legacy bridge key is an ingress credential, not a scoped MCP client.
+	// Treat bridge calls as read-only until the caller migrates to an OAuth
+	// connection with an explicit access profile; otherwise this endpoint would
+	// invoke the executor with a nil request and bypass policy gates.
+	bridgeRequest := requestWithAuthClaims(r, map[string]any{
+		"sub":         "legacy-bridge",
+		"scope":       "gptadmin.read",
+		"access_mode": accessModeReadonly,
+	})
+	if err := authorizeFacadeCall(bridgeRequest, tool, args); err != nil {
+		s.auditToolDecision(bridgeRequest, "bridge", tool, args, "deny", err.Error(), nil, http.StatusForbidden)
+		writeJSON(w, http.StatusForbidden, map[string]any{"status": "failed", "error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"status": "completed", "result": s.appsSDKCallForRequest(bridgeRequest, tool, args)})
 }
 
 func (s *Server) appsSDKCall(name string, args map[string]any) any {

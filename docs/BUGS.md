@@ -12,6 +12,29 @@ Rules:
 - At the end of the current goal, resolve every actionable open entry before
   final handoff, unless a concrete external blocker is recorded.
 
+## 2026-07-24 - POLICY-BOUNDARY-BYPASS-20260724 - Legacy write entrypoints skip central policy - open
+
+- Component: `go-hub/internal/hub/server.go` bridge/prompt, bulk execution and
+  admin MCP resource routes; `go-hub/internal/hub/webhook_gateway.go` action
+  dispatch.
+- First observed: 2026-07-24, immutable review ID
+  `019f93df-7148-7033-972a-07c17c13955d`.
+- Confirmed fact: `mcpPromptCall` and webhook actions can invoke write-capable
+  execution with a nil request/profile, while `bulkExec` and admin resource
+  routes enqueue work directly; these paths do not consistently pass through
+  approval/autonomy policy and the central policy audit boundary.
+- Root-cause hypothesis: privileged legacy entrypoints predate the shared
+  `executeMCPTool` policy executor and retain direct queue calls.
+- Fix / verification: Added RED regressions in
+  `go-hub/internal/hub/policy_boundary_test.go`; bridge ingress is read-only,
+  webhook writes use explicit approval-mode automation profiles, bulk and
+  resource routes use the central executor, and runtime Actions OpenAPI now
+  advertises the Network Tunnel paths. Focused policy tests and the full Hub
+  suite pass.
+- Status: fixed.
+- Next action: retain the boundary regressions in the completion matrix and
+  repeat them after future legacy-route changes.
+
 ## 2026-07-24 - SECRET-INGRESS-CSP-20260724 - Secret input CSP header malformed - fixed
 
 - Component: `go-hub/internal/hub/secret_ingress.go` browser input response.

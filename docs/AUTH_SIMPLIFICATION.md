@@ -106,13 +106,16 @@ agent policy or JWT validation.
   proxy. GPTAdmin still verifies the proxy identity, maps it to local roles and
   records it in the audit trail.
 
-The current Hub runtime exposes the progressive preset API and a fail-closed
-TOTP enrollment/verification path at `/admin/api/security/preset` and
-`/admin/api/security/mfa/totp/*`. Locked down cannot be selected until TOTP is
-enrolled, and browser admin login then requires a valid six-digit TOTP or
-one-time recovery code. Recovery codes are returned only during explicit
-enrollment and persisted as hashes. Passkey and external-verification support
-remain separate follow-up gates; they must not be inferred from TOTP enrollment.
+The current Hub runtime exposes the progressive preset API, WebAuthn
+registration/login ceremonies and the TOTP fallback at
+`/admin/api/security/preset`, `/admin/api/security/mfa/webauthn/*` and
+`/admin/api/security/mfa/totp/*`. WebAuthn credentials are stored in a
+restrictive atomic state file; registration and login ceremonies are
+single-use and the verified passkey is carried to the password login through
+an HttpOnly, short-lived proof cookie. Locked down cannot be selected until a
+passkey or verified TOTP method is enrolled. Recovery codes remain one-time
+hashed fallbacks. OIDC/external identity verification remains a deployment
+follow-up and must not be inferred from local MFA enrollment.
 
 ### Connect an MCP client
 

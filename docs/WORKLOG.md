@@ -1106,6 +1106,39 @@ plan is [`PROJECT_PLAN.md`](./PROJECT_PLAN.md).
   CI-publication, WebAuthn/OIDC and OTEL-backend evidence; do not mark those
   roadmap gates complete from this local run.
 
+## 2026-07-24 - Policy boundaries and passkey MFA - completed
+
+- Milestone: `S2.1a` / `S2.2` / `S3.1`
+- Owner: Codex
+- Scope: Close the review-confirmed write-path policy bypasses and add the
+  local WebAuthn/passkey MFA ceremony without changing the single integration
+  branch.
+- Baseline / red evidence: Review ID
+  `019f93df-7148-7033-972a-07c17c13955d` identified bridge, webhook, bulk and
+  admin resource queue bypasses plus runtime Actions OpenAPI drift. New RED
+  tests failed with queued jobs and missing proxy-control paths. WebAuthn
+  registration begin initially returned unauthorized because its route and
+  ceremony did not exist.
+- Change: Legacy bridge is read-only; webhook actions use explicit
+  `approval_mode` automation profiles (default `ask_before_write`, optional
+  bounded autonomous mode); bulk/resource routes use the central executor and
+  target policy; runtime Actions OpenAPI now includes Network Tunnel paths.
+  Added WebAuthn registration/login begin/finish ceremonies, restrictive
+  credential state, locked-down MFA recognition and short-lived proof-cookie
+  integration with password login/reauth. Added dependency
+  `github.com/go-webauthn/webauthn v0.15.0` while retaining Go 1.24.
+- Verification: Focused boundary/passkey tests pass; full Hub `go test ./...`
+  and `go test -race ./...` pass; Hub `go vet ./...` passes; ShellMCP race/vet
+  and ProxyRelay test/vet pass; full Python `183 passed, 2 skipped`; completion
+  matrix `11 passed`; `go mod verify` and Hub Darwin arm64/amd64 builds pass;
+  `git diff --check` passes.
+- Delivery: Commit `069bdc4` (`feat: enforce policy boundaries and add passkey
+  MFA`); no push or deployment performed. User-owned untracked remote-secret
+  plan preserved.
+- Next: Verify WebAuthn with a real browser/authenticator and obtain the
+  remaining OIDC, external client, OTEL backend, physical failover and canary
+  release evidence.
+
 ## 2026-07-24 - Clean-host backup restore drill - completed
 
 - Milestone: `S3.3`

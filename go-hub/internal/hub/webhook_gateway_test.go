@@ -63,10 +63,11 @@ func TestWebhookGatewayRendersJSONAndDispatchesConfiguredShell(t *testing.T) {
 		ID:    "build",
 		Token: "webhook-token",
 		Action: WebhookAction{
-			Kind:    "shell",
-			Target:  "shell:runner",
-			Command: `printf '%s:%s' '{{event.repository.name}}' '{{event.number}}'`,
-			Cwd:     "/srv/project",
+			Kind:         "shell",
+			Target:       "shell:runner",
+			ApprovalMode: approvalModeBoundedAutonomous,
+			Command:      `printf '%s:%s' '{{event.repository.name}}' '{{event.number}}'`,
+			Cwd:          "/srv/project",
 		},
 	}}})
 	s.mu.Lock()

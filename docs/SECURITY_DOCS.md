@@ -31,6 +31,17 @@ Plus `SHELLMCP_TOKEN` for agent → hub registration.
   with a TTL. Critical files (nginx, systemd, networking) get longer TTLs by
   default.
 
+### Admin MFA
+
+Locked-down administration accepts an enrolled WebAuthn/passkey credential or
+the TOTP fallback. The WebAuthn ceremonies are exposed at
+`/admin/api/security/mfa/webauthn/register/{begin,finish}` and
+`/admin/api/security/mfa/webauthn/login/{begin,finish}`; the Hub stores public
+credential records in `webauthn_state.json` with mode `0600` and uses a
+short-lived HttpOnly proof cookie after a verified login. OIDC identity-aware
+proxy integration remains deployment-specific and is not implied by local
+passkey enrollment.
+
 ### Remote secret ingress
 
 Remote MCP clients use `secret_request` to create a one-time browser entry

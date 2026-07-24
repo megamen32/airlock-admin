@@ -24,6 +24,32 @@ func requestWithAuthClaims(r *http.Request, claims map[string]any) *http.Request
 	return r.WithContext(context.WithValue(r.Context(), authClaimsContextKey{}, claims))
 }
 
+// requestWithAutomationProfile gives non-interactive ingress an auditable
+// policy identity instead of allowing it to execute with a nil request.
+func requestWithAutomationProfile(r *http.Request, actor, target, tool, approvalMode string) *http.Request {
+	if r == nil {
+		r, _ = http.NewRequest(http.MethodPost, "http://automation.invalid/", nil)
+	}
+	if approvalMode != approvalModeAskBeforeWrite && approvalMode != approvalModeBoundedAutonomous {
+		approvalMode = approvalModeAskBeforeWrite
+	}
+	claims := map[string]any{
+		"sub":         actor,
+		"client_id":   actor,
+		"scope":       "gptadmin.read gptadmin.exec",
+		"access_mode": accessModeFull,
+	}
+	r = requestWithAuthClaims(r, claims)
+	return requestWithAccessProfile(r, AccessProfile{
+		ID:             "automation:" + actor,
+		AccessMode:     accessModeFull,
+		ApprovalMode:   approvalMode,
+		AllowedTargets: []string{target},
+		AllowedTools:   []string{tool},
+		Version:        1,
+	})
+}
+
 func requestAccessMode(r *http.Request) string {
 	if r == nil {
 		return accessModeFull
@@ -83,6 +109,9 @@ func authorizeToolCall(r *http.Request, target, toolName string) error {
 		case "listMcpServers", "list_mcp_servers", "listMcpAgents", "list_mcp_agents", "list_pending_servers", "pending", "hub_status", "status", "demo":
 			return nil
 		}
+	}
+	if toolName == "resources/list" || toolName == "resources/read" {
+		return nil
 	}
 	if strings.HasPrefix(target, "shell:") && toolName == "system_inspect" {
 		return nil
