@@ -5,6 +5,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestActivationTelemetryIsOptInAggregatedAndPersistent(t *testing.T) {
@@ -49,5 +50,53 @@ func TestActivationTelemetryIsOptInAggregatedAndPersistent(t *testing.T) {
 	persisted := request(restarted, http.MethodGet, "/admin/api/telemetry", "")
 	if persisted.Code != http.StatusOK || !strings.Contains(persisted.Body.String(), `"client_connected":2`) {
 		t.Fatalf("telemetry did not survive restart: status=%d body=%s", persisted.Code, persisted.Body.String())
+	}
+}
+
+func TestActivationTelemetryRecordsConnectionAndFirstToolWithoutPayload(t *testing.T) {
+	s := New(Config{
+		ConfigDir:         t.TempDir(),
+		CtlToken:          "ctl",
+		OAuthClientSecret: "oauth-secret",
+		PublicOrigin:      "https://hub.example",
+		MCPResource:       "https://hub.example",
+	})
+	request := func(method, path, token, body string) *httptest.ResponseRecorder {
+		req := httptest.NewRequest(method, path, strings.NewReader(body))
+		if token != "" {
+			req.Header.Set("Authorization", "Bearer "+token)
+		}
+		if body != "" {
+			req.Header.Set("Content-Type", "application/json")
+		}
+		response := httptest.NewRecorder()
+		s.Handler().ServeHTTP(response, req)
+		return response
+	}
+	if enabled := request(http.MethodPut, "/admin/api/telemetry", "ctl", `{"enabled":true}`); enabled.Code != http.StatusOK {
+		t.Fatalf("enable telemetry status=%d body=%s", enabled.Code, enabled.Body.String())
+	}
+	token, err := s.signJWT(map[string]any{
+		"sub": "telemetry-client", "client_id": "telemetry-client", "jti": "telemetry-jti",
+		"scope": "gptadmin.read", "access_mode": accessModeReadonly,
+		"aud": "https://hub.example", "resource": "https://hub.example",
+		"exp": time.Now().Add(time.Hour).Unix(), "iat": time.Now().Unix(), "kid": defaultJWTKeyID,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if page := request(http.MethodGet, "/connect", "", ""); page.Code != http.StatusOK {
+		t.Fatalf("connection page status=%d body=%s", page.Code, page.Body.String())
+	}
+	toolCall := request(http.MethodPost, "/mcp", token, `{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"demo","arguments":{"secret":"must-not-persist"}}}`)
+	if toolCall.Code != http.StatusOK {
+		t.Fatalf("first tool status=%d body=%s", toolCall.Code, toolCall.Body.String())
+	}
+	state := request(http.MethodGet, "/admin/api/telemetry", "ctl", "")
+	if state.Code != http.StatusOK || !strings.Contains(state.Body.String(), `"connection_page_viewed":1`) || !strings.Contains(state.Body.String(), `"first_tool":1`) {
+		t.Fatalf("automatic activation counters missing: status=%d body=%s", state.Code, state.Body.String())
+	}
+	if strings.Contains(state.Body.String(), "must-not-persist") || strings.Contains(state.Body.String(), "telemetry-client") {
+		t.Fatalf("automatic telemetry leaked request payload or identity: %s", state.Body.String())
 	}
 }

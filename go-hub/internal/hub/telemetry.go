@@ -3,6 +3,7 @@ package hub
 import (
 	"encoding/json"
 	"errors"
+	"log"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -110,6 +111,27 @@ func cloneIntMap(source map[string]int) map[string]int {
 
 func (s *Server) persistTelemetry(state telemetryState) error {
 	return saveTelemetryState(s.telemetryPath, state)
+}
+
+func (s *Server) recordActivationTelemetry(event string) {
+	if _, ok := activationTelemetryEvents[event]; !ok {
+		return
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if !s.telemetry.Enabled {
+		return
+	}
+	if s.telemetry.Counters == nil {
+		s.telemetry.Counters = map[string]int{}
+	}
+	if s.telemetry.Counters[event] < 1_000_000 {
+		s.telemetry.Counters[event]++
+	}
+	s.telemetry.UpdatedAt = s.now()
+	if err := s.persistTelemetry(s.telemetry); err != nil {
+		log.Printf("activation telemetry persist failed event=%s err=%v", event, err)
+	}
 }
 
 func (s *Server) adminTelemetry(w http.ResponseWriter, r *http.Request) {

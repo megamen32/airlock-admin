@@ -65,7 +65,7 @@ evidence unambiguous before adding surface area.
 | S1.3 Universal connection page | One Hub URL that detects/configures local MCP clients and derives protocol details | Codex, Claude-compatible and ChatGPT-compatible paths complete a harmless action without documentation lookup | In progress |
 | S1.3a Admin profile workspace | Configure versioned instructions, access mode, allowed targets/tools, external machine/workspace references and client bindings as one user-facing profile; follow [`ADMIN_PROFILES.md`](./ADMIN_PROFILES.md) | A profile survives restart, updates effective MCP instructions without restart, filters the real tool list and rejects a forbidden call in black-box tests; referenced private repositories remain separate sources of truth | Complete |
 | S1.4 Safe demo capability | Built-in read-only demo/diagnostics tool and explicit destructive-action boundary | A user can validate connection without shell execution or credentials beyond setup | In progress |
-| S1.5 Activation telemetry | Opt-in, privacy-preserving local event summary | Operator can see funnel failures without sending command contents or secrets | In progress |
+| S1.5 Activation telemetry | Opt-in, privacy-preserving local event summary | Operator can see funnel failures without sending command contents or secrets | Complete |
 | S1.6 Progressive security presets | Working default, Private access and Locked down presets applied after first connection | Working default has HTTPS/rate limits/no direct public port; Locked down requires MFA and external verification | In progress |
 
 The vocabulary of every Stage 1 surface is **Hub**, **MCP clients** and

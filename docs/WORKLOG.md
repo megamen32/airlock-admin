@@ -1003,6 +1003,25 @@ plan is [`PROJECT_PLAN.md`](./PROJECT_PLAN.md).
 - Next: Implement/verify local client auto-configuration and real Codex,
   Claude-compatible and ChatGPT harmless-action golden paths separately.
 
+## 2026-07-24 - Automatic local activation telemetry - completed
+
+- Milestone: `S1.5`
+- Owner: `Codex`
+- Scope: Turn on opt-in funnel counters from real Hub paths without retaining
+  request payloads, identities, addresses or command contents.
+- Baseline / red evidence: `TestActivationTelemetryRecordsConnectionAndFirstToolWithoutPayload`
+  showed that enabling telemetry left counters empty after `/connect` and a
+  direct `/mcp` tool call; only manual event POSTs worked.
+- Change: Added locked, bounded `recordActivationTelemetry` calls for
+  `connection_page_viewed`, `first_tool` and policy `failure`; persistence is
+  local and errors do not change the request response.
+- Verification: Focused telemetry tests pass; telemetry race test passes; the
+  acceptance matrix command now covers both automatic and manual persistence.
+- Delivery: Pending integration commit on `codex/haos-addon-public`; no deploy,
+  push or merge. The unrelated remote-secret-ingress plan remains preserved.
+- Next: Keep remote client golden paths and standard cross-component traces
+  separate; this milestone intentionally remains local-only.
+
 ## 2026-07-24 - Typed admin security controls and Apps SDK contract - completed
 
 - Milestone: `S2.1` / `S1.4`

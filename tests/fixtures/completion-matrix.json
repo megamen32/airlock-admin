@@ -65,7 +65,7 @@
     },
     {
       "id": "activation-telemetry",
-      "command": "cd go-hub && go test ./internal/hub -run 'TestActivationTelemetryIsOptInAggregatedAndPersistent' -count=1",
+      "command": "cd go-hub && go test ./internal/hub -run 'TestActivationTelemetry(RecordsConnectionAndFirstToolWithoutPayload|IsOptInAggregatedAndPersistent)' -count=1",
       "evidence": "opt-in local event counters, payload exclusion and restart persistence"
     },
     {
