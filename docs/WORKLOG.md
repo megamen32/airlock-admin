@@ -2551,3 +2551,14 @@ plan is [`PROJECT_PLAN.md`](./PROJECT_PLAN.md).
 - Verification: `python3 -m pytest tests/test_shellmcp_contract.py -q` passed (`10 passed`); completion matrix passed (`12 passed`); final Python suite passed (`236 passed, 3 skipped`, 238 collected / 1 collection skip).
 - Delivery: Local current-tree evidence only; native host and public Tunnel file-security proof remain external.
 - Next: Run the same file/profile/policy probes against the authorized deployed commit.
+
+## 2026-07-24 - Project-plan status reconciliation - completed locally
+
+- Milestone: `S3.1`, `S4.1`, `S5.1`, `S5.3`, `S5.4`
+- Owner: Codex
+- Scope: Reconcile canonical `docs/PROJECT_PLAN.md` statuses with current authoritative local evidence without closing external gates.
+- Baseline / red evidence: The plan still labeled the policy/observability/ecosystem baseline `Not started`, S5.1 `In progress` and S5.4 `Planned` despite their checked contracts and completion-matrix evidence.
+- Change: Marked the bounded policy/observability/ecosystem baseline `In progress`, S5.1 reference deployments `Complete` and S5.4 sustainable offering `Complete`; retained S5.2 and external runtime/CI/native gates as open or in progress.
+- Verification: `python3 -m pytest tests/test_docs_product_contract.py tests/test_deployment_blueprints.py tests/test_feedback_loop_contract.py tests/test_sustainable_offering.py -q` passes (`10 passed`).
+- Delivery: Documentation/status reconciliation only; no external adoption, deployment, collector or hosted-service claim was added.
+- Next: Obtain immutable external evidence for the remaining in-progress rows before changing their status.

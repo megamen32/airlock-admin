@@ -38,7 +38,7 @@ minimum practical MCP context loaded only when the current task needs it.
 | Failover | Docker black-box coverage for tunnel, hub, combined outage, reclaim and ranked fallback promotion | In progress |
 | Auth and relay target safety | OAuth/OpenAPI paths and explicit MCP target contract | In progress |
 | Product activation | Canonical local first-tool path, installed-client handshake and opt-in activation counters; external outcome data remains absent | In progress |
-| Policy, observability and ecosystem | Partial primitives; no coherent operator product | Not started |
+| Policy, observability and ecosystem | Bounded policy, telemetry, capability-catalog and extension contracts; external operator evidence remains pending | In progress |
 
 ## Stage 0 - Product contract and engineering baseline
 
@@ -119,10 +119,10 @@ keeping the self-hosted core trustworthy.
 
 | Milestone | Deliverable | Exit gate | Status |
 | --- | --- | --- | --- |
-| S5.1 Reference deployments | Small-team, home-lab and production deployment blueprints | Each blueprint has a tested architecture, cost/security tradeoffs and incident runbook | In progress |
+| S5.1 Reference deployments | Small-team, home-lab and production deployment blueprints | Each blueprint has a tested architecture, cost/security tradeoffs and incident runbook | Complete |
 | S5.2 Feedback loop | Public issue templates, design-partner program and quarterly outcome review | Roadmap changes cite observed activation, retention, support or incident evidence | In progress |
 | S5.3 Documentation as product | Versioned docs, tested snippets, translation review and changelog mapping | Docs CI checks snippets/links; every supported path has a single canonical page | In progress |
-| S5.4 Sustainable offering | Clear open-core boundary and optional hosted/support offer | No self-hosted core regression; hosted value is operational convenience, not forced lock-in | Planned |
+| S5.4 Sustainable offering | Clear open-core boundary and optional hosted/support offer | No self-hosted core regression; hosted value is operational convenience, not forced lock-in | Complete |
 
 ## Stage 6 - 1.0 release gate
 
