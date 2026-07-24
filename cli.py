@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import stat
 import os
 import sys
 import tarfile
@@ -20,6 +21,7 @@ import time
 import urllib.request
 import urllib.error
 import pwd
+from email.utils import parsedate_to_datetime
 from pathlib import Path
 try:
     import tomllib
@@ -2958,60 +2960,135 @@ def cmd_version(_):
     home = str(INSTALL_DIR) if INSTALL_DIR else 'not set'
     print(f'  {c_dim("Home:")}      {home}')
 
-def cmd_doctor(_):
-    """Health check — services, ports, config, tokens."""
-    print_header('GPTAdmin Doctor')
+def _doctor_report() -> dict:
+    """Collect service, configuration and local Hub readiness checks."""
+    checks = []
     issues = 0
-    # Check services
+
     units = installed_units()
     if not units:
-        print_err('No services installed. Run: gptadmin setup')
+        checks.append({'name': 'services', 'status': 'error', 'message': 'No services installed'})
         issues += 1
     else:
         for label, path in units:
-            exists = path.exists()
-            if exists:
-                print_ok(f'{label} — unit installed')
+            if path.exists():
+                checks.append({'name': f'service:{label}', 'status': 'ok', 'message': 'unit installed'})
             else:
-                print_err(f'{label} — unit missing')
+                checks.append({'name': f'service:{label}', 'status': 'error', 'message': 'unit missing'})
                 issues += 1
-    # Check config
+
     env = env_read()
-    admin_password = env.get('ADMIN_PASSWORD', '')
-    if admin_password:
-        print_ok('AdminPassword is configured')
+    if env.get('ADMIN_PASSWORD', ''):
+        checks.append({'name': 'admin_password', 'status': 'ok', 'message': 'configured'})
     else:
-        print_err('AdminPassword is not configured')
+        checks.append({'name': 'admin_password', 'status': 'error', 'message': 'not configured'})
         issues += 1
     if env.get('CTL_TOKEN'):
-        print_warn(f'Legacy Hub bearer is present; migrate to AdminPassword/OAuth by {LEGACY_CTL_TOKEN_DEADLINE}.')
+        checks.append({'name': 'legacy_bearer', 'status': 'warning', 'message': 'present; migrate to AdminPassword/OAuth'})
+
     hub_url = env.get('HUB_URL', env.get('PUBLIC_ORIGIN', ''))
     if hub_url:
-        print_ok(f'Hub URL: {hub_url}')
+        checks.append({'name': 'hub_url', 'status': 'ok', 'message': 'configured'})
     else:
-        print_warn('Hub URL is not set (needed for agents to connect)')
+        checks.append({'name': 'hub_url', 'status': 'error', 'message': 'not set'})
         issues += 1
-    # Check port
+
+    version_path = Path(__file__).parent / 'VERSION'
+    try:
+        local_version = version_path.read_text(encoding='utf-8').strip()
+    except OSError:
+        local_version = 'unknown'
+    checks.append({'name': 'version', 'status': 'ok' if local_version != 'unknown' else 'warning', 'message': f'local build {local_version}'})
+
+    remote_build = None
+    if hub_url:
+        try:
+            health_url = hub_url.rstrip('/') + '/healthz'
+            request = urllib.request.Request(health_url, headers={'Accept': 'application/json'})
+            with urllib.request.urlopen(request, timeout=3) as response:
+                body = response.read().decode('utf-8', 'replace')
+                remote = json.loads(body) if body else {}
+                if response.status != 200 or not isinstance(remote, dict) or remote.get('ok') is not True:
+                    raise RuntimeError(f'HTTP {response.status}')
+                remote_build = remote.get('build_version')
+                checks.append({'name': 'remote_health', 'status': 'ok', 'message': f'Hub reachable at {hub_url}'})
+                remote_date = response.headers.get('Date', '')
+                if remote_date:
+                    remote_clock = parsedate_to_datetime(remote_date).timestamp()
+                    drift = abs(time.time() - remote_clock)
+                    clock_status = 'ok' if drift <= 120 else 'error'
+                    checks.append({'name': 'remote_clock', 'status': clock_status, 'message': f'clock drift {drift:.0f}s'})
+                    if clock_status == 'error':
+                        issues += 1
+                else:
+                    checks.append({'name': 'remote_clock', 'status': 'warning', 'message': 'Hub did not provide a Date header'})
+        except Exception as exc:
+            checks.append({'name': 'remote_health', 'status': 'error', 'message': f'Hub health check failed: {exc}'})
+            issues += 1
+            checks.append({'name': 'remote_clock', 'status': 'warning', 'message': 'unavailable because Hub health failed'})
+    else:
+        checks.append({'name': 'remote_health', 'status': 'warning', 'message': 'skipped because Hub URL is not configured'})
+        checks.append({'name': 'remote_clock', 'status': 'warning', 'message': 'skipped because Hub URL is not configured'})
+
+    if ENV_FILE.exists():
+        mode = stat.S_IMODE(ENV_FILE.stat().st_mode)
+        if mode & 0o077:
+            checks.append({'name': 'env_permissions', 'status': 'error', 'message': f'{ENV_FILE.name} is too permissive'})
+            issues += 1
+        else:
+            checks.append({'name': 'env_permissions', 'status': 'ok', 'message': f'{ENV_FILE.name} is private'})
+    else:
+        checks.append({'name': 'env_permissions', 'status': 'warning', 'message': 'env file is not present'})
+
     hub_port = env.get('HUB_PORT', '9001')
     try:
-        import socket as _sock
-        sock = _sock.socket(_sock.AF_INET, _sock.SOCK_STREAM)
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         sock.settimeout(1)
         result = sock.connect_ex(('127.0.0.1', int(hub_port)))
         sock.close()
         if result == 0:
-            print_ok(f'Port {hub_port} is listening')
+            checks.append({'name': 'hub_port', 'status': 'ok', 'message': f'port {hub_port} is listening'})
         else:
-            print_warn(f'Port {hub_port} is not listening (hub not running?)')
+            checks.append({'name': 'hub_port', 'status': 'error', 'message': f'port {hub_port} is not listening'})
             issues += 1
-    except Exception:
-        pass
-    # Summary
+    except (OSError, TypeError, ValueError) as exc:
+        checks.append({'name': 'hub_port', 'status': 'error', 'message': f'invalid port configuration: {exc}'})
+        issues += 1
+
+    return {'ok': issues == 0, 'issues': issues, 'hub_url': hub_url or None, 'remote_build': remote_build, 'checks': checks}
+
+
+def cmd_doctor(args):
+    """Health check — services, ports, config, tokens."""
+    report = _doctor_report()
+    if args.json:
+        print(json.dumps(report, ensure_ascii=False, sort_keys=True))
+        return
+
+    print_header('GPTAdmin Doctor')
+    for check in report['checks']:
+        message = check['message']
+        if check['name'] == 'hub_url' and check['status'] == 'ok':
+            message = f"Hub URL: {report['hub_url']}"
+        elif check['name'] == 'legacy_bearer':
+            message = f"Legacy Hub bearer is present; migrate to AdminPassword/OAuth by {LEGACY_CTL_TOKEN_DEADLINE}."
+        elif check['name'].startswith('service:'):
+            message = f"{check['name'].split(':', 1)[1]} — {message}"
+        elif check['name'] == 'admin_password':
+            message = f"AdminPassword is {message}"
+        elif check['name'] == 'hub_url' and check['status'] == 'error':
+            message = 'Hub URL is not set (needed for agents to connect)'
+        if check['status'] == 'ok':
+            print_ok(message)
+        elif check['status'] == 'warning':
+            print_warn(message)
+        else:
+            print_err(message)
     print()
-    if issues == 0:
+    if report['ok']:
         print_ok('All checks passed.')
     else:
-        print_warn(f'{issues} issue(s) found. Fix them before proceeding.')
+        print_warn(f"{report['issues']} issue(s) found. Fix them before proceeding.")
 
 def cmd_status(_):
     units = installed_units()
@@ -3626,8 +3703,42 @@ def _remote_artifact_build_info(pkg_url: str) -> dict:
     except Exception as exc:
         print(f'WARNING: update manifest unavailable, continuing with download: {exc}', file=sys.stderr)
         return {}
-    artifact = (manifest.get('artifacts') or {}).get(name) or {}
-    return {k: artifact.get(k) for k in ('build_version', 'build_ts', 'git_commit', 'sha256', 'size') if artifact.get(k) is not None}
+    artifacts = manifest.get('artifacts') or {}
+    if isinstance(artifacts, dict):
+        artifact = artifacts.get(name) or {}
+    elif isinstance(artifacts, list):
+        artifact = next(
+            (
+                item for item in artifacts
+                if isinstance(item, dict) and Path(str(item.get('path', ''))).name == name
+            ),
+            {},
+        )
+    else:
+        artifact = {}
+    return {
+        key: artifact.get(key, manifest.get(key))
+        for key in ('build_version', 'build_ts', 'git_commit', 'sha256', 'size')
+        if artifact.get(key, manifest.get(key)) is not None
+    }
+
+
+def _verify_downloaded_artifact(path: Path, metadata: dict) -> None:
+    """Reject a downloaded package when a published digest/size disagrees."""
+    expected_sha = str(metadata.get('sha256') or '').strip().lower()
+    expected_size = metadata.get('size')
+    if not expected_sha and expected_size is None:
+        return
+    actual_size = path.stat().st_size
+    if expected_size is not None and int(expected_size) != actual_size:
+        die(f'Проверка релиза не пройдена: размер пакета не совпадает ({path.name})')
+    if expected_sha:
+        digest = hashlib.sha256()
+        with path.open('rb') as stream:
+            for chunk in iter(lambda: stream.read(1024 * 1024), b''):
+                digest.update(chunk)
+        if digest.hexdigest() != expected_sha:
+            die(f'Проверка релиза не пройдена: SHA-256 пакета не совпадает ({path.name})')
 
 
 def _should_skip_update(installed: dict, remote: dict) -> bool:
@@ -3733,35 +3844,41 @@ def cmd_update(args):
 
     with tempfile.TemporaryDirectory() as td:
         tdp = Path(td)
+
+        def download_release(url: str, destination: Path) -> None:
+            """Download one package and enforce its published manifest digest."""
+            download(url, destination)
+            _verify_downloaded_artifact(destination, _remote_artifact_build_info(url))
+
         if install_hub and install_shellmcp:
             print('[Update] downloading full package...')
             pkg = tdp / 'all.tgz'
             try:
-                download(pkg_all, pkg)
+                download_release(pkg_all, pkg)
             except subprocess.CalledProcessError:
                 if pkg_all == PKG_ALL_URL_DEFAULT:
                     raise
                 print('  Platform package unavailable, using full package...')
-                download(PKG_ALL_URL_DEFAULT, pkg)
+                download_release(PKG_ALL_URL_DEFAULT, pkg)
             install_component_from_pkg(pkg, 'hub')
             install_component_from_pkg(pkg, 'shellmcp')
         elif install_hub:
             print('[Update] downloading hub package...')
             pkg = tdp / 'hub.tgz'
             try:
-                download(pkg_hub, pkg)
+                download_release(pkg_hub, pkg)
             except subprocess.CalledProcessError:
                 print('  Component package unavailable, using full package...')
-                download(pkg_all, pkg)
+                download_release(pkg_all, pkg)
             install_component_from_pkg(pkg, 'hub')
         elif install_shellmcp:
             print('[Update] downloading shellmcp package...')
             pkg = tdp / 'shellmcp.tgz'
             try:
-                download(pkg_shellmcp, pkg)
+                download_release(pkg_shellmcp, pkg)
             except subprocess.CalledProcessError:
                 print('  Component package unavailable, using full package...')
-                download(pkg_all, pkg)
+                download_release(pkg_all, pkg)
             install_component_from_pkg(pkg, 'shellmcp')
 
     # Package payloads must never be able to invalidate existing Hub JWTs or
@@ -4338,7 +4455,9 @@ def main():
     sub = ap.add_subparsers(dest='cmd')
 
     sub.add_parser('version', help='Показать версию и информацию о сборке').set_defaults(func=cmd_version)
-    sub.add_parser('doctor', help='Проверка здоровья: сервисы, порты, конфиг, токены').set_defaults(func=cmd_doctor)
+    ap_doctor = sub.add_parser('doctor', help='Проверка здоровья: сервисы, порты, конфиг, токены')
+    ap_doctor.add_argument('--json', action='store_true', help='Вывести машиночитаемый JSON без секретов')
+    ap_doctor.set_defaults(func=cmd_doctor)
     ap_setup = sub.add_parser('setup', help='Установка и настройка')
     ap_setup.add_argument('--pkg-all')
     ap_setup.add_argument('--pkg-hub')

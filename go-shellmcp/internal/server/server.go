@@ -73,7 +73,7 @@ func FromEnv() Config {
 	host := env("SHELL_HOST", env("SHELLMCP_HOST", ""))
 	limit, _ := strconv.ParseInt(env("LOG_LIMIT_B", strconv.FormatInt(output.DefaultInlineTailBytes, 10)), 10, 64)
 	timeout, _ := strconv.Atoi(env("EXEC_TIMEOUT", "300"))
-	spill := env("SHELL_SPOOL_DIR", env("SHELLMCP_SPOOL_DIR", filepath.Join(os.TempDir(), "shellmcp-go-spool")))
+	spill := env("SHELL_SPOOL_DIR", env("SHELLMCP_SPOOL_DIR", env("SHELL_SPILL_DIR", env("SHELLMCP_SPILL_DIR", filepath.Join(os.TempDir(), "shellmcp-go-spool")))))
 	name := env("SHELL_NAME", env("SHELLMCP_NAME", ""))
 	baseURL := env("SHELL_URL", env("SHELLMCP_URL", "http://127.0.0.1:"+port))
 	hbInt, _ := strconv.Atoi(env("HB_INTERVAL_S", "3600"))

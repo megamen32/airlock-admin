@@ -28,6 +28,19 @@ func TestFromEnvDefaultLogLimit(t *testing.T) {
 	}
 }
 
+func TestFromEnvUsesInstallerSpillDirectoryAliases(t *testing.T) {
+	spill := t.TempDir()
+	for _, key := range []string{"SHELL_SPOOL_DIR", "SHELLMCP_SPOOL_DIR", "SHELL_SPILL_DIR", "SHELLMCP_SPILL_DIR"} {
+		t.Setenv(key, "")
+	}
+	t.Setenv("SHELLMCP_SPILL_DIR", spill)
+
+	cfg := FromEnv()
+	if cfg.SpillDir != spill {
+		t.Fatalf("installer spill directory ignored: got %q want %q", cfg.SpillDir, spill)
+	}
+}
+
 func TestFromEnvUsesWindowsInstallerPollingContract(t *testing.T) {
 	t.Setenv("SHELLMCP_QUEUE", "1")
 	t.Setenv("SHELLMCP_HOST", "127.0.0.1")

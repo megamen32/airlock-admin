@@ -122,6 +122,23 @@ jobs:
           tar -tzf build/gptadmin-android-arm64.tar.gz | grep -qx 'bin/shellmcp'
           test "$(cat build/gptadmin-android-arm64.version)" = "$(cat VERSION)"
 
+      - name: Verify complete release provenance manifest
+        run: |
+          python3 tools/verify_release_manifest.py verify \
+            --root "$GITHUB_WORKSPACE" \
+            --manifest "$GITHUB_WORKSPACE/build/manifest.json"
+          test -s build/manifest.json
+          test -s build/gptadmin-sbom.spdx.json
+
+      - name: Verify installer links for shipped targets
+        run: |
+          python3 tools/verify_installer_links.py \
+            --installer deploy/install.sh \
+            --target linux/amd64 \
+            --target darwin/arm64 \
+            --android \
+            --json
+
       # --- Release: only on v* tags, only if the opensource PAT is configured ---
       - name: Checkout opensource (public) repo
         if: startsWith(github.ref, 'refs/tags/v') && env.OPENSOURCE_PAT != ''
@@ -178,11 +195,11 @@ jobs:
           if gh release view "${TAG}" --repo megamen32/gptadmin_opensource >/dev/null 2>&1; then
             echo "Release ${TAG} exists; uploading/overwriting assets."
             gh release upload "${TAG}" --repo megamen32/gptadmin_opensource --clobber \
-              "$SRC"/build/*.tar.gz
+              "$SRC"/build/*.tar.gz "$SRC"/build/manifest.json "$SRC"/build/gptadmin-sbom.spdx.json
           else
             gh release create "${TAG}" --repo megamen32/gptadmin_opensource \
               --title "${TAG}" --generate-notes \
-              "$SRC"/build/*.tar.gz
+              "$SRC"/build/*.tar.gz "$SRC"/build/manifest.json "$SRC"/build/gptadmin-sbom.spdx.json
           fi
           echo "=== Public release published: https://github.com/megamen32/gptadmin_opensource/releases/tag/${TAG} ==="
 

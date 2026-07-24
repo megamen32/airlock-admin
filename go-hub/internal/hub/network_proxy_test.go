@@ -90,6 +90,8 @@ func networkProxyMCPToken(t *testing.T, s *Server, profileID string) string {
 		"scope":      "gptadmin.exec",
 		"profile_id": profileID,
 		"exp":        time.Now().Add(time.Hour).Unix(),
+		"iat":        time.Now().Unix(),
+		"kid":        defaultJWTKeyID,
 	})
 	if err != nil {
 		t.Fatalf("sign JWT: %v", err)

@@ -1,6 +1,7 @@
 package hub
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"crypto/hmac"
@@ -29,6 +30,8 @@ import (
 var BuildVersion = "go-dev"
 var GitCommit = "worktree"
 
+const defaultJWTKeyID = "gptadmin-hs256-v1"
+
 // legacyCtlTokenDeadline is the fixed end of the one-week migration window.
 // After this instant only AdminPassword sessions and scoped OAuth JWTs may
 // authenticate human/MCP requests.
@@ -49,6 +52,7 @@ type Config struct {
 	MCPResource                string
 	AdminPassword              string
 	OAuthClientSecret          string
+	OAuthKeyID                 string
 	EnvFile                    string
 	OAuthPermissiveRedirects   bool
 	OAuthPermissiveResources   bool
@@ -67,6 +71,7 @@ type Config struct {
 	NetworkProxyRelayRevokeURL string
 	WebhookConfigFile          string
 	WebhookStateFile           string
+	AuditStateFile             string
 	WebhookRoutes              []WebhookRoute
 }
 
@@ -92,6 +97,7 @@ func FromEnv() Config {
 		MCPResource:                strings.TrimRight(env("MCP_RESOURCE", env("PUBLIC_ORIGIN", "")), "/"),
 		AdminPassword:              env("ADMIN_PASSWORD", ""),
 		OAuthClientSecret:          env("OAUTH_CLIENT_SECRET", ""),
+		OAuthKeyID:                 env("GPTADMIN_JWT_KEY_ID", defaultJWTKeyID),
 		EnvFile:                    env("GPTADMIN_ENV_FILE", "/etc/gptadmin/gptadmin.env"),
 		OAuthPermissiveRedirects:   truthyString(env("OAUTH_PERMISSIVE_REDIRECTS", "0")),
 		OAuthPermissiveResources:   truthyString(env("OAUTH_PERMISSIVE_RESOURCES", "0")),
@@ -110,6 +116,7 @@ func FromEnv() Config {
 		NetworkProxyRelayRevokeURL: strings.TrimRight(env("GPTADMIN_NETWORK_PROXY_RELAY_REVOKE_URL", ""), "/"),
 		WebhookConfigFile:          env("GPTADMIN_WEBHOOK_CONFIG_FILE", filepath.Join(cfgDir, "webhooks.json")),
 		WebhookStateFile:           env("GPTADMIN_WEBHOOK_STATE_FILE", filepath.Join(cfgDir, "webhook_state.json")),
+		AuditStateFile:             env("GPTADMIN_AUDIT_STATE_FILE", filepath.Join(cfgDir, "audit.jsonl")),
 	}
 }
 
@@ -352,6 +359,9 @@ func New(cfg Config) *Server {
 	}
 	if err := s.loadWebhookState(); err != nil {
 		log.Printf("webhook state load failed path=%s err=%v", s.webhookStatePath(), err)
+	}
+	if err := s.loadAuditState(); err != nil {
+		log.Printf("audit state load failed path=%s err=%v", s.auditStatePath(), err)
 	}
 	s.failover = s.loadFailoverConfig()
 	home := os.Getenv("GPTADMIN_HOME")
@@ -1913,6 +1923,7 @@ func (s *Server) mcpRelayCall(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := authorizeToolCall(r, target, toolName); err != nil {
+		s.auditToolDecision(r, target, toolName, args, "deny", err.Error(), nil, http.StatusForbidden)
 		writeJSON(w, http.StatusForbidden, map[string]any{"detail": err.Error()})
 		return
 	}
@@ -1949,7 +1960,9 @@ func (s *Server) executeMCPTool(r *http.Request, target, toolName string, args m
 	}
 	key = strings.TrimSpace(key)
 	if key == "" {
-		return operation()
+		response, status := operation()
+		s.auditToolDecision(r, target, toolName, args, "allow", "", response, status)
+		return response, status
 	}
 	if len(key) > idempotencyKeyMax {
 		return map[string]any{"detail": fmt.Sprintf("idempotency_key must be at most %d characters", idempotencyKeyMax)}, http.StatusBadRequest
@@ -2015,6 +2028,7 @@ func (s *Server) executeMCPTool(r *http.Request, target, toolName string, args m
 	s.mu.Unlock()
 
 	response, status := operation()
+	s.auditToolDecision(r, target, toolName, args, "allow", "", response, status)
 	s.mu.Lock()
 	entry.JobID = firstString(response, "job_id")
 	entry.Response = cloneMap(response)
@@ -2027,6 +2041,59 @@ func (s *Server) executeMCPTool(r *http.Request, target, toolName string, args m
 func sha256Hex(value []byte) string {
 	digest := sha256.Sum256(value)
 	return hex.EncodeToString(digest[:])
+}
+
+func (s *Server) auditToolDecision(r *http.Request, target, toolName string, args map[string]any, decision, reason string, response map[string]any, status int) {
+	encoded, err := json.Marshal(args)
+	if err != nil {
+		encoded = []byte("<unserializable>")
+	}
+	resultReference := "none"
+	if response != nil {
+		resultReference = firstString(response, "job_id", "id")
+		if resultReference == "" {
+			resultReference = "inline"
+		}
+	}
+	actor := "anonymous"
+	identityFields := map[string]any{}
+	if r != nil {
+		if s.cfg.CtlToken != "" && tokenMatches(r, s.cfg.CtlToken) {
+			actor = "legacy_ctl"
+		} else if claims, ok := r.Context().Value(authClaimsContextKey{}).(map[string]any); ok {
+			actor = firstString(claims, "client_id", "sub")
+			identityFields["client_id"] = firstString(claims, "client_id")
+			identityFields["subject"] = firstString(claims, "sub")
+			identityFields["jti"] = firstString(claims, "jti")
+			if actor == "" {
+				actor = "scoped_connection"
+			}
+		} else if s.adminSessionValid(r) {
+			actor = "admin_session"
+		}
+	}
+	fields := map[string]any{
+		"actor":            actor,
+		"profile_id":       AccessProfileIDFromRequest(r),
+		"target":           target,
+		"tool":             toolName,
+		"policy_decision":  decision,
+		"arguments_digest": sha256Hex(encoded),
+		"result_reference": resultReference,
+		"status":           status,
+		"access_mode":      requestAccessMode(r),
+	}
+	if reason != "" {
+		fields["policy_reason"] = reason
+	}
+	for key, value := range identityFields {
+		if value != "" {
+			fields[key] = value
+		}
+	}
+	s.mu.Lock()
+	s.addAuditLocked("tool_policy_decision", fields)
+	s.mu.Unlock()
 }
 
 func toolArgsFromTopLevel(req map[string]any) map[string]any {
@@ -2715,7 +2782,7 @@ func (s *Server) issueManagedMCPTokenWithMode(clientID string, ttlDays int, orig
 	record := managedMCPToken{ID: newID(), ClientID: clientID, Scope: scope, AccessMode: accessMode, IssuedAt: now, ExpiresAt: now + int64(ttlDays)*24*3600}
 	token, err := s.signJWT(map[string]any{
 		"sub": "admin", "scope": record.Scope, "access_mode": record.AccessMode, "client_id": clientID, "jti": record.ID,
-		"iss": origin, "aud": resource, "resource": resource, "exp": record.ExpiresAt, "iat": now,
+		"iss": origin, "aud": resource, "resource": resource, "exp": record.ExpiresAt, "iat": now, "kid": s.jwtKeyID(),
 	})
 	if err != nil {
 		return "", managedMCPToken{}, err
@@ -3122,10 +3189,73 @@ func safeAdminNext(v string) string {
 }
 
 func (s *Server) addAuditLocked(name string, fields map[string]any) {
-	s.audit = append(s.audit, auditEvent{Time: time.Now().Format(time.RFC3339), Name: name, Fields: fields})
+	event := auditEvent{Time: time.Now().Format(time.RFC3339), Name: name, Fields: fields}
+	s.audit = append(s.audit, event)
 	if len(s.audit) > 500 {
 		s.audit = s.audit[len(s.audit)-500:]
 	}
+	if path := s.auditStatePath(); path != "" {
+		if err := os.MkdirAll(filepath.Dir(path), 0o750); err != nil {
+			log.Printf("audit state directory failed path=%s err=%v", path, err)
+			return
+		}
+		file, err := os.OpenFile(path, os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0o600)
+		if err != nil {
+			log.Printf("audit state append failed path=%s err=%v", path, err)
+			return
+		}
+		_ = file.Chmod(0o600)
+		if err := json.NewEncoder(file).Encode(event); err != nil {
+			log.Printf("audit state encode failed path=%s err=%v", path, err)
+		}
+		if err := file.Close(); err != nil {
+			log.Printf("audit state close failed path=%s err=%v", path, err)
+		}
+	}
+}
+
+func (s *Server) auditStatePath() string {
+	if s.cfg.AuditStateFile != "" {
+		return s.cfg.AuditStateFile
+	}
+	if s.cfg.ConfigDir == "" {
+		return ""
+	}
+	return filepath.Join(s.cfg.ConfigDir, "audit.jsonl")
+}
+
+func (s *Server) loadAuditState() error {
+	path := s.auditStatePath()
+	if path == "" {
+		return nil
+	}
+	file, err := os.Open(path)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+	if err := file.Chmod(0o600); err != nil {
+		return err
+	}
+	scanner := bufio.NewScanner(file)
+	scanner.Buffer(make([]byte, 64<<10), 2<<20)
+	for scanner.Scan() {
+		var event auditEvent
+		if err := json.Unmarshal(scanner.Bytes(), &event); err != nil {
+			return fmt.Errorf("decode audit event: %w", err)
+		}
+		s.audit = append(s.audit, event)
+	}
+	if err := scanner.Err(); err != nil {
+		return err
+	}
+	if len(s.audit) > 500 {
+		s.audit = s.audit[len(s.audit)-500:]
+	}
+	return nil
 }
 
 func readJSON(r *http.Request, dst any) error {
@@ -3514,7 +3644,7 @@ func (s *Server) oauthToken(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid_grant", "error_description": "PKCE verification failed"})
 		return
 	}
-	claims := map[string]any{"sub": "admin", "scope": data.Scope, "client_id": data.ClientID, "iss": s.origin(r), "aud": resource, "resource": resource, "exp": time.Now().Add(12 * time.Hour).Unix(), "iat": time.Now().Unix()}
+	claims := map[string]any{"sub": "admin", "scope": data.Scope, "client_id": data.ClientID, "iss": s.origin(r), "aud": resource, "resource": resource, "exp": time.Now().Add(12 * time.Hour).Unix(), "iat": time.Now().Unix(), "kid": s.jwtKeyID()}
 	if profileID := s.oauthClientProfileID(data.ClientID); profileID != "" {
 		claims["profile_id"] = profileID
 	}
@@ -4578,7 +4708,65 @@ func (s *Server) verifyBearerJWTFromRequest(r *http.Request) (map[string]any, er
 	if tok == "" {
 		return nil, errors.New("empty bearer token")
 	}
-	return s.verifyJWT(tok)
+	return s.verifyJWTForRequest(r, tok)
+}
+
+func (s *Server) verifyJWTForRequest(r *http.Request, token string) (map[string]any, error) {
+	claims, err := s.verifyJWT(token)
+	if err != nil {
+		return nil, err
+	}
+	expected := strings.TrimRight(s.resource(r), "/")
+	if expected == "" || !jwtAudienceMatches(claims["aud"], expected) {
+		return nil, errors.New("token audience does not match this Hub")
+	}
+	resource, ok := claims["resource"].(string)
+	if !ok || strings.TrimRight(resource, "/") != expected {
+		return nil, errors.New("token resource does not match this Hub")
+	}
+	if scope, ok := claims["scope"].(string); !ok || !validJWTScopes(scope) {
+		return nil, errors.New("token scope is invalid")
+	}
+	if sub, ok := claims["sub"].(string); !ok || strings.TrimSpace(sub) == "" {
+		return nil, errors.New("token subject is required")
+	}
+	if iat := intFromAny(claims["iat"]); iat <= 0 || int64(iat) > time.Now().Unix()+60 {
+		return nil, errors.New("token issued-at is invalid")
+	}
+	if kid, ok := claims["kid"].(string); !ok || strings.TrimSpace(kid) == "" || kid != s.jwtKeyID() {
+		return nil, errors.New("token key id is invalid")
+	}
+	return claims, nil
+}
+
+func (s *Server) jwtKeyID() string {
+	if strings.TrimSpace(s.cfg.OAuthKeyID) != "" {
+		return strings.TrimSpace(s.cfg.OAuthKeyID)
+	}
+	return defaultJWTKeyID
+}
+
+func validJWTScopes(value string) bool {
+	for _, scope := range strings.Fields(value) {
+		if scope != "gptadmin.read" && scope != "gptadmin.inspect" && scope != "gptadmin.exec" {
+			return false
+		}
+	}
+	return strings.TrimSpace(value) != ""
+}
+
+func jwtAudienceMatches(value any, expected string) bool {
+	switch audience := value.(type) {
+	case string:
+		return strings.TrimRight(audience, "/") == expected
+	case []any:
+		for _, item := range audience {
+			if candidate, ok := item.(string); ok && strings.TrimRight(candidate, "/") == expected {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func (s *Server) authAudit(name string, r *http.Request, fields map[string]any) {
@@ -4705,7 +4893,7 @@ func (s *Server) mcpAuth(w http.ResponseWriter, r *http.Request) bool {
 			s.authAudit("mcp_auth_ok", r, map[string]any{"auth_kind": "ctl_token"})
 			return true
 		}
-		if claims, err := s.verifyJWT(tok); err == nil {
+		if claims, err := s.verifyJWTForRequest(r, tok); err == nil {
 			s.authAudit("mcp_auth_ok", r, map[string]any{"auth_kind": "oauth_jwt", "jwt_claims": claims})
 			*r = *requestWithAuthClaims(r, claims)
 			*r = *s.applyAccessProfileContext(r, claims)

@@ -153,3 +153,21 @@ Rules:
 - Root cause: Public FRP was mapped to `9001` instead of the fallback proxy `9101`, the watchdog health check used the public route and could race promotion, and generated standby internal credentials did not share the primary bridge key.
 - Fix / verification: Set the instance failover port to `9101`, moved health checking to the direct primary LAN endpoint, preserved only the shared bridge key in protected `/data`, and verified artifacts `trash/logs/server100-signed-reclaim-20260723-02.txt` and `trash/logs/haos-public-drill-20260723-01.txt`.
 - Next action: Keep this compatibility contract in the release/runbook before the next public app version.
+
+## 2026-07-24 - SHELLMCP-SPOOL-PERM-20260724 - Installer spill directory alias ignored - fixed
+
+- Component: `go-shellmcp/internal/server.FromEnv` and the Go ShellMCP contract runner.
+- First observed: 2026-07-24, immutable evidence ID `completion-matrix-shellmcp-spool-20260724-01` while running `tests/test_completion_matrix.py::test_completion_matrix_commands_execute[endpoints]`.
+- Symptom / evidence: The Go contract daemon ignored `SHELLMCP_SPILL_DIR`, fell back to `/tmp/shellmcp-go-spool`, and returned `500`/`returncode=-1` with a permission error when that directory was owned by another user.
+- Root cause: `FromEnv` accepted `SHELL_SPOOL_DIR` and `SHELLMCP_SPOOL_DIR` but not the installer-emitted `SHELL_SPILL_DIR`/`SHELLMCP_SPILL_DIR` aliases.
+- Fix / verification: Added `TestFromEnvUsesInstallerSpillDirectoryAliases` and made all four installer spellings converge on the configured directory. The focused Go test and `python3 -m pytest tests/test_shellmcp_contract.py -q` both pass (`8 passed`).
+- Next action: Keep the alias contract in installer/runtime changes; no code-side blocker remains.
+
+## 2026-07-24 - SBOM-PYTHON-TOMLLIB-20260724 - SBOM tool assumed unavailable stdlib module - fixed
+
+- Component: `tools/generate_sbom.py`.
+- First observed: 2026-07-24, immutable evidence ID `sbom-test-20260724-01` from `tests/test_sbom.py`.
+- Symptom / evidence: The first deterministic SBOM implementation failed at startup because the repository's supported Python runtime did not provide `tomllib`.
+- Root cause: The tool assumed a Python 3.11-only standard-library parser despite the project supporting Python 3.10 environments used by the test runner.
+- Fix / verification: Replaced the parser dependency with a bounded manifest parser for the checked-in dependency arrays; `tests/test_sbom.py` passes and output remains byte-for-byte deterministic.
+- Next action: Keep the release tool compatible with the oldest supported Python runtime; no code-side blocker remains.

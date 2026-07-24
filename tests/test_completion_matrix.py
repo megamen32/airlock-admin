@@ -16,8 +16,11 @@ REQUIRED_SURFACES = {
     "endpoints",
     "hooks",
     "mcp_forwarding",
+    "operations",
     "file_sharing",
+    "golden_paths",
     "profiles",
+    "release_provenance",
     "security_policies",
 }
 

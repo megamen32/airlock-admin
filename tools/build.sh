@@ -564,6 +564,25 @@ else
   want smoke && smoke_linux
 fi
 
+if want_any all cli hub shellmcp platform windows android network-tunnel; then
+  step "Generate and verify release provenance manifest"
+  python3 tools/generate_sbom.py \
+    --root "$REPO_DIR" \
+    --output "$ART_DIR/gptadmin-sbom.spdx.json" \
+    --build-version "$BUILD_VERSION" \
+    --build-ts "$BUILD_TS" \
+    --git-commit "$GIT_COMMIT"
+  python3 tools/verify_release_manifest.py generate \
+    --root "$REPO_DIR" \
+    --manifest "$ART_DIR/manifest.json" \
+    --build-version "$BUILD_VERSION" \
+    --build-ts "$BUILD_TS" \
+    --git-commit "$GIT_COMMIT"
+  python3 tools/verify_release_manifest.py verify \
+    --root "$REPO_DIR" \
+    --manifest "$ART_DIR/manifest.json"
+fi
+
 step "DONE: Artifacts stored in $ART_DIR"
 echo "Targets: ${TARGETS[*]}"
 echo "Main log: $LOG"

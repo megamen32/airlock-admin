@@ -1,10 +1,53 @@
 from pathlib import Path
 from types import SimpleNamespace
+import json
+import hashlib
+import pytest
 
 import cli
 
 ROOT = Path(__file__).resolve().parents[1]
 CLI = ROOT / "cli.py"
+
+
+def test_update_reads_canonical_release_manifest_artifact_list(monkeypatch):
+    class Response:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return False
+
+        def read(self):
+            return json.dumps(
+                {
+                    "schema": "gptadmin.release-manifest/v1",
+                    "artifacts": [
+                        {
+                            "path": "build/gptadmin-linux-amd64.tar.gz",
+                            "sha256": "a" * 64,
+                            "size": 42,
+                            "build_version": 9,
+                        }
+                    ],
+                }
+            ).encode()
+
+    monkeypatch.setattr(cli.urllib.request, "urlopen", lambda *_args, **_kwargs: Response())
+
+    info = cli._remote_artifact_build_info("https://mirror.example/gptadmin-linux-amd64.tar.gz")
+
+    assert info["sha256"] == "a" * 64
+    assert info["size"] == 42
+
+
+def test_update_rejects_download_that_does_not_match_manifest(tmp_path: Path):
+    package = tmp_path / "package.tar.gz"
+    package.write_bytes(b"actual bytes")
+    metadata = {"sha256": hashlib.sha256(b"expected bytes").hexdigest(), "size": len(b"expected bytes")}
+
+    with pytest.raises(SystemExit):
+        cli._verify_downloaded_artifact(package, metadata)
 
 
 def test_update_restores_auth_material_if_package_install_rewrites_env(monkeypatch, tmp_path):

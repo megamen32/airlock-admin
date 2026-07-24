@@ -47,6 +47,13 @@
       "evidence": "queue-to-MCP tool execution and result postback"
     }
   ],
+  "operations": [
+    {
+      "id": "doctor-readiness-json",
+      "command": "python3 -m pytest tests/test_doctor_json.py -q",
+      "evidence": "local unit/config, Hub health, remote clock and permission readiness without secrets"
+    }
+  ],
   "file_sharing": [
     {
       "id": "readonly-inspection",
@@ -78,6 +85,16 @@
       "evidence": "fail-closed capability decisions and replay-safe auth"
     },
     {
+      "id": "jwt-connection-hygiene",
+      "command": "cd go-hub && go test ./internal/hub -run 'TestJWTRequest(RejectsWrongAudienceAndExpiredConnection|RequiresCompleteRecognizedScopedClaims)' -count=1",
+      "evidence": "wrong audience/resource, expiry, missing/unknown scope, subject, issued-at, key-id and admin-token-forwarding rejection"
+    },
+    {
+      "id": "operator-audit-decision",
+      "command": "cd go-hub && go test ./internal/hub -run 'Test(ToolAuditIncludesActorPolicyDigestAndResultReference|DeniedToolAuditIncludesPolicyReasonWithoutArguments|AuditTrailSurvivesHubRestartWithRestrictivePermissions)' -count=1",
+      "evidence": "actor, target, allow/deny policy decisions, durable audit, argument digest and result reference without raw arguments"
+    },
+    {
       "id": "readonly-security",
       "command": "cd go-shellmcp && go test ./internal/inspect ./internal/redact ./internal/security -count=1",
       "evidence": "path boundary, symlink/credential rejection and secret redaction"
@@ -86,6 +103,20 @@
       "id": "repository-secret-boundary",
       "command": "python3 -m pytest tests/test_no_secrets.py tests/test_public_mirror.py -q",
       "evidence": "tracked-tree public/private and credential scan"
+    }
+  ],
+  "release_provenance": [
+    {
+      "id": "release-manifest-tamper-check",
+      "command": "python3 -m pytest tests/test_release_provenance.py tests/test_sbom.py tests/test_update_semantics.py -q",
+      "evidence": "artifact provenance/SBOM, canonical manifest compatibility and installer digest rejection"
+    }
+  ],
+  "golden_paths": [
+    {
+      "id": "platform-client-paths",
+      "command": "python3 -m pytest tests/test_golden_paths.py -q",
+      "evidence": "Linux/macOS/Windows/Android and Codex/Claude/ChatGPT install/auth/tool/rollback contract"
     }
   ]
 }

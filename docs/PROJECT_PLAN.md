@@ -47,7 +47,7 @@ evidence unambiguous before adding surface area.
 
 | Milestone | Deliverable | Exit gate | Status |
 | --- | --- | --- | --- |
-| S0.1 Supported golden paths | One matrix for Linux/macOS/Windows/Android and Codex/ChatGPT/Claude-style clients | Each path has install, auth, first tool call and uninstall/rollback commands | Planned |
+| S0.1 Supported golden paths | One matrix for Linux/macOS/Windows/Android and Codex/ChatGPT/Claude-style clients | Each path has install, auth, first tool call and uninstall/rollback commands | In progress |
 | S0.2 Contract suite | Language-neutral Hub and ShellMCP contract suite with implementation matrix | Go is required green; alternative implementation can be run by env-configured command | Complete |
 | S0.3 Release provenance | Version, commit, checksum and platform architecture are observable from the artifact | CI verifies every release artifact, manifest and installer link before publish | In progress |
 | S0.4 Engineering governance | This plan, worklog and agent handoff discipline | New work records scope, evidence, CI link and next owner action | Active |
@@ -61,7 +61,7 @@ evidence unambiguous before adding surface area.
 | Milestone | Deliverable | Exit gate | Status |
 | --- | --- | --- | --- |
 | S1.1 One-command working Hub | Idempotent install/update that starts Hub, creates/verifies Tunnel and outputs one Hub URL | Fresh supported host completes with minimal questions and no manual topology/token configuration | Planned |
-| S1.2 `gptadmin doctor` | Structured local and remote readiness diagnosis | Detects version, service health, Tunnel reachability, auth, clock and permissions; has machine-readable JSON | Planned |
+| S1.2 `gptadmin doctor` | Structured local and remote readiness diagnosis | Detects version, service health, Tunnel reachability, auth, clock and permissions; has machine-readable JSON | In progress |
 | S1.3 Universal connection page | One Hub URL that detects/configures local MCP clients and derives protocol details | Codex, Claude-compatible and ChatGPT-compatible paths complete a harmless action without documentation lookup | Planned |
 | S1.3a Admin profile workspace | Configure versioned instructions, access mode, allowed targets/tools, external machine/workspace references and client bindings as one user-facing profile; follow [`ADMIN_PROFILES.md`](./ADMIN_PROFILES.md) | A profile survives restart, updates effective MCP instructions without restart, filters the real tool list and rejects a forbidden call in black-box tests; referenced private repositories remain separate sources of truth | Complete |
 | S1.4 Safe demo capability | Built-in read-only demo/diagnostics tool and explicit destructive-action boundary | A user can validate connection without shell execution or credentials beyond setup | Planned |
@@ -81,11 +81,11 @@ experience, not an expert-only configuration exercise.
 
 | Milestone | Deliverable | Exit gate | Status |
 | --- | --- | --- | --- |
-| S2.1 One-password identity and connection hygiene | `AdminPassword` for humans; hidden internal keys and short-lived scoped JWT connections | Black-box tests reject wrong audience, expired token and token forwarding; normal user flows reveal no raw token | Planned |
+| S2.1 One-password identity and connection hygiene | `AdminPassword` for humans; hidden internal keys and short-lived scoped JWT connections | Black-box tests reject wrong audience, expired token and token forwarding; normal user flows reveal no raw token | In progress |
 | S2.1a Admin MFA | WebAuthn/passkeys first, TOTP fallback, recovery codes and optional OIDC proxy identity | Locked down admin sessions cannot be enabled without MFA; enrollment, recovery and sensitive-setting re-auth are black-box tested | Planned |
-| S2.2 Capability policy | Per-agent, per-server and per-tool allow rules with explicit deny behavior | Policy decision is included in every audit event and covered by API/MCP tests | Planned |
+| S2.2 Capability policy | Per-agent, per-server and per-tool allow rules with explicit deny behavior | Policy decision is included in every audit event and covered by API/MCP tests | In progress |
 | S2.3 Progressive autonomy | Approval modes: read-only, ask-before-write, bounded autonomous | Dangerous calls require the configured approval and cannot bypass it through aliases or relay targets | In progress |
-| S2.4 Operator audit trail | Searchable immutable-enough action log with actor, target, policy, arguments digest and result reference | Incident drill can answer who did what, where, why and with what result | Planned |
+| S2.4 Operator audit trail | Searchable immutable-enough action log with actor, target, policy, arguments digest and result reference | Incident drill can answer who did what, where, why and with what result | In progress |
 
 ## Stage 3 - Operable and recoverable control plane
 
@@ -109,7 +109,7 @@ tools, rather than another isolated server.
 | --- | --- | --- | --- |
 | S4.1 Integration certification and control contract | Certify the existing `discover -> schema -> execute` flow and define adapter rules for session-oriented integrations | Every listed integration has automated smoke evidence and a known-version support policy; write retries have explicit idempotency semantics where the current call contract lacks them | Planned |
 | S4.2 Curated capability catalog | Signed/attributed MCP definitions with scopes, network needs, risk level and maintenance owner | Install flow displays requested capabilities and provenance before activation | Planned |
-| S4.3 Supply-chain controls | Artifact digest verification, SBOM and dependency/update policy | CI publishes provenance; installer rejects mismatched artifacts; vulnerability response policy is documented | Planned |
+| S4.3 Supply-chain controls | Artifact digest verification, SBOM and dependency/update policy | CI publishes provenance; installer rejects mismatched artifacts; vulnerability response policy is documented | In progress |
 | S4.4 Developer extension path | Stable plugin/adapter SDK and reference implementation | A third party can add a capability without editing hub internals and passes the conformance suite | Planned |
 
 ## Stage 5 - Adoption and sustainable product delivery

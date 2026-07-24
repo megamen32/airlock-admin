@@ -1551,7 +1551,7 @@ func TestAppsSDKMetadataAndWidget(t *testing.T) {
 	s := New(Config{CtlToken: "ctl", AdminPassword: "pw", OAuthClientSecret: "oauth-secret", PublicOrigin: "https://hub.example", MCPResource: "https://hub.example", OAuthPermissiveRedirects: true, OAuthPermissiveResources: true, DefaultTimeout: time.Second, PollMaxTimeout: time.Second})
 	h := s.Handler()
 
-	token, err := s.signJWT(map[string]any{"sub": "admin", "aud": "https://hub.example", "resource": "https://hub.example", "scope": "gptadmin.read gptadmin.exec", "client_id": "test", "exp": time.Now().Add(time.Hour).Unix()})
+	token, err := s.signJWT(map[string]any{"sub": "admin", "aud": "https://hub.example", "resource": "https://hub.example", "scope": "gptadmin.read gptadmin.exec", "client_id": "test", "exp": time.Now().Add(time.Hour).Unix(), "iat": time.Now().Unix(), "kid": defaultJWTKeyID})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1636,6 +1636,208 @@ func TestAppsSDKMetadataAndWidget(t *testing.T) {
 	if ui["domain"] == "" || ui["csp"] == nil || meta["openai/widgetCSP"] == nil {
 		t.Fatalf("resource missing widget metadata: %#v", meta)
 	}
+}
+
+func TestJWTRequestContextRejectsWrongAudienceAndExpiredConnection(t *testing.T) {
+	s := New(Config{OAuthClientSecret: "oauth-secret", AdminPassword: "admin-password", PublicOrigin: "https://hub.example", MCPResource: "https://hub.example"})
+	req := httptest.NewRequest(http.MethodGet, "https://hub.example/mcp", nil)
+
+	wrongAudience, err := s.signJWT(map[string]any{
+		"sub": "test", "aud": "https://other.example", "resource": "https://other.example",
+		"scope": "gptadmin.read", "exp": time.Now().Add(time.Hour).Unix(), "iat": time.Now().Unix(), "kid": defaultJWTKeyID,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.verifyJWTForRequest(req, wrongAudience); err == nil || !strings.Contains(err.Error(), "audience") {
+		t.Fatalf("wrong audience was accepted: %v", err)
+	}
+	deniedRequest := httptest.NewRequest(http.MethodPost, "https://hub.example/mcp", strings.NewReader(`{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}`))
+	deniedRequest.Header.Set("Authorization", "Bearer "+wrongAudience)
+	deniedResponse := httptest.NewRecorder()
+	s.Handler().ServeHTTP(deniedResponse, deniedRequest)
+	if deniedResponse.Code != http.StatusUnauthorized {
+		t.Fatalf("wrong-audience MCP request was accepted: status=%d body=%s", deniedResponse.Code, deniedResponse.Body.String())
+	}
+
+	expired, err := s.signJWT(map[string]any{
+		"sub": "test", "aud": "https://hub.example", "resource": "https://hub.example",
+		"scope": "gptadmin.read", "exp": time.Now().Add(-time.Hour).Unix(), "iat": time.Now().Add(-2 * time.Hour).Unix(), "kid": defaultJWTKeyID,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.verifyJWTForRequest(req, expired); err == nil || !strings.Contains(err.Error(), "expired") {
+		t.Fatalf("expired token was accepted: %v", err)
+	}
+
+	missingScope, err := s.signJWT(map[string]any{
+		"sub": "test", "aud": "https://hub.example", "resource": "https://hub.example",
+		"exp": time.Now().Add(time.Hour).Unix(), "iat": time.Now().Unix(), "kid": defaultJWTKeyID,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.verifyJWTForRequest(req, missingScope); err == nil || !strings.Contains(err.Error(), "scope") {
+		t.Fatalf("token without scope was accepted: %v", err)
+	}
+
+	valid, err := s.signJWT(map[string]any{
+		"sub": "test", "aud": "https://hub.example", "resource": "https://hub.example",
+		"scope": "gptadmin.read", "exp": time.Now().Add(time.Hour).Unix(), "iat": time.Now().Unix(), "kid": defaultJWTKeyID,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	adminRequest := httptest.NewRequest(http.MethodGet, "https://hub.example/admin/api/overview", nil)
+	adminRequest.Header.Set("Authorization", "Bearer "+valid)
+	adminResponse := httptest.NewRecorder()
+	s.Handler().ServeHTTP(adminResponse, adminRequest)
+	if adminResponse.Code != http.StatusForbidden {
+		t.Fatalf("MCP JWT was forwarded to admin API: status=%d body=%s", adminResponse.Code, adminResponse.Body.String())
+	}
+}
+
+func TestJWTRequestRequiresCompleteRecognizedScopedClaims(t *testing.T) {
+	s := New(Config{OAuthClientSecret: "oauth-secret", PublicOrigin: "https://hub.example", MCPResource: "https://hub.example"})
+	req := httptest.NewRequest(http.MethodGet, "https://hub.example/mcp", nil)
+	base := map[string]any{
+		"sub": "client", "aud": "https://hub.example", "resource": "https://hub.example",
+		"scope": "gptadmin.read", "exp": time.Now().Add(time.Hour).Unix(), "iat": time.Now().Unix(), "kid": defaultJWTKeyID,
+	}
+	cases := map[string]func(map[string]any){
+		"missing_resource":  func(claims map[string]any) { delete(claims, "resource") },
+		"unknown_scope":     func(claims map[string]any) { claims["scope"] = "gptadmin.admin" },
+		"missing_subject":   func(claims map[string]any) { delete(claims, "sub") },
+		"missing_issued_at": func(claims map[string]any) { delete(claims, "iat") },
+		"wrong_key_id":      func(claims map[string]any) { claims["kid"] = "other-key" },
+	}
+	for name, mutate := range cases {
+		claims := make(map[string]any, len(base))
+		for key, value := range base {
+			claims[key] = value
+		}
+		mutate(claims)
+		token, err := s.signJWT(claims)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := s.verifyJWTForRequest(req, token); err == nil {
+			t.Errorf("%s token was accepted", name)
+		}
+	}
+	arrayAudience := make(map[string]any, len(base))
+	for key, value := range base {
+		arrayAudience[key] = value
+	}
+	arrayAudience["aud"] = []any{"https://other.example", "https://hub.example/"}
+	arrayAudience["resource"] = "https://hub.example/"
+	arrayToken, err := s.signJWT(arrayAudience)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.verifyJWTForRequest(req, arrayToken); err != nil {
+		t.Fatalf("valid audience array was rejected: %v", err)
+	}
+}
+
+func TestToolAuditIncludesActorPolicyDigestAndResultReference(t *testing.T) {
+	s := New(Config{CtlToken: "ctl-token"})
+	req := httptest.NewRequest(http.MethodPost, "/mcp-relay/call", strings.NewReader(`{"target":"hub","tool_name":"hub_status","arguments":{"probe":"safe"}}`))
+	req.Header.Set("Authorization", "Bearer ctl-token")
+	response := httptest.NewRecorder()
+	s.Handler().ServeHTTP(response, req)
+	if response.Code != http.StatusOK {
+		t.Fatalf("safe tool call status=%d body=%s", response.Code, response.Body.String())
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, event := range s.audit {
+		if event.Name != "tool_policy_decision" {
+			continue
+		}
+		if event.Fields["actor"] != "legacy_ctl" || event.Fields["target"] != "hub" || event.Fields["tool"] != "hub_status" {
+			t.Fatalf("unexpected tool audit identity: %#v", event.Fields)
+		}
+		if event.Fields["policy_decision"] != "allow" || event.Fields["result_reference"] != "inline" {
+			t.Fatalf("missing decision/result reference: %#v", event.Fields)
+		}
+		digest, ok := event.Fields["arguments_digest"].(string)
+		if !ok || len(digest) != 64 {
+			t.Fatalf("missing argument digest: %#v", event.Fields)
+		}
+		if _, leaked := event.Fields["arguments"]; leaked {
+			t.Fatalf("tool audit leaked raw arguments: %#v", event.Fields)
+		}
+		return
+	}
+	t.Fatal("tool policy decision audit event not found")
+}
+
+func TestDeniedToolAuditIncludesPolicyReasonWithoutArguments(t *testing.T) {
+	s := New(Config{OAuthClientSecret: "oauth-secret", PublicOrigin: "https://hub.example", MCPResource: "https://hub.example"})
+	token, err := s.signJWT(map[string]any{
+		"sub": "readonly-client", "client_id": "readonly-client", "jti": "readonly-jti", "scope": "gptadmin.read",
+		"access_mode": "readonly", "aud": "https://hub.example", "resource": "https://hub.example",
+		"exp": time.Now().Add(time.Hour).Unix(), "iat": time.Now().Unix(), "kid": defaultJWTKeyID,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	req := httptest.NewRequest(http.MethodPost, "/mcp-relay/call", strings.NewReader(`{"target":"hub","tool_name":"approve_pending_server","arguments":{"server_id":"shell:runner"}}`))
+	req.Header.Set("Authorization", "Bearer "+token)
+	response := httptest.NewRecorder()
+	s.Handler().ServeHTTP(response, req)
+	if response.Code != http.StatusForbidden {
+		t.Fatalf("read-only dangerous call status=%d body=%s", response.Code, response.Body.String())
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, event := range s.audit {
+		if event.Name == "tool_policy_decision" && event.Fields["policy_decision"] == "deny" {
+			if event.Fields["client_id"] != "readonly-client" || event.Fields["subject"] != "readonly-client" || event.Fields["jti"] != "readonly-jti" {
+				t.Fatalf("missing OAuth identity audit fields: %#v", event.Fields)
+			}
+			if event.Fields["policy_reason"] == "" || event.Fields["result_reference"] != "none" {
+				t.Fatalf("incomplete denied audit: %#v", event.Fields)
+			}
+			if _, leaked := event.Fields["arguments"]; leaked {
+				t.Fatalf("denied audit leaked raw arguments: %#v", event.Fields)
+			}
+			return
+		}
+	}
+	t.Fatal("denied tool policy audit event not found")
+}
+
+func TestAuditTrailSurvivesHubRestartWithRestrictivePermissions(t *testing.T) {
+	configDir := t.TempDir()
+	cfg := Config{ConfigDir: configDir, CtlToken: "ctl-token"}
+	s := New(cfg)
+	s.mu.Lock()
+	s.addAuditLocked("restartable_test_event", map[string]any{"target": "hub", "status": "ok"})
+	s.mu.Unlock()
+
+	path := filepath.Join(configDir, "audit.jsonl")
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if info.Mode().Perm() != 0o600 {
+		t.Fatalf("audit mode=%o want 600", info.Mode().Perm())
+	}
+
+	restarted := New(cfg)
+	restarted.mu.Lock()
+	defer restarted.mu.Unlock()
+	for _, event := range restarted.audit {
+		if event.Name == "restartable_test_event" && event.Fields["target"] == "hub" {
+			return
+		}
+	}
+	t.Fatal("audit event did not survive restart")
 }
 
 func TestServerActionsOpenAPIProxyForPinnedMCPServer(t *testing.T) {

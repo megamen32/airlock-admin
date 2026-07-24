@@ -924,6 +924,129 @@ plan is [`PROJECT_PLAN.md`](./PROJECT_PLAN.md).
   backups.
 - Next: Push the integrated commit and keep the existing admin password stable.
 
+## 2026-07-24 - Release provenance and golden-path evidence - completed
+
+- Milestone: `S0.1` / `S0.3`
+- Owner: Codex
+- Scope: Canonical release manifest/checksum verification and executable
+  supported-path evidence; preserve the single integration branch and the
+  unrelated untracked remote-secret plan.
+- Baseline / red evidence: `tools/build.sh` emitted per-component checksums
+  only for selected artifacts, and CI had no assertion that every produced
+  release artifact had one machine-readable provenance record.
+- Change: Added `tools/verify_release_manifest.py`, canonical archive
+  provenance (`schema`, build/version/commit/time, platform, architecture,
+  size and SHA-256), atomic manifest generation/verification in `build.sh`,
+  release-workflow verification and manifest upload, plus JSON `gptadmin
+  doctor` output. Fixed the discovered ShellMCP spill-directory alias drift
+  and recorded it in `docs/BUGS.md`.
+- Verification: RED/green `tests/test_release_provenance.py` (2),
+  `tests/test_doctor_json.py` (2), `bash -n tools/build.sh`, focused Go
+  alias tests, ShellMCP contract `8 passed`, and completion matrix `9 passed`.
+  A full release build/CI run remains intentionally pending because it bumps
+  the tracked release version and requires the release runner/toolchain.
+- Delivery: Integrated in the final single-vertex branch commit; no deploy was
+  performed. The unrelated untracked remote-secret plan is preserved.
+- Next: Add the explicit four-platform/client golden-path fixture and wire
+  platform-native CI acceptance evidence before changing S0.1 status.
+
+## 2026-07-24 - Supported golden-path matrix - completed
+
+- Milestone: `S0.1`
+- Owner: Codex
+- Scope: Define executable Linux/macOS/Windows/Android and Codex/Claude/
+  ChatGPT-style install/auth/first-tool/uninstall-rollback evidence without
+  claiming local proof for platforms unavailable on this host.
+- Baseline / red evidence: The completion matrix covered requested functional
+  surfaces but had no explicit platform/client path contract or per-path
+  install and rollback commands.
+- Change: Added `tests/fixtures/golden-paths.json` and an executable test that
+  covers Linux/macOS/Windows/Android with Codex/Claude/ChatGPT-style clients
+  and install/auth/first-tool/uninstall-rollback commands. Added it to the
+  completion matrix. The commands reuse real install, Hub, MCP and update/
+  failover tests and are deduplicated per stage/platform.
+- Verification: `python3 -m pytest tests/test_golden_paths.py -q` -> `2
+  passed`; completion matrix -> `10 passed`. The Linux host executed all
+  declared contract commands; native macOS/Windows/Android runtime proof
+  remains delegated to their CI/physical lanes.
+- Delivery: Integrated in the final single-vertex branch commit; no deploy was
+  performed. The unrelated untracked remote-secret plan is preserved.
+- Next: wire the golden-path fixture to platform-native CI result checks and
+  only then promote S0.1 from In progress to Complete.
+
+## 2026-07-24 - One-password security and autonomy contract - completed
+
+- Milestone: `S0.5` / `S1.6` / `S2.1-S2.4`
+- Owner: Codex
+- Scope: Black-box authentication hygiene, progressive security presets,
+  capability policy, approval/autonomy and operator audit evidence; preserve
+  hidden internal credentials and the one integration branch.
+- Baseline / red evidence: Existing tests covered individual auth/policy paths,
+  but the completion matrix did not assert request-bound JWT claims and
+  durable operator audit as one contract.
+- Change: Added strict request-bound JWT validation for audience/resource,
+  recognized scopes, subject, issued-at and key ID; added key ID to issued
+  OAuth/managed tokens; added allow/deny audit events with actor/client/subject/
+  JTI, profile, target, tool, policy reason, status, result reference and a
+  raw-argument-free digest; persisted audit JSONL with restart loading and
+  `0600` permissions.
+- Verification: RED/green focused tests cover wrong audience through `/mcp`,
+  expiry, missing/unknown claims, audience arrays, admin-token forwarding,
+  allow/deny audit metadata and restart persistence. `cd go-hub && go test
+  ./internal/hub -count=1` passes. Security presets/MFA and full platform
+  native checks remain explicitly open.
+- Delivery: Integrated in the final single-vertex branch commit; no deploy was
+  performed. The unrelated untracked remote-secret plan is preserved.
+- Next: implement the progressive security preset/MFA gate or record it as an
+  explicit external product blocker before claiming S1.6 complete.
+
+## 2026-07-24 - Supply-chain SBOM and installer digest gate - completed
+
+- Milestone: `S4.3` / `S0.3`
+- Owner: Codex
+- Scope: Generate a deterministic SPDX-style SBOM from checked-in dependency
+  manifests, bind it to the release manifest and make verification fail closed
+  on artifact/SBOM drift; preserve one integration vertex.
+- Baseline / red evidence: Release provenance covered archive hashes, but CI
+  published no SBOM and CLI update could not consume the canonical manifest
+  list or reject a mismatched package.
+- Change: Added deterministic SPDX-2.3 SBOM generation from Python/Go/npm
+  manifests; bound SBOM path/size/SHA-256 into `build/manifest.json`; added
+  CI verification/upload and shipped-target installer-link verification; made
+  CLI update read both legacy dict and canonical list manifests and reject
+  downloaded size/digest mismatches.
+- Verification: `tests/test_sbom.py`, `tests/test_release_provenance.py` and
+  `tests/test_update_semantics.py` -> `11 passed`; installer-link verifier ->
+  `1 passed`; `bash -n tools/build.sh` passed. Full release build and CI
+  publication remain unrun because they mutate release version state and need
+  the release runner.
+- Delivery: Integrated in the final single-vertex branch commit; no deploy was
+  performed. The unrelated untracked remote-secret plan is preserved.
+- Next: run the full local suite and then the real CI/native platform lanes;
+  only after those results promote S4.3/S0.3 to Complete.
+
+## 2026-07-24 - Doctor remote readiness contract - completed
+
+- Milestone: `S1.1` / `S1.2`
+- Owner: Codex
+- Scope: Extend machine-readable doctor output with version, Hub/Tunnel
+  reachability, remote clock signal and env-file permission checks; keep normal
+  output plain-language and never expose credentials.
+- Baseline / red evidence: `gptadmin doctor --json` reported local units,
+  AdminPassword, Hub URL and port, but not remote readiness, build identity,
+  clock drift or config-file permissions.
+- Change: Added bounded read-only `/healthz` probe with remote build and Date
+  drift reporting, local VERSION identity and restrictive env-file mode check;
+  failures are structured without response bodies or credentials. Added the
+  doctor contract to the completion matrix.
+- Verification: `tests/test_doctor_json.py` and the updated completion matrix
+  pass (`13 passed` combined), including a fake Hub response and secret-free
+  output. `python3 cli.py doctor --json` remains valid JSON on the local host.
+- Delivery: Integrated in the final single-vertex branch commit; no deploy was
+  performed. The unrelated untracked remote-secret plan is preserved.
+- Next: add authenticated Tunnel/client connection checks and native CI proof
+  before promoting S1.2 to Complete.
+
 ## 2026-07-22 - Isolated Network Tunnel proxy relay - completed
 
 - Milestone: `S2.2`
