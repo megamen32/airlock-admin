@@ -1139,6 +1139,25 @@ plan is [`PROJECT_PLAN.md`](./PROJECT_PLAN.md).
   remaining OIDC, external client, OTEL backend, physical failover and canary
   release evidence.
 
+## 2026-07-24 - Post-commit failover build compatibility - completed
+
+- Milestone: `S3.4`
+- Owner: Codex
+- Scope: Verify the committed Hub dependency graph and failover runtime after
+  adding WebAuthn, using the Go 1.24 Docker build image.
+- Baseline / red evidence: The previous failover run predated the new
+  WebAuthn dependency and did not prove container compatibility for it.
+- Change: No production change; rebuilt and ran the isolated failover Compose
+  project from the current integration vertex, then removed its container and
+  network.
+- Verification: `docker compose -f tests/e2e/failover/docker-compose.yml up
+  --build --abort-on-container-exit --exit-code-from failover-e2e` -> exit `0`,
+  all 7 scenarios and `ALL FAILOVER BLACK-BOX SCENARIOS PASSED`.
+- Delivery: Evidence-only follow-up; no push or deployment. The user-owned
+  untracked remote-secret plan remains preserved.
+- Next: Replace Docker-only HA proof with the two physical fallback-host
+  acceptance run required by `PROJECT_PLAN.md`.
+
 ## 2026-07-24 - Clean-host backup restore drill - completed
 
 - Milestone: `S3.3`
