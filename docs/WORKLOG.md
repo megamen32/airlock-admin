@@ -1450,6 +1450,17 @@ plan is [`PROJECT_PLAN.md`](./PROJECT_PLAN.md).
 - Delivery: Same local integration slice; no deploy or push.
 - Next: Include the regression in the final Hub security and race gates.
 
+## 2026-07-24 - Final-head clean-clone acceptance - completed
+
+- Milestone: `S0.2`, `S3.3`, `S3.4`
+- Owner: Codex
+- Scope: Re-run source acceptance from a fresh clone at commit `89d9234dbd98633f7315dd15ed08801796e33921`.
+- Baseline / red evidence: N/A; this is post-commit reproducibility evidence.
+- Change: No runtime change; verified the committed tree without relying on the original working directory.
+- Verification: Clean clone `/tmp/gptadmin-clean-final-JiNqbi` passed `go test ./...` in Hub, ShellMCP and ProxyRelay, `bash tests/e2e/failover/run.sh` with all scenarios passed, and focused Python integration/security tests `15 passed`.
+- Delivery: Local evidence only; no push, deploy or external-host claim.
+- Next: Obtain the remaining real macOS/Windows/Android, public client, tagged CI/provenance, collector and physical-fallback evidence.
+
 ## 2026-07-24 - Remote secret ingress - completed
 
 - Milestone: `S0.5`
