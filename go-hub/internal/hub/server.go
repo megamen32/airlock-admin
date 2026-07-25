@@ -4011,24 +4011,28 @@ func (s *Server) adminSessionValid(r *http.Request) bool {
 	if s.cfg.AdminPassword == "" {
 		return true
 	}
-	c, err := r.Cookie(adminSessionCookieName)
-	if err != nil || c.Value == "" {
-		return false
+	for _, cookie := range r.Cookies() {
+		if cookie.Name != adminSessionCookieName || cookie.Value == "" {
+			continue
+		}
+		parts := strings.Split(cookie.Value, ".")
+		if len(parts) != 2 {
+			continue
+		}
+		exp, err := strconv.ParseInt(parts[0], 10, 64)
+		if err != nil || exp < time.Now().Unix() {
+			continue
+		}
+		mac, err := base64.RawURLEncoding.DecodeString(parts[1])
+		if err != nil {
+			continue
+		}
+		want := s.adminSessionMAC(parts[0])
+		if hmac.Equal(mac, want) {
+			return true
+		}
 	}
-	parts := strings.Split(c.Value, ".")
-	if len(parts) != 2 {
-		return false
-	}
-	exp, err := strconv.ParseInt(parts[0], 10, 64)
-	if err != nil || exp < time.Now().Unix() {
-		return false
-	}
-	mac, err := base64.RawURLEncoding.DecodeString(parts[1])
-	if err != nil {
-		return false
-	}
-	want := s.adminSessionMAC(parts[0])
-	return hmac.Equal(mac, want)
+	return false
 }
 
 func (s *Server) signAdminSession(expires time.Time) string {

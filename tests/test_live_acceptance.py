@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import http.cookiejar
 import importlib.util
 import json
 import os
@@ -11,6 +12,7 @@ import subprocess
 import threading
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -162,3 +164,68 @@ def test_live_runner_checks_actual_go_hub_process(disposable_real_hub: str) -> N
     summary = live_acceptance.run_acceptance(disposable_real_hub, "ctl", required_tools={"demo"})
     assert summary["status"] == "passed"
     assert summary["tool_count"] > 0
+
+
+def test_admin_password_login_persists_across_redirect_refresh_and_api(disposable_real_hub: str) -> None:
+    """Black-box login must retain its cookie through redirects, refresh and API access."""
+
+    cookie_jar = http.cookiejar.CookieJar()
+    opener = urllib.request.build_opener(
+        urllib.request.ProxyHandler({}),
+        urllib.request.HTTPCookieProcessor(cookie_jar),
+    )
+
+    with opener.open(
+        urllib.request.Request(disposable_real_hub + "/admin/login", headers={"Accept": "text/html"}),
+        timeout=10,
+    ) as response:
+        assert response.status == 200
+        assert b'name="password"' in response.read(8192)
+
+    login_request = urllib.request.Request(
+        disposable_real_hub + "/admin/login",
+        data=urllib.parse.urlencode({"password": "pw", "next": "/admin/"}).encode(),
+        headers={"Accept": "text/html", "Content-Type": "application/x-www-form-urlencoded"},
+        method="POST",
+    )
+    with opener.open(login_request, timeout=10) as response:
+        login_body = response.read(32768)
+        assert response.status == 200
+        assert response.status == 200, {
+            "url": response.geturl(),
+            "cookies": [cookie.name for cookie in cookie_jar],
+            "login_page": b"GPTAdmin Login" in login_body,
+        }
+        assert b"GPTAdmin Login" not in login_body
+
+    session_cookie = next((cookie for cookie in cookie_jar if cookie.name == "gptadmin_admin_session"), None)
+    assert session_cookie is not None
+
+    duplicate_cookie_request = urllib.request.Request(
+        disposable_real_hub + "/admin/",
+        headers={
+            "Accept": "text/html",
+            "Cookie": f"gptadmin_admin_session=stale.invalid; gptadmin_admin_session={session_cookie.value}",
+        },
+    )
+    with urllib.request.build_opener(urllib.request.ProxyHandler({})).open(duplicate_cookie_request, timeout=10) as response:
+        duplicate_cookie_body = response.read(32768)
+        assert response.status == 200
+        assert b"GPTAdmin Login" not in duplicate_cookie_body
+
+    with opener.open(
+        urllib.request.Request(disposable_real_hub + "/admin/", headers={"Accept": "text/html"}),
+        timeout=10,
+    ) as response:
+        refresh_body = response.read(32768)
+        assert response.status == 200
+        assert response.geturl().endswith("/admin/")
+        assert b"GPTAdmin Login" not in refresh_body
+
+    with opener.open(
+        urllib.request.Request(disposable_real_hub + "/admin/api/overview?limit=1", headers={"Accept": "application/json"}),
+        timeout=10,
+    ) as response:
+        overview = json.loads(response.read())
+        assert response.status == 200
+        assert isinstance(overview.get("build"), dict)

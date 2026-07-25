@@ -171,7 +171,7 @@
     {
       "id": "live-hub-acceptance-runner",
       "command": "python3 -m pytest tests/test_live_acceptance.py -q",
-      "evidence": "secret-safe deployment runner covers health/version, connection and OAuth discovery, OpenAPI and authenticated safe MCP call"
+      "evidence": "secret-safe deployment runner covers health/version, connection and OAuth discovery, OpenAPI, authenticated safe MCP call and real-process admin password session persistence"
     },
     {
       "id": "deployment-runtime-diagnosis",

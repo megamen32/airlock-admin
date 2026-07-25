@@ -2773,3 +2773,13 @@ plan is [`PROJECT_PLAN.md`](./PROJECT_PLAN.md).
 - Verification: `trash/logs/personal-tunnel-route-repair-20260724.md` records 3 successful proxy registrations, 0 conflicts/failures/restarts, HTTP 200 on all observed personal-edge addresses, and build `128` / commit `fdca78d` on personal and primary origins.
 - Delivery: Personal Tunnel and primary Hub are healthy; HAOS has no fallback `frpc` process.
 - Next: User refreshes `/admin/` and signs in manually; then run authenticated live acceptance.
+
+## 2026-07-25 - Admin login session-loop investigation - active
+
+- Milestone: `S1.3`, `S2.1`
+- Owner: Codex
+- Scope: Reproduce the reported password-loop through a real Hub process, redirect, cookie jar and admin API refresh without recording the password.
+- Baseline / red evidence: `trash/logs/admin-login-session-loop-20260725.md` records the direct HTTP Secure-cookie loop and the currently passing clean HTTPS flow; the new duplicate-cookie case failed before implementation.
+- Change: `go-hub/internal/hub/server.go` now validates all same-name session cookies and accepts a valid signed value even when a stale duplicate precedes it; `tests/test_live_acceptance.py` contains the non-optional process-level black-box regression.
+- Verification: RED then GREEN; `python3 -m pytest tests/test_live_acceptance.py -q` -> `3 passed`; focused Hub auth test passes.
+- Next: Build/deploy the hotfix to the current Hub, then rerun the HTTPS black-box and browser acceptance.

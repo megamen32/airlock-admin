@@ -669,3 +669,13 @@ Rules:
 - Fix / verification: After private backup and HAOS reclaim checks, started the canonical Tunnel exactly once. Immutable evidence `trash/logs/personal-tunnel-route-repair-20260724.md` records three successful proxy registrations, zero conflicts/failures, all observed personal-edge addresses returning HTTP 200, and build `128` / commit `fdca78d` on both origins.
 - Status: fixed for the personal Tunnel route and unauthenticated WebUI availability; authenticated acceptance remains pending.
 - Next action: Refresh the supplied `/admin/` page and sign in manually with the existing AdminPassword, then run the authenticated live acceptance runner.
+
+## 2026-07-25 - ADMIN-LOGIN-SESSION-LOOP-20260725 - Admin password appears not to persist in browser - open
+
+- Component: Browser admin session cookie and the HTTPS/HTTP proxy boundary.
+- First observed: 2026-07-25, user report that entering the password returns to the password form; immutable evidence `trash/logs/admin-login-session-loop-20260725.md`.
+- Confirmed facts: The real deployed password flow sets a `Secure` session cookie. A direct HTTP client reproduces the loop because it cannot send that cookie over HTTP; the same flow through the HTTPS personal Tunnel reaches `/admin/` without the login form and `/admin/api/overview` with HTTP 200.
+- Root-cause hypothesis: A stale cookie with the same name but a different Domain/Path can precede the newly issued valid session cookie; `r.Cookie` previously validated only that first value. The direct HTTP Secure-cookie loop is a separate expected scheme boundary.
+- Fix / verification: Added a process-level black-box regression with `stale.invalid; gptadmin_admin_session=<valid>`; it failed before the change and passes after `adminSessionValid` accepts any valid signed cookie with the session name. The clean HTTPS live flow also passes through `/admin/` and `/admin/api/overview`.
+- Status: fixed in source; deployment acceptance pending.
+- Next action: Build and deploy this committed Hub hotfix, then repeat the same black-box flow through the personal HTTPS Tunnel and verify the user's browser path.
