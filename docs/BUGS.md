@@ -680,3 +680,14 @@ Rules:
 - Fix / verification: Deployed commit `3c4baf4` after private backup. Immutable evidence `trash/logs/admin-login-session-repair-20250725.md` records RED→GREEN black-box coverage and the real HTTPS duplicate-cookie flow passing `/admin/` and `/admin/api/overview`.
 - Status: fixed.
 - Next action: Refresh the browser once and sign in again; if an old page remains cached, clear site data for this origin and retry. Then continue authenticated live acceptance.
+
+## 2026-07-25 - ADMIN-LEGACY-CSS-PATH-20260725 - Legacy admin console lost styles - in_progress
+
+- Component: `public/admin/index.html` asset references and `tools/build.sh` legacy static packaging.
+- First observed: 2026-07-25, immutable browser screenshot from the supplied `/admin/legacy/` URL; live unauthenticated probe also confirmed the Hub route is reachable.
+- Confirmed facts: The release builder copies `public/admin` to `public/admin-legacy`, but the copied HTML requests `/admin/style.css` and `/admin/app.js`; after the React cutover those URLs target the primary `/admin/` payload rather than the legacy directory.
+- Root-cause hypothesis: Absolute legacy asset URLs resolve outside the copied `/admin/legacy/` directory, so the browser renders the HTML with default styles.
+- Fix / verification: Added the RED Python regression, changed both static references to document-relative URLs, and extended the Go static-handler regression to assert `/admin/legacy/style.css` returns CSS with `text/css; charset=utf-8`; focused and full suites are green.
+- Fix / verification: Deployed only the corrected `index.html` atomically to server-100; the target hash matches the tested source, the previous file is backed up, Hub stayed active with the same PID, and the unauthenticated CSS request still returns the login gate.
+- Status: fixed in the live primary static payload; authenticated visual verification remains pending.
+- Next action: Hard-refresh the supplied browser tab and confirm the styled console; if stale, clear only this origin's cached site data.

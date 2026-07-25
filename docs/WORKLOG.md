@@ -2784,3 +2784,14 @@ plan is [`PROJECT_PLAN.md`](./PROJECT_PLAN.md).
 - Verification: RED then GREEN; `python3 -m pytest tests/test_live_acceptance.py -q` -> `3 passed`; focused Hub auth test passes; live HTTPS duplicate-cookie flow passes after deployment.
 - Delivery: Commit `3c4baf4`; binary build `128` deployed with rollback backup `/var/backups/gptadmin/server100-admin-auth-20250725T005926Z`.
 - Next: User refreshes and signs in; then run authenticated live acceptance and continue the remaining server-88 runtime gate.
+
+## 2026-07-25 - Legacy admin CSS asset-path repair - completed locally
+
+- Milestone: `S1.1`
+- Owner: `Codex`
+- Scope: Restore CSS/JavaScript loading for the packaged `/admin/legacy/` static console without changing auth or API routes.
+- Baseline / red evidence: Live authenticated screenshot shows the legacy console unstyled; source `public/admin/index.html` points at `/admin/style.css` and `/admin/app.js`, while release packaging copies that payload to `/admin-legacy/`.
+- Change: Added a release-contract regression, changed `public/admin/index.html` to use document-relative `style.css` and `app.js`, and extended the Go static-handler regression to verify the CSS response.
+- Verification: RED then GREEN; focused UI/admin contracts `17 passed`; full Python suite `247 passed, 3 skipped`; `go test ./...` passed; `git diff --check` passed.
+- Delivery: Atomically deployed only `admin-legacy/index.html` to server-100 at `20260725T020209Z`; rollback backup and hashes are recorded in `trash/logs/admin-legacy-css-deploy-20260725T020209Z.md`; no restart or binary change.
+- Next: Hard-refresh the supplied browser tab and confirm the styled console; leave the separate clean `v129` release integration for a dedicated release task.

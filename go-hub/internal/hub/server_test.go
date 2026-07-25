@@ -979,6 +979,9 @@ func TestAdminLegacyStaticKeepsOperationsAvailableAfterReactCutover(t *testing.T
 	if err := os.WriteFile(filepath.Join(tmp, "admin-legacy", "index.html"), []byte("legacy-operations"), 0o644); err != nil {
 		t.Fatal(err)
 	}
+	if err := os.WriteFile(filepath.Join(tmp, "admin-legacy", "style.css"), []byte("body { color: red; }"), 0o644); err != nil {
+		t.Fatal(err)
+	}
 
 	s := New(Config{CtlToken: "ctl", AdminPassword: "pw", PublicDir: tmp, DefaultTimeout: time.Second, PollMaxTimeout: time.Second})
 	h := s.Handler()
@@ -1013,6 +1016,14 @@ func TestAdminLegacyStaticKeepsOperationsAvailableAfterReactCutover(t *testing.T
 	h.ServeHTTP(w, req)
 	if w.Code != http.StatusOK || !strings.Contains(w.Body.String(), "legacy-operations") {
 		t.Fatalf("legacy operations static page status=%d body=%s", w.Code, w.Body.String())
+	}
+
+	req = httptest.NewRequest(http.MethodGet, "/admin/legacy/style.css", nil)
+	req.AddCookie(session)
+	w = httptest.NewRecorder()
+	h.ServeHTTP(w, req)
+	if w.Code != http.StatusOK || w.Header().Get("Content-Type") != "text/css; charset=utf-8" || w.Body.String() != "body { color: red; }" {
+		t.Fatalf("legacy stylesheet static status=%d content-type=%q body=%s", w.Code, w.Header().Get("Content-Type"), w.Body.String())
 	}
 }
 
