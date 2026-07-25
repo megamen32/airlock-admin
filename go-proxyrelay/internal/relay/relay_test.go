@@ -251,6 +251,7 @@ func TestRelayRejectsGrantReplayWrongRoleCapabilityAndProtocol(t *testing.T) {
 		claims := relayClaims(ticket.RoleClient, "stream-replay", "jti-replay")
 		raw := h.sign(t, claims)
 		first := h.connect(t, ticket.RoleClient, raw, ProtocolVersion)
+		waitForActiveSession(t, h)
 		second := h.connect(t, ticket.RoleClient, raw, ProtocolVersion)
 		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 		defer cancel()
