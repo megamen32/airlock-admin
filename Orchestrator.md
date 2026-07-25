@@ -17,3 +17,4 @@
 
 - 2026-07-25: Missed early delegation/review on release recovery. Next: delegate diagnosis/validation first; lead integrates only.
 - 2026-07-25: HTTP 200 hid authenticated profile failure. Next: require login-cookie-refresh-overview-profiles smoke before acceptance.
+- 2026-07-25: Restart did not fix queued MCP jobs; startup mode was disabled. Next: inspect worker mode and queue metric before retrying a service restart or rotating credentials.
