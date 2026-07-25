@@ -52,6 +52,27 @@ def test_tagged_release_build_preserves_the_tagged_version() -> None:
     assert 'RELEASE_COMMIT="$release_commit"' in build_step["run"]
 
 
+def test_public_release_reruns_fail_closed_on_identity_mismatch() -> None:
+    """Existing public tags and assets must match exactly and are never overwritten."""
+
+    workflow = yaml.safe_load(WORKFLOW.read_text(encoding="utf-8"))
+    steps = workflow["jobs"]["build-and-release"]["steps"]
+    publish_step = next(step for step in steps if step.get("name") == "Mirror source + tag + GitHub Release to public repo")
+    script = publish_step["run"]
+
+    assert "--clobber" not in script
+    assert 'git tag -a "${TAG}" -m "Release ${TAG}" 2>/dev/null || true' not in script
+    assert 'git push origin "${TAG}" ||' not in script
+    assert 'remote_tag_lines="$(git ls-remote --tags origin' in script
+    assert 'remote_tag_commit' in script
+    assert 'expected_public_commit' in script
+    assert 'if [[ "$remote_tag_commit" != "$expected_public_commit" ]]' in script
+    assert 'gh release view "${TAG}" --repo megamen32/gptadmin_opensource --json assets' in script
+    assert 'if [[ "$actual_assets" != "$expected_assets" ]]' in script
+    assert "sha256sum" in script
+    assert script.count("exit 1") >= 2
+
+
 def test_release_job_attests_artifacts_and_scans_dependencies_before_publication() -> None:
     """Require provenance attestation and vulnerability checks before release sync."""
 

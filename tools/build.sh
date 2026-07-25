@@ -152,6 +152,19 @@ build_version() {
   write_build_info
 }
 
+reject_preexisting_tagged_release_archives() {
+  local -a stale_archives=()
+  while IFS= read -r -d '' archive; do
+    stale_archives+=("$archive")
+  done < <(find "$ART_DIR" -type f \( -name 'gptadmin*.tar.gz' -o -name 'gptadmin*.zip' \) -print0)
+  if ((${#stale_archives[@]} == 0)); then
+    return
+  fi
+  rm -f -- "${stale_archives[@]}" "$ART_DIR/manifest.json" "$ART_DIR/gptadmin-sbom.spdx.json"
+  echo "ERROR: tagged build rejected pre-existing release archives; removed stale release outputs" >&2
+  exit 2
+}
+
 build_tagged_release_version() {
   step "Use tagged release version"
   [[ -f "$VERSION_FILE" ]] || { echo "ERROR: missing $VERSION_FILE" >&2; exit 2; }
@@ -161,9 +174,14 @@ build_tagged_release_version() {
     echo "ERROR: RELEASE_TAG must equal v$BUILD_VERSION" >&2
     exit 2
   }
-  tag_commit="$(git rev-list -n 1 "$RELEASE_TAG" 2>/dev/null || true)"
+  tag_ref="refs/tags/$RELEASE_TAG"
+  tag_commit="$(git rev-parse --verify "${tag_ref}^{commit}" 2>/dev/null || true)"
   head_commit="$(git rev-parse HEAD 2>/dev/null || true)"
-  [[ -n "$tag_commit" && "$tag_commit" == "$head_commit" ]] || {
+  [[ -n "$tag_commit" ]] || {
+    echo "ERROR: RELEASE_TAG $RELEASE_TAG does not resolve to HEAD: missing $tag_ref" >&2
+    exit 2
+  }
+  [[ "$tag_commit" == "$head_commit" ]] || {
     echo "ERROR: RELEASE_TAG $RELEASE_TAG does not resolve to HEAD" >&2
     exit 2
   }
@@ -175,6 +193,7 @@ build_tagged_release_version() {
     echo "ERROR: RELEASE_COMMIT must equal HEAD" >&2
     exit 2
   }
+  reject_preexisting_tagged_release_archives
   BUILD_TS="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
   GIT_COMMIT="$(git rev-parse --short "$head_commit")"
   write_build_info

@@ -217,23 +217,77 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add -A
-          git commit -m "chore: sync source from private repo ${TAG}" || echo "No source changes to commit."
+          if git diff --cached --quiet; then
+            echo "No source changes to commit."
+          else
+            git commit -m "chore: sync source from private repo ${TAG}"
+          fi
           git push origin HEAD:main
 
           echo "=== Push tag ${TAG} to public repo ==="
-          git tag -a "${TAG}" -m "Release ${TAG}" 2>/dev/null || true
-          git push origin "${TAG}" || echo "tag ${TAG} already on public repo"
+          expected_public_commit="$(git rev-parse HEAD)"
+          remote_tag_lines="$(git ls-remote --tags origin "refs/tags/${TAG}" "refs/tags/${TAG}^{}")"
+          if [[ -n "$remote_tag_lines" ]]; then
+            remote_tag_commit="$(printf '%s\n' "$remote_tag_lines" | awk '$2 ~ /\^\{\}$/ {print $1}')"
+            if [[ -z "$remote_tag_commit" ]]; then
+              remote_tag_commit="$(printf '%s\n' "$remote_tag_lines" | awk '$2 !~ /\^\{\}$/ {print $1}')"
+            fi
+            if [[ "$remote_tag_commit" != "$expected_public_commit" ]]; then
+              echo "ERROR: public tag ${TAG} targets ${remote_tag_commit}, expected ${expected_public_commit}" >&2
+              exit 1
+            fi
+            echo "Public tag ${TAG} already targets the expected commit."
+          else
+            git tag -a "${TAG}" -m "Release ${TAG}"
+            git push origin "refs/tags/${TAG}:refs/tags/${TAG}"
+          fi
 
           echo "=== Create GitHub Release on public repo with binary assets ==="
-          # Upload every built tarball as release assets (NOT into git).
-          if gh release view "${TAG}" --repo megamen32/gptadmin_opensource >/dev/null 2>&1; then
-            echo "Release ${TAG} exists; uploading/overwriting assets."
-            gh release upload "${TAG}" --repo megamen32/gptadmin_opensource --clobber \
-              "$SRC"/build/*.tar.gz "$SRC"/build/manifest.json "$SRC"/build/gptadmin-sbom.spdx.json
+          shopt -s nullglob
+          release_assets=("$SRC"/build/*.tar.gz "$SRC"/build/manifest.json "$SRC"/build/gptadmin-sbom.spdx.json)
+          shopt -u nullglob
+          for asset in "${release_assets[@]}"; do
+            if [[ ! -f "$asset" ]]; then
+              echo "ERROR: missing release asset: $asset" >&2
+              exit 1
+            fi
+          done
+          expected_assets="$({
+            for asset in "${release_assets[@]}"; do
+              digest="$(sha256sum "$asset" | awk '{print $1}')"
+              printf '%s\tsha256:%s\n' "$(basename "$asset")" "$digest"
+            done
+          } | LC_ALL=C sort)"
+
+          release_response="$RUNNER_TEMP/gptadmin-public-release-${TAG}.txt"
+          release_error="$RUNNER_TEMP/gptadmin-public-release-${TAG}.err"
+          if gh api --include "repos/megamen32/gptadmin_opensource/releases/tags/${TAG}" >"$release_response" 2>"$release_error"; then
+            release_status=200
+          else
+            release_status="$(awk '/^HTTP\// {status=$2} END {print status}' "$release_response")"
+            if [[ "$release_status" != 404 ]]; then
+              echo "ERROR: failed to inspect existing public release ${TAG}" >&2
+              sed -n '1,20p' "$release_error" >&2
+              exit 1
+            fi
+          fi
+
+          if [[ "$release_status" == 200 ]]; then
+            actual_release_tag="$(gh release view "${TAG}" --repo megamen32/gptadmin_opensource --json tagName --jq '.tagName')"
+            if [[ "$actual_release_tag" != "$TAG" ]]; then
+              echo "ERROR: public release tag ${actual_release_tag} does not match ${TAG}" >&2
+              exit 1
+            fi
+            actual_assets="$(gh release view "${TAG}" --repo megamen32/gptadmin_opensource --json assets --jq '.assets[] | [.name, (.digest // "")] | @tsv' | LC_ALL=C sort)"
+            if [[ "$actual_assets" != "$expected_assets" ]]; then
+              echo "ERROR: public release ${TAG} assets do not exactly match local artifact digests" >&2
+              exit 1
+            fi
+            echo "Public release ${TAG} already has the exact expected assets; nothing to upload."
           else
             gh release create "${TAG}" --repo megamen32/gptadmin_opensource \
               --title "${TAG}" --generate-notes \
-              "$SRC"/build/*.tar.gz "$SRC"/build/manifest.json "$SRC"/build/gptadmin-sbom.spdx.json
+              "${release_assets[@]}"
           fi
           echo "=== Public release published: https://github.com/megamen32/gptadmin_opensource/releases/tag/${TAG} ==="
 

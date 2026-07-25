@@ -115,6 +115,19 @@ def test_tagged_build_requires_existing_tag_at_head(tmp_path: Path) -> None:
     assert "RELEASE_TAG v129 does not resolve to HEAD" in completed.stdout + completed.stderr
 
 
+def test_tagged_build_rejects_branch_with_release_tag_name(tmp_path: Path) -> None:
+    """A same-named branch cannot substitute for the required release tag ref."""
+
+    repo = _minimal_build_repo(tmp_path)
+    subprocess.run(["git", "tag", "-d", "v129"], cwd=repo, check=True, capture_output=True, text=True)
+    subprocess.run(["git", "branch", "v129"], cwd=repo, check=True)
+    completed = _run_tagged_build(repo, "v129")
+
+    assert completed.returncode != 0
+    assert "missing refs/tags/v129" in completed.stdout + completed.stderr
+    assert not (repo / "build" / "gptadmin-cli.tar.gz").exists()
+
+
 def test_tagged_build_rejects_tag_that_is_not_head(tmp_path: Path) -> None:
     """A tag from an earlier commit cannot label artifacts from a newer HEAD."""
 
@@ -170,6 +183,21 @@ def test_non_tagged_build_retains_single_version_bump_policy(tmp_path: Path) -> 
     sbom = json.loads((repo / "build" / "gptadmin-sbom.spdx.json").read_text(encoding="utf-8"))
     assert manifest["build_version"] == 130
     assert sbom["gptadminBuild"]["build_version"] == 130
+
+
+def test_tagged_build_rejects_and_removes_preexisting_release_archives(tmp_path: Path) -> None:
+    """A tagged build cannot mix stale archives into current release provenance."""
+
+    repo = _minimal_build_repo(tmp_path)
+    stale_archive = repo / "build" / "gptadmin-v128.tar.gz"
+    stale_archive.parent.mkdir()
+    stale_archive.write_bytes(b"stale v128 archive")
+    completed = _run_tagged_build(repo, "v129")
+
+    assert completed.returncode != 0
+    assert "pre-existing release archives" in completed.stdout + completed.stderr
+    assert not list((repo / "build").rglob("gptadmin*.tar.gz"))
+    assert not (repo / "build" / "manifest.json").exists()
 
 
 def test_tagged_shellmcp_artifact_reports_manifest_and_sbom_identity(tmp_path: Path) -> None:
