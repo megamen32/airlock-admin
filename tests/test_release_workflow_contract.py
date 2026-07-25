@@ -39,6 +39,17 @@ def test_release_job_runs_proxyrelay_tests() -> None:
     assert "go test ./..." in proxy_step["run"]
 
 
+def test_tagged_release_build_preserves_the_tagged_version() -> None:
+    """Tag CI must opt into the build mode that does not bump VERSION."""
+
+    workflow = yaml.safe_load(WORKFLOW.read_text(encoding="utf-8"))
+    steps = workflow["jobs"]["build-and-release"]["steps"]
+    build_step = next(step for step in steps if step.get("name") == "Build binaries")
+
+    assert "TAGGED_RELEASE=1" in build_step["run"]
+    assert "RELEASE_TAG=\"${GITHUB_REF_NAME}\"" in build_step["run"]
+
+
 def test_release_job_attests_artifacts_and_scans_dependencies_before_publication() -> None:
     """Require provenance attestation and vulnerability checks before release sync."""
 

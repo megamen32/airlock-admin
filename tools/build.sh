@@ -23,6 +23,8 @@ FORCE="${FORCE:-0}"
 CLEAN="${CLEAN:-0}"
 REBUILD_ON_REQ_CHANGE="${REBUILD_ON_REQ_CHANGE:-0}"
 SKIP_TESTS="${SKIP_TESTS:-0}"
+TAGGED_RELEASE="${TAGGED_RELEASE:-0}"
+RELEASE_TAG="${RELEASE_TAG:-}"
 
 usage() {
   cat <<'EOF'
@@ -114,15 +116,7 @@ want network-tunnel && need go
 want windows && need zip
 want_any all hub platform && need npm
 
-build_version() {
-  step "Bump build version"
-  old_version="0"
-  [[ -f "$VERSION_FILE" ]] && old_version="$(tr -dc '0-9' < "$VERSION_FILE" || true)"
-  [[ -n "$old_version" ]] || old_version="0"
-  BUILD_VERSION="$((old_version + 1))"
-  printf '%s\n' "$BUILD_VERSION" > "$VERSION_FILE"
-  BUILD_TS="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-  GIT_COMMIT="$(git rev-parse --short HEAD 2>/dev/null || echo unknown)"
+write_build_info() {
   GO_SHELLMCP_LDFLAGS=(-ldflags "-s -w -X github.com/megamen32/gptadmin/go-shellmcp/internal/server.BuildVersion=$BUILD_VERSION -X github.com/megamen32/gptadmin/go-shellmcp/internal/server.GitCommit=$GIT_COMMIT")
   GO_HUB_LDFLAGS=(-ldflags "-s -w -X github.com/megamen32/gptadmin/go-hub/internal/hub.BuildVersion=$BUILD_VERSION -X github.com/megamen32/gptadmin/go-hub/internal/hub.GitCommit=$GIT_COMMIT")
   mkdir -p client
@@ -142,6 +136,38 @@ def build_info(component: str) -> dict:
 PYINFO
   cp client/gptadmin_build_info.py gptadmin_build_info.py
   echo "Build version: $BUILD_VERSION ts=$BUILD_TS git=$GIT_COMMIT"
+}
+
+build_version() {
+  step "Bump build version"
+  old_version="0"
+  [[ -f "$VERSION_FILE" ]] && old_version="$(tr -dc '0-9' < "$VERSION_FILE" || true)"
+  [[ -n "$old_version" ]] || old_version="0"
+  BUILD_VERSION="$((old_version + 1))"
+  printf '%s\n' "$BUILD_VERSION" > "$VERSION_FILE"
+  BUILD_TS="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+  GIT_COMMIT="$(git rev-parse --short HEAD 2>/dev/null || echo unknown)"
+  write_build_info
+}
+
+build_tagged_release_version() {
+  step "Use tagged release version"
+  [[ -f "$VERSION_FILE" ]] || { echo "ERROR: missing $VERSION_FILE" >&2; exit 2; }
+  BUILD_VERSION="$(tr -d '[:space:]' < "$VERSION_FILE" || true)"
+  [[ "$BUILD_VERSION" =~ ^[0-9]+$ ]] || { echo "ERROR: VERSION must contain a plain integer" >&2; exit 2; }
+  [[ "$RELEASE_TAG" == "v$BUILD_VERSION" ]] || {
+    echo "ERROR: RELEASE_TAG must equal v$BUILD_VERSION" >&2
+    exit 2
+  }
+  tag_commit="$(git rev-list -n 1 "$RELEASE_TAG" 2>/dev/null || true)"
+  head_commit="$(git rev-parse HEAD 2>/dev/null || true)"
+  [[ -n "$tag_commit" && "$tag_commit" == "$head_commit" ]] || {
+    echo "ERROR: RELEASE_TAG $RELEASE_TAG does not resolve to HEAD" >&2
+    exit 2
+  }
+  BUILD_TS="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+  GIT_COMMIT="$(git rev-parse --short "$head_commit")"
+  write_build_info
 }
 
 ensure_build_info() {
@@ -173,8 +199,12 @@ PY
 }
 
 # Build-info changes affect hub/shellmcp binaries, so any real build bumps once.
-if want_any all cli hub shellmcp platform windows android; then
-  build_version
+if want_any all cli hub shellmcp platform windows android network-tunnel; then
+  if [[ "$TAGGED_RELEASE" == "1" ]]; then
+    build_tagged_release_version
+  else
+    build_version
+  fi
 else
   ensure_build_info
 fi

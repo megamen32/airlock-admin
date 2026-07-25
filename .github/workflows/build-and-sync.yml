@@ -127,7 +127,11 @@ jobs:
       - name: Build binaries
         run: |
           chmod +x tools/build.sh
-          ./tools/build.sh
+          if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
+            TAGGED_RELEASE=1 RELEASE_TAG="${GITHUB_REF_NAME}" ./tools/build.sh
+          else
+            ./tools/build.sh
+          fi
 
       - name: Verify Android release artifact
         run: |
