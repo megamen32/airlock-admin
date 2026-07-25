@@ -192,6 +192,19 @@ func readFrame(t *testing.T, c *websocket.Conn, max int64) Frame {
 	return frame
 }
 
+func waitForActiveSession(t *testing.T, h *relayHarness) {
+	t.Helper()
+	deadline := time.Now().Add(time.Second)
+	for time.Now().Before(deadline) {
+		stats := h.server.Stats()
+		if stats.ActiveSessions == 1 && stats.AuthenticatedPeers == 1 {
+			return
+		}
+		time.Sleep(time.Millisecond)
+	}
+	t.Fatalf("first relay peer was not registered: %+v", h.server.Stats())
+}
+
 func pairedConnections(t *testing.T, h *relayHarness, streamID string, mutate func(*ticket.Claims, *ticket.Claims)) (*websocket.Conn, *websocket.Conn) {
 	t.Helper()
 	clientClaims := relayClaims(ticket.RoleClient, streamID, streamID+"-client")
@@ -264,6 +277,7 @@ func TestRelayRejectsGrantReplayWrongRoleCapabilityAndProtocol(t *testing.T) {
 		agentClaims := relayClaims(ticket.RoleAgent, "stream-cap", "jti-cap-agent")
 		agentClaims.CapabilityID = "cap-other"
 		client := h.connect(t, ticket.RoleClient, h.sign(t, clientClaims), ProtocolVersion)
+		waitForActiveSession(t, h)
 		agent := h.connect(t, ticket.RoleAgent, h.sign(t, agentClaims), ProtocolVersion)
 		got := readFrame(t, client, 32*1024)
 		if got.Type != FrameReset {
