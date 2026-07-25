@@ -164,6 +164,10 @@ def _current_result_pointer(results_root: Path, commit: str) -> Path:
     return results_root / ".current" / f"{commit}.json"
 
 
+def _after_pointer_published() -> None:
+    """Provide a narrow synchronization boundary after publication of a new pointer."""
+
+
 def _next_sequence(pointer_path: Path, commit: str) -> int:
     """Read the previous per-commit sequence without trusting wall-clock time."""
     if not pointer_path.exists():
@@ -285,6 +289,7 @@ def start_gate_run(
                 "status": "running",
             },
         )
+        _after_pointer_published()
         log_file.touch(mode=0o600)
         write_status_atomic(status_file, payload)
         worker = subprocess.Popen(
@@ -468,7 +473,13 @@ def latest_result_for_commit(repo: Path, results_root: Path, revision: str) -> G
     artifact_run_id = status_file.parent.name
     if pointer_run_id != artifact_run_id:
         raise RuntimeError(f"current-result pointer run identifier does not match artifact: {pointer_path}")
-    if payload.get("commit") != commit or payload.get("sequence") != sequence:
+    payload_sequence = payload.get("sequence")
+    if (
+        payload.get("commit") != commit
+        or not isinstance(payload_sequence, int)
+        or isinstance(payload_sequence, bool)
+        or payload_sequence != sequence
+    ):
         raise RuntimeError(f"current-result pointer does not match its artifact: {pointer_path}")
     if payload.get("run_id") != pointer_run_id:
         raise RuntimeError(f"result artifact run identifier does not match its pointer: {status_file}")

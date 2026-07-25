@@ -341,7 +341,34 @@ def test_new_run_revokes_prior_pass_before_its_artifact_is_published(
     assert observed_exit_codes == [2]
 
 
-@pytest.mark.parametrize("corruption", ["pointer_run_id", "payload_status_file", "payload_version"])
+def test_status_is_nonzero_immediately_after_new_pointer_publication(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The pointer handoff itself must revoke a prior pass before artifact creation."""
+    runner = _load_runner()
+    repo, commit = _make_repo(tmp_path)
+    results_root = tmp_path / "results"
+    gate = runner.Gate(name="pass", argv=(sys.executable, "-c", "pass"), cwd=".")
+    first = runner.start_gate_run(repo, commit, results_root, gates=(gate,))
+    _wait_for_terminal_status(Path(first["status_file"]))
+
+    observed_exit_codes: list[int] = []
+
+    def observe_pointer_handoff() -> None:
+        observed_exit_codes.append(
+            runner.main(["--repo", str(repo), "--results-root", str(results_root), "status", commit])
+        )
+
+    monkeypatch.setattr(runner, "_after_pointer_published", observe_pointer_handoff, raising=False)
+    second = runner.start_gate_run(repo, commit, results_root, gates=(gate,))
+    _wait_for_terminal_status(Path(second["status_file"]))
+
+    assert observed_exit_codes == [1]
+
+
+@pytest.mark.parametrize(
+    "corruption", ["pointer_run_id", "payload_status_file", "payload_version", "payload_sequence_bool"]
+)
 def test_status_rejects_malformed_pointer_and_artifact_identities(
     tmp_path: Path, corruption: str
 ) -> None:
@@ -363,8 +390,10 @@ def test_status_rejects_malformed_pointer_and_artifact_identities(
         payload = json.loads(status_file.read_text(encoding="utf-8"))
         if corruption == "payload_status_file":
             payload["status_file"] = str(results_root / "other" / "result.json")
-        else:
+        elif corruption == "payload_version":
             payload["version"] = "999"
+        else:
+            payload["sequence"] = True
         runner.write_status_atomic(status_file, payload)
 
     with pytest.raises(RuntimeError):
