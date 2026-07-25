@@ -21,6 +21,7 @@ class AdminFlowError(RuntimeError):
 
 
 _DNS_LABEL = re.compile(r"[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?")
+_LEGACY_NUMERIC_COMPONENT = re.compile(r"(?:0x[0-9A-Fa-f]+|[0-9]+)")
 
 
 def _is_canonical_host(hostname: str) -> bool:
@@ -36,6 +37,10 @@ def _is_canonical_host(hostname: str) -> bool:
             len(hostname) <= 253
             and not hostname.endswith(".")
             and not all(label.isdigit() for label in labels)
+            and not (
+                all(_LEGACY_NUMERIC_COMPONENT.fullmatch(label) for label in labels)
+                and any(label.lower().startswith("0x") for label in labels)
+            )
             and all(_DNS_LABEL.fullmatch(label) for label in labels)
         )
     return True

@@ -99,6 +99,8 @@ def test_admin_page_url_is_normalized_to_hub_origin() -> None:
         "https://hub.example.\u00a0test",
         "https://hub.example\\test",
         "https://%68ub.example.test",
+        "https://0x7f000001",
+        "https://0x7f.0.0.1",
     ],
 )
 def test_invalid_origin_is_rejected_before_creating_a_network_opener(
@@ -121,3 +123,9 @@ def test_ipv6_hub_origin_is_accepted() -> None:
 
     assert admin_user_flow._hub_origin("http://[::1]") == "http://[::1]"
     assert admin_user_flow._hub_origin("http://[::1]:9001") == "http://[::1]:9001"
+
+
+def test_dns_label_containing_0x_is_accepted() -> None:
+    """The legacy numeric check must not reject ordinary DNS labels."""
+
+    assert admin_user_flow._hub_origin("https://0xample.test") == "https://0xample.test"
