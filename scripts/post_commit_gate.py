@@ -257,7 +257,6 @@ def start_gate_run(
         artifact = _allocate_artifact(result_root, commit, version, sequence, now)
         status_file = artifact / "result.json"
         log_file = artifact / "gate.log"
-        log_file.touch(mode=0o600)
         started_at = _utc_text(now)
         payload = {
             "schema_version": 1,
@@ -274,7 +273,6 @@ def start_gate_run(
             "log_file": str(log_file),
             "commands": [_command_payload(gate) for gate in gates],
         }
-        write_status_atomic(status_file, payload)
         write_status_atomic(
             pointer_file,
             {
@@ -282,9 +280,13 @@ def start_gate_run(
                 "commit": commit,
                 "sequence": sequence,
                 "run_id": artifact.name,
+                "version": version,
                 "status_file": str(status_file),
+                "status": "running",
             },
         )
+        log_file.touch(mode=0o600)
+        write_status_atomic(status_file, payload)
         worker = subprocess.Popen(
             [
                 sys.executable,
@@ -447,15 +449,34 @@ def latest_result_for_commit(repo: Path, results_root: Path, revision: str) -> G
     pointer = _load_status(pointer_path)
     if pointer.get("commit") != commit:
         raise RuntimeError(f"current-result pointer has a different commit: {pointer_path}")
+    expected_version = version_at_commit(repo.resolve(), commit)
     sequence = pointer.get("sequence")
     if not isinstance(sequence, int) or isinstance(sequence, bool) or sequence < 1:
         raise RuntimeError(f"current-result pointer has an invalid sequence: {pointer_path}")
-    status_file = Path(str(pointer.get("status_file", ""))).resolve()
-    if root not in (status_file, *status_file.parents) or status_file.name != "result.json":
+    pointer_run_id = pointer.get("run_id")
+    if not isinstance(pointer_run_id, str) or not pointer_run_id:
+        raise RuntimeError(f"current-result pointer has an invalid run identifier: {pointer_path}")
+    if pointer.get("version") != expected_version:
+        raise RuntimeError(f"current-result pointer has a different version: {pointer_path}")
+    pointer_status_file = pointer.get("status_file")
+    if not isinstance(pointer_status_file, str) or not pointer_status_file:
+        raise RuntimeError(f"current-result pointer has an invalid status path: {pointer_path}")
+    status_file = Path(pointer_status_file).resolve()
+    if status_file.name != "result.json" or status_file.parent.parent != root:
         raise RuntimeError(f"current-result pointer escapes artifact root: {pointer_path}")
     payload = _load_status(status_file)
+    artifact_run_id = status_file.parent.name
+    if pointer_run_id != artifact_run_id:
+        raise RuntimeError(f"current-result pointer run identifier does not match artifact: {pointer_path}")
     if payload.get("commit") != commit or payload.get("sequence") != sequence:
         raise RuntimeError(f"current-result pointer does not match its artifact: {pointer_path}")
+    if payload.get("run_id") != pointer_run_id:
+        raise RuntimeError(f"result artifact run identifier does not match its pointer: {status_file}")
+    payload_status_file = payload.get("status_file")
+    if not isinstance(payload_status_file, str) or Path(payload_status_file).resolve() != status_file:
+        raise RuntimeError(f"result artifact status path does not match its pointer: {status_file}")
+    if payload.get("version") != expected_version:
+        raise RuntimeError(f"result artifact version does not match commit {commit}: {status_file}")
     return GateResult(path=status_file, payload=payload)
 
 

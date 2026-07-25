@@ -312,3 +312,60 @@ def test_runner_fails_explicitly_without_posix_locking(
 
     with pytest.raises(RuntimeError, match="POSIX"):
         runner.start_gate_run(repo, commit, tmp_path / "results")
+
+
+def test_new_run_revokes_prior_pass_before_its_artifact_is_published(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Status must not authorize an older pass during publication of a new run."""
+    runner = _load_runner()
+    repo, commit = _make_repo(tmp_path)
+    results_root = tmp_path / "results"
+    gate = runner.Gate(name="pass", argv=(sys.executable, "-c", "pass"), cwd=".")
+    first = runner.start_gate_run(repo, commit, results_root, gates=(gate,))
+    _wait_for_terminal_status(Path(first["status_file"]))
+
+    observed_exit_codes: list[int] = []
+    real_write_status = runner.write_status_atomic
+
+    def observe_artifact_publication(path: Path, payload: dict[str, object]) -> None:
+        real_write_status(path, payload)
+        if path.name == "result.json" and payload.get("sequence") == 2 and payload.get("status") == "running":
+            result = runner.latest_result_for_commit(repo, results_root, commit)
+            observed_exit_codes.append(runner.status_exit_code(result.payload))
+
+    monkeypatch.setattr(runner, "write_status_atomic", observe_artifact_publication)
+    second = runner.start_gate_run(repo, commit, results_root, gates=(gate,))
+    _wait_for_terminal_status(Path(second["status_file"]))
+
+    assert observed_exit_codes == [2]
+
+
+@pytest.mark.parametrize("corruption", ["pointer_run_id", "payload_status_file", "payload_version"])
+def test_status_rejects_malformed_pointer_and_artifact_identities(
+    tmp_path: Path, corruption: str
+) -> None:
+    """A passed result is unusable when any authorizing identity is inconsistent."""
+    runner = _load_runner()
+    repo, commit = _make_repo(tmp_path)
+    results_root = tmp_path / "results"
+    gate = runner.Gate(name="pass", argv=(sys.executable, "-c", "pass"), cwd=".")
+    started = runner.start_gate_run(repo, commit, results_root, gates=(gate,))
+    status_file = Path(started["status_file"])
+    _wait_for_terminal_status(status_file)
+    pointer_file = runner._current_result_pointer(results_root, commit)
+
+    if corruption == "pointer_run_id":
+        pointer = json.loads(pointer_file.read_text(encoding="utf-8"))
+        pointer["run_id"] = "forged-run-id"
+        runner.write_status_atomic(pointer_file, pointer)
+    else:
+        payload = json.loads(status_file.read_text(encoding="utf-8"))
+        if corruption == "payload_status_file":
+            payload["status_file"] = str(results_root / "other" / "result.json")
+        else:
+            payload["version"] = "999"
+        runner.write_status_atomic(status_file, payload)
+
+    with pytest.raises(RuntimeError):
+        runner.latest_result_for_commit(repo, results_root, commit)
