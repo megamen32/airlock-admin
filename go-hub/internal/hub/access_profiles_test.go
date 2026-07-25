@@ -406,6 +406,75 @@ func TestClientBindingDeleteUnbindsManagedTokenAndOAuthClient(t *testing.T) {
 	}
 }
 
+func TestManagedMCPTokenRotationPreservesAccessProfileBinding(t *testing.T) {
+	s := New(Config{
+		CtlToken:          "ctl",
+		ConfigDir:         t.TempDir(),
+		OAuthClientSecret: "oauth-secret",
+		PublicOrigin:      "https://hub.example",
+		MCPResource:       "https://hub.example",
+	})
+
+	profile := map[string]any{
+		"id":              "profile-a",
+		"access_mode":     "full",
+		"allowed_targets": []string{"hub"},
+		"allowed_tools":   []string{"discover"},
+	}
+	created := accessProfileTestRequest(t, s, http.MethodPut, "/admin/api/access-profiles/profile-a", profile, map[string]string{"If-Match": "*"})
+	if created.Code != http.StatusOK {
+		t.Fatalf("create profile status=%d", created.Code)
+	}
+
+	issued := accessProfileTestRequest(t, s, http.MethodPost, "/admin/api/mcp/issue-token", map[string]any{"client_id": "managed", "ttl_days": 7}, nil)
+	if issued.Code != http.StatusOK {
+		t.Fatalf("issue token status=%d", issued.Code)
+	}
+	var issuedBody struct {
+		TokenID string `json:"token_id"`
+	}
+	if err := json.Unmarshal(issued.Body.Bytes(), &issuedBody); err != nil {
+		t.Fatal(err)
+	}
+	if issuedBody.TokenID == "" {
+		t.Fatal("issued token ID is empty")
+	}
+
+	bound := accessProfileTestRequest(t, s, http.MethodPut, "/admin/api/client-bindings/"+url.PathEscape(issuedBody.TokenID), map[string]string{"profile_id": "profile-a"}, nil)
+	if bound.Code != http.StatusOK {
+		t.Fatalf("bind token status=%d", bound.Code)
+	}
+
+	rotated := accessProfileTestRequest(t, s, http.MethodPost, "/admin/api/mcp/tokens/"+url.PathEscape(issuedBody.TokenID)+"/rotate", nil, nil)
+	if rotated.Code != http.StatusOK {
+		t.Fatalf("rotate token status=%d", rotated.Code)
+	}
+	var rotatedBody struct {
+		TokenID     string `json:"token_id"`
+		AccessToken string `json:"access_token"`
+	}
+	if err := json.Unmarshal(rotated.Body.Bytes(), &rotatedBody); err != nil {
+		t.Fatal(err)
+	}
+	if rotatedBody.TokenID == "" || rotatedBody.AccessToken == "" {
+		t.Fatal("replacement token response is incomplete")
+	}
+
+	s.mu.Lock()
+	replacement := s.managedMCP[rotatedBody.TokenID]
+	s.mu.Unlock()
+	if replacement.ProfileID != "profile-a" {
+		t.Fatalf("replacement profile ID = %q, want profile-a", replacement.ProfileID)
+	}
+	claims, err := s.verifyJWT(rotatedBody.AccessToken)
+	if err != nil {
+		t.Fatalf("verify replacement token: %v", err)
+	}
+	if claims["profile_id"] != "profile-a" {
+		t.Fatalf("replacement profile claim = %v, want profile-a", claims["profile_id"])
+	}
+}
+
 func accessProfileTestRequest(t *testing.T, server *Server, method, path string, body any, headers map[string]string) *httptest.ResponseRecorder {
 	t.Helper()
 	var payload *strings.Reader

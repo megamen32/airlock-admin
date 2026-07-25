@@ -3385,7 +3385,7 @@ func (s *Server) adminMCPIssueToken(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, map[string]any{"detail": "access_mode must be full or readonly"})
 		return
 	}
-	token, record, err := s.issueManagedMCPTokenWithMode(clientID, ttlDays, origin, resource, accessMode)
+	token, record, err := s.issueManagedMCPTokenWithMode(clientID, ttlDays, origin, resource, accessMode, "")
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]any{"detail": err.Error()})
 		return
@@ -3405,16 +3405,16 @@ func (s *Server) adminMCPIssueToken(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) issueManagedMCPToken(clientID string, ttlDays int, origin, resource string) (string, managedMCPToken, error) {
-	return s.issueManagedMCPTokenWithMode(clientID, ttlDays, origin, resource, accessModeFull)
+	return s.issueManagedMCPTokenWithMode(clientID, ttlDays, origin, resource, accessModeFull, "")
 }
 
-func (s *Server) issueManagedMCPTokenWithMode(clientID string, ttlDays int, origin, resource, accessMode string) (string, managedMCPToken, error) {
+func (s *Server) issueManagedMCPTokenWithMode(clientID string, ttlDays int, origin, resource, accessMode, profileID string) (string, managedMCPToken, error) {
 	now := time.Now().Unix()
 	scope := "gptadmin.read gptadmin.exec"
 	if accessMode == accessModeReadonly {
 		scope = "gptadmin.read gptadmin.inspect"
 	}
-	record := managedMCPToken{ID: newID(), ClientID: clientID, Scope: scope, AccessMode: accessMode, IssuedAt: now, ExpiresAt: now + int64(ttlDays)*24*3600}
+	record := managedMCPToken{ID: newID(), ClientID: clientID, Scope: scope, AccessMode: accessMode, ProfileID: profileID, IssuedAt: now, ExpiresAt: now + int64(ttlDays)*24*3600}
 	token, err := s.signJWT(map[string]any{
 		"sub": "admin", "scope": record.Scope, "access_mode": record.AccessMode, "client_id": clientID, "jti": record.ID,
 		"iss": origin, "aud": resource, "resource": resource, "exp": record.ExpiresAt, "iat": now, "kid": s.jwtKeyID(),
@@ -3464,7 +3464,7 @@ func (s *Server) adminMCPTokenAction(w http.ResponseWriter, r *http.Request) {
 	if accessMode == "" {
 		accessMode = accessModeFull
 	}
-	token, replacement, err := s.issueManagedMCPTokenWithMode(record.ClientID, remainingDays, s.origin(r), s.resource(r), accessMode)
+	token, replacement, err := s.issueManagedMCPTokenWithMode(record.ClientID, remainingDays, s.origin(r), s.resource(r), accessMode, record.ProfileID)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]any{"detail": err.Error()})
 		return
