@@ -670,12 +670,13 @@ Rules:
 - Status: fixed for the personal Tunnel route and unauthenticated WebUI availability; authenticated acceptance remains pending.
 - Next action: Refresh the supplied `/admin/` page and sign in manually with the existing AdminPassword, then run the authenticated live acceptance runner.
 
-## 2026-07-25 - ADMIN-LOGIN-SESSION-LOOP-20260725 - Admin password appears not to persist in browser - open
+## 2026-07-25 - ADMIN-LOGIN-SESSION-LOOP-20260725 - Admin password appears not to persist in browser - fixed
 
 - Component: Browser admin session cookie and the HTTPS/HTTP proxy boundary.
 - First observed: 2026-07-25, user report that entering the password returns to the password form; immutable evidence `trash/logs/admin-login-session-loop-20260725.md`.
 - Confirmed facts: The real deployed password flow sets a `Secure` session cookie. A direct HTTP client reproduces the loop because it cannot send that cookie over HTTP; the same flow through the HTTPS personal Tunnel reaches `/admin/` without the login form and `/admin/api/overview` with HTTP 200.
 - Root-cause hypothesis: A stale cookie with the same name but a different Domain/Path can precede the newly issued valid session cookie; `r.Cookie` previously validated only that first value. The direct HTTP Secure-cookie loop is a separate expected scheme boundary.
 - Fix / verification: Added a process-level black-box regression with `stale.invalid; gptadmin_admin_session=<valid>`; it failed before the change and passes after `adminSessionValid` accepts any valid signed cookie with the session name. The clean HTTPS live flow also passes through `/admin/` and `/admin/api/overview`.
-- Status: fixed in source; deployment acceptance pending.
-- Next action: Build and deploy this committed Hub hotfix, then repeat the same black-box flow through the personal HTTPS Tunnel and verify the user's browser path.
+- Fix / verification: Deployed commit `3c4baf4` after private backup. Immutable evidence `trash/logs/admin-login-session-repair-20250725.md` records RED→GREEN black-box coverage and the real HTTPS duplicate-cookie flow passing `/admin/` and `/admin/api/overview`.
+- Status: fixed.
+- Next action: Refresh the browser once and sign in again; if an old page remains cached, clear site data for this origin and retry. Then continue authenticated live acceptance.

@@ -2774,12 +2774,13 @@ plan is [`PROJECT_PLAN.md`](./PROJECT_PLAN.md).
 - Delivery: Personal Tunnel and primary Hub are healthy; HAOS has no fallback `frpc` process.
 - Next: User refreshes `/admin/` and signs in manually; then run authenticated live acceptance.
 
-## 2026-07-25 - Admin login session-loop investigation - active
+## 2026-07-25 - Admin login session-loop repair - completed
 
 - Milestone: `S1.3`, `S2.1`
 - Owner: Codex
 - Scope: Reproduce the reported password-loop through a real Hub process, redirect, cookie jar and admin API refresh without recording the password.
-- Baseline / red evidence: `trash/logs/admin-login-session-loop-20260725.md` records the direct HTTP Secure-cookie loop and the currently passing clean HTTPS flow; the new duplicate-cookie case failed before implementation.
+- Baseline / red evidence: `trash/logs/admin-login-session-loop-20250725.md` records the direct HTTP Secure-cookie loop and the browser-specific hypothesis; the duplicate-cookie black-box failed before implementation.
 - Change: `go-hub/internal/hub/server.go` now validates all same-name session cookies and accepts a valid signed value even when a stale duplicate precedes it; `tests/test_live_acceptance.py` contains the non-optional process-level black-box regression.
-- Verification: RED then GREEN; `python3 -m pytest tests/test_live_acceptance.py -q` -> `3 passed`; focused Hub auth test passes.
-- Next: Build/deploy the hotfix to the current Hub, then rerun the HTTPS black-box and browser acceptance.
+- Verification: RED then GREEN; `python3 -m pytest tests/test_live_acceptance.py -q` -> `3 passed`; focused Hub auth test passes; live HTTPS duplicate-cookie flow passes after deployment.
+- Delivery: Commit `3c4baf4`; binary build `128` deployed with rollback backup `/var/backups/gptadmin/server100-admin-auth-20250725T005926Z`.
+- Next: User refreshes and signs in; then run authenticated live acceptance and continue the remaining server-88 runtime gate.
