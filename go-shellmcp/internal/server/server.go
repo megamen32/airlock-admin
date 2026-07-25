@@ -812,12 +812,56 @@ func (s *Server) fileGet(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusForbidden, map[string]any{"error": "symbolic links are not allowed"})
 		return
 	}
+	if err := rejectSymlinksBelowRoot(root, abs); err != nil {
+		writeJSON(w, http.StatusForbidden, map[string]any{"error": "symbolic links are not allowed"})
+		return
+	}
+	resolvedRoot, err := filepath.EvalSymlinks(root)
+	if err != nil {
+		writeJSON(w, http.StatusForbidden, map[string]any{"error": "symbolic links are not allowed"})
+		return
+	}
 	resolved, err := filepath.EvalSymlinks(abs)
-	if err != nil || resolved != abs {
+	if err != nil {
+		writeJSON(w, http.StatusForbidden, map[string]any{"error": "symbolic links are not allowed"})
+		return
+	}
+	rel, err := filepath.Rel(resolvedRoot, resolved)
+	if err != nil || (rel != "." && (rel == ".." || strings.HasPrefix(rel, ".."+string(os.PathSeparator)) || filepath.IsAbs(rel))) {
 		writeJSON(w, http.StatusForbidden, map[string]any{"error": "symbolic links are not allowed"})
 		return
 	}
 	http.ServeFile(w, r, abs)
+}
+
+// rejectSymlinksBelowRoot permits a platform-owned symlink prefix in root but
+// rejects a caller-controlled symlink anywhere below it.
+func rejectSymlinksBelowRoot(root, path string) error {
+	rel, err := filepath.Rel(root, path)
+	if err != nil {
+		return fmt.Errorf("resolve path relative to spill root: %w", err)
+	}
+	if rel == "." {
+		return nil
+	}
+	if rel == ".." || strings.HasPrefix(rel, ".."+string(os.PathSeparator)) || filepath.IsAbs(rel) {
+		return fmt.Errorf("path outside spill root: %s", path)
+	}
+	current := root
+	for _, part := range strings.Split(rel, string(os.PathSeparator)) {
+		if part == "" || part == "." {
+			continue
+		}
+		current = filepath.Join(current, part)
+		info, statErr := os.Lstat(current)
+		if statErr != nil {
+			return statErr
+		}
+		if info.Mode()&os.ModeSymlink != 0 {
+			return fmt.Errorf("symbolic link below root: %s", path)
+		}
+	}
+	return nil
 }
 
 func (s *Server) heartbeatLoop(ctx context.Context) {

@@ -226,6 +226,67 @@ func TestFileEndpoint(t *testing.T) {
 	}
 }
 
+func TestFileEndpointAllowsCanonicalizedSpillRootPrefix(t *testing.T) {
+	physical := t.TempDir()
+	alias := filepath.Join(t.TempDir(), "spill-root")
+	if err := os.Symlink(physical, alias); err != nil {
+		t.Skipf("symbolic links unavailable: %v", err)
+	}
+	path := filepath.Join(alias, "stdout.txt")
+	if err := os.WriteFile(filepath.Join(physical, "stdout.txt"), []byte("canonical-root"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	s := New(Config{Token: "t", SpillDir: alias})
+	req := httptest.NewRequest(http.MethodGet, "/file?path="+path, nil)
+	req.Header.Set("Authorization", "Bearer t")
+	rec := httptest.NewRecorder()
+	s.Handler().ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK || rec.Body.String() != "canonical-root" {
+		t.Fatalf("file code=%d body=%q", rec.Code, rec.Body.String())
+	}
+}
+
+func TestFileEndpointRejectsIntermediateSymlinkBelowCanonicalizedSpillRoot(t *testing.T) {
+	physical := t.TempDir()
+	alias := filepath.Join(t.TempDir(), "spill-root")
+	if err := os.Symlink(physical, alias); err != nil {
+		t.Skipf("symbolic links unavailable: %v", err)
+	}
+	targetDir := filepath.Join(physical, "target")
+	if err := os.Mkdir(targetDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(targetDir, "secret.txt"), []byte("not-for-shell-client"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	intermediateLink := filepath.Join(physical, "nested")
+	if err := os.Symlink(targetDir, intermediateLink); err != nil {
+		t.Skipf("symbolic links unavailable: %v", err)
+	}
+
+	s := New(Config{Token: "t", SpillDir: alias})
+	path := filepath.Join(alias, "nested", "secret.txt")
+	req := httptest.NewRequest(http.MethodGet, "/file?path="+url.QueryEscape(path), nil)
+	req.Header.Set("Authorization", "Bearer t")
+	rec := httptest.NewRecorder()
+	s.Handler().ServeHTTP(rec, req)
+	if rec.Code != http.StatusForbidden || strings.Contains(rec.Body.String(), "not-for-shell-client") {
+		t.Fatalf("file endpoint followed intermediate symlink: status=%d body=%q", rec.Code, rec.Body.String())
+	}
+}
+
+func TestRejectSymlinksBelowRootFailsClosedOutsideRoot(t *testing.T) {
+	root := t.TempDir()
+	outside := filepath.Join(t.TempDir(), "outside.txt")
+	if err := os.WriteFile(outside, []byte("outside"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := rejectSymlinksBelowRoot(root, outside); err == nil {
+		t.Fatal("expected path outside root to be rejected")
+	}
+}
+
 func TestMCPHTTPEndpointToolsAndShellExec(t *testing.T) {
 	s := New(Config{Token: "t", Name: "unit-host", LogLimit: 8192, ExecTimeout: 5, SpillDir: t.TempDir()})
 
