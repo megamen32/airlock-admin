@@ -48,6 +48,8 @@ def test_tagged_release_build_preserves_the_tagged_version() -> None:
 
     assert "TAGGED_RELEASE=1" in build_step["run"]
     assert "RELEASE_TAG=\"${GITHUB_REF_NAME}\"" in build_step["run"]
+    assert 'release_commit="$(git rev-parse "${GITHUB_SHA}^{commit}")"' in build_step["run"]
+    assert 'RELEASE_COMMIT="$release_commit"' in build_step["run"]
 
 
 def test_release_job_attests_artifacts_and_scans_dependencies_before_publication() -> None:

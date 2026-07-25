@@ -128,7 +128,8 @@ jobs:
         run: |
           chmod +x tools/build.sh
           if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
-            TAGGED_RELEASE=1 RELEASE_TAG="${GITHUB_REF_NAME}" ./tools/build.sh
+            release_commit="$(git rev-parse "${GITHUB_SHA}^{commit}")"
+            TAGGED_RELEASE=1 RELEASE_TAG="${GITHUB_REF_NAME}" RELEASE_COMMIT="$release_commit" ./tools/build.sh
           else
             ./tools/build.sh
           fi

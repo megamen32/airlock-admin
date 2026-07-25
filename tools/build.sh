@@ -25,6 +25,7 @@ REBUILD_ON_REQ_CHANGE="${REBUILD_ON_REQ_CHANGE:-0}"
 SKIP_TESTS="${SKIP_TESTS:-0}"
 TAGGED_RELEASE="${TAGGED_RELEASE:-0}"
 RELEASE_TAG="${RELEASE_TAG:-}"
+RELEASE_COMMIT="${RELEASE_COMMIT:-}"
 
 usage() {
   cat <<'EOF'
@@ -46,6 +47,7 @@ Targets:
 
 Env:
   FORCE=1 CLEAN=1 SKIP_TESTS=1 REBUILD_ON_REQ_CHANGE=1
+  TAGGED_RELEASE=1 RELEASE_TAG=vN RELEASE_COMMIT=<full-commit-sha>
   GPTADMIN_HUB_DARWIN_ARM64=/path/gptadmin_hub GPTADMIN_HUB_DARWIN_AMD64=/path/gptadmin_hub
 EOF
 }
@@ -163,6 +165,14 @@ build_tagged_release_version() {
   head_commit="$(git rev-parse HEAD 2>/dev/null || true)"
   [[ -n "$tag_commit" && "$tag_commit" == "$head_commit" ]] || {
     echo "ERROR: RELEASE_TAG $RELEASE_TAG does not resolve to HEAD" >&2
+    exit 2
+  }
+  [[ "$RELEASE_COMMIT" =~ ^[0-9a-f]{40}$ ]] || {
+    echo "ERROR: RELEASE_COMMIT must be a full lowercase commit SHA" >&2
+    exit 2
+  }
+  [[ "$RELEASE_COMMIT" == "$head_commit" ]] || {
+    echo "ERROR: RELEASE_COMMIT must equal HEAD" >&2
     exit 2
   }
   BUILD_TS="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
