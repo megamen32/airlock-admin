@@ -258,6 +258,9 @@ func TestRelayRejectsGrantReplayWrongRoleCapabilityAndProtocol(t *testing.T) {
 		if _, _, err := second.Read(ctx); err == nil {
 			t.Fatal("replayed ticket was accepted")
 		}
+		if got := h.server.Stats().AuthenticatedPeers; got != 1 {
+			t.Fatalf("authenticated peers = %d, want 1 after replay rejection", got)
+		}
 		first.CloseNow()
 	})
 
