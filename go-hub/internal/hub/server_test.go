@@ -1027,7 +1027,7 @@ func TestAdminLegacyStaticKeepsOperationsAvailableAfterReactCutover(t *testing.T
 	}
 }
 
-func TestAuthPagesExplainAdminPasswordAndBearerOptions(t *testing.T) {
+func TestAuthPagesUseApprovedAuthenticationLanguage(t *testing.T) {
 	s := New(Config{
 		CtlToken:                 "test-secret-not-for-production",
 		AdminPassword:            "test-secret-not-for-production",
@@ -1049,12 +1049,12 @@ func TestAuthPagesExplainAdminPasswordAndBearerOptions(t *testing.T) {
 		t.Fatalf("admin login status=%d body=%s", w.Code, w.Body.String())
 	}
 	loginPage := w.Body.String()
-	for _, want := range []string{"admin-пароль", "OAuth", "JWT"} {
+	for _, want := range []string{"AdminPassword", "Connect"} {
 		if !strings.Contains(loginPage, want) {
 			t.Fatalf("admin login page missing %q: %s", want, loginPage)
 		}
 	}
-	for _, forbidden := range []string{"CTL_TOKEN", "MCP_BRIDGE_KEY", "OAUTH_CLIENT_SECRET", "SHELLMCP_TOKEN"} {
+	for _, forbidden := range []string{"CTL_TOKEN", "MCP_BRIDGE_KEY", "OAUTH_CLIENT_SECRET", "SHELLMCP_TOKEN", "Bearer", "JWT", "generated Action"} {
 		if strings.Contains(loginPage, forbidden) {
 			t.Fatalf("admin login page exposed internal credential name %q: %s", forbidden, loginPage)
 		}
