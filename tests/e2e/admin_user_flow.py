@@ -21,22 +21,25 @@ class AdminFlowError(RuntimeError):
 def _hub_origin(base_url: str) -> str:
     """Return the Hub origin from an origin or documented admin page URL."""
 
-    parsed = urllib.parse.urlsplit(base_url)
-    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+    if any(ord(character) <= 0x20 or ord(character) == 0x7F for character in base_url):
         raise AdminFlowError("base URL must be an absolute HTTP(S) Hub origin or /admin page")
     try:
+        parsed = urllib.parse.urlsplit(base_url)
         parsed.port
+        is_invalid = (
+            parsed.scheme not in {"http", "https"}
+            or not parsed.netloc
+            or parsed.username is not None
+            or parsed.password is not None
+            or parsed.hostname is None
+            or parsed.netloc.endswith(":")
+            or bool(parsed.query)
+            or bool(parsed.fragment)
+            or parsed.path not in {"", "/", "/admin", "/admin/"}
+        )
     except ValueError:
         raise AdminFlowError("base URL must be an absolute HTTP(S) Hub origin or /admin page") from None
-    if (
-        parsed.username is not None
-        or parsed.password is not None
-        or parsed.hostname is None
-        or parsed.netloc.endswith(":")
-        or parsed.query
-        or parsed.fragment
-        or parsed.path not in {"", "/", "/admin", "/admin/"}
-    ):
+    if is_invalid:
         raise AdminFlowError("base URL must be an absolute HTTP(S) Hub origin or /admin page")
     return urllib.parse.urlunsplit((parsed.scheme, parsed.netloc, "", "", ""))
 

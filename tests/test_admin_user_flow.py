@@ -86,7 +86,22 @@ def test_admin_page_url_is_normalized_to_hub_origin() -> None:
     ]
 
 
-def test_other_page_url_is_rejected_before_creating_a_network_opener(monkeypatch: pytest.MonkeyPatch) -> None:
+@pytest.mark.parametrize(
+    "base_url",
+    [
+        "https://hub.example.test/other",
+        "http://[::1",
+        "https://hub.example.test:bad-port",
+        "https://hub.example.test\n.evil",
+        "https://hub.example.test\t",
+        "https:// hub.example.test",
+        "https://hub.example.test\x7f",
+    ],
+)
+def test_invalid_origin_is_rejected_before_creating_a_network_opener(
+    monkeypatch: pytest.MonkeyPatch,
+    base_url: str,
+) -> None:
     """Only a Hub origin or its admin page is safe runner input."""
 
     def unexpected_network_opener(*_args: object, **_kwargs: object) -> None:
@@ -95,7 +110,7 @@ def test_other_page_url_is_rejected_before_creating_a_network_opener(monkeypatch
     monkeypatch.setattr(admin_user_flow.urllib.request, "build_opener", unexpected_network_opener)
 
     with pytest.raises(admin_user_flow.AdminFlowError, match="Hub origin or /admin page"):
-        admin_user_flow.run_admin_user_flow("https://hub.example.test/other", "test-password")
+        admin_user_flow.run_admin_user_flow(base_url, "test-password")
 
 
 def test_ipv6_hub_origin_is_accepted() -> None:
