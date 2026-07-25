@@ -5,7 +5,6 @@ from __future__ import annotations
 
 import argparse
 import dataclasses
-import fcntl
 import json
 import os
 import re
@@ -16,6 +15,11 @@ import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Mapping, Sequence
+
+if os.name == "posix":
+    import fcntl
+else:
+    fcntl = None
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -42,6 +46,12 @@ class GateResult:
 
 class GateAlreadyRunning(RuntimeError):
     """Raised when another process holds the lock for the same commit."""
+
+
+def _require_posix_release_host() -> None:
+    """Fail explicitly because this local helper relies on POSIX fd locking."""
+    if fcntl is None:
+        raise RuntimeError("post-commit gate runner requires a POSIX local release host")
 
 
 DEFAULT_GATES = (
@@ -119,9 +129,11 @@ def write_status_atomic(path: Path, payload: Mapping[str, object]) -> None:
         temporary.unlink(missing_ok=True)
 
 
-def _allocate_artifact(results_root: Path, commit: str, version: str, now: datetime | None) -> Path:
+def _allocate_artifact(
+    results_root: Path, commit: str, version: str, sequence: int, now: datetime | None
+) -> Path:
     """Create a unique artifact directory containing commit, version, and UTC time."""
-    base_name = f"{commit[:12]}-v{version}-{_utc_text(now)}"
+    base_name = f"{commit[:12]}-v{version}-{_utc_text(now)}-r{sequence:06d}"
     results_root.mkdir(parents=True, exist_ok=True)
     for counter in range(1000):
         suffix = "" if counter == 0 else f"-{counter:02d}"
@@ -145,6 +157,44 @@ def _command_payload(gate: Gate) -> dict[str, object]:
         "started_at": None,
         "finished_at": None,
     }
+
+
+def _current_result_pointer(results_root: Path, commit: str) -> Path:
+    """Return the atomically replaced pointer for the current commit result."""
+    return results_root / ".current" / f"{commit}.json"
+
+
+def _next_sequence(pointer_path: Path, commit: str) -> int:
+    """Read the previous per-commit sequence without trusting wall-clock time."""
+    if not pointer_path.exists():
+        return 1
+    pointer = _load_status(pointer_path)
+    if pointer.get("commit") != commit:
+        raise RuntimeError(f"current-result pointer has a different commit: {pointer_path}")
+    previous = pointer.get("sequence")
+    if not isinstance(previous, int) or isinstance(previous, bool) or previous < 1:
+        raise RuntimeError(f"current-result pointer has an invalid sequence: {pointer_path}")
+    return previous + 1
+
+
+def _terminalize_failed(payload: dict[str, object], error: str) -> None:
+    """Make a result and every unfinished command terminal after an internal failure."""
+    finished_at = _utc_text()
+    commands = payload.get("commands")
+    if isinstance(commands, list):
+        for command in commands:
+            if not isinstance(command, dict):
+                continue
+            if command.get("status") == "running":
+                command["status"] = "failed"
+                command["exit_code"] = None
+                command["finished_at"] = finished_at
+            elif command.get("status") == "pending":
+                command["status"] = "skipped"
+                command["finished_at"] = finished_at
+    payload["status"] = "failed"
+    payload["finished_at"] = finished_at
+    payload["error"] = error
 
 
 def _safe_gate_environment(artifact: Path, commit: str, version: str) -> dict[str, str]:
@@ -185,6 +235,7 @@ def start_gate_run(
     now: datetime | None = None,
 ) -> dict[str, object]:
     """Start an exact-commit gate process and return its immutable artifact identity."""
+    _require_posix_release_host()
     repository = repo.resolve()
     result_root = results_root.resolve()
     commit = resolve_commit(repository, revision)
@@ -193,24 +244,29 @@ def start_gate_run(
     lock_root.mkdir(parents=True, exist_ok=True)
     lock_file = lock_root / f"{commit}.lock"
     lock_descriptor = os.open(lock_file, os.O_RDWR | os.O_CREAT, 0o600)
+    payload: dict[str, object] | None = None
+    status_file: Path | None = None
     try:
         try:
             fcntl.flock(lock_descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
         except BlockingIOError as exc:
             raise GateAlreadyRunning(f"a gate is already running for commit {commit}") from exc
 
-        artifact = _allocate_artifact(result_root, commit, version, now)
+        pointer_file = _current_result_pointer(result_root, commit)
+        sequence = _next_sequence(pointer_file, commit)
+        artifact = _allocate_artifact(result_root, commit, version, sequence, now)
         status_file = artifact / "result.json"
         log_file = artifact / "gate.log"
         log_file.touch(mode=0o600)
         started_at = _utc_text(now)
-        payload: dict[str, object] = {
+        payload = {
             "schema_version": 1,
             "run_id": artifact.name,
             "status": "running",
             "commit": commit,
             "short_commit": commit[:12],
             "version": version,
+            "sequence": sequence,
             "started_at": started_at,
             "finished_at": None,
             "repository": str(repository),
@@ -219,6 +275,16 @@ def start_gate_run(
             "commands": [_command_payload(gate) for gate in gates],
         }
         write_status_atomic(status_file, payload)
+        write_status_atomic(
+            pointer_file,
+            {
+                "schema_version": 1,
+                "commit": commit,
+                "sequence": sequence,
+                "run_id": artifact.name,
+                "status_file": str(status_file),
+            },
+        )
         worker = subprocess.Popen(
             [
                 sys.executable,
@@ -236,7 +302,10 @@ def start_gate_run(
             start_new_session=True,
             pass_fds=(lock_descriptor,),
         )
-    except Exception:
+    except Exception as exc:
+        if payload is not None and status_file is not None:
+            _terminalize_failed(payload, f"worker startup failed: {type(exc).__name__}")
+            write_status_atomic(status_file, payload)
         os.close(lock_descriptor)
         raise
     os.close(lock_descriptor)
@@ -246,6 +315,7 @@ def start_gate_run(
         "status": "running",
         "commit": commit,
         "version": version,
+        "sequence": sequence,
         "status_file": str(status_file),
         "log_file": str(log_file),
     }
@@ -261,22 +331,23 @@ def _load_status(path: Path) -> dict[str, object]:
 
 def _run_worker(status_file: Path, lock_descriptor: int) -> int:
     """Prepare an isolated commit checkout, run gates, and publish terminal state."""
-    os.fstat(lock_descriptor)
     payload = _load_status(status_file)
     artifact = status_file.parent
     checkout = artifact / "checkout"
-    log_file = Path(str(payload["log_file"]))
-    commit = str(payload["commit"])
-    version = str(payload["version"])
-    repository = Path(str(payload["repository"]))
-    commands = payload["commands"]
-    if not isinstance(commands, list):
-        raise ValueError("status commands must be a list")
-    environment = _safe_gate_environment(artifact, commit, version)
     failed = False
     failure_summary: str | None = None
 
     try:
+        _require_posix_release_host()
+        os.fstat(lock_descriptor)
+        log_file = Path(str(payload["log_file"]))
+        commit = str(payload["commit"])
+        version = str(payload["version"])
+        repository = Path(str(payload["repository"]))
+        commands = payload.get("commands")
+        if not isinstance(commands, list):
+            raise ValueError("status commands must be a list")
+        environment = _safe_gate_environment(artifact, commit, version)
         with log_file.open("a", encoding="utf-8") as log:
             log.write(f"run={payload['run_id']} commit={commit} version={version}\n")
             log.flush()
@@ -309,8 +380,7 @@ def _run_worker(status_file: Path, lock_descriptor: int) -> int:
                 if not isinstance(command, dict):
                     raise ValueError("each command status must be an object")
                 if failed:
-                    command["status"] = "skipped"
-                    continue
+                    break
                 command["status"] = "running"
                 command["started_at"] = _utc_text()
                 write_status_atomic(status_file, payload)
@@ -341,9 +411,10 @@ def _run_worker(status_file: Path, lock_descriptor: int) -> int:
                 if completed.returncode != 0:
                     failed = True
                     failure_summary = f"gate {command['name']} failed with exit code {completed.returncode}"
+                    break
     except Exception as exc:
         failed = True
-        failure_summary = f"runner error: {type(exc).__name__}: {exc}"
+        failure_summary = f"runner error: {type(exc).__name__}"
     finally:
         try:
             if checkout.exists():
@@ -351,32 +422,41 @@ def _run_worker(status_file: Path, lock_descriptor: int) -> int:
                     shutil.rmtree(checkout)
                 except OSError as exc:
                     failed = True
-                    failure_summary = f"checkout cleanup failed: {type(exc).__name__}: {exc}"
-            for command in commands:
-                if isinstance(command, dict) and command.get("status") == "pending":
-                    command["status"] = "skipped"
-            payload["status"] = "failed" if failed else "passed"
-            payload["finished_at"] = _utc_text()
-            if failure_summary is not None:
-                payload["error"] = failure_summary
+                    failure_summary = f"checkout cleanup failed: {type(exc).__name__}"
+            if failed:
+                _terminalize_failed(payload, failure_summary or "runner failed")
+            else:
+                payload["status"] = "passed"
+                payload["finished_at"] = _utc_text()
             write_status_atomic(status_file, payload)
         finally:
-            os.close(lock_descriptor)
+            try:
+                os.close(lock_descriptor)
+            except OSError:
+                pass
     return 1 if failed else 0
 
 
 def latest_result_for_commit(repo: Path, results_root: Path, revision: str) -> GateResult:
-    """Return the newest persisted result matching the exact resolved commit."""
+    """Return the pointer-selected result for the exact commit, never a timestamp guess."""
     commit = resolve_commit(repo.resolve(), revision)
-    matches: list[GateResult] = []
-    if results_root.exists():
-        for path in results_root.glob("*/result.json"):
-            payload = _load_status(path)
-            if payload.get("commit") == commit:
-                matches.append(GateResult(path=path.resolve(), payload=payload))
-    if not matches:
-        raise FileNotFoundError(f"no gate result exists for commit {commit}")
-    return max(matches, key=lambda result: (str(result.payload.get("started_at", "")), result.path.name))
+    root = results_root.resolve()
+    pointer_path = _current_result_pointer(root, commit)
+    if not pointer_path.exists():
+        raise FileNotFoundError(f"no current gate result exists for commit {commit}")
+    pointer = _load_status(pointer_path)
+    if pointer.get("commit") != commit:
+        raise RuntimeError(f"current-result pointer has a different commit: {pointer_path}")
+    sequence = pointer.get("sequence")
+    if not isinstance(sequence, int) or isinstance(sequence, bool) or sequence < 1:
+        raise RuntimeError(f"current-result pointer has an invalid sequence: {pointer_path}")
+    status_file = Path(str(pointer.get("status_file", ""))).resolve()
+    if root not in (status_file, *status_file.parents) or status_file.name != "result.json":
+        raise RuntimeError(f"current-result pointer escapes artifact root: {pointer_path}")
+    payload = _load_status(status_file)
+    if payload.get("commit") != commit or payload.get("sequence") != sequence:
+        raise RuntimeError(f"current-result pointer does not match its artifact: {pointer_path}")
+    return GateResult(path=status_file, payload=payload)
 
 
 def status_exit_code(payload: Mapping[str, object]) -> int:
@@ -418,14 +498,14 @@ def main(argv: Sequence[str] | None = None) -> int:
     if arguments.action == "start":
         try:
             started = start_gate_run(arguments.repo, arguments.revision, arguments.results_root)
-        except (GateAlreadyRunning, ValueError) as exc:
+        except (GateAlreadyRunning, RuntimeError, ValueError) as exc:
             print(str(exc), file=sys.stderr)
             return 1
         print(json.dumps(started, indent=2, sort_keys=True))
         return 0
     try:
         result = latest_result_for_commit(arguments.repo, arguments.results_root, arguments.revision)
-    except (FileNotFoundError, ValueError) as exc:
+    except (FileNotFoundError, RuntimeError, ValueError) as exc:
         print(str(exc), file=sys.stderr)
         return 1
     print(json.dumps(result.payload, indent=2, sort_keys=True))

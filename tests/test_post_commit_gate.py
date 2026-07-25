@@ -145,7 +145,7 @@ def test_background_run_is_commit_scoped_unique_locked_and_never_pushes(
         now=fixed_now,
     )
     assert Path(repeated["status_file"]).parent != status_file.parent
-    assert Path(repeated["status_file"]).parent.name.endswith("-01")
+    assert Path(repeated["status_file"]).parent.name.endswith("-r000002")
     _wait_for_terminal_status(Path(repeated["status_file"]))
 
 
@@ -220,3 +220,95 @@ def test_failed_gate_is_machine_readable_and_blocks_follow_up(tmp_path: Path) ->
     assert final["commands"][0]["status"] == "failed"
     assert final["commands"][0]["exit_code"] == 7
     assert runner.status_exit_code(final) != 0
+
+
+def test_status_uses_newest_sequence_when_wall_clock_moves_back(tmp_path: Path) -> None:
+    """A failed later run must block release even if its clock is older."""
+    runner = _load_runner()
+    repo, commit = _make_repo(tmp_path)
+    results_root = tmp_path / "results"
+    passed_gate = runner.Gate(name="pass", argv=(sys.executable, "-c", "pass"), cwd=".")
+    failed_gate = runner.Gate(
+        name="fail", argv=(sys.executable, "-c", "raise SystemExit(9)"), cwd="."
+    )
+
+    older = runner.start_gate_run(
+        repo=repo,
+        revision=commit,
+        results_root=results_root,
+        gates=(passed_gate,),
+        now=datetime(2026, 7, 25, 16, 0, tzinfo=timezone.utc),
+    )
+    _wait_for_terminal_status(Path(older["status_file"]))
+    newer = runner.start_gate_run(
+        repo=repo,
+        revision=commit,
+        results_root=results_root,
+        gates=(failed_gate,),
+        now=datetime(2026, 7, 25, 15, 0, tzinfo=timezone.utc),
+    )
+    _wait_for_terminal_status(Path(newer["status_file"]))
+
+    latest = runner.latest_result_for_commit(repo, results_root, commit)
+    assert latest.path == Path(newer["status_file"])
+    assert latest.payload["status"] == "failed"
+    assert latest.payload["sequence"] == 2
+    assert runner.status_exit_code(latest.payload) == 1
+
+
+def test_startup_failure_terminalizes_artifact_and_commands(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A worker launch error cannot leave a releasable-looking running result."""
+    runner = _load_runner()
+    repo, commit = _make_repo(tmp_path)
+    results_root = tmp_path / "results"
+    gate = runner.Gate(name="pass", argv=(sys.executable, "-c", "pass"), cwd=".")
+
+    real_popen = runner.subprocess.Popen
+
+    def fail_start(args: object, *other_args: object, **kwargs: object) -> object:
+        if isinstance(args, list) and len(args) > 2 and args[2] == "_worker":
+            raise OSError("simulated worker launch failure")
+        return real_popen(args, *other_args, **kwargs)
+
+    monkeypatch.setattr(runner.subprocess, "Popen", fail_start)
+    with pytest.raises(OSError, match="worker launch"):
+        runner.start_gate_run(repo, commit, results_root, gates=(gate,))
+
+    status_file = next(results_root.glob("*/result.json"))
+    payload = json.loads(status_file.read_text(encoding="utf-8"))
+    assert payload["status"] == "failed"
+    assert payload["finished_at"] is not None
+    assert payload["commands"][0]["status"] == "skipped"
+    assert payload["commands"][0]["finished_at"] is not None
+
+
+def test_missing_executable_terminalizes_active_command(tmp_path: Path) -> None:
+    """A missing gate executable publishes a failed command instead of running forever."""
+    runner = _load_runner()
+    repo, commit = _make_repo(tmp_path)
+    missing_gate = runner.Gate(
+        name="missing-executable",
+        argv=("definitely-not-a-gptadmin-test-executable",),
+        cwd=".",
+    )
+
+    started = runner.start_gate_run(repo, commit, tmp_path / "results", gates=(missing_gate,))
+    final = _wait_for_terminal_status(Path(started["status_file"]))
+    assert final["status"] == "failed"
+    assert final["commands"][0]["status"] == "failed"
+    assert final["commands"][0]["finished_at"] is not None
+    assert final["commands"][0]["exit_code"] is None
+
+
+def test_runner_fails_explicitly_without_posix_locking(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The local release helper must not silently claim Windows support."""
+    runner = _load_runner()
+    repo, commit = _make_repo(tmp_path)
+    monkeypatch.setattr(runner, "fcntl", None)
+
+    with pytest.raises(RuntimeError, match="POSIX"):
+        runner.start_gate_run(repo, commit, tmp_path / "results")
