@@ -18,6 +18,29 @@ class AdminFlowError(RuntimeError):
     """Raised when a public admin-flow stage fails without disclosing a body."""
 
 
+def _hub_origin(base_url: str) -> str:
+    """Return the Hub origin from an origin or documented admin page URL."""
+
+    parsed = urllib.parse.urlsplit(base_url)
+    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+        raise AdminFlowError("base URL must be an absolute HTTP(S) Hub origin or /admin page")
+    try:
+        parsed.port
+    except ValueError:
+        raise AdminFlowError("base URL must be an absolute HTTP(S) Hub origin or /admin page") from None
+    if (
+        parsed.username is not None
+        or parsed.password is not None
+        or parsed.hostname is None
+        or parsed.netloc.endswith(":")
+        or parsed.query
+        or parsed.fragment
+        or parsed.path not in {"", "/", "/admin", "/admin/"}
+    ):
+        raise AdminFlowError("base URL must be an absolute HTTP(S) Hub origin or /admin page")
+    return urllib.parse.urlunsplit((parsed.scheme, parsed.netloc, "", "", ""))
+
+
 def _request(opener: urllib.request.OpenerDirector, base_url: str, path: str, form: dict[str, str] | None = None) -> tuple[int, bytes]:
     """Execute one bounded request without putting response contents in errors."""
 
@@ -40,8 +63,7 @@ def _request(opener: urllib.request.OpenerDirector, base_url: str, path: str, fo
 def run_admin_user_flow(base_url: str, password: str, require_profiles: bool = False) -> dict[str, Any]:
     """Verify login, cookie refresh, overview, and optionally profile access."""
 
-    if not base_url.startswith(("http://", "https://")):
-        raise AdminFlowError("base URL must be absolute HTTP(S)")
+    base_url = _hub_origin(base_url)
     if not password:
         raise AdminFlowError("password environment variable is empty")
 
