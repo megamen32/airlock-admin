@@ -74,7 +74,12 @@ def test_curated_mcp_binding_persists_provenance_before_activation(monkeypatch: 
 
     monkeypatch.setattr(cli, "need_root", lambda: None)
     config_file = tmp_path / "mcp.json"
+    token_file = tmp_path / "mcp-relay.token"
     monkeypatch.setattr(cli, "MCP_CONFIG_FILE", config_file)
+    monkeypatch.setattr(cli, "MCP_AGENTS_DIR", tmp_path / "mcp-agents.d")
+    monkeypatch.setattr(cli, "MCP_SUPERVISOR_CONFIG", tmp_path / "mcp-supervisor.json")
+    monkeypatch.setattr(cli, "MCP_TOKEN_FILE", token_file)
+    monkeypatch.setattr(cli, "env_read", lambda: {"MCP_RELAY_AGENT_TOKEN": "test-managed-token"})
     args = argparse.Namespace(
         name="safe-demo",
         command="npx",

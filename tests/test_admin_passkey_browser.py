@@ -12,11 +12,7 @@ import urllib.request
 from pathlib import Path
 
 import pytest
-
-try:
-    from playwright.sync_api import sync_playwright
-except ImportError:  # pragma: no cover - exercised only on minimal hosts
-    sync_playwright = None
+from playwright.sync_api import sync_playwright
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -32,8 +28,6 @@ def _free_port() -> int:
 def test_admin_spa_can_enroll_passkey_with_virtual_authenticator(tmp_path: Path) -> None:
     """Exercise password login, SPA enrollment and the real WebAuthn ceremony."""
 
-    if sync_playwright is None:
-        pytest.fail("playwright Python package is required for browser acceptance")
     chrome = shutil.which("google-chrome") or shutil.which("chromium")
     if not chrome:
         pytest.fail("Google Chrome or Chromium is required for browser acceptance")
