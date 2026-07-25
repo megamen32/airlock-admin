@@ -200,6 +200,21 @@ def test_tagged_build_rejects_and_removes_preexisting_release_archives(tmp_path:
     assert not (repo / "build" / "manifest.json").exists()
 
 
+def test_tagged_build_removes_stale_public_archive_before_manifest(tmp_path: Path) -> None:
+    """Tracked generated public archives must be rebuilt before tagged provenance includes them."""
+
+    repo = _minimal_build_repo(tmp_path)
+    stale_archive = repo / "public" / "gptadmin-win.zip"
+    stale_archive.parent.mkdir()
+    stale_archive.write_bytes(b"stale public v128 archive")
+    completed = _run_tagged_build(repo, "v129")
+
+    assert completed.returncode == 0, completed.stderr
+    assert not stale_archive.exists()
+    manifest = json.loads((repo / "build" / "manifest.json").read_text(encoding="utf-8"))
+    assert {artifact["path"] for artifact in manifest["artifacts"]} == {"build/gptadmin-cli.tar.gz"}
+
+
 def test_tagged_shellmcp_artifact_reports_manifest_and_sbom_identity(tmp_path: Path) -> None:
     """The packaged binary must report the same version and commit as release metadata."""
 

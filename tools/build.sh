@@ -152,15 +152,23 @@ build_version() {
   write_build_info
 }
 
-reject_preexisting_tagged_release_archives() {
-  local -a stale_archives=()
+prepare_tagged_release_archive_scope() {
+  local -a stale_build_archives=() generated_public_archives=()
   while IFS= read -r -d '' archive; do
-    stale_archives+=("$archive")
+    stale_build_archives+=("$archive")
   done < <(find "$ART_DIR" -type f \( -name 'gptadmin*.tar.gz' -o -name 'gptadmin*.zip' \) -print0)
-  if ((${#stale_archives[@]} == 0)); then
+  if [[ -d "$REPO_DIR/public" ]]; then
+    while IFS= read -r -d '' archive; do
+      generated_public_archives+=("$archive")
+    done < <(find "$REPO_DIR/public" -type f \( -name 'gptadmin*.tar.gz' -o -name 'gptadmin*.zip' \) -print0)
+  fi
+  if ((${#generated_public_archives[@]} > 0)); then
+    rm -f -- "${generated_public_archives[@]}" "$ART_DIR/manifest.json" "$ART_DIR/gptadmin-sbom.spdx.json"
+  fi
+  if ((${#stale_build_archives[@]} == 0)); then
     return
   fi
-  rm -f -- "${stale_archives[@]}" "$ART_DIR/manifest.json" "$ART_DIR/gptadmin-sbom.spdx.json"
+  rm -f -- "${stale_build_archives[@]}" "$ART_DIR/manifest.json" "$ART_DIR/gptadmin-sbom.spdx.json"
   echo "ERROR: tagged build rejected pre-existing release archives; removed stale release outputs" >&2
   exit 2
 }
@@ -193,7 +201,7 @@ build_tagged_release_version() {
     echo "ERROR: RELEASE_COMMIT must equal HEAD" >&2
     exit 2
   }
-  reject_preexisting_tagged_release_archives
+  prepare_tagged_release_archive_scope
   BUILD_TS="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
   GIT_COMMIT="$(git rev-parse --short "$head_commit")"
   write_build_info
