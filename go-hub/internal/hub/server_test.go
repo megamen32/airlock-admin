@@ -1054,8 +1054,8 @@ func TestAuthPagesUseApprovedAuthenticationLanguage(t *testing.T) {
 			t.Fatalf("admin login page missing %q: %s", want, loginPage)
 		}
 	}
-	for _, forbidden := range []string{"CTL_TOKEN", "MCP_BRIDGE_KEY", "OAUTH_CLIENT_SECRET", "SHELLMCP_TOKEN", "Bearer", "JWT", "generated Action"} {
-		if strings.Contains(loginPage, forbidden) {
+	for _, forbidden := range []string{"ctl_token", "mcp_bridge_key", "oauth_client_secret", "shellmcp_token", "bearer", "jwt", "generated action", "shell", "relay", "oauth"} {
+		if strings.Contains(strings.ToLower(loginPage), forbidden) {
 			t.Fatalf("admin login page exposed internal credential name %q: %s", forbidden, loginPage)
 		}
 	}
