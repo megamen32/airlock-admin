@@ -1,0 +1,112 @@
+#!/usr/bin/env python3
+"""Run a redacted public admin password-flow smoke against one or more origins."""
+
+from __future__ import annotations
+
+import argparse
+import http.cookiejar
+import json
+import os
+import sys
+import urllib.error
+import urllib.parse
+import urllib.request
+from typing import Any
+
+
+class AdminFlowError(RuntimeError):
+    """Raised when a public admin-flow stage fails without disclosing a body."""
+
+
+def _request(opener: urllib.request.OpenerDirector, base_url: str, path: str, form: dict[str, str] | None = None) -> tuple[int, bytes]:
+    """Execute one bounded request without putting response contents in errors."""
+
+    data = urllib.parse.urlencode(form).encode("utf-8") if form is not None else None
+    request = urllib.request.Request(
+        base_url.rstrip("/") + path,
+        data=data,
+        headers={"Accept": "application/json" if path.startswith("/admin/api/") else "text/html"},
+        method="POST" if form is not None else "GET",
+    )
+    try:
+        with opener.open(request, timeout=12) as response:
+            return response.status, response.read(262144)
+    except urllib.error.HTTPError as error:
+        return error.code, error.read(262144)
+    except urllib.error.URLError as error:
+        raise AdminFlowError(f"{path}: transport failure ({type(error.reason).__name__})") from None
+
+
+def run_admin_user_flow(base_url: str, password: str, require_profiles: bool = False) -> dict[str, Any]:
+    """Verify login, cookie refresh, overview, and optionally profile access."""
+
+    if not base_url.startswith(("http://", "https://")):
+        raise AdminFlowError("base URL must be absolute HTTP(S)")
+    if not password:
+        raise AdminFlowError("password environment variable is empty")
+
+    cookies = http.cookiejar.CookieJar()
+    opener = urllib.request.build_opener(urllib.request.ProxyHandler({}), urllib.request.HTTPCookieProcessor(cookies))
+    login_page, body = _request(opener, base_url, "/admin/login")
+    if login_page != 200 or b'name="password"' not in body:
+        raise AdminFlowError(f"/admin/login: HTTP {login_page} or password form missing")
+
+    login, _ = _request(opener, base_url, "/admin/login", {"password": password, "next": "/admin/"})
+    if login != 200 or not any(cookie.name == "gptadmin_admin_session" for cookie in cookies):
+        raise AdminFlowError(f"/admin/login: HTTP {login} or session cookie missing")
+
+    refresh, body = _request(opener, base_url, "/admin/")
+    if refresh != 200 or b"GPTAdmin Login" in body:
+        raise AdminFlowError(f"/admin/: HTTP {refresh} or login page returned after refresh")
+
+    overview, body = _request(opener, base_url, "/admin/api/overview?limit=1")
+    try:
+        overview_json = json.loads(body.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError):
+        overview_json = None
+    if overview != 200 or not isinstance(overview_json, dict):
+        raise AdminFlowError(f"/admin/api/overview: HTTP {overview} or invalid JSON")
+
+    profiles, body = _request(opener, base_url, "/admin/api/access-profiles")
+    profiles_ok = False
+    if profiles == 200:
+        try:
+            profiles_ok = isinstance(json.loads(body.decode("utf-8")), dict)
+        except (UnicodeDecodeError, json.JSONDecodeError):
+            profiles_ok = False
+    if require_profiles and not profiles_ok:
+        raise AdminFlowError(f"/admin/api/access-profiles: HTTP {profiles} or invalid JSON")
+
+    return {
+        "base_url": base_url.rstrip("/"),
+        "status": "passed",
+        "login": login,
+        "refresh": refresh,
+        "overview": overview,
+        "profiles": profiles,
+        "profiles_ok": profiles_ok,
+    }
+
+
+def main(argv: list[str] | None = None) -> int:
+    """Run requested origins and print only redacted stage statuses."""
+
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--base-url", action="append", required=True)
+    parser.add_argument("--password-env", default="ADMIN_PASSWORD")
+    parser.add_argument("--require-profiles", action="store_true")
+    args = parser.parse_args(argv)
+    password = os.environ.get(args.password_env, "")
+    results: list[dict[str, Any]] = []
+    try:
+        for base_url in args.base_url:
+            results.append(run_admin_user_flow(base_url, password, args.require_profiles))
+    except AdminFlowError as error:
+        print(json.dumps({"status": "failed", "error": str(error)}, ensure_ascii=False))
+        return 1
+    print(json.dumps({"status": "passed", "origins": results}, ensure_ascii=False))
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

@@ -27,6 +27,26 @@ func TestReadFileIsBoundedAndRedactsSecrets(t *testing.T) {
 	}
 }
 
+func TestReadFileAllowsCanonicalizedAllowedRootPrefix(t *testing.T) {
+	root := t.TempDir()
+	alias := filepath.Join(t.TempDir(), "allowed-root")
+	if err := os.Symlink(root, alias); err != nil {
+		t.Skipf("symbolic links unavailable: %v", err)
+	}
+	path := filepath.Join(alias, "diagnostic.env")
+	if err := os.WriteFile(filepath.Join(root, "diagnostic.env"), []byte("STATE=ok\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	result, err := Run(Request{Action: "read_file", Path: path, AllowedRoots: []string{alias}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(result.Content, "STATE=ok") {
+		t.Fatalf("unexpected inspection result: %+v", result)
+	}
+}
+
 func TestListDirectoryDoesNotExposeFileContents(t *testing.T) {
 	dir := t.TempDir()
 	if err := os.WriteFile(filepath.Join(dir, "visible.txt"), []byte("must-not-be-read"), 0o600); err != nil {

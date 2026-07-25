@@ -204,6 +204,37 @@ def test_update_transaction_restores_runtime_snapshot_after_failed_canary(tmp_pa
     assert rollback_callbacks == ["restarted"]
 
 
+def test_transactional_update_restarts_services_after_pre_download_failure(monkeypatch):
+    """A failed automatic update must not strand the already-stopped Hub."""
+
+    restarts: list[str] = []
+    monkeypatch.setattr(cli, "need_root", lambda: None)
+    monkeypatch.setattr(cli, "_update_runtime_paths", lambda: [])
+    monkeypatch.setattr(cli, "_restart_update_services_after_rollback", lambda: restarts.append("restart"))
+
+    def failed_before_download(_args) -> None:
+        cli._mark_update_runtime_started()
+        raise RuntimeError("release manifest unavailable")
+
+    wrapped = cli._transactional_update(failed_before_download)
+    with pytest.raises(RuntimeError, match="release manifest unavailable"):
+        wrapped(SimpleNamespace())
+
+    assert restarts == ["restart"]
+    assert cli._active_update_snapshot is None
+
+
+def test_update_stages_release_before_stopping_services():
+    """A transient release failure must leave the running Hub untouched."""
+
+    source = CLI.read_text()
+    start = source.index("def cmd_update(args):")
+    end = source.index("\n\n# ===== AI client MCP auto-configuration =====", start)
+    update = source[start:end]
+
+    assert update.index("with tempfile.TemporaryDirectory()") < update.index("svc_stop_multi(")
+
+
 def test_macos_launchd_bootout_is_not_duplicated_before_bootstrap():
     # After the fix that splits svc_enable_start into svc_enable (load-only)
     # + svc_enable_start (load + kickstart), the bootstrap call lives in

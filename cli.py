@@ -4491,10 +4491,6 @@ def cmd_update(args):
             print('Use `gptadmin update --force` to reinstall anyway.')
             return
 
-    print('Stopping installed GPTAdmin services for safe in-place update...')
-    _mark_update_runtime_started()
-    svc_stop_multi(_service_pairs_for_update(install_hub, install_shellmcp, env))
-
     with tempfile.TemporaryDirectory() as td:
         tdp = Path(td)
 
@@ -4514,8 +4510,7 @@ def cmd_update(args):
                     raise
                 print('  Platform package unavailable, using full package...')
                 download_release(PKG_ALL_URL_DEFAULT, pkg)
-            install_component_from_pkg(pkg, 'hub')
-            install_component_from_pkg(pkg, 'shellmcp')
+            components = ('hub', 'shellmcp')
         elif install_hub:
             print('[Update] downloading hub package...')
             pkg = tdp / 'hub.tgz'
@@ -4524,7 +4519,7 @@ def cmd_update(args):
             except subprocess.CalledProcessError:
                 print('  Component package unavailable, using full package...')
                 download_release(pkg_all, pkg)
-            install_component_from_pkg(pkg, 'hub')
+            components = ('hub',)
         elif install_shellmcp:
             print('[Update] downloading shellmcp package...')
             pkg = tdp / 'shellmcp.tgz'
@@ -4533,7 +4528,17 @@ def cmd_update(args):
             except subprocess.CalledProcessError:
                 print('  Component package unavailable, using full package...')
                 download_release(pkg_all, pkg)
-            install_component_from_pkg(pkg, 'shellmcp')
+            components = ('shellmcp',)
+
+        # Download and verify every selected release artifact before taking the
+        # live control plane down. The rollback path still protects package
+        # installation and health failures, but a network hiccup must not
+        # create user-visible downtime in the first place.
+        print('Stopping installed GPTAdmin services for safe in-place update...')
+        _mark_update_runtime_started()
+        svc_stop_multi(_service_pairs_for_update(install_hub, install_shellmcp, env))
+        for component in components:
+            install_component_from_pkg(pkg, component)
 
     # Package payloads must never be able to invalidate existing Hub JWTs or
     # client credentials. Restore the pre-update auth state before services
