@@ -96,6 +96,9 @@ def test_admin_page_url_is_normalized_to_hub_origin() -> None:
         "https://hub.example.test\t",
         "https:// hub.example.test",
         "https://hub.example.test\x7f",
+        "https://hub.example.\u00a0test",
+        "https://hub.example\\test",
+        "https://%68ub.example.test",
     ],
 )
 def test_invalid_origin_is_rejected_before_creating_a_network_opener(

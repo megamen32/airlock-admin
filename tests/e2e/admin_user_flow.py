@@ -5,8 +5,10 @@ from __future__ import annotations
 
 import argparse
 import http.cookiejar
+import ipaddress
 import json
 import os
+import re
 import sys
 import urllib.error
 import urllib.parse
@@ -16,6 +18,27 @@ from typing import Any
 
 class AdminFlowError(RuntimeError):
     """Raised when a public admin-flow stage fails without disclosing a body."""
+
+
+_DNS_LABEL = re.compile(r"[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?")
+
+
+def _is_canonical_host(hostname: str) -> bool:
+    """Report whether hostname is an ASCII DNS name or a literal IP address."""
+
+    if not hostname or not hostname.isascii():
+        return False
+    try:
+        ipaddress.ip_address(hostname)
+    except ValueError:
+        labels = hostname.split(".")
+        return (
+            len(hostname) <= 253
+            and not hostname.endswith(".")
+            and not all(label.isdigit() for label in labels)
+            and all(_DNS_LABEL.fullmatch(label) for label in labels)
+        )
+    return True
 
 
 def _hub_origin(base_url: str) -> str:
@@ -32,6 +55,9 @@ def _hub_origin(base_url: str) -> str:
             or parsed.username is not None
             or parsed.password is not None
             or parsed.hostname is None
+            or not _is_canonical_host(parsed.hostname)
+            or (":" in parsed.hostname and not parsed.netloc.startswith("["))
+            or (":" not in parsed.hostname and ("[" in parsed.netloc or "]" in parsed.netloc))
             or parsed.netloc.endswith(":")
             or bool(parsed.query)
             or bool(parsed.fragment)
