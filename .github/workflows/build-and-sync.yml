@@ -108,7 +108,7 @@ jobs:
           uv run pytest tests/ -v
 
       - name: Docs product contract
-        run: python3 -m pytest tests/test_docs_product_contract.py tests/test_feedback_loop_contract.py -q
+        run: uv run pytest tests/test_docs_product_contract.py tests/test_feedback_loop_contract.py -q
 
       - name: Test Go hub
         run: |

@@ -40,6 +40,16 @@ def test_release_job_runs_proxyrelay_tests() -> None:
     assert "go test ./..." in proxy_step["run"]
 
 
+def test_release_docs_contract_uses_the_uv_test_environment() -> None:
+    """Release docs tests must not bypass dependencies installed by uv sync."""
+
+    workflow = yaml.safe_load(WORKFLOW.read_text(encoding="utf-8"))
+    steps = workflow["jobs"]["build-and-release"]["steps"]
+    docs_step = next(step for step in steps if step.get("name") == "Docs product contract")
+
+    assert docs_step["run"].startswith("uv run pytest ")
+
+
 def test_tagged_release_build_preserves_the_tagged_version() -> None:
     """Tag CI must opt into the build mode that does not bump VERSION."""
 
