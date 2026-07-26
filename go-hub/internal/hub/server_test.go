@@ -919,7 +919,7 @@ func TestAdminPasswordLoginCookieProtectsStaticAndAPI(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("unauthorized admin page status=%d body=%s", w.Code, w.Body.String())
 	}
-	if !strings.Contains(w.Body.String(), "Введите admin-пароль") || strings.Contains(w.Body.String(), "secret-admin") {
+	if !strings.Contains(w.Body.String(), "AdminPassword") || !strings.Contains(w.Body.String(), "Connect") || strings.Contains(w.Body.String(), "secret-admin") {
 		t.Fatalf("unauthorized admin page leaked content or missed login form: %s", w.Body.String())
 	}
 
@@ -989,7 +989,7 @@ func TestAdminLegacyStaticKeepsOperationsAvailableAfterReactCutover(t *testing.T
 	req.Header.Set("Accept", "text/html")
 	w := httptest.NewRecorder()
 	h.ServeHTTP(w, req)
-	if w.Code != http.StatusOK || !strings.Contains(w.Body.String(), "Введите admin-пароль") {
+	if w.Code != http.StatusOK || !strings.Contains(w.Body.String(), "AdminPassword") || !strings.Contains(w.Body.String(), "Connect") {
 		t.Fatalf("legacy admin should use the shared login gate: status=%d body=%s", w.Code, w.Body.String())
 	}
 
