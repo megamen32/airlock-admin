@@ -7,6 +7,7 @@ import yaml
 
 
 WORKFLOW = Path(__file__).resolve().parents[1] / ".github" / "workflows" / "build-and-sync.yml"
+AUTO_TAG_WORKFLOW = Path(__file__).resolve().parents[1] / ".github" / "workflows" / "auto-tag.yml"
 HAOS_WORKFLOW = Path(__file__).resolve().parents[1] / ".github" / "workflows" / "publish-haos-addon.yml"
 
 
@@ -73,6 +74,48 @@ def test_public_release_reruns_fail_closed_on_identity_mismatch() -> None:
     assert script.count("exit 1") >= 2
 
 
+def test_public_release_preflights_immutable_identity_before_mutating_remote_main() -> None:
+    """An identity mismatch must fail before any public branch mutation."""
+
+    workflow = yaml.safe_load(WORKFLOW.read_text(encoding="utf-8"))
+    steps = workflow["jobs"]["build-and-release"]["steps"]
+    publish_step = next(step for step in steps if step.get("name") == "Mirror source + tag + GitHub Release to public repo")
+    script = publish_step["run"]
+    main_push_index = script.index("git push origin HEAD:main")
+
+    assert script.index('if [[ "$remote_tag_commit" != "$expected_public_commit" ]]') < main_push_index
+    assert script.index('if [[ "$actual_assets" != "$expected_assets" ]]') < main_push_index
+    assert script.index('gh api --include "repos/megamen32/gptadmin_opensource/releases/tags/${TAG}"') < main_push_index
+    assert main_push_index < script.index('git push origin "refs/tags/${TAG}:refs/tags/${TAG}"')
+    assert main_push_index < script.index('gh release create "${TAG}"')
+
+
+def test_publication_waits_for_every_platform_and_ui_gate() -> None:
+    """The job that can publish must run only after all independent gates pass."""
+
+    workflow = yaml.safe_load(WORKFLOW.read_text(encoding="utf-8"))
+    job = workflow["jobs"]["build-and-release"]
+
+    assert job["needs"] == ["admin-ui-build", "failover-e2e", "macos-build", "windows-shellmcp"]
+    assert "always()" not in str(job.get("if", ""))
+
+
+def test_auto_tag_verifies_the_fetched_remote_tag_commit_before_no_op() -> None:
+    """A local tag alone cannot authorize an idempotent release no-op."""
+
+    workflow = yaml.safe_load(AUTO_TAG_WORKFLOW.read_text(encoding="utf-8"))
+    maybe_tag = next(step for step in workflow["jobs"]["tag"]["steps"] if step.get("id") == "maybe_tag")
+    script = maybe_tag["run"]
+
+    assert 'current_commit="$(git rev-parse "${GITHUB_SHA}^{commit}")"' in script
+    assert 'git ls-remote --exit-code --tags origin "refs/tags/${tag}"' in script
+    assert 'git fetch --no-tags origin "refs/tags/${tag}"' in script
+    assert 'git rev-parse --verify "FETCH_HEAD^{commit}"' in script
+    assert 'if [[ "$remote_tag_commit" != "$current_commit" ]]' in script
+    assert "already targets the current commit; nothing to do" in script
+    assert 'git rev-parse -q --verify "refs/tags/${tag}"' not in script
+
+
 def test_release_job_attests_artifacts_and_scans_dependencies_before_publication() -> None:
     """Require provenance attestation and vulnerability checks before release sync."""
 
@@ -89,6 +132,13 @@ def test_release_job_attests_artifacts_and_scans_dependencies_before_publication
     assert names.index(vulnerability_step["name"]) < mirror_index
     assert names.index(attestation_step["name"]) < mirror_index
     assert "govulncheck" in vulnerability_step["run"]
+    assert "go install golang.org/x/vuln/cmd/govulncheck@v1.6.0" in vulnerability_step["run"]
+    assert "govulncheck@latest" not in vulnerability_step["run"]
+    assert 'GOVULNCHECK="$(go env GOPATH)/bin/govulncheck"' in vulnerability_step["run"]
+    for module in ("go-hub", "go-shellmcp", "go-proxyrelay"):
+        module_scan = rf"\(\s+cd {module}\s+\"\$GOVULNCHECK\" \./\.\.\.\s+\)"
+        assert re.search(module_scan, vulnerability_step["run"]), f"missing module-local scan for {module}"
+        assert f"./{module}/..." not in vulnerability_step["run"]
     assert "npm audit" in vulnerability_step["run"]
     assert re.fullmatch(r"actions/attest-build-provenance@[0-9a-f]{40}", attestation_step["uses"])
     assert "build/manifest.json" in attestation_step["with"]["subject-path"]

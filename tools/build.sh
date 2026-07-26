@@ -203,7 +203,7 @@ build_tagged_release_version() {
   }
   prepare_tagged_release_archive_scope
   BUILD_TS="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-  GIT_COMMIT="$(git rev-parse --short "$head_commit")"
+  GIT_COMMIT="$RELEASE_COMMIT"
   write_build_info
 }
 

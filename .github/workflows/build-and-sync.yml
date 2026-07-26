@@ -69,6 +69,7 @@ jobs:
         run: docker compose -f tests/e2e/failover/docker-compose.yml up --build --abort-on-container-exit --exit-code-from failover-e2e
 
   build-and-release:
+    needs: [admin-ui-build, failover-e2e, macos-build, windows-shellmcp]
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -159,8 +160,20 @@ jobs:
 
       - name: Scan dependencies for known vulnerabilities
         run: |
-          go install golang.org/x/vuln/cmd/govulncheck@latest
-          "$(go env GOPATH)/bin/govulncheck" ./go-hub/... ./go-shellmcp/...
+          go install golang.org/x/vuln/cmd/govulncheck@v1.6.0
+          GOVULNCHECK="$(go env GOPATH)/bin/govulncheck"
+          (
+            cd go-hub
+            "$GOVULNCHECK" ./...
+          )
+          (
+            cd go-shellmcp
+            "$GOVULNCHECK" ./...
+          )
+          (
+            cd go-proxyrelay
+            "$GOVULNCHECK" ./...
+          )
           npm audit --prefix admin-ui --omit=dev --audit-level=high
 
       - name: Attest verified release artifacts
@@ -222,27 +235,8 @@ jobs:
           else
             git commit -m "chore: sync source from private repo ${TAG}"
           fi
-          git push origin HEAD:main
 
-          echo "=== Push tag ${TAG} to public repo ==="
           expected_public_commit="$(git rev-parse HEAD)"
-          remote_tag_lines="$(git ls-remote --tags origin "refs/tags/${TAG}" "refs/tags/${TAG}^{}")"
-          if [[ -n "$remote_tag_lines" ]]; then
-            remote_tag_commit="$(printf '%s\n' "$remote_tag_lines" | awk '$2 ~ /\^\{\}$/ {print $1}')"
-            if [[ -z "$remote_tag_commit" ]]; then
-              remote_tag_commit="$(printf '%s\n' "$remote_tag_lines" | awk '$2 !~ /\^\{\}$/ {print $1}')"
-            fi
-            if [[ "$remote_tag_commit" != "$expected_public_commit" ]]; then
-              echo "ERROR: public tag ${TAG} targets ${remote_tag_commit}, expected ${expected_public_commit}" >&2
-              exit 1
-            fi
-            echo "Public tag ${TAG} already targets the expected commit."
-          else
-            git tag -a "${TAG}" -m "Release ${TAG}"
-            git push origin "refs/tags/${TAG}:refs/tags/${TAG}"
-          fi
-
-          echo "=== Create GitHub Release on public repo with binary assets ==="
           shopt -s nullglob
           release_assets=("$SRC"/build/*.tar.gz "$SRC"/build/manifest.json "$SRC"/build/gptadmin-sbom.spdx.json)
           shopt -u nullglob
@@ -259,8 +253,25 @@ jobs:
             done
           } | LC_ALL=C sort)"
 
+          echo "=== Preflight immutable public tag ${TAG} ==="
+          public_tag_exists=false
+          remote_tag_lines="$(git ls-remote --tags origin "refs/tags/${TAG}" "refs/tags/${TAG}^{}")"
+          if [[ -n "$remote_tag_lines" ]]; then
+            remote_tag_commit="$(printf '%s\n' "$remote_tag_lines" | awk '$2 ~ /\^\{\}$/ {print $1}')"
+            if [[ -z "$remote_tag_commit" ]]; then
+              remote_tag_commit="$(printf '%s\n' "$remote_tag_lines" | awk '$2 !~ /\^\{\}$/ {print $1}')"
+            fi
+            if [[ "$remote_tag_commit" != "$expected_public_commit" ]]; then
+              echo "ERROR: public tag ${TAG} targets ${remote_tag_commit}, expected ${expected_public_commit}" >&2
+              exit 1
+            fi
+            public_tag_exists=true
+          fi
+
+          echo "=== Preflight immutable public release ${TAG} ==="
           release_response="$RUNNER_TEMP/gptadmin-public-release-${TAG}.txt"
           release_error="$RUNNER_TEMP/gptadmin-public-release-${TAG}.err"
+          release_status=404
           if gh api --include "repos/megamen32/gptadmin_opensource/releases/tags/${TAG}" >"$release_response" 2>"$release_error"; then
             release_status=200
           else
@@ -283,6 +294,20 @@ jobs:
               echo "ERROR: public release ${TAG} assets do not exactly match local artifact digests" >&2
               exit 1
             fi
+          fi
+
+          echo "=== Immutable public identity preflight passed ==="
+          git push origin HEAD:main
+
+          if [[ "$public_tag_exists" == true ]]; then
+            echo "Public tag ${TAG} already targets the expected commit."
+          else
+            git tag -a "${TAG}" -m "Release ${TAG}"
+            git push origin "refs/tags/${TAG}:refs/tags/${TAG}"
+          fi
+
+          echo "=== Publish GitHub Release on public repo with binary assets ==="
+          if [[ "$release_status" == 200 ]]; then
             echo "Public release ${TAG} already has the exact expected assets; nothing to upload."
           else
             gh release create "${TAG}" --repo megamen32/gptadmin_opensource \

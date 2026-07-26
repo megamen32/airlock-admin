@@ -84,7 +84,8 @@ def test_tagged_build_keeps_version_and_generates_matching_metadata(tmp_path: Pa
     assert (repo / "VERSION").read_text(encoding="utf-8") == "129\n"
     build_info = (repo / "client" / "gptadmin_build_info.py").read_text(encoding="utf-8")
     assert "BUILD_VERSION = 129" in build_info
-    commit = subprocess.run(["git", "rev-parse", "--short", "HEAD"], cwd=repo, check=True, capture_output=True, text=True).stdout.strip()
+    commit = subprocess.run(["git", "rev-parse", "HEAD"], cwd=repo, check=True, capture_output=True, text=True).stdout.strip()
+    assert len(commit) == 40
     assert f'GIT_COMMIT = "{commit}"' in build_info
     assert (repo / "gptadmin_build_info.py").read_text(encoding="utf-8") == build_info
     manifest = json.loads((repo / "build" / "manifest.json").read_text(encoding="utf-8"))
@@ -181,8 +182,13 @@ def test_non_tagged_build_retains_single_version_bump_policy(tmp_path: Path) -> 
     assert (repo / "VERSION").read_text(encoding="utf-8") == "130\n"
     manifest = json.loads((repo / "build" / "manifest.json").read_text(encoding="utf-8"))
     sbom = json.loads((repo / "build" / "gptadmin-sbom.spdx.json").read_text(encoding="utf-8"))
+    short_commit = subprocess.run(
+        ["git", "rev-parse", "--short", "HEAD"], cwd=repo, check=True, capture_output=True, text=True
+    ).stdout.strip()
     assert manifest["build_version"] == 130
+    assert manifest["git_commit"] == short_commit
     assert sbom["gptadminBuild"]["build_version"] == 130
+    assert sbom["gptadminBuild"]["git_commit"] == short_commit
 
 
 def test_tagged_build_rejects_and_removes_preexisting_release_archives(tmp_path: Path) -> None:
