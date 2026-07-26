@@ -68,6 +68,23 @@ def _wait_for_terminal_status(status_file: Path, timeout: float = 10.0) -> dict[
     raise AssertionError(f"gate did not finish within {timeout}s: {status_file}")
 
 
+def test_safe_gate_environment_keeps_only_the_python_dependency_base(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Keep declared Python dependencies available without exposing the real home."""
+    runner = _load_runner()
+    dependency_base = tmp_path / "python-user-base"
+    dependency_base.mkdir()
+    artifact = tmp_path / "artifact"
+    artifact.mkdir()
+    monkeypatch.setattr(runner.site, "getuserbase", lambda: str(dependency_base))
+
+    environment = runner._safe_gate_environment(artifact, "a" * 40, "131")
+
+    assert environment["PYTHONUSERBASE"] == str(dependency_base)
+    assert environment["HOME"] == str(artifact / "home")
+
+
 def test_background_run_is_commit_scoped_unique_locked_and_never_pushes(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

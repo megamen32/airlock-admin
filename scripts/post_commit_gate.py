@@ -9,6 +9,7 @@ import json
 import os
 import re
 import shutil
+import site
 import subprocess
 import sys
 import tempfile
@@ -210,6 +211,9 @@ def _safe_gate_environment(artifact: Path, commit: str, version: str) -> dict[st
     environment.update(
         {
             "HOME": str(isolated_home),
+            # The isolated HOME would otherwise hide project-declared user-site
+            # dependencies from the fresh committed checkout.
+            "PYTHONUSERBASE": site.getuserbase(),
             "CI": "1",
             "GIT_CONFIG_GLOBAL": os.devnull,
             "NPM_CONFIG_USERCONFIG": os.devnull,
