@@ -116,6 +116,15 @@ def test_auto_tag_verifies_the_fetched_remote_tag_commit_before_no_op() -> None:
     assert 'git rev-parse -q --verify "refs/tags/${tag}"' not in script
 
 
+def test_auto_tag_retries_dispatch_after_a_verified_existing_tag() -> None:
+    """A transient dispatch failure must be recoverable without moving the tag."""
+
+    workflow = yaml.safe_load(AUTO_TAG_WORKFLOW.read_text(encoding="utf-8"))
+    release = workflow["jobs"]["release"]
+
+    assert "if" not in release
+
+
 def test_release_job_attests_artifacts_and_scans_dependencies_before_publication() -> None:
     """Require provenance attestation and vulnerability checks before release sync."""
 
