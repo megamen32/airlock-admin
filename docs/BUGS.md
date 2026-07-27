@@ -17,16 +17,18 @@ Rules:
 - Component: Hub OAuth authorization-code exchange and external GPTADMIN Codex connector.
 - Evidence: Codex reported `reauthentication_required` with `oauth_refresh_token_missing`; reconnect then failed during connection setup. The pre-fix Hub advertised only `authorization_code` and returned no refresh credential.
 - Confirmed facts: access JWTs lasted 12 hours, and a connector could not refresh after that boundary. Refresh records now persist only a digest, rotate on use, and have a five-year lifetime; the old refresh value is invalidated on rotation. Existing signed JWTs retain their original embedded expiry, while the previously expired legacy bearer deadline is removed rather than silently invalidating that credential.
-- Verification: the candidate branch has a restart/refresh regression proving a refreshed access token works through custom MCP, MCP remote and relay discovery; `go test ./...` in `go-hub` passes. The secret-safe credential-matrix runner covers every declared existing credential without writing bearer values to output.
-- Remaining live gate: complete a real Codex reconnect and run the pre-deploy credential matrix for all existing supported keys before deploying the final candidate; do not substitute newly issued keys.
+- Verification: `go test ./...` in `go-hub` and focused client/matrix regressions pass. Primary commit `071d69c` and HAOS public commit `e7cec60` are deployed. The post-deploy public matrix is `9 credentials × 3 paths = 27 HTTP 200` without printing bearer values.
+- Remaining live gate: complete one real Codex reconnect. It is required to mint the first refresh credential for the old connector, which cannot manufacture a refresh token it never received.
 
 ## 2026-07-27 - GPTADMIN-EXISTING-MCP-BEARERS-20260727 - Existing client credentials are not recognized - active
 
 - Component: Hub MCP authentication for custom endpoint, MCP remote, and relay/VRP paths.
 - Evidence: the secret-safe live pre-deploy matrix exercised nine configured client bearer credentials on all three paths and received `401` for every probe. The effective process environment matches the configured values, so this is not an env-file parsing or reload mismatch.
-- Confirmed facts: all nine values are signed JWTs and eight remain within their embedded expiry, but every value has a `resource` claim that mismatches the current `MCP_RESOURCE`; current `mcpAuth` rejects them before the route handler. A production-safe live matrix reproduced `401` on custom, MCP remote and relay/VRP for every value without printing a bearer.
-- Root cause: preserved client credentials were signed for a prior resource identity, while the current Hub only accepted a live matching JWT resource. This is an authorization-identity migration gap, not an environment-reload failure.
-- Repair candidate: `071d69c` registers only configured `GPTADMIN_*_MCP_BEARER` values as digest-only five-year migration records and accepts them on all three entitled paths across Hub restart. Focused regression is green. Next action: deploy the final candidate, then rerun the full live matrix before claiming the repair.
+- Confirmed facts: the effective values matched the Hub process environment, but `mcpAuth` accepted only a control token or OAuth JWT. A production-safe live matrix reproduced `401` on custom, MCP remote and relay/VRP for every value without printing a bearer.
+- Root cause: client bearer provisioning and Hub authentication had diverged after OAuth-only validation replaced the opaque credential contract.
+- Fix / verification: `071d69c` persists only SHA-256 digests for configured bearer values with a fixed five-year expiry and accepts them on the three entitled paths across restarts. HAOS `e7cec60` preserves the same bearer inputs. The post-deploy matrix is 27/27 `HTTP 200`.
+- Status: fixed.
+- Next action: retain the matrix as a mandatory pre/post-deploy gate; do not replace a missing inventory credential with a newly issued token.
 
 ## 2026-07-24 - UPDATE-HEALTH-IGNORED-20260724 - Failed update health did not abort - fixed
 
