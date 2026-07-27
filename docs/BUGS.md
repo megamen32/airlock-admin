@@ -16,9 +16,9 @@ Rules:
 
 - Component: Hub OAuth authorization-code exchange and external GPTADMIN Codex connector.
 - Evidence: Codex reported `reauthentication_required` with `oauth_refresh_token_missing`; reconnect then failed during connection setup. The pre-fix Hub advertised only `authorization_code` and returned no refresh credential.
-- Confirmed facts: access JWTs lasted 12 hours, and a connector could not refresh after that boundary. Refresh records now persist only a digest, rotate on use, and have a five-year lifetime; the old refresh value is invalidated on rotation.
-- Verification: the isolated candidate's OAuth restart/refresh regression proves a refreshed access token works through custom MCP, MCP remote and relay discovery; `go test ./...` in `go-hub` passes. The secret-safe credential-matrix runner covers every declared existing credential without writing bearer values to output.
-- Remaining live gate: complete a real Codex reconnect and run the pre-deploy credential matrix for all existing supported keys before deploying; do not substitute newly issued keys.
+- Confirmed facts: access JWTs lasted 12 hours, and a connector could not refresh after that boundary. Refresh records now persist only a digest, rotate on use, and have a five-year lifetime; the old refresh value is invalidated on rotation. Existing signed JWTs retain their original embedded expiry, while the previously expired legacy bearer deadline is removed rather than silently invalidating that credential.
+- Verification: exact candidate `24e1032` has a restart/refresh regression proving a refreshed access token works through custom MCP, MCP remote and relay discovery; `go test ./...` in `go-hub` passes. The secret-safe credential-matrix runner covers every declared existing credential without writing bearer values to output.
+- Remaining live gate: complete a real Codex reconnect and run the pre-deploy credential matrix for all existing supported keys before deploying `24e1032`; do not substitute newly issued keys.
 
 ## 2026-07-24 - UPDATE-HEALTH-IGNORED-20260724 - Failed update health did not abort - fixed
 

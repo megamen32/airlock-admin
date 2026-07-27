@@ -55,9 +55,9 @@ plan is [`PROJECT_PLAN.md`](./PROJECT_PLAN.md).
 - Scope: Preserve GPTADMIN OAuth authorization across client refresh and Hub restart; make default supported client credentials five years; require secret-safe checks of existing credentials through custom endpoint, MCP remote and relay/VRP before deployment.
 - Baseline / red evidence: Codex returned `reauthentication_required` with `oauth_refresh_token_missing`; the OAuth authorization-code response contained no refresh token, and the CLI bearer default was one year.
 - Change: Added persistent digest-only rotating OAuth refresh credentials, five-year default managed and CLI MCP credential lifetimes, restart/rotation regression coverage, and a credential-matrix runner that never prints bearer values.
-- Verification: OAuth restart/refresh regression is green; Python focused suites `7 passed`; `cd go-hub && go test ./...` passed in the isolated candidate worktree.
-- Delivery: Candidate base commit `8b32a3677f59d491930c45cc21c31fe79fdc57bc` plus uncommitted integration slice in `/home/roomhacker/gptadmin-oauth-refresh-five-years`; no deployment, push, or merge. Preserve the unrelated dirty current worktree.
-- Next: Complete Codex reconnect and the redacted existing-credential matrix, then create one final candidate commit and deploy only that exact SHA with rollback material.
+- Verification: OAuth restart/refresh and expired-legacy-bearer regressions are green; `cd go-hub && go test ./...` passed, and the focused Python matrix, live-acceptance, product-doc, CLI-retention and client-lifetime suites passed `28` tests in the isolated candidate worktree.
+- Delivery: exact candidate `24e1032` on `codex/oauth-refresh-five-years`; no deployment, push, merge, or runtime restart was performed. Preserve the unrelated dirty current worktree.
+- Next: Complete Codex reconnect and the redacted existing-credential matrix, then deploy only `24e1032` with rollback material.
 
 ## 2026-07-24 - Final linear acceptance after failover delivery - completed
 
