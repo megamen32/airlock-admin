@@ -20,6 +20,14 @@ Rules:
 - Verification: exact candidate `24e1032` has a restart/refresh regression proving a refreshed access token works through custom MCP, MCP remote and relay discovery; `go test ./...` in `go-hub` passes. The secret-safe credential-matrix runner covers every declared existing credential without writing bearer values to output.
 - Remaining live gate: complete a real Codex reconnect and run the pre-deploy credential matrix for all existing supported keys before deploying `24e1032`; do not substitute newly issued keys.
 
+## 2026-07-27 - GPTADMIN-EXISTING-MCP-BEARERS-20260727 - Existing client credentials are not recognized - active
+
+- Component: Hub MCP authentication for custom endpoint, MCP remote, and relay/VRP paths.
+- Evidence: the secret-safe live pre-deploy matrix exercised nine configured client bearer credentials on all three paths and received `401` for every probe. The effective process environment matches the configured values, so this is not an env-file parsing or reload mismatch.
+- Confirmed facts: `mcpAuth` accepts only the legacy control token or a signed OAuth JWT. The existing client-specific opaque bearer values are neither, so they cannot authenticate despite remaining configured for supported MCP clients.
+- Root-cause hypothesis: client bearer provisioning and Hub authentication diverged when OAuth-only validation replaced the pre-existing opaque credential contract.
+- Next action: add a persisted five-year migration registry for the existing client bearer digests, with focused regressions for custom, remote MCP, relay/VRP, expiry, and restart; rerun the full live matrix before deployment without changing bearer values.
+
 ## 2026-07-24 - UPDATE-HEALTH-IGNORED-20260724 - Failed update health did not abort - fixed
 
 - Component: `cli.py:cmd_update` in-place update flow.

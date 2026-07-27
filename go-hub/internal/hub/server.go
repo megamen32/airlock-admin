@@ -35,6 +35,8 @@ const defaultJWTKeyID = "gptadmin-hs256-v1"
 
 const defaultManagedMCPTokenTTLDays = 5 * 365
 
+const configuredMCPBearerTokenKind = "configured_opaque_migration"
+
 // legacyCtlTokenDeadline is the fixed end of the one-week migration window.
 // After this instant only AdminPassword sessions and scoped OAuth JWTs may
 // authenticate human/MCP requests.
@@ -85,6 +87,7 @@ type Config struct {
 	SecretIngressStateFile     string
 	SecretIngressTTL           time.Duration
 	WebhookRoutes              []WebhookRoute
+	ExistingMCPBearers         map[string]string
 }
 
 func FromEnv() Config {
@@ -145,7 +148,22 @@ func FromEnv() Config {
 		SecretStoreKeyFile:         env("GPTADMIN_SECRET_STORE_KEY_FILE", filepath.Join(cfgDir, "secret-store.key")),
 		SecretIngressStateFile:     env("GPTADMIN_SECRET_INGRESS_STATE_FILE", filepath.Join(cfgDir, "secrets", "requests.json")),
 		SecretIngressTTL:           time.Duration(secretTTL) * time.Second,
+		ExistingMCPBearers:         configuredMCPBearerEnv(),
 	}
+}
+
+func configuredMCPBearerEnv() map[string]string {
+	values := map[string]string{}
+	for _, pair := range os.Environ() {
+		name, value, ok := strings.Cut(pair, "=")
+		if !ok || !strings.HasPrefix(name, "GPTADMIN_") || !strings.HasSuffix(name, "_MCP_BEARER") {
+			continue
+		}
+		if value = strings.TrimSpace(value); value != "" {
+			values[name] = value
+		}
+	}
+	return values
 }
 
 func env(k, d string) string {
@@ -505,6 +523,9 @@ func New(cfg Config) *Server {
 	if err := s.loadManagedMCPState(); err != nil {
 		log.Printf("MCP token state load failed path=%s err=%v", s.managedMCPStatePath(), err)
 	}
+	if err := s.reconcileExistingMCPBearers(); err != nil {
+		log.Printf("configured MCP bearer migration state failed path=%s err=%v", s.managedMCPStatePath(), err)
+	}
 	if err := s.loadOAuthClientsState(); err != nil {
 		log.Printf("OAuth client state load failed path=%s err=%v", s.oauthClientsStatePath(), err)
 	}
@@ -602,6 +623,78 @@ func (s *Server) saveManagedMCPStateLocked() error {
 		return err
 	}
 	return os.Rename(tmp, path)
+}
+
+func configuredMCPBearerID(name string) string {
+	return "configured-mcp-" + strings.ToLower(strings.ReplaceAll(name, "_", "-"))
+}
+
+func configuredMCPBearerDigest(token string) string {
+	digest := sha256.Sum256([]byte(token))
+	return hex.EncodeToString(digest[:])
+}
+
+func (s *Server) reconcileExistingMCPBearers() error {
+	if len(s.cfg.ExistingMCPBearers) == 0 {
+		return nil
+	}
+	now := s.now()
+	changed := false
+	s.mu.Lock()
+	for name, token := range s.cfg.ExistingMCPBearers {
+		token = strings.TrimSpace(token)
+		if token == "" {
+			continue
+		}
+		id := configuredMCPBearerID(name)
+		digest := configuredMCPBearerDigest(token)
+		record, exists := s.managedMCP[id]
+		if exists && record.TokenKind == configuredMCPBearerTokenKind && record.TokenDigest == digest {
+			continue
+		}
+		s.managedMCP[id] = managedMCPToken{
+			ID:          id,
+			ClientID:    name,
+			TokenDigest: digest,
+			TokenKind:   configuredMCPBearerTokenKind,
+			Status:      "migration",
+			Scope:       "gptadmin.read gptadmin.exec",
+			AccessMode:  accessModeFull,
+			IssuedAt:    now.Unix(),
+			CreatedAt:   now.Unix(),
+			ExpiresAt:   now.AddDate(5, 0, 0).Unix(),
+		}
+		changed = true
+	}
+	if !changed {
+		s.mu.Unlock()
+		return nil
+	}
+	err := s.saveManagedMCPStateLocked()
+	s.mu.Unlock()
+	return err
+}
+
+func (s *Server) existingMCPBearerClaims(token string) (map[string]any, bool) {
+	digest := configuredMCPBearerDigest(token)
+	now := s.now().Unix()
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, record := range s.managedMCP {
+		if record.TokenKind != configuredMCPBearerTokenKind || record.RevokedAt != 0 || record.ExpiresAt <= now {
+			continue
+		}
+		if hmac.Equal([]byte(record.TokenDigest), []byte(digest)) {
+			return map[string]any{
+				"sub":         "configured-mcp-bearer",
+				"scope":       record.Scope,
+				"access_mode": record.AccessMode,
+				"client_id":   record.ClientID,
+				"jti":         record.ID,
+			}, true
+		}
+	}
+	return nil, false
 }
 
 func (s *Server) registryStatePath() string {
@@ -968,6 +1061,19 @@ func (s *Server) requireCtl(next http.HandlerFunc) http.HandlerFunc {
 			s.authAudit("ctl_auth_ok", r, map[string]any{"auth_kind": "admin_cookie"})
 			next(w, r)
 			return
+		}
+		if auth := strings.TrimSpace(r.Header.Get("Authorization")); strings.HasPrefix(strings.ToLower(auth), "bearer ") {
+			if claims, ok := s.existingMCPBearerClaims(strings.TrimSpace(auth[7:])); ok {
+				s.authAudit("ctl_auth_ok", r, map[string]any{"auth_kind": configuredMCPBearerTokenKind, "client_id": claims["client_id"]})
+				*r = *requestWithAuthClaims(r, claims)
+				*r = *s.applyAccessProfileContext(r, claims)
+				if !mcpClientHTTPPathAllowed(r.URL.Path) {
+					writeJSON(w, http.StatusForbidden, map[string]any{"detail": "MCP client credentials cannot access the admin API"})
+					return
+				}
+				next(w, r)
+				return
+			}
 		}
 		if claims, err := s.verifyBearerJWTFromRequest(r); err == nil {
 			s.authAudit("ctl_auth_ok", r, map[string]any{"auth_kind": "oauth_jwt", "jwt_claims": claims})
@@ -6018,6 +6124,12 @@ func (s *Server) mcpAuth(w http.ResponseWriter, r *http.Request) bool {
 				return false
 			}
 			s.authAudit("mcp_auth_ok", r, map[string]any{"auth_kind": "ctl_token"})
+			return true
+		}
+		if claims, ok := s.existingMCPBearerClaims(tok); ok {
+			s.authAudit("mcp_auth_ok", r, map[string]any{"auth_kind": configuredMCPBearerTokenKind, "client_id": claims["client_id"]})
+			*r = *requestWithAuthClaims(r, claims)
+			*r = *s.applyAccessProfileContext(r, claims)
 			return true
 		}
 		if claims, err := s.verifyJWTForRequest(r, tok); err == nil {

@@ -39,6 +39,69 @@ func TestListServersUsesHubKind(t *testing.T) {
 	}
 }
 
+func TestExistingConfiguredMCPBearerSurvivesRestartAndExpiresAfterFiveYears(t *testing.T) {
+	configDir := t.TempDir()
+	now := time.Date(2026, 7, 27, 0, 0, 0, 0, time.UTC)
+	cfg := Config{
+		ConfigDir:          configDir,
+		ExistingMCPBearers: map[string]string{"GPTADMIN_CODEX_MCP_BEARER": "existing-codex-bearer"},
+		OAuthClientSecret:  "oauth-secret",
+		PublicOrigin:       "https://hub.example",
+		MCPResource:        "https://hub.example",
+		DefaultTimeout:     time.Second,
+		PollMaxTimeout:     time.Second,
+		Now:                func() time.Time { return now },
+	}
+	for _, server := range []*Server{New(cfg), New(cfg)} {
+		for _, probe := range []struct {
+			method string
+			path   string
+			body   string
+		}{
+			{method: http.MethodPost, path: "/server/hub/mcp", body: `{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}`},
+			{method: http.MethodPost, path: "/mcp", body: `{"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}}`},
+			{method: http.MethodGet, path: "/mcp-relay/servers"},
+		} {
+			req := httptest.NewRequest(probe.method, probe.path, strings.NewReader(probe.body))
+			req.Header.Set("Authorization", "Bearer existing-codex-bearer")
+			w := httptest.NewRecorder()
+			server.Handler().ServeHTTP(w, req)
+			if w.Code != http.StatusOK {
+				t.Fatalf("%s %s status=%d body=%s", probe.method, probe.path, w.Code, w.Body.String())
+			}
+		}
+	}
+	persisted, err := os.ReadFile(filepath.Join(configDir, "mcp_tokens_state.json"))
+	if err != nil {
+		t.Fatalf("read persisted migration state: %v", err)
+	}
+	if strings.Contains(string(persisted), "existing-codex-bearer") {
+		t.Fatalf("persisted migration state leaked the configured bearer: %s", persisted)
+	}
+
+	expired := New(cfg)
+	now = now.AddDate(5, 0, 0).Add(time.Second)
+	req := httptest.NewRequest(http.MethodPost, "/mcp", strings.NewReader(`{"jsonrpc":"2.0","id":3,"method":"tools/list","params":{}}`))
+	req.Header.Set("Authorization", "Bearer existing-codex-bearer")
+	w := httptest.NewRecorder()
+	expired.Handler().ServeHTTP(w, req)
+	if w.Code != http.StatusUnauthorized {
+		t.Fatalf("expired configured bearer status=%d body=%s", w.Code, w.Body.String())
+	}
+}
+
+func TestFromEnvDiscoversConfiguredMCPBearers(t *testing.T) {
+	t.Setenv("GPTADMIN_CODEX_MCP_BEARER", "codex-existing")
+	t.Setenv("GPTADMIN_UNRELATED_TOKEN", "must-not-be-discovered")
+	cfg := FromEnv()
+	if got := cfg.ExistingMCPBearers["GPTADMIN_CODEX_MCP_BEARER"]; got != "codex-existing" {
+		t.Fatalf("configured bearer=%q", got)
+	}
+	if _, ok := cfg.ExistingMCPBearers["GPTADMIN_UNRELATED_TOKEN"]; ok {
+		t.Fatalf("unrelated token was discovered: %v", cfg.ExistingMCPBearers)
+	}
+}
+
 func TestDetailedDiscoveryRedactsSensitiveAgentMetadata(t *testing.T) {
 	s := New(Config{CtlToken: "ctl", DefaultTimeout: 1, PollMaxTimeout: 1})
 	s.mu.Lock()

@@ -87,6 +87,11 @@ issued without an explicit `ttl_days` also default to five years. Existing JWT
 strings retain the lifetime embedded in their signed claims and are never
 silently replaced by an update.
 
+During the explicit configured-bearer migration, existing client bearer values
+remain valid on the custom endpoint, MCP remote, and relay/VRP paths for five
+years from their first persisted Hub observation. The state stores only their
+digests; removing or replacing a configured value disables the old value.
+
 ## Web panel (`/admin`)
 
 Open the Hub URL printed by setup and choose **Admin**. Sign in with your
