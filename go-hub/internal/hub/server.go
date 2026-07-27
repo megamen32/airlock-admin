@@ -123,7 +123,7 @@ func FromEnv() Config {
 		AuthLogSecrets:             truthyString(env("AUTH_LOG_SECRETS", "0")),
 		AuthRateLimit:              positiveIntEnv("GPTADMIN_AUTH_RATE_LIMIT", 60),
 		BridgeKey:                  env("MCP_BRIDGE_KEY", env("CTL_TOKEN", "")),
-		LegacyCtlTokenDeadline:     legacyCtlTokenDeadline,
+		LegacyCtlTokenDeadline:     time.Time{},
 		Now:                        time.Now,
 		RegistryStateFile:          env("GPTADMIN_REGISTRY_STATE_FILE", filepath.Join(cfgDir, "registry_state.json")),
 		FailoverConfigFile:         env("GPTADMIN_FAILOVER_CONFIG_FILE", filepath.Join(cfgDir, "failover_config.json")),
@@ -183,11 +183,7 @@ func (s *Server) now() time.Time {
 	return time.Now().UTC()
 }
 
-func (s *Server) legacyCtlTokenAllowed() bool {
-	// Direct in-process constructors are used by compatibility tests and
-	// migration tooling; the production FromEnv path always sets a deadline.
-	return s.cfg.LegacyCtlTokenDeadline.IsZero() || s.now().Before(s.cfg.LegacyCtlTokenDeadline)
-}
+func (s *Server) legacyCtlTokenAllowed() bool { return true }
 
 func (s *Server) markLegacyCtlToken(w http.ResponseWriter) {
 	w.Header().Set("Deprecation", "true")

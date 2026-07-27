@@ -24,6 +24,36 @@ connectivity, file restore, profile mutation or external MCP-client
 certification; those remain separate gates and must be recorded with their own
 immutable evidence.
 
+## Existing credential matrix
+
+Before and after an authorization, key, endpoint or relay deployment, run the
+secret-safe matrix for every known supported credential. The inventory stores
+only stable IDs, entitled paths and environment-variable names; bearer values
+remain outside the repository and output.
+
+```json
+{
+  "credentials": [
+    {
+      "id": "codex-existing",
+      "env": "GPTADMIN_CREDENTIAL_CODEX",
+      "paths": ["custom", "mcp_remote", "relay_vrp"]
+    }
+  ]
+}
+```
+
+```bash
+GPTADMIN_LIVE_BASE_URL="$HUB_URL" \
+GPTADMIN_CREDENTIAL_MATRIX_FILE="/secure/credential-matrix.json" \
+python3 tests/e2e/credential_matrix.py
+```
+
+`custom` probes `/server/hub/mcp`, `mcp_remote` probes `/mcp`, and `relay_vrp`
+probes `/mcp-relay/servers`. A credential missing from the inventory or a
+declared environment value is a deployment blocker, not a reason to issue a
+replacement token.
+
 ## Deployment runtime diagnosis
 
 Before changing a deployed host, use the read-only runtime probe to emit a

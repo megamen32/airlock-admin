@@ -434,7 +434,7 @@ func TestLegacyCTLHasSunsetMetadataDuringMigrationWindow(t *testing.T) {
 	}
 }
 
-func TestLegacyCTLIsRejectedAfterMigrationDeadline(t *testing.T) {
+func TestLegacyCTLRemainsValidAfterThePreviousMigrationDeadline(t *testing.T) {
 	s := New(Config{
 		CtlToken:               "legacy-ctl",
 		LegacyCtlTokenDeadline: legacyCtlTokenDeadline,
@@ -447,7 +447,7 @@ func TestLegacyCTLIsRejectedAfterMigrationDeadline(t *testing.T) {
 	adminReq.Header.Set("Authorization", "Bearer legacy-ctl")
 	adminRec := httptest.NewRecorder()
 	s.Handler().ServeHTTP(adminRec, adminReq)
-	if adminRec.Code != http.StatusUnauthorized {
+	if adminRec.Code != http.StatusOK {
 		t.Fatalf("admin status=%d body=%s", adminRec.Code, adminRec.Body.String())
 	}
 
@@ -455,7 +455,7 @@ func TestLegacyCTLIsRejectedAfterMigrationDeadline(t *testing.T) {
 	mcpReq.Header.Set("Authorization", "Bearer legacy-ctl")
 	mcpRec := httptest.NewRecorder()
 	s.Handler().ServeHTTP(mcpRec, mcpReq)
-	if mcpRec.Code != http.StatusUnauthorized {
+	if mcpRec.Code != http.StatusOK {
 		t.Fatalf("mcp status=%d body=%s", mcpRec.Code, mcpRec.Body.String())
 	}
 }

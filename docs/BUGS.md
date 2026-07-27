@@ -12,6 +12,14 @@ Rules:
 - At the end of the current goal, resolve every actionable open entry before
   final handoff, unless a concrete external blocker is recorded.
 
+## 2026-07-27 - GPTADMIN-OAUTH-REFRESH-MISSING-20260727 - Codex connector cannot retain authorization - active
+
+- Component: Hub OAuth authorization-code exchange and external GPTADMIN Codex connector.
+- Evidence: Codex reported `reauthentication_required` with `oauth_refresh_token_missing`; reconnect then failed during connection setup. The pre-fix Hub advertised only `authorization_code` and returned no refresh credential.
+- Confirmed facts: access JWTs lasted 12 hours, and a connector could not refresh after that boundary. Refresh records now persist only a digest, rotate on use, and have a five-year lifetime; the old refresh value is invalidated on rotation.
+- Verification: the isolated candidate's OAuth restart/refresh regression proves a refreshed access token works through custom MCP, MCP remote and relay discovery; `go test ./...` in `go-hub` passes. The secret-safe credential-matrix runner covers every declared existing credential without writing bearer values to output.
+- Remaining live gate: complete a real Codex reconnect and run the pre-deploy credential matrix for all existing supported keys before deploying; do not substitute newly issued keys.
+
 ## 2026-07-24 - UPDATE-HEALTH-IGNORED-20260724 - Failed update health did not abort - fixed
 
 - Component: `cli.py:cmd_update` in-place update flow.

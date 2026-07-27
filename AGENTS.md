@@ -63,6 +63,12 @@ GPT‑Админ — self-hosted MCP hub. Три основные компоне
 - Для поведенческих изменений применяйте TDD: сначала зафиксируйте failing
   regression test или точное pre-fix evidence, затем реализацию и focused/full
   verification. Не отмечайте milestone/stage завершённым без его exit gate.
+- Перед каждым deploy, который меняет авторизацию, ключи, OAuth, endpoint или
+  relay, сохраните redacted pre-deploy credential matrix: каждый ранее выданный
+  поддерживаемый ключ должен пройти harmless probe через custom endpoint, MCP
+  remote и relay/VRP path. Не заменяйте матрицу новым ключом, health-check или
+  одним успешным endpoint; отдельно зафиксируйте ключи, которые невозможно
+  проверить без внешнего владельца.
 - Не записывайте в worklog токены, приватные URL, customer data или raw logs.
 - **Проактивная работа с багами:** при любом найденном баге или неожиданном
   поведении немедленно добавьте запись в [`docs/BUGS.md`](docs/BUGS.md) с

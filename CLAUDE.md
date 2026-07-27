@@ -56,6 +56,12 @@ Self-hosted MCP hub. Two Go binaries + one Python CLI + legacy vanilla-JS admin 
 - For behavior changes use TDD: record a failing regression test or precise
   pre-fix evidence before implementation, then focused and full verification.
   Do not mark a milestone or stage complete without its listed exit gate.
+- Before every deployment that changes authorization, keys, OAuth, an endpoint,
+  or relay behavior, save a redacted pre-deploy credential matrix: every
+  previously issued supported credential must pass its harmless probe through
+  the custom endpoint, MCP remote, and relay/VRP path. Never substitute a new
+  credential, health check, or one successful endpoint; explicitly record
+  credentials that cannot be tested without their external owner.
 - Never record tokens, private URLs, customer data or raw logs in the worklog.
 - **Proactive bug handling:** whenever a bug or unexpected behavior is found,
   immediately add an entry to [`docs/BUGS.md`](docs/BUGS.md) with an immutable
