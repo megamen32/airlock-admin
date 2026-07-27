@@ -54,10 +54,10 @@ plan is [`PROJECT_PLAN.md`](./PROJECT_PLAN.md).
 - Owner: `Codex`
 - Scope: Preserve GPTADMIN OAuth authorization across client refresh and Hub restart; make default supported client credentials five years; require secret-safe checks of existing credentials through custom endpoint, MCP remote and relay/VRP before deployment.
 - Baseline / red evidence: Codex returned `reauthentication_required` with `oauth_refresh_token_missing`; the OAuth authorization-code response contained no refresh token, and the CLI bearer default was one year.
-- Change: Added persistent digest-only rotating OAuth refresh credentials, five-year default managed and CLI MCP credential lifetimes, restart/rotation regression coverage, and a credential-matrix runner that never prints bearer values.
-- Verification: OAuth restart/refresh and expired-legacy-bearer regressions are green; `cd go-hub && go test ./...` passed, and the focused Python matrix, live-acceptance, product-doc, CLI-retention and client-lifetime suites passed `28` tests in the isolated candidate worktree.
-- Delivery: exact candidate `24e1032` on `codex/oauth-refresh-five-years`; no deployment, push, merge, or runtime restart was performed. Preserve the unrelated dirty current worktree.
-- Next: Complete Codex reconnect and the redacted existing-credential matrix, then deploy only `24e1032` with rollback material.
+- Change: Added persistent digest-only rotating OAuth refresh credentials, five-year default managed and CLI MCP credential lifetimes, deadline-free legacy preservation, and a secret-safe credential-matrix runner. The pre-deploy matrix then found nine configured JWTs with a stale resource identity; implementation commit `071d69c` preserves their exact values with digest-only five-year records across restart on custom, MCP remote and relay/VRP paths.
+- Verification: OAuth restart/refresh, configured-bearer restart/expiry and expired-legacy-bearer regressions are green; `cd go-hub && go test ./...` passed, and the focused Python matrix, live-acceptance, product-doc, CLI-retention and client-lifetime suites passed `29` tests in the isolated candidate worktree.
+- Delivery: repair source `071d69c` on `codex/oauth-refresh-five-years`; documentation corrections remain in this same active milestone. No deployment, push, merge, or runtime restart was performed. Preserve the unrelated dirty current worktree.
+- Next: Commit the final candidate, complete Codex reconnect and the redacted existing-credential matrix, then deploy that exact SHA with rollback material.
 
 ## 2026-07-24 - Final linear acceptance after failover delivery - completed
 

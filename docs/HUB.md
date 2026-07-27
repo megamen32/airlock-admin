@@ -90,7 +90,9 @@ silently replaced by an update.
 During the explicit configured-bearer migration, existing client bearer values
 remain valid on the custom endpoint, MCP remote, and relay/VRP paths for five
 years from their first persisted Hub observation. The state stores only their
-digests; removing or replacing a configured value disables the old value.
+digests. Use explicit administrative rotation or revocation to invalidate a
+registered bearer; merely removing its source environment value is not a
+replacement for that deliberate action.
 
 ## Web panel (`/admin`)
 

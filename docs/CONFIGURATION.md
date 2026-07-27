@@ -9,7 +9,7 @@ Full environment-variable reference, auth model, and OAuth setup.
 | Var | Required | Default | Purpose |
 |-----|----------|---------|---------|
 | `ADMIN_PASSWORD` | **yes** | — | Password for the `/oauth/authorize` HTML form and admin session. |
-| `CTL_TOKEN` | legacy only until 2026-07-27 | — | Deprecated compatibility bearer; do not create or copy it. |
+| `CTL_TOKEN` | existing installations only | — | Deprecated compatibility bearer; do not create or copy it. It remains valid until its owner explicitly rotates or removes it. |
 | `OAUTH_CLIENT_SECRET` | for `/mcp` | — | Signs OAuth bearer tokens. Generate with `openssl rand -hex 32`. |
 | `PUBLIC_ORIGIN` | recommended | — | Public base URL (e.g. `https://your-hub.bezrabotnyi.com`). Used in OAuth + OpenAPI. |
 | `MCP_RESOURCE` | recommended | `$PUBLIC_ORIGIN` | The MCP resource identifier. |
@@ -84,14 +84,16 @@ GPT‑Админ has **three** auth mechanisms — they're different, don't mix 
 ### 1. Legacy `CTL_TOKEN` (temporary compatibility only)
 
 - Used for: `/admin`, `/admin/api/*`, `/servers`, `/tasks/*`, artifact endpoints
-- Header: `Authorization: Bearer <CTL_TOKEN>` (accepted only before the migration deadline)
+- Header: `Authorization: Bearer <CTL_TOKEN>` (accepted only for an existing
+  compatibility credential until its owner explicitly rotates or removes it)
 - This is the "admin" token. The web panel and Custom GPT actions use it.
 
 ### 2. OAuth bearer (for `/mcp`)
 
 - Used for: `/mcp` (MCP remote SSE)
-- `/mcp` does **not** accept `CTL_TOKEN` directly. It requires an OAuth bearer
-  token that the hub signs via `OAUTH_CLIENT_SECRET`.
+- `/mcp` normally uses an OAuth bearer token that the hub signs via
+  `OAUTH_CLIENT_SECRET`. The deprecated existing compatibility bearer remains
+  accepted only until its owner explicitly rotates or removes it.
 - MCP clients (Claude Desktop, Codex) obtain this token via the OAuth flow.
 
 ### 3. `ADMIN_PASSWORD` (form)
@@ -118,10 +120,10 @@ GPT‑Админ has **three** auth mechanisms — they're different, don't mix 
 ## Legacy bearer migration
 
 `CTL_TOKEN` is a deprecated compatibility credential, not a supported setup
-path. The migration deadline is `2026-07-27T00:00:00Z`; the Hub advertises
-this with `Deprecation`/`Sunset` headers and then rejects the bearer. Use the
-AdminPassword OAuth authorization flow or a scoped MCP JWT instead. ShellMCP
-agent credentials are separate and are not affected by this deadline.
+path. New setup and updates never create or print it. An existing credential
+remains valid until its owner explicitly rotates or removes it; normal clients
+should use the AdminPassword OAuth authorization flow or a scoped MCP JWT.
+ShellMCP agent credentials are separate and are not affected by this rule.
 
 ## OAuth
 

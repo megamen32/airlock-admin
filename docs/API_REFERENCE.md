@@ -50,7 +50,9 @@ the resolved value, and readonly profiles cannot access these operations.
 | `POST /oauth/authorize` | `ADMIN_PASSWORD` form |
 | `POST /oauth/token` | client credentials |
 
-See [Configuration → Auth model](./CONFIGURATION.md#auth-model).
+The deprecated compatibility bearer is accepted only for existing installations
+until its owner explicitly rotates or removes it; do not use it for new client
+setup. See [Configuration → Auth model](./CONFIGURATION.md#auth-model).
 
 ---
 

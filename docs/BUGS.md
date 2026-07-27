@@ -17,16 +17,16 @@ Rules:
 - Component: Hub OAuth authorization-code exchange and external GPTADMIN Codex connector.
 - Evidence: Codex reported `reauthentication_required` with `oauth_refresh_token_missing`; reconnect then failed during connection setup. The pre-fix Hub advertised only `authorization_code` and returned no refresh credential.
 - Confirmed facts: access JWTs lasted 12 hours, and a connector could not refresh after that boundary. Refresh records now persist only a digest, rotate on use, and have a five-year lifetime; the old refresh value is invalidated on rotation. Existing signed JWTs retain their original embedded expiry, while the previously expired legacy bearer deadline is removed rather than silently invalidating that credential.
-- Verification: exact candidate `24e1032` has a restart/refresh regression proving a refreshed access token works through custom MCP, MCP remote and relay discovery; `go test ./...` in `go-hub` passes. The secret-safe credential-matrix runner covers every declared existing credential without writing bearer values to output.
-- Remaining live gate: complete a real Codex reconnect and run the pre-deploy credential matrix for all existing supported keys before deploying `24e1032`; do not substitute newly issued keys.
+- Verification: the candidate branch has a restart/refresh regression proving a refreshed access token works through custom MCP, MCP remote and relay discovery; `go test ./...` in `go-hub` passes. The secret-safe credential-matrix runner covers every declared existing credential without writing bearer values to output.
+- Remaining live gate: complete a real Codex reconnect and run the pre-deploy credential matrix for all existing supported keys before deploying the final candidate; do not substitute newly issued keys.
 
 ## 2026-07-27 - GPTADMIN-EXISTING-MCP-BEARERS-20260727 - Existing client credentials are not recognized - active
 
 - Component: Hub MCP authentication for custom endpoint, MCP remote, and relay/VRP paths.
 - Evidence: the secret-safe live pre-deploy matrix exercised nine configured client bearer credentials on all three paths and received `401` for every probe. The effective process environment matches the configured values, so this is not an env-file parsing or reload mismatch.
-- Confirmed facts: `mcpAuth` accepts only the legacy control token or a signed OAuth JWT. The existing client-specific opaque bearer values are neither, so they cannot authenticate despite remaining configured for supported MCP clients.
-- Root-cause hypothesis: client bearer provisioning and Hub authentication diverged when OAuth-only validation replaced the pre-existing opaque credential contract.
-- Next action: add a persisted five-year migration registry for the existing client bearer digests, with focused regressions for custom, remote MCP, relay/VRP, expiry, and restart; rerun the full live matrix before deployment without changing bearer values.
+- Confirmed facts: all nine values are signed JWTs and eight remain within their embedded expiry, but every value has a `resource` claim that mismatches the current `MCP_RESOURCE`; current `mcpAuth` rejects them before the route handler. A production-safe live matrix reproduced `401` on custom, MCP remote and relay/VRP for every value without printing a bearer.
+- Root cause: preserved client credentials were signed for a prior resource identity, while the current Hub only accepted a live matching JWT resource. This is an authorization-identity migration gap, not an environment-reload failure.
+- Repair candidate: `071d69c` registers only configured `GPTADMIN_*_MCP_BEARER` values as digest-only five-year migration records and accepts them on all three entitled paths across Hub restart. Focused regression is green. Next action: deploy the final candidate, then rerun the full live matrix before claiming the repair.
 
 ## 2026-07-24 - UPDATE-HEALTH-IGNORED-20260724 - Failed update health did not abort - fixed
 
