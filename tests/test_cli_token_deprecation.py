@@ -9,7 +9,7 @@ import pytest
 import cli
 
 
-def test_tokens_never_prints_legacy_ctl_secret_and_shows_deadline(monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]) -> None:
+def test_tokens_never_prints_legacy_ctl_secret_or_an_automatic_deadline(monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]) -> None:
     monkeypatch.setattr(cli, "env_read", lambda: {"CTL_TOKEN": "legacy-secret", "HUB_URL": "https://hub.example"})
 
     cli.cmd_tokens(SimpleNamespace(show_shellmcp=False))
@@ -17,7 +17,7 @@ def test_tokens_never_prints_legacy_ctl_secret_and_shows_deadline(monkeypatch: p
     captured = capsys.readouterr()
     output = captured.out + captured.err
     assert "legacy-secret" not in output
-    assert cli.LEGACY_CTL_TOKEN_DEADLINE in output
+    assert "deadline" not in output.lower()
 
 
 def test_tokens_hides_internal_credential_names_in_normal_output(monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]) -> None:
@@ -40,14 +40,14 @@ def test_tokens_hides_internal_credential_names_in_normal_output(monkeypatch: py
     assert "MCP_BRIDGE_KEY" not in output
 
 
-def test_rotate_hub_is_removed_from_cli(monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]) -> None:
+def test_rotate_hub_requires_an_explicit_global_invalidation(monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]) -> None:
     monkeypatch.setattr(cli, "need_root", lambda: None)
 
     with pytest.raises(SystemExit):
         cli.cmd_rotate(SimpleNamespace(which="hub"))
 
     output = capsys.readouterr()
-    assert "legacy" in (output.out + output.err).lower()
+    assert "global invalidation" in (output.out + output.err).lower()
     assert "legacy-secret" not in (output.out + output.err)
 
 

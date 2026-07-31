@@ -64,8 +64,9 @@ iwr -UseBasicParsing https://became.bezrabotnyi.com/install_win.ps1 | iex
 ```
 
 The installer prints your **Hub URL** and opens the connection flow. Do not
-copy a legacy bearer token; existing installations must migrate to
-AdminPassword/OAuth by `2026-07-27`.
+copy a legacy bearer token; new connections use AdminPassword/OAuth. An
+existing compatibility credential remains valid until its owner explicitly
+rotates or removes it.
 
 ```bash
 # 2. Connect your AI — pick one adapter:
