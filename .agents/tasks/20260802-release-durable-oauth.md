@@ -64,3 +64,9 @@ Tag указывает на текущий main, GitHub Release опублико
   public release. v138 removes all such Markdown dependencies while preserving
   the incident facts. The full preflight passed 45 tests, and the final
   release-blocker regressions passed 6 tests with a clean link scan.
+- 2026-08-02: v138 passed build, manifest/SBOM, installer and vulnerability
+  gates but failed only when GitHub rejected artifact attestation for a
+  user-owned private repository; release upload therefore did not run. v139
+  skips that unsupported attestation solely on private source repositories,
+  keeps every other blocking gate, and documents the boundary. 23 targeted
+  workflow/policy/provenance/docs tests pass; v138 remains immutable.

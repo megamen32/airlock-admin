@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [139] - 2026-08-02
+
+### Fixed
+- Private-source releases no longer fail solely because GitHub does not offer
+  artifact attestations to user-owned private repositories; manifest, SBOM,
+  installer verification and vulnerability gates remain mandatory.
+
 ## [138] - 2026-08-02
 
 ### Fixed
