@@ -3,7 +3,7 @@ name: Build, Sync, Release
 # Builds binaries on every push to main and every v* tag.
 # On v* tags (release), also: mirror source into the PUBLIC repo
 # megamen32/gptadmin_opensource, push the tag there, and publish all built
-# tarballs as GitHub Release ASSETS (not committed into git history — that was
+# archives as GitHub Release ASSETS (not committed into git history — that was
 # the old design and bloated the repo by ~500MB per release for no benefit,
 # since became.bezrabotnyi.com serves from its own local build/ anyway).
 
@@ -242,7 +242,7 @@ jobs:
 
           expected_public_commit="$(git rev-parse HEAD)"
           shopt -s nullglob
-          release_assets=("$SRC"/build/*.tar.gz "$SRC"/build/manifest.json "$SRC"/build/gptadmin-sbom.spdx.json)
+          release_assets=("$SRC"/build/*.tar.gz "$SRC"/build/*.zip "$SRC"/build/manifest.json "$SRC"/build/gptadmin-sbom.spdx.json)
           shopt -u nullglob
           for asset in "${release_assets[@]}"; do
             if [[ ! -f "$asset" ]]; then

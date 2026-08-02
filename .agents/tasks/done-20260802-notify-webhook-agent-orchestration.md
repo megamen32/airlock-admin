@@ -368,3 +368,28 @@ durable job immutable, а retry принадлежит Notify producer и про
   `gptadmin.release-manifest/v1`, `build_version=141`, the same source commit,
   and 12 artifacts. Overseer PASS, Reviewer APPROVE after both P1 fixes, and
   final Critic PASS are recorded in the task evidence above. P0 CONFIRMED.
+- 2026-08-02: Completion audit reopened the task. Public `v141` had 12 release
+  assets but omitted `gptadmin-win.zip`, while its provenance manifest listed
+  that ZIP twice (the identical `build/` and `public/` copies). Root cause is
+  the release upload allowlist matching only `*.tar.gz`, manifest, and SBOM.
+  The green Windows job did not upload an Actions artifact, so recovery must
+  rebuild the exact tagged ZIP and prove its SHA-256 before attaching it. P0 is
+  not confirmed until manifest/release names and digests agree.
+- 2026-08-02: Release recovery completed without rebuilding or moving the tag.
+  The immutable public `v141` source tag already contained the exact generated
+  `public/gptadmin-win.zip`; its 3,637,301-byte payload matched provenance
+  SHA-256 `0f6428a10e3ceccd165d36528e8f050c7e803eb2a80548bb8a6496616b8358fb`
+  before upload. Public Release `v141` now has 13 assets: the 11 unique manifest
+  archive basenames plus `manifest.json` and SBOM, with no missing, unexpected,
+  or digest-mismatched assets. A RED/green workflow contract now requires
+  `build/*.zip` in every future immutable release asset set; focused release
+  tests pass 12/12.
+- 2026-08-02: Final current-state runtime audit reconfirmed both HMAC-v2 routes
+  at 300-second skew, bounded-autonomous policy, fixed ShellMCP targets, and no
+  route bearer tokens. Both ShellMCP targets are online. Server-100 and Mac
+  durable agent deliveries remain `sent` on attempt 1 with no error, their Hub
+  jobs are `completed`, and the receipts record `created=false` with the same
+  named Codex session IDs. Both sessions are currently readable from Agent
+  Herder and idle; server-100 user service/listener and Mac launchd service are
+  running. The server-100 completion timestamp precedes Mac as required. P0
+  CONFIRMED after release recovery.
