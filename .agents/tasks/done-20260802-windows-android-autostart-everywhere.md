@@ -1,6 +1,6 @@
 # Автозапуск GPTAdmin ShellMCP на Windows и Android везде
 
-Status: active
+Status: completed
 Class: Full
 
 ## Original request
@@ -157,6 +157,19 @@ Class: Full
 - Windows ACL runtime canary passed on a disposable file, then the existing canonical `C:\ProgramData\gptadmin\shellmcp.env` was restricted without reading its contents. Live proof reports protected inheritance and only SID `S-1-5-18` plus `S-1-5-32-544`; the previous SDDL is stored in the task rollback directory.
 - Reviewer returned `CHANGES_REQUIRED` for partial-install rollback and an Android healthy-pair-plus-orphan false no-op. RED coverage was retained; Windows now writes a private pre-mutation receipt and automatically restores/removes exact artifacts, task states, and optional fallback launcher on failure. Android now requires one parent, one associated child, and one total exact executable. Focused suite is green at `20 passed`, including safe normalization of legacy v1 rollback receipts; the updated PowerShell script executed its secret-free `-DryRun` successfully on BeyondInfinity.
 - Post-ACL/runtime recheck remained green: Windows canonical task is enabled and `Running`, exactly one canonical ProgramData process exists, and a fresh Hub relay returned `GPTADMIN_AUTOSTART_POST_ACL_OK` with return code 0.
+- Final Reviewer returned `PASS`. Clean-main cherry-pick `b1960276e47dd54df9e78f5e7e53c11c98c91339` was pushed to `origin/main`; remote ref equality is proven. GitHub `Build, Sync, Release` run `30761028831` completed `success` for that exact SHA. Build, tests, binary generation, Android artifact verification, provenance verification, installer-link verification, and dependency scan passed. Because this was an ordinary branch push, release mirroring was intentionally skipped; no new tag, GitHub Release, or assets were created by this run.
+- S21 return watcher caught one transient `R5CR702SRFP` sample, but exact preflight immediately afterward found no ADB device and `agent-device` only exposed server-100. Kernel evidence at 22:50–22:52 MSK shows repeated USB port power cycles followed by `unable to enumerate USB device`; fixed Wi-Fi ADB `192.168.2.243:5555` also remained unreachable. No reboot was sent. Agent-resume job `gptadmin-s21-adb-stable-v3` now requires five consecutive ADB samples before resuming acceptance.
+- Stable return acceptance passed later: six consecutive ADB samples reported `R5CR702SRFP device`, and `agent-device devices --json` exposed physical Android `SM G998B`. `agent-device open Settings --session s21-autostart` then hung without creating that session; the existing unrelated `s21-notify-call` session was not touched. Per the project fallback rule, direct ADB is therefore used only for the transport-level reboot and the failure/reason is recorded here.
+- S21 pre-reboot proof: boot ID `defd274f-2e1b-4efa-841d-a929dc981f78`; timer reconciliation receipt `status=noop` with parent/associated child/total exact executable all `1`; Hub main target online while Termux remains stale; fresh relay returned marker `GPTADMIN_S21_PRE_REBOOT_OK`, serial `R5CR702SRFP`, model `SM-G998B`, and return code 0.
+- Authorized S21 reboot acceptance is complete. Watcher `gptadmin-s21-autostart-reboot-final` observed the device go down and return with new boot ID `0e54cdf5-175f-4fdc-b811-0181995851cf`, replacing pre-reboot ID `defd274f-2e1b-4efa-841d-a929dc981f78`; `sys.boot_completed=1` and `agent-device devices --json` again identified booted physical device `R5CR702SRFP` / `SM G998B`.
+- Post-reboot startup-owner proof: server-100 timer remains enabled/active/waiting, service result is success, and its receipt is `status=noop` with canonical parent/associated child/total exact executable counts `1/1/1`. Process topology is one `/data/local/tmp/gptadmin/run.sh` parent owned from PID 1 and one matching `shellmcp` child.
+- Fresh post-reboot Hub discovery reports the main target `shell:android-SM-G998B-02SRFP` online and the unused Termux target stale. A new background relay job completed in 59 ms with return code 0 and no stderr, returning marker `GPTADMIN_S21_POST_REBOOT_OK`, exact serial `R5CR702SRFP`, model `SM-G998B`, the new boot ID, and uptime of three minutes.
+
+## Completion
+
+- Normal-plan Windows and Android lifecycle acceptance is complete for the two currently confirmed dev targets: `BEYONDINFINITY` and S21 `R5CR702SRFP`.
+- Stale/unreachable dev records remain opportunistic enrollment candidates and do not block the working production path, per the user's clarified fleet intent.
+- Implementation is published on `origin/main` at `b1960276e47dd54df9e78f5e7e53c11c98c91339`; exact-SHA GitHub run `30761028831` is green. The ordinary branch push intentionally created no tag or release.
 
 ## Estimate revisions
 
