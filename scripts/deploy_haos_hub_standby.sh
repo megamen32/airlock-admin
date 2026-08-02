@@ -214,10 +214,25 @@ PY
     return 1
   fi
 }
+addon_installed(){
+  python3 - /tmp/gptadmin-ha-api.b <<'PY'
+import json, sys
+try:
+    payload = json.load(open(sys.argv[1]))
+    # Supervisor's app-info response has no stable `installed` boolean.
+    # A concrete installed version is the portable indicator; an unavailable
+    # local app only reports version_latest.
+    raise SystemExit(0 if payload.get('data', {}).get('version') else 1)
+except Exception:
+    raise SystemExit(1)
+PY
+}
 api POST /addons/reload '{}'
 api GET /addons/local_gptadmin_hub_standby/info
-api POST /addons/local_gptadmin_hub_standby/install '{}'
-sleep 3
+if ! addon_installed; then
+  api POST /addons/local_gptadmin_hub_standby/install '{}'
+  sleep 3
+fi
 api POST /addons/local_gptadmin_hub_standby/stop '{}'
 sleep 3
 api POST /addons/local_gptadmin_hub_standby/update '{}'
