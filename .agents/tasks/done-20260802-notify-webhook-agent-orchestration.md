@@ -359,3 +359,12 @@ durable job immutable, а retry принадлежит Notify producer и про
   now validates a profile-owned absolute CWD without reading the protected home;
   Agent Herder remains the canonical existence/realpath authority outside the
   ShellMCP sandbox. The temporary exact bind drop-in is removed.
+- 2026-08-02: Completion receipt. Notify `main` contains `7fb5605`; GPTAdmin
+  `main` contains `04980ac` and annotated tag `v141`. Build, Sync, Release run
+  `30737173119` completed successfully at exact source commit `04980acfd3d6f9924177683dac86dee5727eb959`;
+  failover, Windows, macOS, admin UI, and build/release jobs are all green.
+  Public release `v141` is neither draft nor prerelease and exposes 12 assets
+  with GitHub SHA-256 digests. Its manifest is schema
+  `gptadmin.release-manifest/v1`, `build_version=141`, the same source commit,
+  and 12 artifacts. Overseer PASS, Reviewer APPROVE after both P1 fixes, and
+  final Critic PASS are recorded in the task evidence above. P0 CONFIRMED.
