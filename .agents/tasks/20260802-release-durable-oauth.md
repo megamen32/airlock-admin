@@ -50,3 +50,17 @@ Tag указывает на текущий main, GitHub Release опублико
   tests and 8 documentation contract tests are green; git diff --check is
   clean. The explicitly staged scope excludes all foreign Last Human Commit
   instruction changes and backups.
+- 2026-08-02: Release build 137 was pushed as 84bc4df. Auto-tag completed
+  successfully and created annotated v137 at that commit; the immutable
+  Build, Sync, Release workflow is in progress. agent-resume job
+  20260802T001648Z-529e1c2e is armed to verify its public release result.
+- 2026-08-02: Four prerequisite build jobs completed successfully; only the
+  final build-and-release job remains in progress, so the public release is
+  not claimed yet. agent-resume job 20260802T002017Z-6f45bc7c is armed for the
+  next bounded verification.
+- 2026-08-02: v137 Build, Sync, Release failed before publication because a
+  clean CI checkout lacked two host-local incident artifacts referenced by
+  docs. v137 remains immutable and correctly tagged; it is not claimed as a
+  public release. v138 removes all such Markdown dependencies while preserving
+  the incident facts. The full preflight passed 45 tests, and the final
+  release-blocker regressions passed 6 tests with a clean link scan.

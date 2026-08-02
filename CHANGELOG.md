@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [138] - 2026-08-02
+
+### Fixed
+- Release documentation no longer links to host-local incident attachments or
+  disposable logs that are absent from a clean source checkout.
+
 ## [137] - 2026-08-02
 
 ### Added

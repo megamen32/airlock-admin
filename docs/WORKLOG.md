@@ -2810,7 +2810,7 @@ plan is [`PROJECT_PLAN.md`](./PROJECT_PLAN.md).
 
 - Milestone: `S1.1`, `S1.3`, `S3.4`, `S3.5`
 - Objective: restore and prove the real public browser path: styled admin UI, one password login, refresh, authenticated overview and harmless MCP call through the Tunnel.
-- Baseline / red evidence: [`trash/logs/production-browser-502-20260725.md`](../trash/logs/production-browser-502-20260725.md) records HTTP `502` for the public `/admin/` browser navigation at `2026-07-25T15:05:38+03:00`.
+- Baseline / red evidence: a sanitized incident log recorded HTTP `502` for the public `/admin/` browser navigation at `2026-07-25T15:05:38+03:00`; the disposable host-local log is intentionally not a source-tree dependency.
 - Exit gate: root cause is identified; the failed production component is recovered with rollback material; browser login/refresh, overview, harmless MCP and one bounded Hub/Tunnel stability window pass with sanitized immutable evidence.
 - Now: trace the public edge, canonical Tunnel and Hub read-only. Next: repair the failed component only after a backup/rollback preflight. Not now: server-88 repair, v129 integration, new features, or repeated heavy matrices.
 
