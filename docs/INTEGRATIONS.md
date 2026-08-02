@@ -135,6 +135,8 @@ ChatGPT requires `offline_access` and the `refresh_token` grant to maintain an
 OAuth connection after the original access token expires. GPTAdmin rotates a
 digest-only refresh credential on each use; the client receives the replacement
 while the Hub persists only its digest, so authorization survives a Hub restart.
+Connections created before this capability was deployed must be authorized once
+again: a server cannot add a refresh credential to an already-issued session.
 
 ### Troubleshooting
 

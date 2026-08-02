@@ -6,7 +6,7 @@ Priority order: top first.
 
 Status: recovery deployed; fresh ChatGPT authorization acceptance pending
 
-- [x] P0.1 Update the public primary and HAOS standby to tested build 136; prove public OAuth metadata and authorization routing without 502.
+- [x] P0.1 Update the public primary and HAOS standby to tested build 134; prove public OAuth metadata and authorization routing without 502.
 - [ ] P0.2 Reauthorize the GPTAdmin ChatGPT connection and confirm authenticated `resources/read` renders `ui://widget/admin-v3.html`.
 
 ## M1 — [user-visible outcome]

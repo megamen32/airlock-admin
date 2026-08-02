@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [137] - 2026-08-02
+
+### Added
+- Durable OAuth refresh-token support for MCP/ChatGPT connections, including
+  `offline_access` discovery metadata and digest-only rotating credentials.
+- Explicit documentation for the one-time reconnect required by sessions that
+  predate refresh support.
+
+### Changed
+- HAOS GPTAdmin Hub Standby now deploys as app version 1.0.6 and fails closed
+  when Supervisor rejects an update or the requested listener build is absent.
+- Release identity advances to build 137 so the private source tag and public
+  release do not regress behind existing v136 artifacts.
+
 ### Added
 - AGPL-3.0 license
 - SECURITY.md (responsible disclosure policy)
