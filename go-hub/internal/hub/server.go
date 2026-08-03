@@ -1634,6 +1634,45 @@ func (s *Server) shellmcpArtifactPath() string {
 	return filepath.Join(s.cfg.ArtifactDir, "gptadmin-shellmcp.tar.gz")
 }
 
+type shellmcpArtifactMetadata struct {
+	Component    string `json:"component"`
+	BuildVersion int    `json:"build_version"`
+	GitCommit    string `json:"git_commit"`
+	SHA256       string `json:"sha256"`
+}
+
+func (s *Server) loadShellMCPArtifactMetadata() (shellmcpArtifactMetadata, error) {
+	path := filepath.Join(s.cfg.ArtifactDir, "gptadmin-shellmcp.json")
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		return shellmcpArtifactMetadata{}, fmt.Errorf("read %s: %w", path, err)
+	}
+	if len(raw) > 64*1024 {
+		return shellmcpArtifactMetadata{}, errors.New("shellmcp artifact metadata exceeds 64 KiB")
+	}
+	var metadata shellmcpArtifactMetadata
+	if err := json.Unmarshal(raw, &metadata); err != nil {
+		return shellmcpArtifactMetadata{}, fmt.Errorf("decode shellmcp artifact metadata: %w", err)
+	}
+	metadata.Component = strings.TrimSpace(metadata.Component)
+	metadata.GitCommit = strings.TrimSpace(metadata.GitCommit)
+	metadata.SHA256 = strings.ToLower(strings.TrimSpace(metadata.SHA256))
+	if metadata.Component != "shellmcp" {
+		return shellmcpArtifactMetadata{}, errors.New("shellmcp artifact metadata has invalid component")
+	}
+	if metadata.BuildVersion <= 0 {
+		return shellmcpArtifactMetadata{}, errors.New("shellmcp artifact metadata has invalid build_version")
+	}
+	if metadata.GitCommit == "" {
+		return shellmcpArtifactMetadata{}, errors.New("shellmcp artifact metadata has empty git_commit")
+	}
+	decodedSHA, err := hex.DecodeString(metadata.SHA256)
+	if err != nil || len(decodedSHA) != sha256.Size {
+		return shellmcpArtifactMetadata{}, errors.New("shellmcp artifact metadata has invalid sha256")
+	}
+	return metadata, nil
+}
+
 func (s *Server) shellmcpArtifactManifest(w http.ResponseWriter, r *http.Request) {
 	artifact := s.shellmcpArtifactPath()
 	st, err := os.Stat(artifact)
@@ -1646,7 +1685,16 @@ func (s *Server) shellmcpArtifactManifest(w http.ResponseWriter, r *http.Request
 		writeJSON(w, http.StatusInternalServerError, map[string]any{"detail": err.Error()})
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"component": "shellmcp", "build_version": BuildVersion, "git_commit": GitCommit, "sha256": sha, "size": st.Size(), "url": s.origin(r) + "/artifacts/shellmcp.tar.gz"})
+	metadata, err := s.loadShellMCPArtifactMetadata()
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]any{"detail": err.Error()})
+		return
+	}
+	if metadata.SHA256 != strings.ToLower(sha) {
+		writeJSON(w, http.StatusInternalServerError, map[string]any{"detail": "shellmcp artifact metadata sha256 does not match archive"})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"component": metadata.Component, "build_version": metadata.BuildVersion, "git_commit": metadata.GitCommit, "sha256": sha, "size": st.Size(), "url": s.origin(r) + "/artifacts/shellmcp.tar.gz"})
 }
 
 func (s *Server) shellmcpArtifactDownload(w http.ResponseWriter, r *http.Request) {
