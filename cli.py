@@ -812,20 +812,22 @@ if IS_MACOS:
         # restore a LaunchAgent after bootout during in-place update. Prefer
         # bootstrap into the explicit domain, then enable; keep load -w as
         # fallback for older systems.
-        domain = _launchd_domain()
+        domains = _launchd_domains()
         # A missing/unloaded launchd job is normal during update or first install.
         # `launchctl bootout` prints "Boot-out failed: 3: No such process" to
         # stderr in that case; suppress it so a harmless pre-cleanup does not look
         # like an update failure.
-        _launchctl_capture(['launchctl', 'bootout', _launchd_service_target(label)])
-        bootstrap = _launchctl_capture(['launchctl', 'bootstrap', domain, str(unit_path)])
-        if bootstrap.returncode != 0 and not _launchd_is_loaded(label):
-            # A stale launchd registration can transiently return EIO. Retry once
-            # after removing the label, while keeping harmless output quiet.
-            _launchctl_capture(['launchctl', 'remove', label])
-            time.sleep(0.2)
+        for domain in domains:
+            _launchctl_capture(['launchctl', 'bootout', _launchd_service_target(label, domain)])
+        for domain in domains:
             bootstrap = _launchctl_capture(['launchctl', 'bootstrap', domain, str(unit_path)])
-        _launchctl_capture(['launchctl', 'enable', _launchd_service_target(label)])
+            if bootstrap.returncode != 0 and not _launchd_is_loaded(label):
+                _launchctl_capture(['launchctl', 'remove', label])
+                time.sleep(0.2)
+                _launchctl_capture(['launchctl', 'bootstrap', domain, str(unit_path)])
+            if _launchd_is_loaded(label):
+                break
+        _launchctl_capture(['launchctl', 'enable', _launchd_loaded_target(label) or _launchd_service_target(label)])
         if not _launchd_is_loaded(label):
             run(['launchctl', 'load', '-w', str(unit_path)], check=False)
         if not _launchd_is_loaded(label):
@@ -843,7 +845,7 @@ if IS_MACOS:
         # versions; keep kickstart as silent best-effort only.
         try:
             subprocess.run(
-                ['launchctl', 'kickstart', '-k', _launchd_service_target(label)],
+                ['launchctl', 'kickstart', '-k', _launchd_loaded_target(label) or _launchd_service_target(label)],
                 check=False, text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                 timeout=int(os.environ.get('GPTADMIN_LAUNCHCTL_KICKSTART_TIMEOUT', '2')),
             )
@@ -868,22 +870,36 @@ if IS_MACOS:
     def _launchd_domain() -> str:
         return f'gui/{_launchd_uid()}' if IS_USER_INSTALL else 'system'
 
+    def _launchd_domains() -> list[str]:
+        """Return interactive and SSH launchd domains for a user install."""
+        primary = _launchd_domain()
+        if not IS_USER_INSTALL:
+            return [primary]
+        fallback = f'user/{_launchd_uid()}'
+        return [primary] if fallback == primary else [primary, fallback]
+
     def _launchctl_capture(args: list[str]) -> subprocess.CompletedProcess:
         return subprocess.run(args, check=False, text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
 
-    def _launchd_service_target(label: str) -> str:
-        return f'{_launchd_domain()}/{label}'
+    def _launchd_service_target(label: str, domain: str | None = None) -> str:
+        return f'{domain or _launchd_domain()}/{label}'
+
+    def _launchd_loaded_target(label: str) -> str:
+        for domain in _launchd_domains():
+            target = _launchd_service_target(label, domain)
+            if _launchctl_capture(['launchctl', 'print', target]).returncode == 0:
+                return target
+        return ''
 
     def _launchd_is_loaded(label: str) -> bool:
-        return _launchctl_capture(['launchctl', 'print', _launchd_service_target(label)]).returncode == 0
+        return bool(_launchd_loaded_target(label))
 
     def _launchd_stop(label: str, unit_path: Path) -> tuple[bool, list[str]]:
-        attempts = [
-            ['launchctl', 'bootout', _launchd_service_target(label)],
-            ['launchctl', 'remove', label],
-        ]
+        attempts = [['launchctl', 'bootout', _launchd_service_target(label, domain)] for domain in _launchd_domains()]
+        attempts.append(['launchctl', 'remove', label])
         if unit_path.exists():
-            attempts.insert(1, ['launchctl', 'bootout', _launchd_domain(), str(unit_path)])
+            for domain in reversed(_launchd_domains()):
+                attempts.insert(1, ['launchctl', 'bootout', domain, str(unit_path)])
             attempts.append(['launchctl', 'unload', '-w', str(unit_path)])
         messages: list[str] = []
         for cmd in attempts:
