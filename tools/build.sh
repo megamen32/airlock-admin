@@ -156,7 +156,10 @@ prepare_tagged_release_archive_scope() {
   local -a stale_build_archives=() generated_public_archives=()
   while IFS= read -r -d '' archive; do
     stale_build_archives+=("$archive")
-  done < <(find "$ART_DIR" -type f \( -name 'gptadmin*.tar.gz' -o -name 'gptadmin*.zip' \) -print0)
+  # Only the top-level build directory belongs to this release pipeline.
+  # Nested build trees can be owned by separate add-ons and must not be
+  # removed (or make this release fail) during tagged-release preflight.
+  done < <(find "$ART_DIR" -maxdepth 1 -type f \( -name 'gptadmin*.tar.gz' -o -name 'gptadmin*.zip' \) -print0)
   if [[ -d "$REPO_DIR/public" ]]; then
     while IFS= read -r -d '' archive; do
       generated_public_archives+=("$archive")
