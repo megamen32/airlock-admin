@@ -34,6 +34,8 @@ def test_readonly_cli_token_has_inspection_scope_without_exec() -> None:
 
     assert payload["access_mode"] == "readonly"
     assert payload["scope"] == "gptadmin.read gptadmin.inspect"
+    assert payload["resource"] == "https://hub.example.test"
+    assert payload["kid"] == "gptadmin-hs256-v1"
     assert "gptadmin.exec" not in payload["scope"]
 
 

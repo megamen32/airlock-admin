@@ -323,6 +323,12 @@ copy_hub_platform_binary() {
   [[ -n "$src" && -x "$src" ]] || return 0
   mkdir -p "$ART_DIR/gptadmin_hub/$tag"
   local dst="$ART_DIR/gptadmin_hub/$tag/$exe_name"
+  # A cross-build for this target is authoritative. Fallback binaries may be
+  # older prebuilt artifacts and must never overwrite the current source build.
+  if [[ -x "$dst" ]]; then
+    echo "hub platform binary: $tag/$exe_name (destination already built)"
+    return 0
+  fi
   # Cross-build already places the binary in its destination; copying a file
   # onto itself makes `cp` fail ("один и тот же файл") under errexit. Skip.
   if [[ "$src" -ef "$dst" ]]; then

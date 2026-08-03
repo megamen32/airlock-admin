@@ -255,9 +255,9 @@
       "evidence": "legacy bridge, webhook, bulk and admin resource entrypoints cannot enqueue work outside the central policy boundary"
     },
     {
-      "id": "runtime-actions-openapi-proxy-contract",
-      "command": "cd go-hub && go test ./internal/hub -run 'TestActionsOpenAPIIncludesNetworkProxyContract' -count=1",
-      "evidence": "runtime generated Actions OpenAPI advertises the same Network Tunnel control paths as the static contract"
+      "id": "runtime-actions-openapi-virtual-mcp-contract",
+      "command": "cd go-hub && go test ./internal/hub -run 'TestVirtualMCPsAreDefaultOffPersistedAndExposeDedicatedActions|TestActionsOpenAPIKeepsNetworkProxyOutOfDefaultCustomGPTContract|TestActionsOpenAPIDefaultExcludesWebhookManagement' -count=1",
+      "evidence": "default Custom GPT schema has one Bearer contract while default-off optional virtual MCPs persist and expose isolated server schemas only after enablement"
     },
     {
       "id": "readonly-security",

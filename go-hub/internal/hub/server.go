@@ -71,6 +71,7 @@ type Config struct {
 	StartupInstructionsFile    string
 	StartupInstructions        string
 	InstructionSetsStateFile   string
+	VirtualMCPStateFile        string
 	NetworkProxyStateFile      string
 	NetworkProxyRelayKeyFile   string
 	NetworkProxyRelayRevokeURL string
@@ -132,6 +133,7 @@ func FromEnv() Config {
 		StartupInstructionsFile:    env("GPTADMIN_STARTUP_INSTRUCTIONS_FILE", filepath.Join(cfgDir, "startup_instructions.md")),
 		StartupInstructions:        env("GPTADMIN_STARTUP_INSTRUCTIONS", ""),
 		InstructionSetsStateFile:   env("GPTADMIN_INSTRUCTION_SETS_STATE_FILE", filepath.Join(cfgDir, "instruction_sets_state.json")),
+		VirtualMCPStateFile:        env("GPTADMIN_VIRTUAL_MCP_STATE_FILE", filepath.Join(cfgDir, virtualMCPStateFilename)),
 		NetworkProxyStateFile:      env("GPTADMIN_NETWORK_PROXY_STATE_FILE", filepath.Join(cfgDir, "network_proxy_state.json")),
 		NetworkProxyRelayKeyFile:   env("GPTADMIN_NETWORK_PROXY_RELAY_KEY_FILE", ""),
 		NetworkProxyRelayRevokeURL: strings.TrimRight(env("GPTADMIN_NETWORK_PROXY_RELAY_REVOKE_URL", ""), "/"),
@@ -368,6 +370,7 @@ type Server struct {
 	instructionSet     InstructionSet
 	instructionSetsMu  sync.RWMutex
 	instructionSets    map[string]InstructionSet
+	virtualMCP         map[string]bool
 }
 
 func New(cfg Config) *Server {
@@ -444,6 +447,7 @@ func New(cfg Config) *Server {
 		webhookJobs:       map[string]*webhookJob{},
 		webhookDeliveries: map[string]*webhookDelivery{},
 		instructionSets:   map[string]InstructionSet{},
+		virtualMCP:        map[string]bool{},
 	}
 	if cfg.ConfigDir != "" || cfg.SecretStoreDir != "" || cfg.SecretStoreKeyFile != "" || cfg.SecretIngressStateFile != "" {
 		if cfg.SecretStoreDir == "" {
@@ -498,6 +502,9 @@ func New(cfg Config) *Server {
 	s.instructionSet = newInstructionSet(cfg)
 	if err := s.loadInstructionSetsState(); err != nil {
 		log.Printf("instruction sets state load failed path=%s err=%v", s.instructionSetsStatePath(), err)
+	}
+	if err := s.loadVirtualMCPState(); err != nil {
+		log.Printf("virtual MCP state load failed path=%s err=%v", s.virtualMCPStatePath(), err)
 	}
 	if err := s.loadRegistryState(); err != nil {
 		log.Printf("registry state load failed path=%s err=%v", s.registryStatePath(), err)
@@ -769,6 +776,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/proxy-control/v1/status", s.requireCtl(s.networkProxyStatusHTTP))
 	mux.HandleFunc("/proxy-control/v1/revoke", s.requireCtl(s.networkProxyRevokeHTTP))
 	mux.HandleFunc("/admin/api/mcp/manage", s.requireCtl(s.adminMCPManage))
+	mux.HandleFunc("/admin/api/virtual-mcps", s.requireCtl(s.adminVirtualMCPEndpoint))
+	mux.HandleFunc("/admin/api/virtual-mcps/", s.requireCtl(s.adminVirtualMCPEndpoint))
 	mux.HandleFunc("/admin/api/mcp/issue-token", s.requireCtl(s.adminMCPIssueToken))
 	mux.HandleFunc("/admin/api/mcp/tokens/", s.requireCtl(s.adminMCPTokenAction))
 	mux.HandleFunc("/admin/api/access-profiles", s.requireCtl(s.adminAccessProfiles))
@@ -1073,6 +1082,17 @@ func tokenMatches(r *http.Request, expected string) bool {
 }
 
 func (s *Server) actionsOpenAPI(w http.ResponseWriter, r *http.Request) {
+	body := defaultCustomGPTActionsOpenAPI(s.origin(r))
+	w.Header().Set("Content-Type", "application/yaml; charset=utf-8")
+	w.Header().Set("Content-Length", strconv.Itoa(len(body)))
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write([]byte(body))
+}
+
+// legacyActionsOpenAPIContract is retained only for source compatibility while
+// callers migrate to the Custom-GPT-safe default contract above. It is not
+// registered as an HTTP handler.
+func (s *Server) legacyActionsOpenAPIContract(w http.ResponseWriter, r *http.Request) {
 	origin := s.origin(r)
 	yaml := fmt.Sprintf(`openapi: 3.1.0
 info:
@@ -1630,8 +1650,128 @@ components:
 	w.WriteHeader(http.StatusOK)
 	_, _ = w.Write(b)
 }
+
+// defaultCustomGPTActionsOpenAPI deliberately stays limited to the relay
+// workflow. Optional network-proxy and webhooks capabilities are exposed only
+// after enablement as normal per-server virtual MCP schemas.
+func defaultCustomGPTActionsOpenAPI(origin string) string {
+	return fmt.Sprintf(`openapi: 3.1.0
+info:
+  title: GPTAdmin MCP Relay
+  version: "1.0.0"
+  description: "Custom GPT relay workflow: discover, schema, execute, then poll a background job when needed. Optional capabilities are separate virtual MCP servers."
+servers:
+  - url: %s
+security:
+  - bearerAuth: []
+paths:
+  /mcp-relay/servers:
+    get:
+      operationId: discover
+      summary: Discover targets
+      responses:
+        "200": {description: Available MCP servers}
+  /mcp-relay/tools:
+    post:
+      operationId: schema
+      summary: Get target schema
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [target]
+              properties:
+                target: {type: string, description: 'Target id to use in schema and execute. Never use target="default".'}
+              additionalProperties: false
+      responses:
+        "200": {description: Tool list}
+  /mcp-relay/call:
+    post:
+      operationId: execute
+      summary: Execute one tool on one selected target
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [target, tool]
+              properties:
+                target: {type: string, description: 'Target id to use in schema and execute. Never use target="default".'}
+                tool: {type: string, description: "Tool name from schema."}
+                tool_name: {type: string}
+                args: {type: object, additionalProperties: true}
+                arguments: {type: object, additionalProperties: true}
+                cmd: {type: string}
+                query: {type: string}
+                cwd: {type: string}
+                idempotency_key: {type: string}
+                schema_digest_sha256: {type: string}
+              additionalProperties: true
+      responses:
+        "200": {description: Tool result or background job}
+        "428": {description: Approval required}
+  /mcp-relay/job/{job_id}:
+    get:
+      operationId: job
+      summary: Read a background job
+      parameters:
+        - name: job_id
+          in: path
+          required: true
+          schema: {type: string}
+      responses:
+        "200": {description: Job status}
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+`, yamlQuote(origin))
+}
 func (s *Server) shellmcpArtifactPath() string {
 	return filepath.Join(s.cfg.ArtifactDir, "gptadmin-shellmcp.tar.gz")
+}
+
+type shellmcpArtifactMetadata struct {
+	Component    string `json:"component"`
+	BuildVersion int    `json:"build_version"`
+	GitCommit    string `json:"git_commit"`
+	SHA256       string `json:"sha256"`
+}
+
+func (s *Server) loadShellMCPArtifactMetadata() (shellmcpArtifactMetadata, error) {
+	path := filepath.Join(s.cfg.ArtifactDir, "gptadmin-shellmcp.json")
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		return shellmcpArtifactMetadata{}, fmt.Errorf("read %s: %w", path, err)
+	}
+	if len(raw) > 64*1024 {
+		return shellmcpArtifactMetadata{}, errors.New("shellmcp artifact metadata exceeds 64 KiB")
+	}
+	var metadata shellmcpArtifactMetadata
+	if err := json.Unmarshal(raw, &metadata); err != nil {
+		return shellmcpArtifactMetadata{}, fmt.Errorf("decode shellmcp artifact metadata: %w", err)
+	}
+	metadata.Component = strings.TrimSpace(metadata.Component)
+	metadata.GitCommit = strings.TrimSpace(metadata.GitCommit)
+	metadata.SHA256 = strings.ToLower(strings.TrimSpace(metadata.SHA256))
+	if metadata.Component != "shellmcp" {
+		return shellmcpArtifactMetadata{}, errors.New("shellmcp artifact metadata has invalid component")
+	}
+	if metadata.BuildVersion <= 0 {
+		return shellmcpArtifactMetadata{}, errors.New("shellmcp artifact metadata has invalid build_version")
+	}
+	if metadata.GitCommit == "" {
+		return shellmcpArtifactMetadata{}, errors.New("shellmcp artifact metadata has empty git_commit")
+	}
+	decodedSHA, err := hex.DecodeString(metadata.SHA256)
+	if err != nil || len(decodedSHA) != sha256.Size {
+		return shellmcpArtifactMetadata{}, errors.New("shellmcp artifact metadata has invalid sha256")
+	}
+	return metadata, nil
 }
 
 func (s *Server) shellmcpArtifactManifest(w http.ResponseWriter, r *http.Request) {
@@ -1646,7 +1786,16 @@ func (s *Server) shellmcpArtifactManifest(w http.ResponseWriter, r *http.Request
 		writeJSON(w, http.StatusInternalServerError, map[string]any{"detail": err.Error()})
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"component": "shellmcp", "build_version": BuildVersion, "git_commit": GitCommit, "sha256": sha, "size": st.Size(), "url": s.origin(r) + "/artifacts/shellmcp.tar.gz"})
+	metadata, err := s.loadShellMCPArtifactMetadata()
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]any{"detail": err.Error()})
+		return
+	}
+	if metadata.SHA256 != strings.ToLower(sha) {
+		writeJSON(w, http.StatusInternalServerError, map[string]any{"detail": "shellmcp artifact metadata sha256 does not match archive"})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"component": metadata.Component, "build_version": metadata.BuildVersion, "git_commit": metadata.GitCommit, "sha256": sha, "size": st.Size(), "url": s.origin(r) + "/artifacts/shellmcp.tar.gz"})
 }
 
 func (s *Server) shellmcpArtifactDownload(w http.ResponseWriter, r *http.Request) {
@@ -2305,9 +2454,12 @@ func isSensitiveMetadataValue(value string) bool {
 }
 
 func (s *Server) publicAgentsLocked(r *http.Request) []Agent {
-	agents := make([]Agent, 0, len(s.agents)+1)
+	agents := make([]Agent, 0, len(s.agents)+len(virtualMCPDefinitions)+1)
 	hub := s.hubAgentLocked()
 	agents = append(agents, s.withExposeMetaLocked(hub, r))
+	for _, virtual := range s.virtualAgentsLocked() {
+		agents = append(agents, s.withExposeMetaLocked(virtual, r))
+	}
 	for _, a := range s.agents {
 		cp := *a
 		agents = append(agents, s.withExposeMetaLocked(cp, r))
@@ -2358,6 +2510,9 @@ func (s *Server) selectMCPRelayTarget(target string) (string, int, string) {
 
 	s.mu.Lock()
 	_, exists := s.agents[target]
+	if !exists {
+		exists = s.virtualMCP[target]
+	}
 	s.mu.Unlock()
 	if exists {
 		return target, http.StatusOK, ""
@@ -2389,6 +2544,10 @@ func (s *Server) mcpRelayTools(w http.ResponseWriter, r *http.Request) {
 	target = selectedTarget
 	if target == "hub" {
 		writeJSON(w, http.StatusOK, withActionToolHints(withSchemaContractMetadata(map[string]any{"server_id": target, "status": "completed", "response": map[string]any{"tools": toolsForRequest(r, target, hubTools())}}), target))
+		return
+	}
+	if virtual, ok := virtualMCPDefinitions[target]; ok {
+		writeJSON(w, http.StatusOK, withActionToolHints(withSchemaContractMetadata(map[string]any{"server_id": target, "status": "completed", "response": map[string]any{"tools": s.virtualMCPToolsForRequest(r, virtual)}}), target))
 		return
 	}
 	if strings.HasPrefix(target, "shell:") {
@@ -2481,6 +2640,10 @@ func (s *Server) executeMCPTool(r *http.Request, target, toolName string, args m
 	operation := func() (map[string]any, int) {
 		if target == "hub" {
 			resp, status := s.callHubToolForRequest(r, toolName, args)
+			return map[string]any{"server_id": target, "status": "completed", "response": resp}, status
+		}
+		if virtual, ok := virtualMCPDefinitions[target]; ok {
+			resp, status := s.callVirtualMCP(virtual, AccessProfileIDFromRequest(r), toolName, args)
 			return map[string]any{"server_id": target, "status": "completed", "response": resp}, status
 		}
 		if strings.HasPrefix(target, "shell:") {
@@ -3136,8 +3299,6 @@ func hubTools() []map[string]any {
 		{"name": "approve_pending_server", "description": "Approve one ShellMCP device awaiting enrollment", "inputSchema": map[string]any{"type": "object", "properties": map[string]any{"server_id": map[string]any{"type": "string", "description": "Exact shell:<name> returned by pending"}}, "required": []string{"server_id"}, "additionalProperties": false}},
 		{"name": "status", "description": "Return Hub status", "inputSchema": map[string]any{"type": "object", "properties": map[string]any{}}},
 	}
-	tools = append(tools, webhookHubTools()...)
-	tools = append(tools, networkProxyHubTools()...)
 	return append(tools, secretHubTools()...)
 }
 
@@ -4828,7 +4989,7 @@ func (s *Server) resolveExposedAgent(slug string) (Agent, bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	hub := s.hubAgentLocked()
-	for _, a := range append([]Agent{hub}, s.agentCopiesLocked()...) {
+	for _, a := range append(append([]Agent{hub}, s.virtualAgentsLocked()...), s.agentCopiesLocked()...) {
 		aliases := []string{a.AgentID, a.Name, agentSlug(a.AgentID), agentSlug(a.Name), compactSlug(a.AgentID), compactSlug(a.Name)}
 		for _, alias := range aliases {
 			if strings.EqualFold(slug, alias) || want == agentSlug(alias) || wantCompact == compactSlug(alias) {
@@ -5214,7 +5375,7 @@ func (s *Server) agentMCPJSONRPC(r *http.Request, agent Agent, body map[string]a
 	params := mapValue(body["params"])
 	switch method {
 	case "initialize":
-		if agent.AgentID == "hub" || strings.HasPrefix(agent.AgentID, "shell:") {
+		if agent.AgentID == "hub" || strings.HasPrefix(agent.AgentID, "shell:") || isVirtualMCPAgent(agent) {
 			return map[string]any{"protocolVersion": "2024-11-05", "capabilities": map[string]any{"tools": map[string]any{}, "resources": map[string]any{}, "prompts": map[string]any{}}, "serverInfo": map[string]any{"name": "gptadmin-server-" + agentSlug(agent.AgentID), "version": BuildVersion}, "instructions": s.startupInstructionsTextForRequest(r)}, nil, false
 		}
 		jobID := s.enqueueRelay(agent.AgentID, method, params)
@@ -5230,6 +5391,11 @@ func (s *Server) agentMCPJSONRPC(r *http.Request, agent Agent, body map[string]a
 		args := mapValue(params["arguments"])
 		if name == "" {
 			return nil, map[string]any{"code": -32602, "message": "tool name is required"}, false
+		}
+		if agent.AgentID == "hub" {
+			if id := virtualMCPToolID(name); id != "" {
+				return nil, map[string]any{"code": -32601, "message": "tool is exposed only by the optional virtual MCP " + id}, false
+			}
 		}
 		var authErr error
 		if agent.AgentID == "hub" {
@@ -5274,6 +5440,9 @@ func (s *Server) agentToolsList(agent Agent) (any, any) {
 	if agent.AgentID == "hub" {
 		return map[string]any{"tools": appsSDKTools()}, nil
 	}
+	if isVirtualMCPAgent(agent) {
+		return map[string]any{"tools": virtualMCPTools(agent)}, nil
+	}
 	if strings.HasPrefix(agent.AgentID, "shell:") {
 		return map[string]any{"tools": shellTools()}, nil
 	}
@@ -5288,6 +5457,9 @@ func (s *Server) agentToolsListForRequest(r *http.Request, agent Agent) (any, an
 	if agent.AgentID == "hub" {
 		return map[string]any{"tools": appsSDKToolsForRequest(r)}, nil
 	}
+	if isVirtualMCPAgent(agent) {
+		return map[string]any{"tools": s.virtualMCPToolsForRequest(r, agent)}, nil
+	}
 	if strings.HasPrefix(agent.AgentID, "shell:") {
 		return map[string]any{"tools": toolsForRequest(r, agent.AgentID, shellTools())}, nil
 	}
@@ -5301,6 +5473,9 @@ func (s *Server) agentToolCall(r *http.Request, agent Agent, name string, args m
 		}
 		return mcpToolResult(s.appsSDKCall(name, args)), nil
 	}
+	if isVirtualMCPAgent(agent) {
+		return s.callVirtualMCPTool(r, agent, name, args)
+	}
 	if strings.HasPrefix(agent.AgentID, "shell:") {
 		return unwrapMCPUpstream(s.callShellToolWithTraceParent(agent.AgentID, name, args, false, s.cfg.DefaultTimeout, requestTraceID(r), requestTraceParent(r)))
 	}
@@ -5311,6 +5486,9 @@ func (s *Server) agentToolCall(r *http.Request, agent Agent, name string, args m
 func (s *Server) agentResourcesList(r *http.Request, agent Agent) (any, any) {
 	if agent.AgentID == "hub" {
 		return s.appsSDKResourcesList(), nil
+	}
+	if isVirtualMCPAgent(agent) {
+		return map[string]any{"resources": []any{}}, nil
 	}
 	if strings.HasPrefix(agent.AgentID, "shell:") {
 		return map[string]any{"resources": []map[string]any{
@@ -5329,6 +5507,9 @@ func (s *Server) agentResourceRead(r *http.Request, agent Agent, uri string) (an
 	if agent.AgentID == "hub" {
 		return s.appsSDKResourceRead(r, uri), nil
 	}
+	if isVirtualMCPAgent(agent) {
+		return nil, map[string]any{"code": -32601, "message": "resources/read is not supported by this virtual MCP"}
+	}
 	if strings.HasPrefix(agent.AgentID, "shell:") {
 		if uri == startupInstructionsResourceURI {
 			return s.startupInstructionsResourceRead(r, uri), nil
@@ -5345,7 +5526,7 @@ func (s *Server) agentResourceRead(r *http.Request, agent Agent, uri string) (an
 }
 
 func (s *Server) agentPromptsList(agent Agent) (any, any) {
-	if agent.AgentID == "hub" || strings.HasPrefix(agent.AgentID, "shell:") || !hasCapability(agent, "prompts/list") {
+	if agent.AgentID == "hub" || isVirtualMCPAgent(agent) || strings.HasPrefix(agent.AgentID, "shell:") || !hasCapability(agent, "prompts/list") {
 		return map[string]any{"prompts": []any{}}, nil
 	}
 	jobID := s.enqueueRelay(agent.AgentID, "prompts/list", map[string]any{})
@@ -5353,7 +5534,7 @@ func (s *Server) agentPromptsList(agent Agent) (any, any) {
 }
 
 func (s *Server) agentPromptGet(agent Agent, params map[string]any) (any, any) {
-	if agent.AgentID == "hub" || strings.HasPrefix(agent.AgentID, "shell:") || !hasCapability(agent, "prompts/get") {
+	if agent.AgentID == "hub" || isVirtualMCPAgent(agent) || strings.HasPrefix(agent.AgentID, "shell:") || !hasCapability(agent, "prompts/get") {
 		return nil, map[string]any{"code": -32601, "message": "prompts/get is not supported by this agent"}
 	}
 	jobID := s.enqueueRelay(agent.AgentID, "prompts/get", params)
@@ -5425,6 +5606,8 @@ func (s *Server) mcpEndpoint(w http.ResponseWriter, r *http.Request) {
 		args := mapValue(params["arguments"])
 		if name == "" {
 			rpcErr = map[string]any{"code": -32602, "message": "tool name is required"}
+		} else if id := virtualMCPToolID(name); id != "" {
+			rpcErr = map[string]any{"code": -32601, "message": "tool is exposed only by the optional virtual MCP " + id}
 		} else if err := authorizeFacadeCall(r, name, args); err != nil {
 			s.recordActivationTelemetry("failure")
 			s.auditToolDecision(r, "hub", name, args, "deny", err.Error(), nil, http.StatusForbidden)
@@ -5549,9 +5732,6 @@ func (s *Server) mcpPromptCall(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) appsSDKCall(name string, args map[string]any) any {
 	switch name {
-	case webhookRoutesListTool, webhookRouteCreateTool, webhookRouteReplaceTool, webhookRouteDeleteTool, webhookJobGetTool:
-		result, _ := s.callWebhookHubTool(name, args)
-		return result
 	case "secret_request", "secret_status":
 		return s.secretToolForRequest(nil, name, args)
 	case "ui", "render_gptadmin_dashboard", "renderGptadminDashboard":
@@ -5631,6 +5811,9 @@ func (s *Server) appsSDKCall(name string, args map[string]any) any {
 }
 
 func (s *Server) appsSDKCallForRequest(r *http.Request, name string, args map[string]any) any {
+	if id := virtualMCPToolID(name); id != "" {
+		return map[string]any{"status": "failed", "error": "tool is exposed only by the optional virtual MCP " + id}
+	}
 	if name == "secret_request" || name == "secret_status" {
 		return s.secretToolForRequest(r, name, args)
 	}
@@ -5707,6 +5890,8 @@ func (s *Server) appsSDKSchemaForRequest(r *http.Request, args map[string]any) a
 	var result map[string]any
 	if target == "hub" {
 		result = map[string]any{"server_id": target, "status": "completed", "response": map[string]any{"tools": hubTools()}}
+	} else if virtual, ok := virtualMCPDefinitions[target]; ok {
+		result = map[string]any{"server_id": target, "status": "completed", "response": map[string]any{"tools": s.virtualMCPToolsForRequest(r, virtual)}}
 	} else if strings.HasPrefix(target, "shell:") {
 		result = map[string]any{"server_id": target, "status": "completed", "response": map[string]any{"tools": shellTools()}}
 	} else {
@@ -5902,7 +6087,6 @@ func appsSDKTools() []map[string]any {
 			"_meta":           readMeta,
 		},
 	}
-	tools = append(tools, webhookAppsTools(readSecurity, execSecurity, readMeta, execMeta)...)
 	return append(tools, secretAppsTools()...)
 }
 

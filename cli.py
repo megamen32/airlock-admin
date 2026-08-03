@@ -26,8 +26,16 @@ import pwd
 from functools import wraps
 from email.utils import parsedate_to_datetime
 from pathlib import Path, PurePosixPath
-from cryptography.exceptions import InvalidSignature
-from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
+# The curl bootstrap must run on a stock Python installation.  The signed
+# optional MCP catalogue is the only feature that needs ``cryptography``;
+# defer that dependency so setup/update are not blocked before packages can
+# install their runtime payloads.
+try:
+    from cryptography.exceptions import InvalidSignature
+    from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
+except ImportError:  # pragma: no cover - exercised in the installer subprocess
+    InvalidSignature = ValueError
+    Ed25519PublicKey = None
 try:
     import tomllib
 except Exception:
@@ -2427,6 +2435,12 @@ def _mcp_catalog_canonical_bytes(payload: dict) -> bytes:
 def _verify_mcp_catalog_payload(payload: dict) -> None:
     """Fail closed when the bundled capability catalog has been tampered with."""
 
+    if Ed25519PublicKey is None:
+        raise ValueError(
+            'MCP capability catalog verification requires the optional '
+            'Python package "cryptography". Install GPTAdmin with its Python '
+            'runtime dependencies before using bundled catalog capabilities.'
+        )
     try:
         public_key = base64.urlsafe_b64decode(MCP_CAPABILITY_CATALOG_PUBLIC_KEY_B64 + '==')
         signature = base64.urlsafe_b64decode(MCP_CAPABILITY_CATALOG_SIGNATURE_B64 + '==')
@@ -4619,7 +4633,13 @@ def make_mcp_bearer_token(env: dict, client_id: str, ttl_days: int = DEFAULT_MCP
         'client_id': client_id,
         'iss': origin,
         'aud': resource,
+        # Hub validates both OAuth audience and protected-resource binding.
+        # Keep this CLI fallback wire-compatible with Hub-issued tokens.
+        'resource': resource,
         'iat': now,
+        # Match the Hub verifier's explicit key-id contract.  Installations
+        # that rotate the JWT signing key configure the same value here.
+        'kid': env.get('GPTADMIN_JWT_KEY_ID') or 'gptadmin-hs256-v1',
     }
     body['exp'] = now + ttl_days * 24 * 3600
     signing_input = f'{_b64url_json(header)}.{_b64url_json(body)}'.encode()

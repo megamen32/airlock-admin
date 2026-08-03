@@ -139,6 +139,8 @@ describe("Profiles / Instructions", () => {
     await userEvent.tab();
     expect(screen.getByRole("link", { name: "Вебхуки и агенты" })).toHaveFocus();
     await userEvent.tab();
+    expect(screen.getByRole("link", { name: "Виртуальные MCP" })).toHaveFocus();
+    await userEvent.tab();
     expect(screen.getByRole("link", { name: "Авторизация" })).toHaveFocus();
     await userEvent.tab();
     expect(screen.getByRole("link", { name: "Операции и MCP" })).toHaveFocus();
