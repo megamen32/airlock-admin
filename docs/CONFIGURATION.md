@@ -34,6 +34,7 @@ Full environment-variable reference, auth model, and OAuth setup.
 | `GPTADMIN_STARTUP_INSTRUCTIONS_FILE` | `$GPTADMIN_CONFIG_DIR/startup_instructions.md` | Optional local Markdown startup instructions for MCP clients. |
 | `GPTADMIN_STARTUP_INSTRUCTIONS` | — | Optional environment override for startup instructions; takes precedence over the file. |
 | `GPTADMIN_INSTRUCTION_SETS_STATE_FILE` | `$GPTADMIN_CONFIG_DIR/instruction_sets_state.json` | Restrictive state file for named profile instruction sets. |
+| `GPTADMIN_VIRTUAL_MCP_STATE_FILE` | `$GPTADMIN_CONFIG_DIR/virtual_mcps_state.json` | Persisted on/off state for `network-proxy` and `webhooks`; if the file is absent, both stay off. |
 | `GPTADMIN_WEBHOOK_CONFIG_FILE` | `$GPTADMIN_CONFIG_DIR/webhooks.json` | Operator-owned universal webhook route definitions. |
 | `GPTADMIN_WEBHOOK_STATE_FILE` | `$GPTADMIN_CONFIG_DIR/webhook_state.json` | Durable webhook jobs and replay keys; written with mode `0600`. |
 
