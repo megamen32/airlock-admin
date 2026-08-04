@@ -164,9 +164,9 @@
       "evidence": "curated MCP definitions expose provenance, scopes, network needs and risk before activation; catalog-bound installs require explicit acceptance"
     },
     {
-      "id": "mcp-extension-conformance",
-      "command": "python3 -m pytest tests/test_extension_sdk.py -q",
-      "evidence": "third-party-shaped manifest and stdio lifecycle validate, then discover -> schema -> execute crosses a live Hub and generic relay"
+      "id": "native-mcp-supervisor-conformance",
+      "command": "cd go-shellmcp && go test ./internal/server ./internal/mcpclient ./internal/supervisor",
+      "evidence": "native ShellMCP persists stdio and remote MCP definitions, validates transports, and executes tools through its Go MCP client"
     },
     {
       "id": "live-hub-acceptance-runner",

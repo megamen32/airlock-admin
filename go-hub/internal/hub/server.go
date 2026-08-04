@@ -4,9 +4,11 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"crypto/ed25519"
 	"crypto/hmac"
 	"crypto/rand"
 	"crypto/sha256"
+	"crypto/x509"
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
@@ -113,8 +115,8 @@ func FromEnv() Config {
 		DefaultTimeout:             time.Duration(defTimeout) * time.Second,
 		PollMaxTimeout:             time.Duration(pollTimeout) * time.Second,
 		OutputDir:                  env("GPTADMIN_OUTPUT_DIR", filepath.Join(cfgDir, "outputs")),
-		PublicOrigin:               strings.TrimRight(env("PUBLIC_ORIGIN", ""), "/"),
-		MCPResource:                strings.TrimRight(env("MCP_RESOURCE", env("PUBLIC_ORIGIN", "")), "/"),
+		PublicOrigin:               normalizePublicURL(env("PUBLIC_ORIGIN", "")),
+		MCPResource:                normalizePublicURL(env("MCP_RESOURCE", env("PUBLIC_ORIGIN", ""))),
 		AdminPassword:              env("ADMIN_PASSWORD", ""),
 		OAuthClientSecret:          env("OAUTH_CLIENT_SECRET", ""),
 		OAuthKeyID:                 env("GPTADMIN_JWT_KEY_ID", defaultJWTKeyID),
@@ -206,10 +208,19 @@ type Agent struct {
 }
 
 type persistentRegistryState struct {
-	SavedAt      float64          `json:"saved_at"`
-	BuildVersion string           `json:"build_version,omitempty"`
-	GitCommit    string           `json:"git_commit,omitempty"`
-	Agents       map[string]Agent `json:"agents"`
+	SavedAt          float64                    `json:"saved_at"`
+	BuildVersion     string                     `json:"build_version,omitempty"`
+	GitCommit        string                     `json:"git_commit,omitempty"`
+	Agents           map[string]Agent           `json:"agents"`
+	RelayCredentials map[string]string          `json:"relay_credentials,omitempty"`
+	RelayEnrollments map[string]relayEnrollment `json:"relay_enrollments,omitempty"`
+}
+
+type relayEnrollment struct {
+	AgentID     string `json:"agent_id"`
+	PublicKey   string `json:"public_key"`
+	Fingerprint string `json:"fingerprint"`
+	Challenge   string `json:"challenge"`
 }
 
 type relayJob struct {
@@ -331,6 +342,8 @@ type Server struct {
 	authRateMu        sync.Mutex
 	cond              *sync.Cond
 	agents            map[string]*Agent
+	relayCredentials  map[string]string // SHA-256 digests keyed by agent_id; never retain raw credentials.
+	relayEnrollments  map[string]relayEnrollment
 	relayQueues       map[string][]string
 	relayJobs         map[string]*relayJob
 	shellQueues       map[string][]string
@@ -374,6 +387,10 @@ type Server struct {
 }
 
 func New(cfg Config) *Server {
+	// Direct Config construction must use the same issuer/resource wire
+	// contract as FromEnv and the CLI token issuer.
+	cfg.PublicOrigin = normalizePublicURL(cfg.PublicOrigin)
+	cfg.MCPResource = normalizePublicURL(cfg.MCPResource)
 	if cfg.AuthRateLimit <= 0 {
 		cfg.AuthRateLimit = 60
 	}
@@ -422,6 +439,8 @@ func New(cfg Config) *Server {
 	s := &Server{
 		cfg:               cfg,
 		agents:            map[string]*Agent{},
+		relayCredentials:  map[string]string{},
+		relayEnrollments:  map[string]relayEnrollment{},
 		relayQueues:       map[string][]string{},
 		relayJobs:         map[string]*relayJob{},
 		shellQueues:       map[string][]string{},
@@ -635,6 +654,16 @@ func (s *Server) loadRegistryState() error {
 		return err
 	}
 	loaded := 0
+	for id, digest := range state.RelayCredentials {
+		if id != "" && digest != "" {
+			s.relayCredentials[id] = digest
+		}
+	}
+	for id, enrollment := range state.RelayEnrollments {
+		if id != "" && enrollment.AgentID == id && enrollment.PublicKey != "" && enrollment.Challenge != "" {
+			s.relayEnrollments[id] = enrollment
+		}
+	}
 	for id, agent := range state.Agents {
 		if id == "" {
 			id = agent.AgentID
@@ -666,7 +695,14 @@ func (s *Server) saveRegistryStateLocked() error {
 	if path == "" {
 		return nil
 	}
-	state := persistentRegistryState{SavedAt: nowFloat(), BuildVersion: BuildVersion, GitCommit: GitCommit, Agents: map[string]Agent{}}
+	state := persistentRegistryState{
+		SavedAt:          nowFloat(),
+		BuildVersion:     BuildVersion,
+		GitCommit:        GitCommit,
+		Agents:           map[string]Agent{},
+		RelayCredentials: map[string]string{},
+		RelayEnrollments: map[string]relayEnrollment{},
+	}
 	for id, agent := range s.agents {
 		if id == "" || agent == nil || id == "hub" {
 			continue
@@ -681,6 +717,16 @@ func (s *Server) saveRegistryStateLocked() error {
 		delete(cp.Meta, "restored_from_state")
 		delete(cp.Meta, "state_file")
 		state.Agents[id] = cp
+	}
+	for id, digest := range s.relayCredentials {
+		if id != "" && digest != "" {
+			state.RelayCredentials[id] = digest
+		}
+	}
+	for id, enrollment := range s.relayEnrollments {
+		if id != "" && enrollment.AgentID == id {
+			state.RelayEnrollments[id] = enrollment
+		}
 	}
 	if err := os.MkdirAll(filepath.Dir(path), 0o750); err != nil {
 		return err
@@ -823,7 +869,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/admin/legacy/", s.adminLegacyStatic)
 	mux.HandleFunc("/admin/", s.adminStatic)
 	mux.HandleFunc("/admin", s.adminIndex)
-	return withRequestTrace(withCORS(mux))
+	return withRequestTrace(withIngressAudit(withCORS(mux)))
 }
 
 func (s *Server) httpServiceEndpoint(w http.ResponseWriter, r *http.Request) {
@@ -1035,6 +1081,72 @@ func (s *Server) requireRelay(w http.ResponseWriter, r *http.Request) bool {
 	}
 	writeJSON(w, http.StatusUnauthorized, map[string]any{"detail": "unauthorized"})
 	return false
+}
+
+func relayCredential(r *http.Request) string {
+	if authorization := strings.TrimSpace(r.Header.Get("Authorization")); strings.HasPrefix(strings.ToLower(authorization), "bearer ") {
+		return strings.TrimSpace(authorization[len("Bearer "):])
+	}
+	return strings.TrimSpace(r.Header.Get("X-MCP-Relay-Token"))
+}
+
+func relayCredentialDigest(token string) string {
+	digest := sha256.Sum256([]byte(token))
+	return hex.EncodeToString(digest[:])
+}
+
+// relayEnrollmentAllowed deliberately accepts the administrator password only
+// for POST /mcp-relay/register. Poll and result calls must use an agent-bound
+// credential, so knowledge of the password never grants ongoing relay access.
+func (s *Server) relayEnrollmentAllowed(credential string) bool {
+	return credential != "" && s.cfg.AdminPassword != "" && hmac.Equal([]byte(credential), []byte(s.cfg.AdminPassword))
+}
+
+func (s *Server) legacyRelayCredentialAllowed(credential string) bool {
+	return credential != "" && s.cfg.RelayAgentToken != "" && hmac.Equal([]byte(credential), []byte(s.cfg.RelayAgentToken))
+}
+
+func (s *Server) relayCredentialAllowedLocked(agentID, credential string) bool {
+	digest := s.relayCredentials[agentID]
+	return credential != "" && digest != "" && hmac.Equal([]byte(relayCredentialDigest(credential)), []byte(digest))
+}
+
+func newRelayCredential() (string, error) {
+	secret := make([]byte, 32)
+	if _, err := rand.Read(secret); err != nil {
+		return "", err
+	}
+	return "gptr_" + base64.RawURLEncoding.EncodeToString(secret), nil
+}
+
+func relayEnrollmentMessage(agentID, challenge string) []byte {
+	return []byte("gptadmin-relay-enroll-v1\n" + agentID + "\n" + challenge)
+}
+
+func verifyRelayEnrollment(agentID string, enrollment relayEnrollment, signatureB64 string) bool {
+	publicDER, err := base64.RawURLEncoding.DecodeString(enrollment.PublicKey)
+	if err != nil {
+		return false
+	}
+	parsed, err := x509.ParsePKIXPublicKey(publicDER)
+	if err != nil {
+		return false
+	}
+	publicKey, ok := parsed.(ed25519.PublicKey)
+	if !ok {
+		return false
+	}
+	signature, err := base64.RawURLEncoding.DecodeString(signatureB64)
+	return err == nil && ed25519.Verify(publicKey, relayEnrollmentMessage(agentID, enrollment.Challenge), signature)
+}
+
+func relayFingerprintMatches(publicKey, fingerprint string) bool {
+	publicDER, err := base64.RawURLEncoding.DecodeString(publicKey)
+	if err != nil {
+		return false
+	}
+	digest := sha256.Sum256(publicDER)
+	return hmac.Equal([]byte(strings.ToLower(fingerprint)), []byte(hex.EncodeToString(digest[:])))
 }
 
 func (s *Server) requireArtifact(next http.HandlerFunc) http.HandlerFunc {
@@ -1725,6 +1837,12 @@ paths:
       responses:
         "200": {description: Job status}
 components:
+  # Custom GPT requires a non-empty schemas object; an inline empty YAML map
+  # is rejected by its OpenAPI importer.
+  schemas:
+    EmptyObject:
+      type: object
+      properties: {}
   securitySchemes:
     bearerAuth:
       type: http
@@ -2179,9 +2297,6 @@ func (s *Server) mcpRelayRegister(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusMethodNotAllowed, map[string]any{"detail": "method not allowed"})
 		return
 	}
-	if !s.requireRelay(w, r) {
-		return
-	}
 	var req map[string]any
 	if err := readJSON(r, &req); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]any{"detail": err.Error()})
@@ -2209,17 +2324,96 @@ func (s *Server) mcpRelayRegister(w http.ResponseWriter, r *http.Request) {
 	}
 	caps := stringSlice(req["capabilities"])
 	meta := mapValue(req["meta"])
+	credential := relayCredential(r)
+	legacyCredential := s.legacyRelayCredentialAllowed(credential)
+	enrollment := s.relayEnrollmentAllowed(credential)
+	publicKey := firstString(req, "public_key")
+	fingerprint := firstString(req, "fingerprint")
+	signature := firstString(req, "signature")
+	var issuedCredential string
 	s.mu.Lock()
-	s.agents[agentID] = &Agent{AgentID: agentID, Name: name, Kind: kind, Transport: transport, Status: "online", LastSeen: nowFloat(), Capabilities: caps, Meta: meta}
-	s.addAuditLocked("mcp_register", map[string]any{"agent_id": agentID, "kind": kind, "transport": transport})
-	if err := s.saveRegistryStateLocked(); err != nil {
-		log.Printf("registry state save failed: %v", err)
+	boundCredential := s.relayCredentialAllowedLocked(agentID, credential)
+	existing := s.agents[agentID]
+	if legacyCredential || boundCredential {
+		s.agents[agentID] = &Agent{AgentID: agentID, Name: name, Kind: kind, Transport: transport, Status: "online", LastSeen: nowFloat(), Capabilities: caps, Meta: meta}
+		credentialMode := "agent"
+		if legacyCredential {
+			credentialMode = "legacy"
+		}
+		s.addAuditLocked("mcp_register", map[string]any{"agent_id": agentID, "kind": kind, "transport": transport, "credential_mode": credentialMode})
+		if err := s.saveRegistryStateLocked(); err != nil {
+			s.mu.Unlock()
+			writeJSON(w, http.StatusInternalServerError, map[string]any{"detail": "registry persistence failed"})
+			return
+		}
+		s.mu.Unlock()
+		writeJSON(w, http.StatusOK, map[string]any{"ok": true, "agent_id": agentID, "status": "registered"})
+		return
 	}
-	if err := s.saveFailoverStateBundleLocked(); err != nil {
-		log.Printf("failover state save failed: %v", err)
+	if enrollment {
+		if publicKey == "" || fingerprint == "" || !relayFingerprintMatches(publicKey, fingerprint) || existing != nil || s.relayEnrollments[agentID].AgentID != "" {
+			s.mu.Unlock()
+			writeJSON(w, http.StatusConflict, map[string]any{"detail": "agent_id is already enrolled or identity is missing"})
+			return
+		}
+		challenge, err := newRelayCredential()
+		if err != nil {
+			s.mu.Unlock()
+			writeJSON(w, http.StatusInternalServerError, map[string]any{"detail": "enrollment challenge generation failed"})
+			return
+		}
+		candidate := &Agent{AgentID: agentID, Name: name, Kind: kind, Transport: transport, Status: "awaiting_approval", LastSeen: nowFloat(), Capabilities: caps, Meta: meta}
+		candidate.Meta["public_key"] = publicKey
+		candidate.Meta["fingerprint"] = fingerprint
+		candidate.Meta["approved"] = false
+		s.agents[agentID] = candidate
+		s.relayEnrollments[agentID] = relayEnrollment{AgentID: agentID, PublicKey: publicKey, Fingerprint: fingerprint, Challenge: challenge}
+		if err := s.saveRegistryStateLocked(); err != nil {
+			delete(s.agents, agentID)
+			delete(s.relayEnrollments, agentID)
+			s.mu.Unlock()
+			writeJSON(w, http.StatusInternalServerError, map[string]any{"detail": "registry persistence failed"})
+			return
+		}
+		s.addAuditLocked("mcp_enrollment_pending", map[string]any{"agent_id": agentID, "fingerprint": fingerprint})
+		s.mu.Unlock()
+		writeJSON(w, http.StatusOK, map[string]any{"ok": true, "agent_id": agentID, "status": "awaiting_approval", "challenge": challenge})
+		return
+	}
+	candidate, pending := s.relayEnrollments[agentID]
+	if !pending || publicKey != candidate.PublicKey || fingerprint != candidate.Fingerprint || !verifyRelayEnrollment(agentID, candidate, signature) {
+		s.mu.Unlock()
+		writeJSON(w, http.StatusUnauthorized, map[string]any{"detail": "unauthorized"})
+		return
+	}
+	if existing == nil || existing.Meta["approved"] != true {
+		s.mu.Unlock()
+		writeJSON(w, http.StatusOK, map[string]any{"ok": true, "agent_id": agentID, "status": "awaiting_approval"})
+		return
+	}
+	var err error
+	issuedCredential, err = newRelayCredential()
+	if err != nil {
+		s.mu.Unlock()
+		writeJSON(w, http.StatusInternalServerError, map[string]any{"detail": "relay credential generation failed"})
+		return
+	}
+	s.relayCredentials[agentID] = relayCredentialDigest(issuedCredential)
+	delete(s.relayEnrollments, agentID)
+	existing.Status = "online"
+	existing.LastSeen = nowFloat()
+	s.addAuditLocked("mcp_enrollment_approved", map[string]any{"agent_id": agentID, "fingerprint": fingerprint})
+	if err := s.saveRegistryStateLocked(); err != nil {
+		delete(s.relayCredentials, agentID)
+		s.relayEnrollments[agentID] = candidate
+		existing.Status = "awaiting_approval"
+		existing.Meta["approved"] = true
+		s.mu.Unlock()
+		writeJSON(w, http.StatusInternalServerError, map[string]any{"detail": "registry persistence failed"})
+		return
 	}
 	s.mu.Unlock()
-	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "agent_id": agentID, "status": "registered"})
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "agent_id": agentID, "status": "registered", "relay_token": issuedCredential})
 }
 
 func (s *Server) mcpRelayPoll(w http.ResponseWriter, r *http.Request) {
@@ -2227,14 +2421,21 @@ func (s *Server) mcpRelayPoll(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusMethodNotAllowed, map[string]any{"detail": "method not allowed"})
 		return
 	}
-	if !s.requireRelay(w, r) {
-		return
-	}
 	agentID, _ := url.PathUnescape(strings.TrimPrefix(r.URL.Path, "/mcp-relay/poll/"))
 	agentID = strings.Trim(agentID, "/")
 	if agentID == "" {
 		writeJSON(w, http.StatusNotFound, map[string]any{"detail": "missing agent"})
 		return
+	}
+	credential := relayCredential(r)
+	if !s.legacyRelayCredentialAllowed(credential) {
+		s.mu.Lock()
+		allowed := s.relayCredentialAllowedLocked(agentID, credential)
+		s.mu.Unlock()
+		if !allowed {
+			writeJSON(w, http.StatusUnauthorized, map[string]any{"detail": "unauthorized"})
+			return
+		}
 	}
 	timeout := queryDuration(r, "timeout", s.cfg.PollMaxTimeout)
 	deadline := time.Now().Add(timeout)
@@ -2278,11 +2479,18 @@ func (s *Server) mcpRelayResult(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusMethodNotAllowed, map[string]any{"detail": "method not allowed"})
 		return
 	}
-	if !s.requireRelay(w, r) {
-		return
-	}
 	agentID, _ := url.PathUnescape(strings.TrimPrefix(r.URL.Path, "/mcp-relay/result/"))
 	agentID = strings.Trim(agentID, "/")
+	credential := relayCredential(r)
+	if !s.legacyRelayCredentialAllowed(credential) {
+		s.mu.Lock()
+		allowed := s.relayCredentialAllowedLocked(agentID, credential)
+		s.mu.Unlock()
+		if !allowed {
+			writeJSON(w, http.StatusUnauthorized, map[string]any{"detail": "unauthorized"})
+			return
+		}
+	}
 	var res struct {
 		ID     string         `json:"id"`
 		OK     *bool          `json:"ok"`
@@ -3169,14 +3377,18 @@ func (s *Server) callHubToolForRequest(r *http.Request, name string, args map[st
 		if target == "" {
 			return map[string]any{"error": "server_id or name is required"}, http.StatusBadRequest
 		}
-		if !strings.HasPrefix(target, "shell:") {
+		if _, exists := s.agents[target]; !exists && !strings.HasPrefix(target, "shell:") {
 			target = "shell:" + target
 		}
 		agent := s.agents[target]
 		if agent == nil || agent.Status != "awaiting_approval" {
 			return map[string]any{"error": "pending server not found", "server_id": target}, http.StatusNotFound
 		}
-		agent.Status = "online"
+		// Relay agents stay pending until their signed enrollment proof collects
+		// the agent-bound credential. Shell agents become online immediately.
+		if _, relay := s.relayEnrollments[target]; !relay {
+			agent.Status = "online"
+		}
 		agent.LastSeen = nowFloat()
 		if agent.Meta == nil {
 			agent.Meta = map[string]any{}
@@ -4611,7 +4823,7 @@ func (s *Server) origin(r *http.Request) string {
 	if host == "" {
 		host = "127.0.0.1"
 	}
-	return scheme + "://" + strings.TrimRight(host, "/")
+	return normalizePublicURL(scheme + "://" + strings.TrimRight(host, "/"))
 }
 
 func (s *Server) resource(r *http.Request) string {
@@ -4619,6 +4831,37 @@ func (s *Server) resource(r *http.Request) string {
 		return s.cfg.MCPResource
 	}
 	return s.origin(r)
+}
+
+// normalizePublicURL is the canonical issuer/audience/resource
+// representation. It preserves an optional resource path while dropping
+// values that cannot identify an OAuth protected resource.
+func normalizePublicURL(value string) string {
+	raw := strings.TrimSpace(value)
+	if raw == "" {
+		return ""
+	}
+	u, err := url.Parse(raw)
+	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Hostname() == "" {
+		return strings.TrimRight(raw, "/")
+	}
+	host := strings.ToLower(u.Hostname())
+	if strings.Contains(host, ":") && !strings.HasPrefix(host, "[") {
+		host = "[" + host + "]"
+	}
+	if port := u.Port(); port != "" {
+		host += ":" + port
+	}
+	u.Scheme = strings.ToLower(u.Scheme)
+	u.Host = host
+	u.User = nil
+	u.RawQuery = ""
+	u.ForceQuery = false
+	u.Fragment = ""
+	u.RawFragment = ""
+	u.Path = strings.TrimRight(u.Path, "/")
+	u.RawPath = ""
+	return strings.TrimRight(u.String(), "/")
 }
 
 func (s *Server) oauthProtectedResource(w http.ResponseWriter, r *http.Request) {
@@ -4717,8 +4960,8 @@ func (s *Server) oauthAuthorizeGet(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid_request", "error_description": "redirect_uri is not registered for client"})
 		return
 	}
-	if strings.TrimSpace(q.Get("code_challenge")) == "" || q.Get("code_challenge_method") != "S256" {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid_request", "error_description": "PKCE S256 is required"})
+	if !validPKCEParameters(q.Get("code_challenge"), q.Get("code_challenge_method"), redirectURI) {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid_request", "error_description": "invalid PKCE parameters"})
 		return
 	}
 	hidden := ""
@@ -4762,8 +5005,8 @@ func (s *Server) oauthAuthorizePost(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid_request", "error_description": "redirect_uri is not registered for client"})
 		return
 	}
-	if strings.TrimSpace(r.Form.Get("code_challenge")) == "" || r.Form.Get("code_challenge_method") != "S256" {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid_request", "error_description": "PKCE S256 is required"})
+	if !validPKCEParameters(r.Form.Get("code_challenge"), r.Form.Get("code_challenge_method"), redirectURI) {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid_request", "error_description": "invalid PKCE parameters"})
 		return
 	}
 	code := newID()
@@ -6250,23 +6493,27 @@ func (s *Server) verifyBearerJWTFromRequest(r *http.Request) (map[string]any, er
 }
 
 func (s *Server) verifyJWTForRequest(r *http.Request, token string) (map[string]any, error) {
-	if claims, ok := s.verifyManagedMCPToken(token); ok {
-		expected := strings.TrimRight(s.resource(r), "/")
-		claims["iss"] = s.origin(r)
-		claims["aud"] = expected
-		claims["resource"] = expected
-		return claims, nil
+	claims, managed := s.verifyManagedMCPToken(token)
+	if !managed {
+		var err error
+		claims, err = s.verifyJWT(token)
+		if err != nil {
+			return nil, err
+		}
 	}
-	claims, err := s.verifyJWT(token)
-	if err != nil {
-		return nil, err
+	expectedIssuer := normalizePublicURL(s.origin(r))
+	expected := normalizePublicURL(s.resource(r))
+	// Existing pre-contract JWTs without an issuer remain readable until they
+	// expire, but every new CLI/OAuth/Admin token carries it and a mismatched
+	// issuer is a distinct rejection reason.
+	if issuer, present := claims["iss"].(string); present && strings.TrimSpace(issuer) != "" && normalizePublicURL(issuer) != expectedIssuer {
+		return nil, errors.New("token issuer does not match this Hub")
 	}
-	expected := strings.TrimRight(s.resource(r), "/")
 	if expected == "" || !jwtAudienceMatches(claims["aud"], expected) {
 		return nil, errors.New("token audience does not match this Hub")
 	}
 	resource, ok := claims["resource"].(string)
-	if !ok || strings.TrimRight(resource, "/") != expected {
+	if !ok || normalizePublicURL(resource) != expected {
 		return nil, errors.New("token resource does not match this Hub")
 	}
 	if scope, ok := claims["scope"].(string); !ok || !validJWTScopes(scope) {
@@ -6326,10 +6573,10 @@ func validJWTScopes(value string) bool {
 func jwtAudienceMatches(value any, expected string) bool {
 	switch audience := value.(type) {
 	case string:
-		return strings.TrimRight(audience, "/") == expected
+		return normalizePublicURL(audience) == expected
 	case []any:
 		for _, item := range audience {
-			if candidate, ok := item.(string); ok && strings.TrimRight(candidate, "/") == expected {
+			if candidate, ok := item.(string); ok && normalizePublicURL(candidate) == expected {
 				return true
 			}
 		}
@@ -6524,6 +6771,12 @@ func (s *Server) allowedRedirect(uri string) bool {
 	if (host == "chatgpt.com" || strings.HasSuffix(host, ".chatgpt.com")) && strings.HasPrefix(u.Path, "/connector/oauth/") {
 		return true
 	}
+	// Custom GPT Actions use the legacy OpenAI callback shape, not the
+	// connector callback. Reuse the strict profile used by the no-PKCE
+	// compatibility exception so the two authorization boundaries cannot drift.
+	if isCustomGPTActionsCallback(uri) {
+		return true
+	}
 	if host == "opencode.bezrabotnyi.com" && u.Path == "/mcp/oauth/callback" {
 		return true
 	}
@@ -6556,6 +6809,34 @@ func pkceOK(verifier, challenge string) bool {
 	}
 	sum := sha256.Sum256([]byte(verifier))
 	return hmac.Equal([]byte(b64url(sum[:])), []byte(challenge))
+}
+
+// validPKCEParameters accepts RFC 7636 S256 for every OAuth client. The sole
+// no-PKCE exception is the exact legacy Custom GPT Actions callback profile;
+// it is deliberately not a generic redirect/client exception. Authorization
+// codes remain one-time and bound to client, redirect URI, and resource in
+// oauthToken.
+func validPKCEParameters(challenge, method, redirectURI string) bool {
+	challenge = strings.TrimSpace(challenge)
+	method = strings.TrimSpace(method)
+	if challenge != "" || method != "" {
+		return challenge != "" && method == "S256"
+	}
+	return isCustomGPTActionsCallback(redirectURI)
+}
+
+func isCustomGPTActionsCallback(uri string) bool {
+	u, err := url.Parse(uri)
+	if err != nil || u.Scheme != "https" || !strings.EqualFold(u.Host, "chat.openai.com") || u.RawQuery != "" || u.Fragment != "" {
+		return false
+	}
+	const prefix = "/aip/g-"
+	const suffix = "/oauth/callback"
+	if !strings.HasPrefix(u.Path, prefix) || !strings.HasSuffix(u.Path, suffix) {
+		return false
+	}
+	gptID := strings.TrimSuffix(strings.TrimPrefix(u.Path, prefix), suffix)
+	return gptID != "" && !strings.Contains(gptID, "/")
 }
 
 func (s *Server) signJWT(claims map[string]any) (string, error) {

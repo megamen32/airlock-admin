@@ -39,8 +39,8 @@ public HTTPS schema URL; never use `localhost` in ChatGPT. The CLI fallback
 
 `PUBLIC_ORIGIN` is the issuer/public origin and `MCP_RESOURCE` is the exact
 expected OAuth audience and protected resource. Both must equal the public
-HTTPS origin with no trailing slash. `OAUTH_CLIENT_SECRET` must be identical in
-the running Hub and the CLI environment that signs a CLI-issued token.
+HTTPS origin with no trailing slash. The installer keeps signing material inside
+the Hub configuration; clients never copy or configure an internal signing key.
 
 The default `/actions/openapi.yaml` intentionally contains one Bearer security
 scheme and only `discover → schema → execute → job`. This avoids Custom GPT

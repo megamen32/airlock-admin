@@ -39,6 +39,16 @@ func TestListServersUsesHubKind(t *testing.T) {
 	}
 }
 
+func TestAllowedRedirectAcceptsCustomGPTActionsCallback(t *testing.T) {
+	s := &Server{}
+	if !s.allowedRedirect("https://chat.openai.com/aip/g-776f9cc89b61906bdbcc3067b9b90b32ffb92a6f/oauth/callback") {
+		t.Fatal("Custom GPT Actions callback must be accepted")
+	}
+	if s.allowedRedirect("https://chat.openai.com/aip/not-a-gpt/oauth/callback") {
+		t.Fatal("non-GPT OpenAI callback must be rejected")
+	}
+}
+
 func TestDetailedDiscoveryRedactsSensitiveAgentMetadata(t *testing.T) {
 	s := New(Config{CtlToken: "ctl", DefaultTimeout: 1, PollMaxTimeout: 1})
 	s.mu.Lock()
@@ -2102,6 +2112,37 @@ func TestJWTRequestContextRejectsWrongAudienceAndExpiredConnection(t *testing.T)
 	s.Handler().ServeHTTP(adminResponse, adminRequest)
 	if adminResponse.Code != http.StatusForbidden {
 		t.Fatalf("MCP JWT was forwarded to admin API: status=%d body=%s", adminResponse.Code, adminResponse.Body.String())
+	}
+}
+
+func TestJWTRequestRejectsWrongIssuerAndNormalizesConfiguredOrigin(t *testing.T) {
+	s := New(Config{OAuthClientSecret: "oauth-secret", PublicOrigin: " HTTPS://Hub.Example/// ", MCPResource: " HTTPS://Hub.Example/// "})
+	if got := s.origin(nil); got != "https://hub.example" {
+		t.Fatalf("normalized origin=%q", got)
+	}
+	if got := s.resource(nil); got != "https://hub.example" {
+		t.Fatalf("normalized resource=%q", got)
+	}
+	req := httptest.NewRequest(http.MethodGet, "http://127.0.0.1:9001/mcp-relay/servers", nil)
+	wrongIssuer, err := s.signJWT(map[string]any{
+		"sub": "test", "iss": "https://other.example", "aud": "https://hub.example", "resource": "https://hub.example",
+		"scope": "gptadmin.read", "exp": time.Now().Add(time.Hour).Unix(), "iat": time.Now().Unix(), "kid": defaultJWTKeyID,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.verifyJWTForRequest(req, wrongIssuer); err == nil || !strings.Contains(err.Error(), "issuer") {
+		t.Fatalf("wrong issuer was accepted: %v", err)
+	}
+	normalizedClaims, err := s.signJWT(map[string]any{
+		"sub": "test", "iss": "HTTPS://HUB.EXAMPLE///", "aud": "HTTPS://HUB.EXAMPLE///", "resource": "HTTPS://HUB.EXAMPLE///",
+		"scope": "gptadmin.read", "exp": time.Now().Add(time.Hour).Unix(), "iat": time.Now().Unix(), "kid": defaultJWTKeyID,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.verifyJWTForRequest(req, normalizedClaims); err != nil {
+		t.Fatalf("equivalent normalized origin rejected: %v", err)
 	}
 }
 
