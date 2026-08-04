@@ -20,6 +20,7 @@ import base64
 import hashlib
 import json
 import os
+import secrets
 import shutil
 import signal
 import socket
@@ -38,14 +39,15 @@ from playwright.sync_api import Browser, Playwright, sync_playwright
 
 
 ROOT = Path(__file__).resolve().parents[1]
-ADMIN_PASSWORD = "custom-gpt-browser-test-password"
-CONTROL_TOKEN = "custom-gpt-browser-test-control"
-
-
 def _free_port() -> int:
     with socket.socket() as sock:
         sock.bind(("127.0.0.1", 0))
         return int(sock.getsockname()[1])
+
+
+def _test_secret(label: str) -> str:
+    """Return disposable test-only credential material without committing a value."""
+    return f"{label}-{secrets.token_urlsafe(18)}"
 
 
 def _request(
@@ -125,6 +127,9 @@ def _browser(playwright: Playwright) -> tuple[Browser, bool]:
 def test_custom_gpt_actions_schema_bearer_and_oauth_pkce_in_browser(tmp_path: Path) -> None:
     """Prove the exact schema, Bearer and browser OAuth/PKCE contract together."""
 
+    admin_password = _test_secret("admin-password")
+    control_token = _test_secret("control-token")
+    oauth_client_secret = _test_secret("oauth-signing-secret")
     binary = tmp_path / "gptadmin-hub"
     subprocess.run(["go", "build", "-buildvcs=false", "-o", str(binary), "./cmd/gptadmin-hub"], cwd=ROOT / "go-hub", check=True, timeout=120)
     hub_port = _free_port()
@@ -141,9 +146,9 @@ def test_custom_gpt_actions_schema_bearer_and_oauth_pkce_in_browser(tmp_path: Pa
             "GPTADMIN_HUB_HOST": hub_bind_host,
             "GPTADMIN_HUB_PORT": str(hub_port),
             "PORT": str(hub_port),
-            "CTL_TOKEN": CONTROL_TOKEN,
-            "ADMIN_PASSWORD": ADMIN_PASSWORD,
-            "OAUTH_CLIENT_SECRET": "custom-gpt-browser-test-oauth-signing-secret",
+            "CTL_TOKEN": control_token,
+            "ADMIN_PASSWORD": admin_password,
+            "OAUTH_CLIENT_SECRET": oauth_client_secret,
             "PUBLIC_ORIGIN": browser_base_url,
             "MCP_RESOURCE": browser_base_url,
             "GPTADMIN_CONFIG_DIR": str(tmp_path / "config"),
@@ -184,7 +189,7 @@ def test_custom_gpt_actions_schema_bearer_and_oauth_pkce_in_browser(tmp_path: Pa
             base_url,
             "/admin/api/mcp/issue-token",
             method="POST",
-            token=CONTROL_TOKEN,
+            token=control_token,
             payload={"client_id": "custom-gpt-browser-test", "ttl_days": 1, "access_mode": "readonly"},
         )
         assert status == 200
@@ -215,7 +220,7 @@ def test_custom_gpt_actions_schema_bearer_and_oauth_pkce_in_browser(tmp_path: Pa
             context = browser.contexts[0] if browser.contexts else browser.new_context()
             page = context.new_page()
             page.goto(browser_base_url + "/oauth/authorize?" + authorize_query, wait_until="domcontentloaded")
-            page.locator('input[name="password"]').fill(ADMIN_PASSWORD)
+            page.locator('input[name="password"]').fill(admin_password)
             page.get_by_role("button", name="Authorize").click()
             assert _CallbackHandler.event.wait(timeout=10), "browser OAuth callback was not reached"
             page.close()
