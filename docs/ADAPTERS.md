@@ -7,7 +7,7 @@ The hub exposes **three ways** for an AI to connect. Same hub, same capabilities
 |---------|-----|-----|
 | [MCP client](#1-mcp-client) | Claude Desktop, Codex, OpenCode | MCP remote SSE at `/mcp` |
 | [Browser extension](#2-browser-extension) | DeepSeek, Qwen, Alice, GigaChat, ChatGPT (free) | userscript (Tampermonkey/Firefox) |
-| [OpenAI Action](#3-openai-action) | ChatGPT Custom GPT, Open WebUI | REST + OpenAPI, Bearer token |
+| [OpenAI Action](#3-openai-action) | ChatGPT Custom GPT, Open WebUI | generated OpenAPI schema; choose Bearer or OAuth |
 
 ---
 
@@ -121,19 +121,71 @@ Press `Alt+K` (or the key icon, bottom-right) and enter:
 
 **For:** ChatGPT Custom GPT, Open WebUI.
 
-**Protocol:** REST + OpenAPI schema, OAuth Authorization Code + PKCE.
+**Protocol:** REST + generated OpenAPI schema. Custom GPT Actions use the
+schema URL you import; native MCP clients use `/mcp` instead.
 
-**Endpoint:** `https://your-hub.bezrabotnyi.com/admin/api/*`
+**Schema URLs:**
+
+- Hub-wide: `https://your-hub.example/actions/openapi.yaml`
+- Single-server: `https://your-hub.example/server/{slug}/actions/openapi.yaml`
+
+The hub generates these schemas from the current MCP tool list. Import the URL
+you need; do not hand-edit a schema for Custom GPT.
 
 ### Setup (ChatGPT Custom GPT)
 
 1. Open https://chatgpt.com/gpts/editor
 2. Create or edit a GPT → Configure → Actions → Create new action
-3. Import OpenAPI by URL: `https://became.bezrabotnyi.com/api.json`
-4. In the `servers` block, replace the `url` with your Hub URL
-5. Authentication → OAuth2 → Authorization Code + PKCE; use the Hub metadata
-   discovered from `/connect`
-6. Save. You can now ask ChatGPT to run server commands — no Codex limits.
+3. Import OpenAPI by URL: `https://your-hub.example/actions/openapi.yaml`.
+   This is the generated hub-wide schema. For a single server, import
+   `/server/{slug}/actions/openapi.yaml` instead.
+4. Pick the auth path:
+
+   - **Bearer** — choose **API key** → **Bearer**, then paste only a scoped
+     token value issued by the Hub.
+   - **OAuth** — choose **OAuth**, then use the Hub authorize/token flow from
+     the Hub URL.
+
+Bearer is the shortest path when the GPT only needs a scoped token. OAuth is
+the better choice when you want the GPT to go through the Hub login flow.
+
+5. Save and use the per-operation **Test** control. The first call opens
+   ChatGPT's one-time outbound-call confirmation; approve it, then confirm the
+   generated schema works with a harmless action.
+
+### OAuth for a Custom GPT
+
+Custom GPT OAuth uses the Authorization Code flow. Choose **OAuth** in the
+Action authentication dialog and configure the public Hub:
+
+- authorization URL: `https://your-hub.example/oauth/authorize`;
+- token URL: `https://your-hub.example/oauth/token`;
+- client ID: a stable label for this GPT (for example `chatgpt-custom-gpt`);
+- scopes: `gptadmin.read` (add `gptadmin.exec` only when required).
+
+ChatGPT supplies its callback. Some Custom GPT editor versions do not send
+PKCE parameters, so the Hub accepts that interoperable Authorization Code
+variant only for the exact `https://chat.openai.com/aip/g-.../oauth/callback`
+callback profile. Every other OAuth client must use PKCE S256.
+On the Hub authorization page, sign in and complete the redirect, then run a
+harmless test action again. The Hub rejects a token whose issuer, audience,
+resource, signature or key id does not match its canonical public origin.
+
+### Diagnose a 401 without exposing a credential
+
+Run the command below on the same installation that runs the Hub. It prints
+only config paths, normalized issuer/audience/resource, the signing-key
+fingerprint and a distinct local verdict; it never prints the supplied JWT or
+signing secret.
+
+```bash
+gptadmin auth-diagnose --token '<paste-token-here>'
+```
+
+For a token that works on the public URL but not loopback (or the inverse),
+check that the Hub's origin, resource and signing settings all come from the
+same configuration file, then restart that Hub and issue a new token. Do not
+point a Custom GPT at `127.0.0.1`.
 
 ### Setup (Open WebUI)
 
