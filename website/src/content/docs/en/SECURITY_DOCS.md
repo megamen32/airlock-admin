@@ -7,9 +7,9 @@ GPT‑Админ gives AI agents access to your servers. Security is the top pri
 GPT‑Админ has three auth mechanisms — see [Configuration → Auth model](./CONFIGURATION.md#auth-model)
 for details:
 
-1. **`CTL_TOKEN`** (Bearer) — admin API + web panel
-2. **OAuth bearer** — `/mcp` endpoint (for MCP clients)
-3. **`ADMIN_PASSWORD`** — the `/authorize` form inside OAuth flow
+1. **`CTL_TOKEN`** (Bearer, legacy migration only) — existing admin API + web panel installs; do not use it for new Custom GPT setup.
+2. **OAuth bearer** — `/mcp` endpoint (for MCP clients) and the Custom GPT relay schema flow
+3. **`ADMIN_PASSWORD`** — the `/oauth/authorize` form inside OAuth flow
 
 Plus `SHELLMCP_TOKEN` for agent → hub registration.
 
@@ -17,10 +17,6 @@ Plus `SHELLMCP_TOKEN` for agent → hub registration.
 
 - **User-mode by default** — the agent runs as the installing user, not root.
   System-mode (sudo) is opt-in, only when you need privileged operations.
-- **Root services fail closed** — when ShellMCP runs as root, configure
-  `SHELLMCP_DEFAULT_USER`. Otherwise ordinary commands are rejected; they never
-  silently inherit root. Use `run_as_user: "root"` or explicit `sudo` only for
-  a deliberate privileged action.
 - **Command allowlist** — restrict which commands the agent will execute
   (configure in `~/.config/gptadmin/allowlist.txt`).
 - **IP allowlist** — restrict which IPs can reach the agent.
@@ -35,6 +31,49 @@ Plus `SHELLMCP_TOKEN` for agent → hub registration.
   with a TTL. Critical files (nginx, systemd, networking) get longer TTLs by
   default.
 
+### Admin MFA
+
+Locked-down administration accepts an enrolled WebAuthn/passkey credential or
+the TOTP fallback. The WebAuthn ceremonies are exposed at
+`/admin/api/security/mfa/webauthn/register/{begin,finish}` and
+`/admin/api/security/mfa/webauthn/login/{begin,finish}`; the Hub stores public
+credential records in `webauthn_state.json` with mode `0600` and uses a
+short-lived HttpOnly proof cookie after a verified login. OIDC identity-aware
+proxy integration remains deployment-specific and is not implied by local
+passkey enrollment.
+
+### Remote secret ingress
+
+Remote MCP clients use `secret_request` to create a one-time browser entry
+flow and `secret_status` to read metadata only. Values must never be sent in
+MCP JSON, logs, audit records, job inspection or public responses. A managed
+`shell_exec` may receive an opaque `secret_env` mapping; the Hub resolves it
+server-side and redacts the value again at every response boundary.
+
+The secure defaults are:
+
+| Variable | Default | Contract |
+|----------|---------|----------|
+| `GPTADMIN_SECRET_STORE_DIR` | `$GPTADMIN_CONFIG_DIR/secrets` | Directory mode `0700`; contains encrypted records only |
+| `GPTADMIN_SECRET_STORE_KEY_FILE` | `$GPTADMIN_CONFIG_DIR/secret-store.key` | AES-256 key mode `0600`; missing/invalid key fails closed |
+| `GPTADMIN_SECRET_INGRESS_STATE_FILE` | `$GPTADMIN_CONFIG_DIR/secrets/requests.json` | Request metadata mode `0600`; token hashes only |
+| `GPTADMIN_SECRET_INGRESS_TTL` | `900` seconds | Bounded to 60–3600 seconds; requests are single-use |
+
+Back up the key and encrypted store together using the existing protected
+backup procedure. If the key is lost or invalid, restore it from a protected
+backup or recreate the request; GPTAdmin never falls back to plaintext files
+or environment variables. Rotate the key only with a planned migration that
+re-encrypts records before removing the old key.
+
+### OTLP telemetry export
+
+OTLP export is opt-in through `GPTADMIN_OTLP_ENDPOINT`. External endpoints
+must use HTTPS; HTTP is allowed only for loopback development collectors. The
+Hub exports only an allowlisted structured event envelope and bounded
+correlation fields. Arguments, commands, credentials, URLs, file contents and
+raw payloads are excluded. The queue is bounded and export errors are
+fail-open for the originating control-plane request.
+
 ## Approve mode
 
 For critical operations (deleting files, changing network config), the hub
@@ -44,18 +83,19 @@ human confirmation before executing. Enable per-agent in `/admin` → Security.
 ## Token rotation
 
 ```bash
-# Generate a new CTL_TOKEN
+# Legacy `CTL_TOKEN` rotation (migration installs only)
 openssl rand -hex 32
 
 # Update the hub env, restart
 sudo systemctl restart gptadmin_hub  # or: systemctl --user restart gptadmin_hub
 
 # Update each agent's HUB_URL/TOKEN if you changed SHELLMCP_TOKEN
-# Update Custom GPT / MCP client configs with the new CTL_TOKEN
+# Update Custom GPT / MCP client configs with the new OAuth bearer or scoped managed MCP token; do not onboard new clients with CTL_TOKEN
 ```
 
-Rotate immediately if a token leaks. Scrubbing a leaked value from
-historical commits is only a one-time measure — rotation is the safe path.
+Rotate immediately if a token leaks. The repo's history-scrubbing
+ is a one-time measure —
+rotate to be safe.
 
 
 ## Gateway mode for MCP servers
@@ -71,7 +111,7 @@ This keeps the upstream MCP server private while GPTAdmin applies HTTPS, bearer/
 
 ## Production hardening checklist
 
-- [ ] `CTL_TOKEN` is a strong random value (`openssl rand -hex 32`)
+- [ ] New Custom GPT setup uses OAuth bearer or a scoped managed MCP token; no new `CTL_TOKEN` is created
 - [ ] `OAUTH_CLIENT_SECRET` is set (for `/mcp`)
 - [ ] `ADMIN_PASSWORD` is strong
 - [ ] Hub is behind HTTPS (via Cloudflare/FRP tunnel or nginx + Certbot)

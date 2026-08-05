@@ -14,18 +14,18 @@
 1.下载FRP客户端
 2. 在公共FRP服务器上注册一个随机子域
 3. 将 FRP 客户端作为服务与集线器一起启动
-4.打印您的公共URL：`https://random-sub.frp.bezrabotnyi.com`
+4. 打印您的公共 URL：`https://random-sub.frp.bezrabotnyi.com`
 
 ### 优点/缺点
 
 - ✅ 无需域名，无需设置 DNS
 - ✅ 快速（直接 TCP 隧道）
-- ⚠️ URL位于`frp.bezrabotnyi.com`（共享域）
+- ⚠️ URL 位于 `frp.bezrabotnyi.com`（共享域）
 - ⚠️ 免费的 FRP 服务器有速率限制
 
 ## Cloudflare 隧道
 
-[Cloudflare隧道](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/)
+[Cloudflare 隧道](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/)
 创建通往 Cloudflare 边缘的安全出站隧道。您需要一个 Cloudflare
 Cloudflare 上的帐户和域。
 
@@ -45,8 +45,8 @@ gptadmin tunnel cloudflare
 1.安装`cloudflared`
 2. 创建隧道
 3. 将其绑定到您的 Cloudflare 域上的子域
-4.启动 `cloudflared` 作为服务
-5.打印您的公共URL：`https://hub.yourdomain.com`
+4. 将 `cloudflared` 作为服务启动
+5. 打印您的公共 URL：`https://hub.yourdomain.com`
 
 ### 优点/缺点
 
@@ -61,7 +61,7 @@ gptadmin tunnel cloudflare
 
 1. 将 DNS A 记录指向您的服务器
 2.使用提供的nginx配置模板：`deploy/nginx/`（复制并编辑）
-3、获取证书：`certbot --nginx -d hub.yourdomain.com`
+3. 获取证书：`certbot --nginx -d hub.yourdomain.com`
 4. 在本地主机上运行集线器，nginx 代理它
 
 ```bash
@@ -87,6 +87,6 @@ location / {
 
 ## 另请参阅
 
-- [开始使用](./GETTING_STARTED.md)
-- [配置](./CONFIGURATION.md) — `PUBLIC_ORIGIN`等。
+- [入门](./GETTING_STARTED.md)
+- [配置](./CONFIGURATION.md) — `PUBLIC_ORIGIN` 等。
 - [集线器](./HUB.md)

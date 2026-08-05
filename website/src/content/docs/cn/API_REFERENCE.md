@@ -1,28 +1,67 @@
 # API 参考
 
+## 操作探针
+
+|方法|路径|授权 |目的|
+| ---| ---| ---| ---|
+| `GET` | `/healthz` |无 |仅活性；返回 `ok`。 |
+| `GET` | `/version` |无 |构建版本并提交身份。 |
+| `GET` | `/metrics` |无 |有界聚合集线器计数；从不包含凭据、参数或文件内容。 |
+
 集线器公开的 REST + MCP 端点。
+
+## 请求关联
+
+集线器接受可选的 W3C `traceparent` 请求标头。它返回一个
+已验证的子 `traceparent` 和有界的 `X-Request-ID` 响应标头；
+排队中继和 ShellMCP 作业通过轮询携带相同的相关字段
+和结果交付。无效的跟踪标头将被丢弃并替换。踪迹
+元数据从不包含命令参数、凭据或文件内容。
+
+操作员可以选择使用 OTLP/HTTP 日志导出
+`GPTADMIN_OTLP_ENDPOINT`。外部收集器必须使用HTTPS；普通 HTTP 是
+仅接受环回开发收集器。出口商使用
+有界异步队列并导出列入白名单的事件字段，例如
+策略决策、工具、结果参考和跟踪 ID。它从不出口原料
+参数、命令、凭据、URL 或文件内容以及收集器
+传送失败不会导致原始集线器请求失败。
+
+## 远程秘密入口
+
+完全访问 MCP 客户端可以调用 `secret_request` 和 `secret_status`。的
+首先仅返回 `request_id`、`input_url`、`secret_ref`、`env_name`、`file`
+和过期元数据。操作员将值提交一次
+`POST /secret-input/{token}`; MCP 和响应机构均不接受或
+返回明文。稍后的 `shell_exec` 可能会通过
+`secret_env: {"ENV_NAME": "secret_ref"}`。中心作业响应和日志编辑
+解析值和只读配置文件无法访问这些操作。
 
 ## 授权快速参考
 
 |端点 |授权 |
 |----------|------|
 | `GET /admin` |基本 (`CTL_TOKEN`) |
-| `GET /admin/api/*` |持票人 `CTL_TOKEN` |
+| `GET /admin/api/*` |持有者 `CTL_TOKEN` |
 | `POST /mcp` | OAuth 承载 |
-| `POST /heartbeat` |持票人 `SHELLMCP_TOKEN` |
-| `GET /servers` |持票人 `CTL_TOKEN` |
-| `GET /api.json` |无 |
-| `GET /openapi.yaml` |无 |
-| `POST /authorize` | `ADMIN_PASSWORD` 表格 |
+| `POST /heartbeat` |持有者 `SHELLMCP_TOKEN` |
+| `GET /servers` |持有者 `CTL_TOKEN` |
+| `GET /actions/openapi.yaml` |无 |
+| `GET /server/{slug}/actions/openapi.yaml` |无 |
+| `GET /api.json` |无（旧别名；不是自定义 GPT 路径）|
+| `GET /openapi.yaml` |无（旧别名；不是自定义 GPT 路径）|
+| `POST /oauth/authorize` | `ADMIN_PASSWORD` 表单 |
 | `POST /oauth/token` |客户凭证|
 
-请参阅[配置→验证模型](./CONFIGURATION.md#auth-model)。
+自定义 GPT 导入使用 `/actions/openapi.yaml` 或 `/server/{slug}/actions/openapi.yaml`；
+中继调用通过 `/mcp-relay/*`。 `CTL_TOKEN` 仅限旧版/管理员。
+
+请参阅[配置 → 身份验证模型](./CONFIGURATION.md#auth-model)。
 
 ---
 
-## 管理API (`/admin/api/*`)
+## 管理 API (`/admin/api/*`)
 
-持有者身份验证为 `CTL_TOKEN`。由 Web 面板和自定义 GPT 操作使用。
+使用 `CTL_TOKEN` 进行不记名身份验证。仅旧版管理/Web 面板迁移详细信息。
 
 ### `GET /servers`
 
@@ -58,10 +97,6 @@
 }
 ```
 
-命令通常以 ShellMCP 代理配置的非 root 用户身份运行。套装
-`run_as_user: "root"` 仅用于有意的特权操作；一个根
-没有配置默认用户的 ShellMCP 会拒绝普通命令。
-
 ### `GET /tasks/{task_id}`
 
 获取后台任务的状态。
@@ -74,7 +109,10 @@
 
 目标代理的 CPU、RAM、磁盘、正常运行时间。
 
-完整架构：将 `https://became.bezrabotnyi.com/api.json` 导入到您的客户端。
+旧版导入架构：`https://became.bezrabotnyi.com/api.json` 或
+`https://became.bezrabotnyi.com/openapi.yaml`。自定义 GPT 导入用途
+`/actions/openapi.yaml` 或 `/server/{slug}/actions/openapi.yaml`，不是这些
+遗留别名。
 
 ---
 
@@ -83,9 +121,7 @@
 OAuth 承载身份验证。 MCP 远程 SSE（流式 HTTP）。
 
 MCP 客户端（Claude Desktop、Codex、OpenCode）连接至此处。集线器暴露
-shellmcp 工具作为 MCP 工具：
-
-- `shell_exec` — 运行 shell 命令
+shellmcp 工具作为 MCP 工具：- `shell_exec` — 运行 shell 命令
 - `file_read` — 读取文件
 - `file_write` — 写入文件（带备份）
 - `file_backup` — 创建托管备份
@@ -102,7 +138,7 @@ shellmcp 工具作为 MCP 工具：
 
 这些由集线器调用，而不是直接由人工智能调用。持有者 `SHELLMCP_TOKEN`。
 
-|端点|方法|目的|
+|端点 |方法|目的|
 |----------|--------|---------|
 | `/exec` |发布 |运行 shell 命令 |
 | `/file` |获取/发布 |读/写文件 |
@@ -110,7 +146,7 @@ shellmcp 工具作为 MCP 工具：
 | `/systemd/{action}` |发布 |状态/启动/停止/重新启动/启用 |
 | `/system/info` |获取 | CPU/RAM/磁盘/正常运行时间 |
 | `/system/health` |获取 |健康检查|
-| `/heartbeat` |发布 |向集线器注册（由代理→集线器调用）|
+| `/heartbeat` |发布 |向集线器注册（由代理→集线器调用） |
 
 ---
 
@@ -128,10 +164,12 @@ shellmcp 工具作为 MCP 工具：
 
 ## OpenAPI 架构
 
-- `GET /api.json` — JSON 架构（用于自定义 GPT/开放 WebUI 导入）
-- `GET /openapi.yaml` — YAML 架构
+- 规范自定义 GPT 导入：`GET /actions/openapi.yaml`
+- 每服务器导入：`GET /server/{slug}/actions/openapi.yaml`
+- 旧别名：`GET /api.json` 和 `GET /openapi.yaml`
 
-这些是公共的（无身份验证），因此自定义 GPT 可以通过 URL 导入。
+规范导入 URL 是公开的（无需身份验证）。旧别名保持公开
+用于迁移，但它们不是自定义 GPT 路径。
 
 ## 后台任务
 
@@ -141,7 +179,7 @@ shellmcp 工具作为 MCP 工具：
 { "task_id": "abc123", "status": "running" }
 ```
 
-使用 `GET /tasks/abc123` 进行轮询，直到 `status: completed`。AI 会执行此操作
+使用 `GET /tasks/abc123` 进行轮询，直到 `status: completed`。 AI 这样做
 自动。
 
 ## 输出截断
@@ -161,16 +199,12 @@ shellmcp 工具作为 MCP 工具：
 人工智能可以通过后续通话按需阅读更多内容。这节省了代币——
 人工智能只读取它需要回答的内容。
 
-## 中继目标合约
-
-对于集线器中继，请在 `listMcpTools` 之前拨打 `listMcpServers` 或
-`callMcpTool`，然后将返回的显式服务器id传递为`target`。有
-没有 `default` 目标，`target: "default"` 返回 `400`。
-
 
 ## 每服务器 MCP 和 OpenAPI Action 代理
 
-GPTAdmin 通过经过身份验证的每服务器路由公开每个注册的 MCP 服务器。将 `{slug}` 替换为 `GET /mcp-relay/servers` 中的 `meta.public_mcp_slug`。|方法|路径|目的|
+GPTAdmin 通过经过身份验证的每服务器路由公开每个注册的 MCP 服务器。将 `{slug}` 替换为 `GET /mcp-relay/servers` 中的 `meta.public_mcp_slug`。
+
+|方法|路径|目的|
 |--------|------|---------|
 | `GET` / `POST` | `/server/{slug}/mcp` |一台服务器的 MCP 兼容端点 |
 | `GET` | `/server/{slug}/card` |服务器发现卡 |
@@ -179,7 +213,22 @@ GPTAdmin 通过经过身份验证的每服务器路由公开每个注册的 MCP 
 | `GET` | `/server/{slug}/actions/openapi.json` |与 JSON 相同的架构 |
 | `POST` | `/server/{slug}/actions/tools/{tool_name}` |将 OpenAPI 操作调用代理到一个 MCP 工具 |
 
-Action 架构是根据所选 MCP 服务器的 `tools/list` 生成的。每个操作请求正文是 MCP 工具 `inputSchema`。Action 调用响应包装上游 MCP 结果：
+操作架构是从所选 MCP 服务器的 `tools/list` 生成的。每个操作请求主体是MCP工具`inputSchema`。 Action 调用响应包装上游 MCP 结果：
+
+## 可选的虚拟 MCP 管理
+
+`network-proxy` 和 `webhooks` 默认情况下处于关闭状态。默认 `/actions/openapi.yaml` 保持仅中继状态并排除两者。
+
+|方法|路径|目的|
+|--------|------|---------|
+| `GET` | `/admin/api/virtual-mcps` |在一次调用中检查两种状态。 |
+| `PUT` | `/admin/api/virtual-mcps/{id}` |保留 `{"enabled": true|false}` 为 `network-proxy` 或 `webhooks`。 |
+
+`network-proxy` 提供有界网络隧道工具：`network_proxy_request`、`network_proxy_approve`、`network_proxy_issue`、`network_proxy_open`、`network_proxy_status`、 `network_proxy_revoke`。`webhooks` 提供无秘密的 Webhook 路由 CRUD 和作业查找：`webhook_routes_list`、`webhook_route_create`、`webhook_route_replace`、`webhook_route_delete`、`webhook_job_get`。
+
+启用检查：`GET /mcp-relay/servers` 仅显示已启用的虚拟 MCP。
+
+启用后使用：`/server/{slug}/mcp` 和 `/server/{slug}/actions/openapi.yaml`。
 
 ```json
 {
@@ -190,4 +239,4 @@ Action 架构是根据所选 MCP 服务器的 `tools/list` 生成的。每个操
 }
 ```
 
-有关示例，请参阅 [MCP 代理中继](./MCP_PROXY_RELAY.md)]。
+有关示例，请参阅 [MCP 代理中继](./MCP_PROXY_RELAY.md)。

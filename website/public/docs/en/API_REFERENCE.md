@@ -1,6 +1,40 @@
 # API Reference
 
+## Operational probes
+
+| Method | Path | Auth | Purpose |
+| --- | --- | --- | --- |
+| `GET` | `/healthz` | none | Liveness only; returns `ok`. |
+| `GET` | `/version` | none | Build version and commit identity. |
+| `GET` | `/metrics` | none | Bounded aggregate Hub counts; never includes credentials, arguments or file contents. |
+
 REST + MCP endpoints exposed by the hub.
+
+## Request correlation
+
+The Hub accepts an optional W3C `traceparent` request header. It returns a
+validated child `traceparent` and the bounded `X-Request-ID` response header;
+queued relay and ShellMCP jobs carry the same correlation fields through poll
+and result delivery. Invalid trace headers are discarded and replaced. Trace
+metadata never contains command arguments, credentials or file contents.
+
+An operator may opt in to OTLP/HTTP log export with
+`GPTADMIN_OTLP_ENDPOINT`. External collectors must use HTTPS; plain HTTP is
+accepted only for loopback development collectors. The exporter uses a
+bounded asynchronous queue and exports allowlisted event fields such as
+policy decision, tool, result reference and trace IDs. It never exports raw
+arguments, commands, credentials, URLs or file contents, and collector
+delivery failures do not fail the originating Hub request.
+
+## Remote secret ingress
+
+Full-access MCP clients can call `secret_request` and `secret_status`. The
+first returns only `request_id`, `input_url`, `secret_ref`, `env_name`, `file`
+and expiry metadata. The operator submits the value once to
+`POST /secret-input/{token}`; neither MCP nor the response body accepts or
+returns the plaintext. A later `shell_exec` may pass
+`secret_env: {"ENV_NAME": "secret_ref"}`. Hub job responses and logs redact
+the resolved value, and readonly profiles cannot access these operations.
 
 ## Auth quick reference
 
@@ -11,10 +45,15 @@ REST + MCP endpoints exposed by the hub.
 | `POST /mcp` | OAuth bearer |
 | `POST /heartbeat` | Bearer `SHELLMCP_TOKEN` |
 | `GET /servers` | Bearer `CTL_TOKEN` |
-| `GET /api.json` | none |
-| `GET /openapi.yaml` | none |
-| `POST /authorize` | `ADMIN_PASSWORD` form |
+| `GET /actions/openapi.yaml` | none |
+| `GET /server/{slug}/actions/openapi.yaml` | none |
+| `GET /api.json` | none (legacy alias; not the Custom GPT path) |
+| `GET /openapi.yaml` | none (legacy alias; not the Custom GPT path) |
+| `POST /oauth/authorize` | `ADMIN_PASSWORD` form |
 | `POST /oauth/token` | client credentials |
+
+Custom GPT imports use `/actions/openapi.yaml` or `/server/{slug}/actions/openapi.yaml`;
+relay calls go through `/mcp-relay/*`. `CTL_TOKEN` is legacy/admin only.
 
 See [Configuration → Auth model](./CONFIGURATION.md#auth-model).
 
@@ -22,7 +61,7 @@ See [Configuration → Auth model](./CONFIGURATION.md#auth-model).
 
 ## Admin API (`/admin/api/*`)
 
-Bearer auth with `CTL_TOKEN`. Used by the web panel and Custom GPT actions.
+Bearer auth with `CTL_TOKEN`. Legacy admin/web-panel migration detail only.
 
 ### `GET /servers`
 
@@ -58,10 +97,6 @@ Response (truncated to save tokens if long):
 }
 ```
 
-Commands normally run as the ShellMCP agent's configured non-root user. Set
-`run_as_user: "root"` only for an intentional privileged operation; a root
-ShellMCP without a configured default user rejects ordinary commands.
-
 ### `GET /tasks/{task_id}`
 
 Get the status of a background task.
@@ -74,7 +109,10 @@ Create a managed backup of a file before editing.
 
 CPU, RAM, disk, uptime for a target agent.
 
-Full schema: import `https://became.bezrabotnyi.com/api.json` into your client.
+Legacy import schema: `https://became.bezrabotnyi.com/api.json` or
+`https://became.bezrabotnyi.com/openapi.yaml`. Custom GPT import uses
+`/actions/openapi.yaml` or `/server/{slug}/actions/openapi.yaml`, not these
+legacy aliases.
 
 ---
 
@@ -128,10 +166,12 @@ See [Configuration → OAuth](./CONFIGURATION.md#oauth).
 
 ## OpenAPI schema
 
-- `GET /api.json` — JSON schema (for Custom GPT / Open WebUI import)
-- `GET /openapi.yaml` — YAML schema
+- Canonical Custom GPT import: `GET /actions/openapi.yaml`
+- Per-server import: `GET /server/{slug}/actions/openapi.yaml`
+- Legacy aliases: `GET /api.json` and `GET /openapi.yaml`
 
-These are public (no auth) so Custom GPT can import by URL.
+The canonical import URLs are public (no auth). The legacy aliases stay public
+for migration, but they are not the Custom GPT path.
 
 ## Background tasks
 
@@ -161,12 +201,6 @@ Long stdout/stderr is chunked. The response includes:
 The AI can read more on demand via a follow-up call. This saves tokens — the
 AI only reads what it needs to answer.
 
-## Relay target contract
-
-For the hub relay, call `listMcpServers` before `listMcpTools` or
-`callMcpTool`, then pass the returned explicit server id as `target`. There is
-no `default` target and `target: "default"` returns `400`.
-
 
 ## Per-server MCP and OpenAPI Action proxy
 
@@ -182,6 +216,23 @@ GPTAdmin exposes each registered MCP server through authenticated per-server rou
 | `POST` | `/server/{slug}/actions/tools/{tool_name}` | Proxy an OpenAPI Action call to one MCP tool |
 
 The Action schema is generated from the selected MCP server's `tools/list`. Each operation request body is the MCP tool `inputSchema`. The Action call response wraps the upstream MCP result:
+
+## Optional virtual MCP management
+
+`network-proxy` and `webhooks` are off by default. The default `/actions/openapi.yaml` stays relay-only and excludes both.
+
+| Method | Path | Purpose |
+|--------|------|---------|
+| `GET` | `/admin/api/virtual-mcps` | Check both states in one call. |
+| `PUT` | `/admin/api/virtual-mcps/{id}` | Persist `{"enabled": true|false}` for `network-proxy` or `webhooks`. |
+
+`network-proxy` gives bounded Network Tunnel tools: `network_proxy_request`, `network_proxy_approve`, `network_proxy_issue`, `network_proxy_open`, `network_proxy_status`, `network_proxy_revoke`.
+
+`webhooks` gives secret-free webhook route CRUD and job lookup: `webhook_routes_list`, `webhook_route_create`, `webhook_route_replace`, `webhook_route_delete`, `webhook_job_get`.
+
+Enablement check: `GET /mcp-relay/servers` shows only enabled virtual MCPs.
+
+Use after enablement: `/server/{slug}/mcp` and `/server/{slug}/actions/openapi.yaml`.
 
 ```json
 {

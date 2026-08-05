@@ -5,40 +5,40 @@
 
 ## FRP (по умолчанию)
 
-[FRP](https://github.com/fatedier/frp) — быстрый обратный прокси. GPT‑Админ запускает
+[FRP](https://github.com/fatedier/frp) — быстрый обратный прокси-сервер. GPT‑Админ запускает
 общедоступный FRP-сервер; установщик может автоматически зарегистрироваться с ним.
 
 ### Настройка
 
-В течение `gptadmin setup` выберите вариант **1** (автотуннелирование через FRP). Установщик:
+Во время `gptadmin setup` выберите вариант **1** (автотуннелирование через FRP). Установщик:
 1. Загружает клиент FRP.
 2. Регистрирует случайный поддомен на общедоступном сервере FRP.
 3. Запускает клиент FRP как службу рядом с хабом.
-4. Распечатает ваш общедоступный URL-адрес: `https://random-sub.frp.bezrabotnyi.com`.
+4. Распечатывает общедоступный URL-адрес: `https://random-sub.frp.bezrabotnyi.com`.
 
 ### Плюсы/минусы
 
 - ✅ Домен не требуется, настройка DNS не требуется.
 - ✅ Быстрый (прямой TCP-туннель)
-- ⚠️ URL-адрес `frp.bezrabotnyi.com` (общий домен)
+- ⚠️ URL находится на `frp.bezrabotnyi.com` (общий домен)
 - ⚠️ Бесплатный FRP-сервер имеет ограничения по скорости
 
 ## Туннель Cloudflare
 
-[Cloudflare Tunnel](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/)
+[Туннель Cloudflare](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/)
 создает безопасный исходящий туннель к границе Cloudflare. Вам нужен Cloudflare
 учетная запись и домен на Cloudflare.
 
 ### Настройка
 
-В течение `gptadmin setup` выберите опцию Cloudflare. Или настройте позже:
+Во время `gptadmin setup` выберите опцию Cloudflare. Или настройте позже:
 
 ```bash
 gptadmin tunnel cloudflare
 ```
 
 Вам понадобится:
-- `CLOUDFLARE_TOKEN` — токен Cloudflare API с разрешениями туннеля.
+- `CLOUDFLARE_TOKEN` — токен API Cloudflare с разрешениями туннеля.
 - Домен, управляемый Cloudflare.
 
 Интерфейс командной строки:
@@ -46,7 +46,7 @@ gptadmin tunnel cloudflare
 2. Создает туннель
 3. Привязывает его к поддомену вашего домена Cloudflare.
 4. Запускает `cloudflared` как службу.
-5. Распечатывает ваш общедоступный URL-адрес: `https://hub.yourdomain.com`.
+5. Распечатывает общедоступный URL-адрес: `https://hub.yourdomain.com`.
 
 ### Плюсы/минусы
 
@@ -89,4 +89,4 @@ location / {
 
 - [Начало работы](./GETTING_STARTED.md)
 - [Конфигурация](./CONFIGURATION.md) — `PUBLIC_ORIGIN` и т. д.
-- [Hub](./HUB.md)
+- [Хаб](./HUB.md)

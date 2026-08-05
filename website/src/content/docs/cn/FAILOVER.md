@@ -17,7 +17,7 @@ GPTAdmin 的设计使得一台死机并不一定意味着控制平面死机。�
 
 1. 后备看门狗按一定时间间隔检查主要公共卫生端点。
 2. 在配置的故障阈值之后，回退确认公共 URL 仍然不健康。
-3. 后备通过启动其本地集线器/代理和隧道客户端来提升自身。
+3. 后备保持其本地集线器和回收感知代理处于活动状态，然后为每个配置的端点启动一个 FRP 客户端。这是必需的，因为现代 `frpc` 接受每个进程/配置一个客户端服务器块。
 4. 现有的 AI 客户端和管理员继续通过公共 URL 访问 GPTAdmin，但系统处于降级模式。
 5. 幸存的 shell/MCP 服务器重新连接或继续轮询。失效的服务器显示为离线/过时，可以从后备控制平面进行修复。
 6. 当主节点再次恢复正常时，主节点会发送签名的回收消息。活动回退降级并返回到待机/客户端模式。
@@ -69,16 +69,48 @@ find /data/gptadmin-failover -maxdepth 4 -type f | sort | tail -100
 
 ## 当前 HAOS 风格的布局
 
-紧凑的后备可以运行如下循环：
+支持的 HAOS 附加组件拥有完整的后备运行时：
 
 ```text
-/data/gptadmin-failover/loop.sh
-/data/gptadmin-failover/gptadmin-failover-proxy.py --listen 127.0.0.1:9101 --upstream http://127.0.0.1:9001
-/data/gptadmin-failover/runtime.json
-/data/gptadmin-failover/failover_state.json
-/data/gptadmin-failover/logs/watchdog.log
+/opt/gptadmin/failover/failover_config.json
+/opt/gptadmin/failover/failover_state.json
+/usr/local/bin/gptadmin_failover_runtime.py
+/usr/local/bin/gptadmin_failover_proxy.py  # 0.0.0.0:9101 -> 127.0.0.1:9001
+/usr/local/bin/gptadmin_failover_watchdog.py
+/usr/local/bin/frpc                     # linux/arm64
+/data/config/frpc-failover-1.toml       # one file/process per FRP endpoint
+/data/config/failover_frpc.pid
+```即使在升级之前，该附加组件也可以使备用集线器和代理保持可用。
+它的无 systemd 运行时运行看门狗循环，仅在之后升级
+阈值/确认，并在主返回时接受签名回收。
+部署源必须提供真正的Linux/ARM64 `frpc`；复制
+主 x86-64 二进制文件会默默地生成一个不工作的备用文件。
+
+## 黑盒回归覆盖率
+
+Docker套件在CI中运行，无需部署FRP即可在本地运行
+服务器：
+
+```bash
+docker compose -f tests/e2e/failover/docker-compose.yml up --build --abort-on-container-exit --exit-code-from failover-e2e
 ```
 
-确切的路径是特定于部署的，但逻辑是相同的：看门狗检查主数据库，仅在阈值/确认后才进行回退，保持磁盘状态，并在主数据库返回时接受签名回收。
+它在测试组合中断之前分别验证这些边界：
 
-## 设计规则比起“完美而堕落”，更喜欢“活着而堕落”。在中断期间，GPTAdmin 应该保持足够的自身可访问性，以回答：什么是活动的、什么是死亡的、哪些作业正在运行、日志在哪里以及如何恢复主数据库。
+- 仅隧道损失并不能促进健康的初级；
+- 主集线器丢失会促进通过实时隧道的回退；
+- 隧道恢复后集线器和隧道同时丢失恢复；
+- 签署的主要回收删除了恢复后的后备路由。
+- 通过健康的公共端点，排名 1 晋升围栏排名 2；
+- 当等级 1 不可用时，等级 2 仅在其较长阈值后晋升。
+
+该套件使用真正的 Go 集线器、看门狗和代理进程。它的本地入口
+并且 FRP 客户端将存储库拥有的故障转移合约与
+外部 FRP 服务。它不会取代物理 HAOS 演练：即演练
+必须验证 `:9001`、`:9101`、每个配置的端点一个实时 `frpc` 进程，
+停止`server-100`后的公共卫生路线，并在之后签署回收
+初级回报。
+
+## 设计规则
+
+比起“完美而堕落”，更喜欢“活着但堕落”。在中断期间，GPTAdmin 应该保持足够的自身可访问性，以回答：什么是活动的、什么是死亡的、哪些作业正在运行、日志在哪里以及如何恢复主数据库。

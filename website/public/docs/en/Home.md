@@ -4,6 +4,9 @@ Welcome to the GPT‑Админ docs. GPT‑Админ is a self-hosted MCP hub:
 servers and any MCP tools into it, then connect any AI via one of three
 adapters.
 
+Start with the [Product philosophy](./PHILOSOPHY.md) for the decisions that
+govern setup, resilience, MCP context cost and progressive configuration.
+
 **Website:** https://gptadmin.bezrabotnyi.com
 **Install:** `curl -s https://became.bezrabotnyi.com/install.sh | bash`
 
@@ -11,6 +14,8 @@ adapters.
 
 | Page | What's inside |
 |------|---------------|
+| [Product philosophy](./PHILOSOPHY.md) | Easy setup, flexible configuration, resilience and low-context MCP defaults |
+| [Read-only clients](./READONLY_MODE.md) | Cross-platform inspection without raw shell access, with automatic secret redaction |
 | [Architecture](./ARCHITECTURE.md) | How the hub, shellmcp, and 3 adapters fit together |
 | [Getting Started](./GETTING_STARTED.md) | Install + first command in 5 minutes |
 | [Adapters](./ADAPTERS.md) | The 3 ways to connect your AI (MCP / extension / Custom GPT) |

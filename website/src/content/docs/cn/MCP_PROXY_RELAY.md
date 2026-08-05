@@ -7,6 +7,8 @@ GPTAdmin 可以通过两个公共的、经过身份验证的兼容层公开每�
 
 这使您可以将真正的 MCP 服务器保留在私有计算机上、NAT 后面、stdio 后面或内部隧道后面，同时为外部 AI 客户端提供一个 HTTPS 入口点，包括 GPTAdmin 身份验证、审核日志记录、路由、队列和输出处理。
 
+`network-proxy` 和 `webhooks` 是单独的虚拟 MCP 功能。它们默认处于关闭状态，并且仅在操作员启用它们后才会出现。
+
 ## 为什么使用GPTAdmin作为前门
 
 - 一个公共 HTTPS 端点，而不是暴露许多 MCP 服务器。
@@ -16,6 +18,13 @@ GPTAdmin 可以通过两个公共的、经过身份验证的兼容层公开每�
 - OpenAPI 模式是从上游 MCP 服务器 `tools/list` 响应生成的，因此操作模式遵循真实的工具集。
 - 呼叫仅代理至选定的 MCP 服务器；自定义 GPT 只能看到 OpenMemory、只能看到 FileShare 或任何其他单个服务器，而无法看到完整的 GPTAdmin 中继。
 
+## 可选的虚拟 MCP 功能
+
+|能力|默认|给予|启用 |检查 |使用|
+|------------|---------|--------|--------|--------|-----|
+| `network-proxy` |关闭 |有界网络隧道工具：`network_proxy_request`、`network_proxy_approve`、`network_proxy_issue`、`network_proxy_open`、`network_proxy_status`、`network_proxy_revoke` | `curl -X PUT -H "Authorization: Bearer <admin-credential>" -H 'Content-Type: application/json' https://<your-hub>/admin/api/virtual-mcps/network-proxy -d '{"enabled":true}'` | `curl -H "Authorization: Bearer <admin-credential>" https://<your-hub>/admin/api/virtual-mcps` | `https://<your-hub>/server/network-proxy/mcp` · `https://<your-hub>/server/network-proxy/actions/openapi.yaml` |
+| `webhooks` |关闭 |无秘密 Webhook 路由 CRUD 和作业查找：`webhook_routes_list`、`webhook_route_create`、`webhook_route_replace`、`webhook_route_delete`、`webhook_job_get` | `curl -X PUT -H "Authorization: Bearer <admin-credential>" -H 'Content-Type: application/json' https://<your-hub>/admin/api/virtual-mcps/webhooks -d '{"enabled":true}'` | `curl -H "Authorization: Bearer <admin-credential>" https://<your-hub>/admin/api/virtual-mcps` | `https://<your-hub>/server/webhooks/mcp` · `https://<your-hub>/server/webhooks/actions/openapi.yaml` |
+
 ## 网址布局
 
 假设您的中心发布于：
@@ -24,7 +33,7 @@ GPTAdmin 可以通过两个公共的、经过身份验证的兼容层公开每�
 https://hub.example.com
 ```
 
-每个注册的 MCP 服务器都会获得一个 slug，在 `/admin` 和 `GET /mcp-relay/servers` 下的 `meta.public_mcp_slug` 中可见。
+每个注册的 MCP 服务器都会获得一个 slug，在 `/admin` 和 `meta.public_mcp_slug` 下的 `GET /mcp-relay/servers` 中可见。
 
 |目的|网址 |
 |---------|-----|
@@ -35,7 +44,7 @@ https://hub.example.com
 | OpenAPI 操作架构、JSON | `https://hub.example.com/server/{slug}/actions/openapi.json` |
 | OpenAPI Action工具调用| `POST https://hub.example.com/server/{slug}/actions/tools/{tool_name}` |
 
-旧的 `/agent/{slug}/...` 路由保留为兼容性别名，但新客户端应使用 `/server/{slug}/...`。
+旧版 `/agent/{slug}/...` 路由保留为兼容性别名，但新客户端应使用 `/server/{slug}/...`。
 
 ## 示例：仅向自定义 GPT 公开 OpenMemory
 
@@ -123,9 +132,7 @@ https://hub.example.com/server/openmemory/mcp
 
 ```text
 GET /server/{slug}/actions/openapi.yaml
-```
-
-GPTAdmin 将 `{slug}` 解析为一个已注册的 MCP 服务器，调用 `tools/list`，并将每个 MCP 工具描述符转换为 OpenAPI `POST /server/{slug}/actions/tools/{tool_name}` 操作。 MCP `inputSchema` 成为 OpenAPI 请求主体架构。
+```GPTAdmin 将 `{slug}` 解析为一个已注册的 MCP 服务器，调用 `tools/list`，并将每个 MCP 工具描述符转换为 OpenAPI `POST /server/{slug}/actions/tools/{tool_name}` 操作。 MCP `inputSchema` 成为 OpenAPI 请求正文架构。
 
 这意味着：
 
@@ -133,28 +140,20 @@ GPTAdmin 将 `{slug}` 解析为一个已注册的 MCP 服务器，调用 `tools/
 - 删除工具会将其从生成的模式中删除；
 - 每台服务器的自定义 GPT 保持小而集中；
 - 用户无需手动维护大型 OpenAPI 文件。
+- 启用的虚拟 MCP 拥有自己的每服务器架构；默认集线器 `/actions/openapi.yaml` 保持仅中继状态，并省略 `network-proxy` 和 `webhooks`。
 
-## 选择中继目标
+## 安全说明
 
-全集线器中继没有**无全局默认目标**。拨打 `listMcpServers`
-首先，然后通过一个返回 `server_id` 作为 `target` 到 `listMcpTools` 和
-`callMcpTool`。从不发送 `target: "default"`：集线器拒绝它而不是
-猜测哪台机器应该接收命令。
-
-使用 `hub` 进行中心/注册表工作，并使用明确的 `shell:<server>` 目标
-该服务器上的命令、日志、服务管理和文件。对于特权
-shell工作时，保持正常的非root身份除非刻意请求
-设置 `run_as_user: "root"` 或使用 `sudo`。
-
-## 安全说明- 不要将原始 stdio MCP 服务器直接暴露到互联网上；将 GPTAdmin 放在前面。
+- 不要将原始 stdio MCP 服务器直接暴露到互联网上；将 GPTAdmin 放在前面。
 - 对公共中心使用 HTTPS。
 - 如果与自定义 GPT 或 MCP 客户端共享，请使用强承载/OAuth 凭据并轮换它们。
 - 当 GPT 仅需要一种功能时，首选针对自定义 GPT 的每服务器 OpenAPI 架构。
+- 默认集线器 `/actions/openapi.yaml` 用于仅中继自定义 GPT 导入；它不包括可选的虚拟 MCP。
 - 仅当客户端确实需要完整的中继/管理界面时，才使用 `/server/hub/mcp` 或 GPTAdmin Apps SDK。
 
 ## 另请参阅
 
-- [API参考](./API_REFERENCE.md)
-- [积分](./INTEGRATIONS.md)
+- [API 参考](./API_REFERENCE.md)
+- [集成](./INTEGRATIONS.md)
 - [安全](./SECURITY_DOCS.md)
 - [集线器](./HUB.md)

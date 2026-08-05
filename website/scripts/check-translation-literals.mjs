@@ -1,11 +1,13 @@
 import fs from "node:fs";
 import path from "node:path";
 
-const root = path.resolve(import.meta.dirname, "..");
-const docsRoot = path.join(root, "src", "content", "docs");
+const websiteRoot = path.resolve(import.meta.dirname, "..");
+const repoRoot = path.resolve(websiteRoot, "..");
+const docsRoot = path.join(repoRoot, "docs");
+const publishedDocsRoot = path.join(websiteRoot, "src", "content", "docs", "en");
 
-function markdownFiles(locale) {
-  return fs.readdirSync(path.join(docsRoot, locale)).filter((file) => file.endsWith(".md")).sort();
+function markdownFiles(dir) {
+  return fs.readdirSync(dir).filter((file) => file.endsWith(".md")).sort();
 }
 
 function protectedLiterals(markdown) {
@@ -16,11 +18,14 @@ function protectedLiterals(markdown) {
   return [...new Set([...fenced, ...inline, ...links])];
 }
 
+const published = markdownFiles(publishedDocsRoot);
+
 let failures = 0;
-for (const file of markdownFiles("en")) {
-  const english = fs.readFileSync(path.join(docsRoot, "en", file), "utf8");
+for (const file of published) {
+  const english = fs.readFileSync(path.join(docsRoot, file), "utf8");
   for (const locale of ["ru", "cn"]) {
-    const translated = fs.readFileSync(path.join(docsRoot, locale, file), "utf8");
+    const translatedPath = path.join(docsRoot, locale, file);
+    const translated = fs.readFileSync(translatedPath, "utf8");
     const missing = protectedLiterals(english).filter((literal) => !translated.includes(literal));
     if (missing.length > 0) {
       console.error(`[translation-literals] ${locale}/${file} changed ${missing.length} protected literal(s)`);
@@ -30,4 +35,4 @@ for (const file of markdownFiles("en")) {
 }
 
 if (failures > 0) process.exit(1);
-console.log("[translation-literals] executable Markdown literals are preserved in every locale");
+console.log("[translation-literals] executable Markdown literals are preserved in every derived locale");

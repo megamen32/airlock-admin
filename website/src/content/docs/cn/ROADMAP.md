@@ -21,10 +21,10 @@
 - **输出截断**（保存令牌）
 - **带有 TTL 的托管文件备份**
 
-### 🚧 下一步
+### 🚧 即将推出
 
-- **高级 Web 面板** — 团队、RBAC、警报和更丰富的审核日志导出
-- **托管云** — 不想自行托管？计划提供托管云选项
+- **高级 Web 面板** — 团队、RBAC、警报、审核日志导出
+- **托管云** — 不想自行托管？我们将为您举办
 - **企业 SSO** — SAML、OIDC、SCIM 配置
 - **MCP 市场** — 浏览并安装 MCP（openmemory、chrome-devtools、
   自定义）从面板
@@ -56,19 +56,16 @@ GPT‑Админ 在 AGPL-3.0 下是**开放核心**。
 
 ## 版本控制
 
-GPT-Админ 遵循 [SemVer](https://semver.org/)。请参阅
-[变更日志](https://github.com/megamen32/gptadmin/blob/main/CHANGELOG.md)
-发布历史记录。
+我们遵循 [SemVer](https://semver.org/)。请参阅 [CHANGELOG.md](../CHANGELOG.md)
+用于发布历史记录。
 
-- `0.x` — 1.0 之前，次要版本之间可能存在重大更改
-- `1.0` — 第一个稳定版本
-- `1.x+` — 向后兼容的补充
+- `0.x` — 1.0 之前的版本，次要版本之间可能存在重大更改
+- `1.0` — 第一个稳定版本（Web 面板发布后）
+- `1.x+` — 向后兼容的添加
 
 ## 贡献
 
-欢迎 PR——请参阅
-[贡献指南](https://github.com/megamen32/gptadmin/blob/main/CONTRIBUTING.md)。
-贡献的好地方：
+欢迎 PR — 请参阅 [CONTRIBUTING.md](../CONTRIBUTING.md)。需要关爱的地方：
 
 - 更多的测试覆盖范围（隧道、MCP-SSE、CLI）
 - 文档改进
@@ -78,4 +75,4 @@ GPT-Админ 遵循 [SemVer](https://semver.org/)。请参阅
 ## 另请参阅
 
 - [Architecture](./ARCHITECTURE.md) — 它是如何构建的
-- [CHANGELOG](https://github.com/megamen32/gptadmin/blob/main/CHANGELOG.md) — 发生了什么变化
+- [CHANGELOG.md](../CHANGELOG.md) — 发生了什么变化

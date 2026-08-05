@@ -4,7 +4,7 @@
 
 是的。核心（集线器、shellmcp、所有三个适配器、基本 Web 面板）是免费的
 永远在 AGPL-3.0 下。未来的付费产品（托管云、企业 SSO、
-高级面板）将是附加的 - 现有功能保持免费。
+高级面板）将是附加的——我们不会为现有功能付费。
 请参阅[路线图](./ROADMAP.md)。
 
 ## 我需要付费订阅 AI 吗？
@@ -18,7 +18,7 @@ Yandex Alice、Sber GigaChat，甚至免费版 ChatGPT。参见
 GPT‑Админ 就是为此而设计的。主要安全特性：
 
 - **默认用户模式** — 不需要 root/sudo
-- **命令允许列表** — 限制 AI 可以运行的内容
+- **命令白名单** — 限制 AI 可以运行的内容
 - **批准模式** — 关键操作的人工确认
 - **审核日志** — 每个命令都记录有调用者 + 结果
 - **日志中隐藏的秘密**
@@ -42,18 +42,18 @@ GPT‑Админ 就是为此而设计的。主要安全特性：
 
 请参阅[适配器](./ADAPTERS.md)。
 
-## 为什么叫CTL_TOKEN？
+## 如何处理凭证？
 
-历史命名。 `CTL_TOKEN` 是中心 API 的管理员不记名令牌 +
-网页面板。 1.0之前命名可能会改变（带有迁移路径）。
-请参阅[配置→命名](./CONFIGURATION.md)。
+您只记得 `AdminPassword`。 Hub 创建短暂的作用域
+MCP 客户端的 OAuth 连接并管理代理设备凭据
+服务配置。正常设置不会要求您复制内部密钥。
 
 ## `/mcp` 返回 401 — 为什么？
 
-`/mcp` 不直接接受 `CTL_TOKEN`。它需要 OAuth 不记名令牌
-通过 `OAUTH_CLIENT_SECRET` 签名。MCP 客户端通过以下方式自动处理此问题
-OAuth 流程。对于本地开发人员，中心放宽了本地主机上的身份验证。参见
-[配置→OAuth](./CONFIGURATION.md#oauth)。
+`/mcp` 需要限定范围的 OAuth 连接。重新打开Hub连接页面并
+完成 OAuth 流程； MCP 客户端自动处理连接。对于
+本地开发，Hub 可能会放宽本地主机上的身份验证。参见[配置→
+OAuth](./CONFIGURATION.md#oauth)。
 
 ## 我需要自己的域名吗？
 
@@ -98,8 +98,8 @@ openmemory 用于项目内存等）并将它们作为工具公开给每个人
 
 ## 有东西坏了。日志在哪里？
 
-- 集线器：`journalctl -u gptadmin_hub -n 100`（或用户模式 `--user`）
-- 代理：`journalctl -u shellmcp -n 100`（或`--user`）
+- 集线器：`journalctl -u gptadmin_hub -n 100`（或 `--user` 对于用户模式）
+- 代理：`journalctl -u shellmcp -n 100`（或 `--user`）
 - 或在网络面板中阅读它们：`/admin` → 日志
 
 ## 如何卸载？

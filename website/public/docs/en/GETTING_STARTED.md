@@ -1,6 +1,6 @@
 # Getting Started
 
-Install GPT‑Админ, connect your AI, run your first command — in 5 minutes.
+Install GPT‑Админ, connect your AI, run your first command — in a few minutes.
 
 ## 1. Install the hub
 
@@ -16,7 +16,8 @@ curl -s https://became.bezrabotnyi.com/install.sh | bash
 iwr -UseBasicParsing https://became.bezrabotnyi.com/install_win.ps1 | iex
 ```
 
-The installer prints your **Hub URL** and **CTL_TOKEN** — save them.
+The installer creates the Hub, starts a Tunnel when needed, and prints one
+**Hub URL**. Keep that URL: it is the place you will connect from.
 
 > No domain needed: choose the auto-tunnel option (FRP or Cloudflare) and you
 > get a public URL. See [Tunnels](./TUNNELS_DOCS.md).
@@ -33,9 +34,15 @@ Pick "agent only" when prompted. The agent registers with your hub automatically
 
 ## 3. Connect your AI
 
-Pick one adapter (you can use all three with the same hub):
+If the client already speaks MCP, register the Hub once:
 
-- **Claude Desktop / Codex / OpenCode** → [MCP client setup](./ADAPTERS.md#1-mcp-client)
+```bash
+gptadmin connect-mcp
+```
+
+For other clients, pick an adapter:
+
+- **Claude Desktop / other MCP clients** → [MCP client setup](./ADAPTERS.md#1-mcp-client)
 - **DeepSeek / Qwen / Alice / GigaChat** (free web chats) → [Browser extension](./ADAPTERS.md#2-browser-extension)
 - **ChatGPT Custom GPT / Open WebUI** → [OpenAI Action](./ADAPTERS.md#3-openai-action)
 
@@ -43,13 +50,17 @@ Pick one adapter (you can use all three with the same hub):
 
 Ask your AI in plain language:
 
-- "show nginx status on server-01"
-- "install docker on vps-prod"
-- "why is openchamber returning 503? check the logs"
-- "run codex to fix a bug in this repo"
+- «покажи статус nginx на server-01»
+- «поставь docker на vps-prod»
+- «почему openchamber отдаёт 503? посмотри логи»
+- «запусти codex чтобы пофиксить баг в этом репо»
 
 The AI calls the hub, the hub routes to the agent, the agent runs the command
 and returns real output. The AI reads it and reports back.
+
+If you are wiring a Custom GPT, import the generated schema URL from the
+Actions section in [Adapters](./ADAPTERS.md#3-openai-action), then choose
+Bearer or OAuth there. Never paste internal service secrets into the GPT.
 
 ## Show connection URLs
 
@@ -73,16 +84,24 @@ sudo gptadmin urls --json  # machine-readable output
 - [Security](./SECURITY_DOCS.md) — production hardening
 - [Web panel](./HUB.md#web-panel-admin) — manage from the browser
 
+Optional extras:
+
+- [MCP Proxy Relay](./MCP_PROXY_RELAY.md)
+- [Webhooks](./WEBHOOKS.md)
+
 ## Troubleshooting
 
 **The agent doesn't show up in `/admin`**
 - Check `HUB_URL` is set and reachable from the agent
-- Check `SHELLMCP_TOKEN` matches what the hub expects
+- Re-run the agent connection step from the Hub connection page
 - Look at the agent logs: `journalctl --user -u shellmcp -n 50`
 
 **`/mcp` returns 401**
-- You're using `CTL_TOKEN` directly. `/mcp` needs an OAuth bearer. See
-  [Configuration → OAuth](./CONFIGURATION.md#oauth).
+- Complete the OAuth connection from the Hub URL; `/mcp` accepts scoped MCP
+  connections, not copied service credentials. See [Configuration → OAuth](./CONFIGURATION.md#oauth).
+- If this connection predates Hub refresh support, reconnect once to obtain an
+  `offline_access` refresh credential. Existing sessions cannot receive one
+  retroactively.
 
 **Browser extension buttons don't appear**
 - Refresh the page
@@ -91,4 +110,5 @@ sudo gptadmin urls --json  # machine-readable output
 
 **Custom GPT action test fails**
 - Verify the Hub URL in `servers.url` matches your hub
-- Verify the Bearer token is your `CTL_TOKEN`, not `SHELLMCP_TOKEN`
+- Re-open the Hub connection page and complete the OAuth authorization for the
+  Custom GPT client
