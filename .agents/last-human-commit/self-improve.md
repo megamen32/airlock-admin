@@ -19,5 +19,5 @@
 - What slowed or confused L? Divergent stale worktrees and a nested gitlink hid two independent merge contracts: the website mirror and optional virtual MCP tests.
 - Which instruction should change? Proposed: when a user requires a canonical local checkout, require explicit no-new-worktree mode before any task bootstrap.
 - Which skill, MCP, or tool is missing? Proposed: a read-only worktree inventory that classifies clean/dirty state, unique commits, and gitlink/tree collisions.
-- What operation or error repeated? Merge choices retained stale test variants; guard: after every cross-line merge, run target-specific tests and restore the newer contract when it has explicit coverage.
+- What operation or error repeated? Merge choices retained stale test and source variants; guard: after every cross-line merge, run the full target package after focused tests and restore the newer contract when it has explicit coverage.
 - State: fixed now

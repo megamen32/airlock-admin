@@ -3617,8 +3617,6 @@ func hubTools() []map[string]any {
 		{"name": "approve_pending_server", "description": "Approve one ShellMCP device awaiting enrollment", "inputSchema": map[string]any{"type": "object", "properties": map[string]any{"server_id": map[string]any{"type": "string", "description": "Exact shell:<name> returned by pending"}}, "required": []string{"server_id"}, "additionalProperties": false}},
 		{"name": "status", "description": "Return Hub status", "inputSchema": map[string]any{"type": "object", "properties": map[string]any{}}},
 	}
-	tools = append(tools, webhookHubTools()...)
-	tools = append(tools, networkProxyHubTools()...)
 	return append(tools, secretHubTools()...)
 }
 
@@ -3967,6 +3965,9 @@ func (s *Server) adminMCPIssueToken(w http.ResponseWriter, r *http.Request) {
 		clientID = "custom-mcp-client"
 	}
 	ttlDays := req.TTLDays
+	if ttlDays == 0 {
+		ttlDays = defaultManagedMCPTokenTTLDays
+	}
 	if ttlDays < 0 {
 		writeJSON(w, http.StatusBadRequest, map[string]any{"detail": "ttl_days must be zero or positive"})
 		return
@@ -6083,9 +6084,6 @@ func (s *Server) mcpPromptCall(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) appsSDKCall(name string, args map[string]any) any {
 	switch name {
-	case webhookRoutesListTool, webhookRouteCreateTool, webhookRouteReplaceTool, webhookRouteDeleteTool, webhookJobGetTool:
-		result, _ := s.callWebhookHubTool(name, args)
-		return result
 	case "secret_request", "secret_status":
 		return s.secretToolForRequest(nil, name, args)
 	case "ui", "render_gptadmin_dashboard", "renderGptadminDashboard":
@@ -6441,7 +6439,6 @@ func appsSDKTools() []map[string]any {
 			"_meta":           readMeta,
 		},
 	}
-	tools = append(tools, webhookAppsTools(readSecurity, execSecurity, readMeta, execMeta)...)
 	return append(tools, secretAppsTools()...)
 }
 
@@ -6661,6 +6658,7 @@ func (s *Server) verifyManagedMCPToken(token string) (map[string]any, bool) {
 	return map[string]any{
 		"sub": "admin", "scope": record.Scope, "access_mode": record.AccessMode,
 		"client_id": record.ClientID, "jti": record.ID, "iat": record.IssuedAt, "kid": s.jwtKeyID(),
+		"exp": record.ExpiresAt,
 		"iss": record.Issuer, "aud": record.Audience, "resource": record.Audience,
 		"profile_id": record.ProfileID,
 	}, true
