@@ -1,8 +1,10 @@
+import json
 from pathlib import Path
 import subprocess
 
 
 ROOT = Path(__file__).resolve().parent.parent
+DOCS_MANIFEST = ROOT / "scripts" / "docs-manifest.json"
 DOCS_ROOT = ROOT / "docs"
 WEBSITE_SOURCE = ROOT / "website" / "src" / "content" / "docs"
 WEBSITE_PUBLIC = ROOT / "website" / "public" / "docs"
@@ -14,7 +16,7 @@ def _site_docs_text() -> str:
 
 
 def _published_docs() -> list[str]:
-    return sorted(path.name for path in (WEBSITE_SOURCE / "en").glob("*.md"))
+    return sorted(json.loads(DOCS_MANIFEST.read_text(encoding="utf-8")))
 
 
 def _source_path(locale: str, filename: str) -> Path:

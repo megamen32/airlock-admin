@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Mirror the published docs set into the website runtime trees so the
+ * Mirror the canonical root docs manifest into the website runtime trees so the
  * Next.js server can serve them without any app-router rewrite:
  *
  *   1. ../docs/*.md          → src/content/docs/en/*.md
@@ -10,19 +10,18 @@
  *   5. src/content/i18n/*.json / src/i18n/*.json → public/i18n/*.json
  *
  * The English source stays in the repo-root docs tree. The website content
- * and public trees are generated mirrors for the published doc URLs.
+ * and public trees are generated mirrors for the canonical doc URLs.
  *
  * Idempotent. Safe to run repeatedly.
  */
-import { copyFileSync, mkdirSync, readdirSync, rmSync } from "node:fs";
+import { copyFileSync, mkdirSync, readFileSync, readdirSync, rmSync } from "node:fs";
 import { join, resolve } from "node:path";
 
 const LOCALES = ["en", "ru", "cn"];
 const WEBSITE_ROOT = resolve(process.cwd());
 const REPO_ROOT = resolve(WEBSITE_ROOT, "..");
 const SOURCE_DOCS = join(REPO_ROOT, "docs");
-const PUBLISHED_DOCS = join(WEBSITE_ROOT, "src/content/docs/en");
-
+const DOCS_MANIFEST = join(REPO_ROOT, "scripts", "docs-manifest.json");
 const SOURCES = [
   { src: join(WEBSITE_ROOT, "src/content/i18n"), dest: join(WEBSITE_ROOT, "public/i18n"), ext: ".json" },
   { src: join(WEBSITE_ROOT, "src/i18n"), dest: join(WEBSITE_ROOT, "public/i18n"), ext: ".json" },
@@ -83,10 +82,7 @@ function main() {
   let totalCopied = 0;
   let totalRemoved = 0;
 
-  const publishedFiles = markdownFiles(PUBLISHED_DOCS, ".md");
-  if (publishedFiles === null) {
-    throw new Error(`published docs manifest missing: ${PUBLISHED_DOCS}`);
-  }
+  const publishedFiles = JSON.parse(readFileSync(DOCS_MANIFEST, "utf8")).sort();
 
   for (const locale of LOCALES) {
     const srcDir = locale === "en" ? SOURCE_DOCS : join(SOURCE_DOCS, locale);

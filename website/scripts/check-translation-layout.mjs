@@ -4,6 +4,7 @@ import path from "node:path";
 const websiteRoot = path.resolve(import.meta.dirname, "..");
 const repoRoot = path.resolve(websiteRoot, "..");
 const docsRoot = path.join(repoRoot, "docs");
+const manifestPath = path.join(repoRoot, "scripts", "docs-manifest.json");
 const websiteDocsRoot = path.join(websiteRoot, "src", "content", "docs");
 const publicDocsRoot = path.join(websiteRoot, "public", "docs");
 const config = fs.readFileSync(path.join(websiteRoot, ".gittranslate"), "utf8").trim();
@@ -24,13 +25,13 @@ if (config !== expectedConfig) {
   fail(".gittranslate must translate only docs/*.md into ru and cn locale directories");
 }
 
-const published = markdownFiles(path.join(websiteDocsRoot, "en"));
-const publishedSet = new Set(published);
+const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8")).sort();
+const manifestSet = new Set(manifest);
 
 function assertSourceSubset(sourceDir, label, exact = false) {
   const files = markdownFiles(sourceDir);
-  const missing = published.filter((file) => !files.includes(file));
-  const stale = exact ? files.filter((file) => !publishedSet.has(file)) : [];
+  const missing = manifest.filter((file) => !files.includes(file));
+  const stale = exact ? files.filter((file) => !manifestSet.has(file)) : [];
   if (missing.length > 0) fail(`${label} is missing: ${missing.join(", ")}`);
   if (stale.length > 0) fail(`${label} has no published source: ${stale.join(", ")}`);
 }
@@ -38,8 +39,8 @@ function assertSourceSubset(sourceDir, label, exact = false) {
 function assertMirror(mirrorRoot) {
   for (const locale of ["en", "ru", "cn"]) {
     const files = markdownFiles(path.join(mirrorRoot, locale));
-    const missing = published.filter((file) => !files.includes(file));
-    const stale = files.filter((file) => !publishedSet.has(file));
+    const missing = manifest.filter((file) => !files.includes(file));
+    const stale = files.filter((file) => !manifestSet.has(file));
     if (missing.length > 0) fail(`${path.relative(repoRoot, path.join(mirrorRoot, locale))} is missing: ${missing.join(", ")}`);
     if (stale.length > 0) fail(`${path.relative(repoRoot, path.join(mirrorRoot, locale))} has no published source: ${stale.join(", ")}`);
   }
@@ -52,4 +53,4 @@ assertMirror(websiteDocsRoot);
 assertMirror(publicDocsRoot);
 
 if (process.exitCode) process.exit(process.exitCode);
-console.log(`[translation-layout] ${published.length} published docs mirror root/docs and both website trees`);
+console.log(`[translation-layout] ${manifest.length} canonical docs mirror root/docs and both website trees`);

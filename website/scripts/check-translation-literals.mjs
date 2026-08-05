@@ -4,7 +4,7 @@ import path from "node:path";
 const websiteRoot = path.resolve(import.meta.dirname, "..");
 const repoRoot = path.resolve(websiteRoot, "..");
 const docsRoot = path.join(repoRoot, "docs");
-const publishedDocsRoot = path.join(websiteRoot, "src", "content", "docs", "en");
+const manifestPath = path.join(repoRoot, "scripts", "docs-manifest.json");
 
 function markdownFiles(dir) {
   return fs.readdirSync(dir).filter((file) => file.endsWith(".md")).sort();
@@ -18,7 +18,7 @@ function protectedLiterals(markdown) {
   return [...new Set([...fenced, ...inline, ...links])];
 }
 
-const published = markdownFiles(publishedDocsRoot);
+const published = JSON.parse(fs.readFileSync(manifestPath, "utf8")).sort();
 
 let failures = 0;
 for (const file of published) {
