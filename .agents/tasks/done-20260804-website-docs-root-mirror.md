@@ -1,5 +1,7 @@
 # Задача: корневой docs как canonical source для сайта
 
+Status: complete
+
 ## Исходный запрос
 
 «Worker task: work on the branch where website is now an ordinary subtree. Implement one versioned docs source without breaking current docs URLs: root docs/ remains canonical English source; add clearly derived RU/CN trees under root docs/ru and docs/cn; update website doc sync/translation scripts so website/src/content/docs and website/public/docs are generated mirrors from root docs, not independently authored source. Preserve /docs/<locale>/<slug>.md URLs. Protect technical literals. Do not edit .github workflows, do not push/deploy, do not touch unrelated product code. Add focused tests or extend existing docs tests; run relevant tests and website scripts. Commit your changes locally and report SHA, files changed, and test evidence.»
@@ -54,3 +56,6 @@
 - 2026-08-05: Final verification passed: `node scripts/sync-docs.mjs`, `node scripts/check-translation-layout.mjs`, `node scripts/check-translation-literals.mjs`, and `pytest -q tests/test_site_docs.py`.
 - 2026-08-05: New follow-up request: add root CI guards for the docs-as-code contract. Keep scope root-only (`.github/workflows/`, `tests/`, root scripts if needed), assert website is not a gitlink or `.gitmodules`-backed submodule, and verify `public/openapi.yaml` against the live Go renderer with deterministic local input.
 - 2026-08-05: Review follow-up: move the mirror manifest fully to root `docs/*.md` and strengthen OpenAPI artifact coverage to compare generated operation structure, not only path names.
+- 2026-08-05: Lead recovery request after `f6a9bed` was pushed: independent Critic found that `website/scripts/translate-docs.mjs` enumerates English files from `website/src/content/docs/en`, making a newly manifest-listed root document impossible to translate before the mirror is synced. Confirmed scope is limited to restoring root-docs enumeration and adding a focused regression; no deploy, push, or route change is authorized.
+- 2026-08-05: Root-cause repair changed translation selection to `scripts/docs-manifest.json`; the new black-box regression creates a stale website mirror, proves both manifest-only selection and root-content staging, and cleans its retained diagnostic directory.
+- 2026-08-05: Final local evidence: focused canary `1 passed, 4 deselected`; `pytest -q tests/test_site_docs.py` `5 passed`; `website` layout and protected-literal checks passed. Fresh acceptance Reviewer approved the final diff. No deployment or push was performed.

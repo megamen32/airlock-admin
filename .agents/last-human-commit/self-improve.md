@@ -53,3 +53,11 @@
 - Which skill, MCP, or tool is missing? none.
 - What operation or error repeated? One live health and CONNECT probe after reboot; guard: require both `rmnet4` health and external proxy egress.
 - State: fixed now
+
+## 2026-08-05 — Root docs translation recovery (Short)
+
+- What slowed or confused L? `englishFiles()` read a generated website mirror, so existing mirror-equality checks did not reveal that a new root document could not be translated first.
+- Which instruction should change? none.
+- Which skill, MCP, or tool is missing? Proposed: a docs-contract fixture helper that creates a stale mirror and root manifest without retained temporary diagnostics.
+- What operation or error repeated? Two review passes preceded discovery that the first canary leaked its retained `/tmp/gptadmin-docs-*`; guard: require test-owned cleanup for diagnostic-mode fixtures.
+- State: fixed now

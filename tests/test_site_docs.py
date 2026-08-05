@@ -1,4 +1,7 @@
 import json
+import os
+import re
+import shutil
 from pathlib import Path
 import subprocess
 
@@ -66,3 +69,56 @@ def test_website_tree_is_not_a_gitlink_or_submodule_manifest():
     )
     mode = result.stdout.split(None, 1)[0] if result.stdout.strip() else ""
     assert mode != "160000", f"website is still a gitlink: {result.stdout.strip()!r}"
+
+
+def test_translate_docs_enumerates_root_manifest_not_website_mirror(tmp_path: Path):
+    repo = tmp_path / "repo"
+    docs_root = repo / "docs"
+    scripts_root = repo / "scripts"
+    website_scripts = repo / "website" / "scripts"
+    website_en = repo / "website" / "src" / "content" / "docs" / "en"
+    translator_stub = repo / "translator-stub.mjs"
+    manifest = ["alpha.md", "beta.md"]
+
+    docs_root.mkdir(parents=True)
+    scripts_root.mkdir(parents=True)
+    website_scripts.mkdir(parents=True)
+    website_en.mkdir(parents=True)
+
+    (scripts_root / "docs-manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
+    (docs_root / "alpha.md").write_text("alpha root\n", encoding="utf-8")
+    (docs_root / "beta.md").write_text("beta root\n", encoding="utf-8")
+    (website_en / "alpha.md").write_text("alpha mirror\n", encoding="utf-8")
+    (website_scripts / "translate-docs.mjs").write_text(
+        (ROOT / "website" / "scripts" / "translate-docs.mjs").read_text(encoding="utf-8"),
+        encoding="utf-8",
+    )
+    translator_stub.write_text("process.exit(0);\n", encoding="utf-8")
+
+    env = os.environ.copy()
+    env["TRANSLATE_CLI"] = str(translator_stub)
+    env["KEEP_TRANSLATION_TMP"] = "1"
+
+    retained_tmp = None
+    try:
+        result = subprocess.run(
+            ["node", str(website_scripts / "translate-docs.mjs"), "--dry-run", "--provider", "stub"],
+            cwd=repo,
+            check=True,
+            capture_output=True,
+            text=True,
+            env=env,
+        )
+
+        match = re.search(r"retained (.+) for diagnostics", result.stderr)
+        assert match, result.stderr
+        retained_tmp = Path(match.group(1))
+        temporary_docs = retained_tmp / "docs"
+
+        assert sorted(path.name for path in temporary_docs.glob("*.md")) == manifest
+        assert (temporary_docs / "alpha.md").read_text(encoding="utf-8") == (docs_root / "alpha.md").read_text(encoding="utf-8")
+        assert (temporary_docs / "beta.md").read_text(encoding="utf-8") == (docs_root / "beta.md").read_text(encoding="utf-8")
+        assert (temporary_docs / "alpha.md").read_text(encoding="utf-8") != (website_en / "alpha.md").read_text(encoding="utf-8")
+    finally:
+        if retained_tmp is not None:
+            shutil.rmtree(retained_tmp, ignore_errors=True)
