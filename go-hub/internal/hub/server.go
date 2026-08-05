@@ -741,6 +741,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/webhook-jobs/", s.webhookJobEndpoint)
 	mux.HandleFunc("/webhook-routes", s.requireCtl(s.webhookRoutesEndpoint))
 	mux.HandleFunc("/webhook-routes/", s.requireCtl(s.webhookRoutesEndpoint))
+	mux.HandleFunc("/admin/api/webhook-jobs/", s.requireCtl(s.adminWebhookJobEndpoint))
 	mux.HandleFunc("/.well-known/oauth-protected-resource", s.oauthProtectedResource)
 	mux.HandleFunc("/.well-known/oauth-authorization-server", s.oauthAuthorizationServer)
 	mux.HandleFunc("/register", s.oauthRegister)
@@ -1212,13 +1213,66 @@ paths:
       responses:
         "200":
           description: Durable webhook job state
+  /admin/api/webhook-jobs/{job_id}:
+    get:
+      operationId: getAdminWebhookJob
+      summary: Read one webhook job with operator authentication
+      parameters:
+        - name: job_id
+          in: path
+          required: true
+          schema: {type: string}
+      responses:
+        "200":
+          description: Durable webhook job state
+  /webhook-routes:
+    get:
+      operationId: listWebhookRoutes
+      summary: List secret-free webhook route metadata
+      responses:
+        "200":
+          description: Route metadata without secrets
+    post:
+      operationId: createWebhookRoute
+      summary: Create an operator-owned fixed-target webhook route
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WebhookRoute"
+      responses:
+        "201":
+          description: Created route metadata without secrets
   /webhook-routes/{route}:
     put:
       operationId: replaceWebhookRoute
       summary: Replace an operator-owned webhook route
+      parameters:
+        - name: route
+          in: path
+          required: true
+          schema: {type: string}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WebhookRoute"
+      responses:
+        "200":
+          description: Updated route metadata without secrets
     delete:
       operationId: deleteWebhookRoute
       summary: Delete an operator-owned webhook route
+      parameters:
+        - name: route
+          in: path
+          required: true
+          schema: {type: string}
+      responses:
+        "204":
+          description: Route deleted
   /proxy-control/v1/request:
     post:
       operationId: networkProxyRequest
@@ -1317,6 +1371,38 @@ components:
       type: http
       scheme: bearer
   schemas:
+    WebhookRoute:
+      type: object
+      additionalProperties: false
+      required: [id, action]
+      properties:
+        id: {type: string}
+        token: {type: string, writeOnly: true}
+        hmac_secret: {type: string, writeOnly: true}
+        signature_version: {type: string, enum: [v1, v2]}
+        max_skew_seconds: {type: integer, minimum: 1}
+        action:
+          type: object
+          additionalProperties: false
+          required: [kind, target]
+          properties:
+            kind: {type: string, enum: [mcp, prompt, shell]}
+            target: {type: string}
+            approval_mode: {type: string, enum: [ask_before_write, bounded_autonomous]}
+            tool: {type: string}
+            arguments: {type: object, additionalProperties: true}
+            prompt: {type: string}
+            prompt_arg: {type: string}
+            command: {type: string}
+            cwd: {type: string}
+        callback:
+          type: object
+          additionalProperties: false
+          required: [url]
+          properties:
+            url: {type: string}
+            token: {type: string, writeOnly: true}
+            hmac_secret: {type: string, writeOnly: true}
     ApprovalRequired:
       type: object
       additionalProperties: false
@@ -2564,7 +2650,7 @@ func isReadOnlyTool(target, toolName string) bool {
 	}
 	if target == "hub" {
 		switch toolName {
-		case "discover", "demo", "resource_receipt", "list_mcp_servers", "listMcpServers", "list_mcp_agents", "listMcpAgents", "pending", "list_pending_servers", "hub_status", "status", "schema", "list_mcp_tools", "listMcpTools", "job", "get_mcp_job", "getMcpJob":
+		case "discover", "demo", "resource_receipt", "list_mcp_servers", "listMcpServers", "list_mcp_agents", "listMcpAgents", "pending", "list_pending_servers", "hub_status", "status", "schema", "list_mcp_tools", "listMcpTools", "job", "get_mcp_job", "getMcpJob", webhookRoutesListTool, webhookJobGetTool:
 			return true
 		default:
 			return false
@@ -2874,6 +2960,9 @@ func (s *Server) callHubToolForRequest(r *http.Request, name string, args map[st
 	if isNetworkProxyHubTool(name) {
 		return s.callNetworkProxyTool(AccessProfileIDFromRequest(r), name, args)
 	}
+	if isWebhookHubTool(name) {
+		return s.callWebhookHubTool(name, args)
+	}
 	if name == "resource_receipt" {
 		return s.appsSDKResourceReceipt(r, firstString(args, "uri")), http.StatusOK
 	}
@@ -3034,6 +3123,7 @@ func hubTools() []map[string]any {
 		{"name": "approve_pending_server", "description": "Approve one ShellMCP device awaiting enrollment", "inputSchema": map[string]any{"type": "object", "properties": map[string]any{"server_id": map[string]any{"type": "string", "description": "Exact shell:<name> returned by pending"}}, "required": []string{"server_id"}, "additionalProperties": false}},
 		{"name": "status", "description": "Return Hub status", "inputSchema": map[string]any{"type": "object", "properties": map[string]any{}}},
 	}
+	tools = append(tools, webhookHubTools()...)
 	tools = append(tools, networkProxyHubTools()...)
 	return append(tools, secretHubTools()...)
 }
@@ -5433,6 +5523,9 @@ func (s *Server) mcpPromptCall(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) appsSDKCall(name string, args map[string]any) any {
 	switch name {
+	case webhookRoutesListTool, webhookRouteCreateTool, webhookRouteReplaceTool, webhookRouteDeleteTool, webhookJobGetTool:
+		result, _ := s.callWebhookHubTool(name, args)
+		return result
 	case "secret_request", "secret_status":
 		return s.secretToolForRequest(nil, name, args)
 	case "ui", "render_gptadmin_dashboard", "renderGptadminDashboard":
@@ -5783,6 +5876,7 @@ func appsSDKTools() []map[string]any {
 			"_meta":           readMeta,
 		},
 	}
+	tools = append(tools, webhookAppsTools(readSecurity, execSecurity, readMeta, execMeta)...)
 	return append(tools, secretAppsTools()...)
 }
 

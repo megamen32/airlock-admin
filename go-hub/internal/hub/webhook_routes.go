@@ -30,30 +30,14 @@ func (s *Server) webhookRoutesEndpoint(w http.ResponseWriter, r *http.Request) {
 
 	switch {
 	case routeID == "" && r.Method == http.MethodGet:
-		s.mu.Lock()
-		routes := make([]webhookRouteSummary, 0, len(s.webhookRoutes))
-		for _, route := range s.webhookRoutes {
-			routes = append(routes, summarizeWebhookRoute(route))
-		}
-		s.mu.Unlock()
-		sort.Slice(routes, func(i, j int) bool { return routes[i].ID < routes[j].ID })
-		writeJSON(w, http.StatusOK, map[string]any{"routes": routes})
+		writeJSON(w, http.StatusOK, map[string]any{"routes": s.listWebhookRouteSummaries()})
 	case routeID == "" && r.Method == http.MethodPost:
 		s.writeWebhookRoute(w, r, "", http.StatusCreated)
 	case routeID != "" && r.Method == http.MethodPut:
 		s.writeWebhookRoute(w, r, routeID, http.StatusOK)
 	case routeID != "" && r.Method == http.MethodDelete:
-		s.mu.Lock()
-		if _, ok := s.webhookRoutes[routeID]; !ok {
-			s.mu.Unlock()
-			writeJSON(w, http.StatusNotFound, map[string]any{"detail": "unknown webhook route"})
-			return
-		}
-		delete(s.webhookRoutes, routeID)
-		err := s.saveWebhookRoutesLocked()
-		s.mu.Unlock()
-		if err != nil {
-			writeJSON(w, http.StatusInternalServerError, map[string]any{"detail": err.Error()})
+		if operationErr := s.deleteWebhookRoute(routeID); operationErr != nil {
+			writeJSON(w, operationErr.Status, map[string]any{"detail": operationErr.Detail})
 			return
 		}
 		w.WriteHeader(http.StatusNoContent)
@@ -74,38 +58,18 @@ func (s *Server) writeWebhookRoute(w http.ResponseWriter, r *http.Request, route
 		writeJSON(w, http.StatusBadRequest, map[string]any{"detail": fmt.Sprintf("invalid webhook route: %v", err)})
 		return
 	}
-	if routeID != "" {
-		if route.ID != "" && route.ID != routeID {
-			writeJSON(w, http.StatusBadRequest, map[string]any{"detail": "route id does not match path"})
-			return
-		}
-		route.ID = routeID
+	var summary webhookRouteSummary
+	var operationErr *webhookOperationError
+	if routeID == "" {
+		summary, operationErr = s.createWebhookRoute(route)
+	} else {
+		summary, operationErr = s.replaceWebhookRoute(routeID, route)
 	}
-	if err := validateWebhookRoutes([]WebhookRoute{route}); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"detail": err.Error()})
+	if operationErr != nil {
+		writeJSON(w, operationErr.Status, map[string]any{"detail": operationErr.Detail})
 		return
 	}
-
-	s.mu.Lock()
-	_, exists := s.webhookRoutes[route.ID]
-	if routeID == "" && exists {
-		s.mu.Unlock()
-		writeJSON(w, http.StatusConflict, map[string]any{"detail": "webhook route already exists"})
-		return
-	}
-	if routeID != "" && !exists {
-		s.mu.Unlock()
-		writeJSON(w, http.StatusNotFound, map[string]any{"detail": "unknown webhook route"})
-		return
-	}
-	s.webhookRoutes[route.ID] = route
-	err = s.saveWebhookRoutesLocked()
-	s.mu.Unlock()
-	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]any{"detail": err.Error()})
-		return
-	}
-	writeJSON(w, status, summarizeWebhookRoute(route))
+	writeJSON(w, status, summary)
 }
 
 func summarizeWebhookRoute(route WebhookRoute) webhookRouteSummary {
