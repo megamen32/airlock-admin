@@ -52,3 +52,4 @@
 - 2026-08-05: Fixed the website-side collision by switching to a distinct `__GPTADMIN_DOC_LITERAL_*__` prefix and restoring link suffixes from a synthetic URL anchor rather than the translator's own placeholder prefix.
 - 2026-08-05: Verified the single-file `INTEGRATIONS.md` canary and the full 17-file translation pass after the restore fix, then resynced the website mirrors from root `docs/`.
 - 2026-08-05: Final verification passed: `node scripts/sync-docs.mjs`, `node scripts/check-translation-layout.mjs`, `node scripts/check-translation-literals.mjs`, and `pytest -q tests/test_site_docs.py`.
+- 2026-08-05: New follow-up request: add root CI guards for the docs-as-code contract. Keep scope root-only (`.github/workflows/`, `tests/`, root scripts if needed), assert website is not a gitlink or `.gitmodules`-backed submodule, and verify `public/openapi.yaml` against the live Go renderer with deterministic local input.

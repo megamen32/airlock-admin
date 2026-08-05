@@ -1,20 +1,11 @@
 from pathlib import Path
-
-import pytest
+import subprocess
 
 
 ROOT = Path(__file__).resolve().parent.parent
 DOCS_ROOT = ROOT / "docs"
 WEBSITE_SOURCE = ROOT / "website" / "src" / "content" / "docs"
 WEBSITE_PUBLIC = ROOT / "website" / "public" / "docs"
-
-# The website/ is a private git submodule that CI does not check out (it has no
-# token with cross-repo access). Run these guards only where its rendered-doc
-# source is present (developer machines, the opensource mirror, etc.).
-pytestmark = pytest.mark.skipif(
-    not WEBSITE_SOURCE.exists(),
-    reason="website submodule not checked out",
-)
 
 
 def _site_docs_text() -> str:
@@ -58,3 +49,18 @@ def test_site_docs_do_not_publish_owner_hub_url():
 def test_site_docs_mirror_root_source_and_public_tree():
     _assert_mirror(WEBSITE_SOURCE)
     _assert_mirror(WEBSITE_PUBLIC)
+
+
+def test_website_tree_is_not_a_gitlink_or_submodule_manifest():
+    """The website docs tree must be a real subtree, not a submodule pointer."""
+
+    assert not (ROOT / ".gitmodules").exists(), ".gitmodules should not exist for the website tree"
+
+    result = subprocess.run(
+        ["git", "-C", str(ROOT), "ls-tree", "HEAD", "website"],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    mode = result.stdout.split(None, 1)[0] if result.stdout.strip() else ""
+    assert mode != "160000", f"website is still a gitlink: {result.stdout.strip()!r}"

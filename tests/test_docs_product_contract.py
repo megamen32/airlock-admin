@@ -51,6 +51,8 @@ def test_release_workflow_runs_docs_contract() -> None:
     workflow = (ROOT / ".github" / "workflows" / "build-and-sync.yml").read_text(encoding="utf-8")
     assert "name: Docs product contract" in workflow
     assert "uv run pytest tests/test_docs_product_contract.py tests/test_feedback_loop_contract.py -q" in workflow
+    assert "name: Docs-as-code contract" in workflow
+    assert "uv run pytest tests/test_site_docs.py tests/test_openapi_artifact.py tests/test_docs_product_contract.py tests/test_public_mirror.py tests/test_install_scripts.py -q" in workflow
 
 
 def test_integration_control_contract_matches_current_hub_scope() -> None:
