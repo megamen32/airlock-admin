@@ -27,7 +27,7 @@ import {
 } from "./api";
 import "./styles.css";
 
-type View = "instructions" | "profiles" | "clients" | "webhooks" | "auth";
+type View = "instructions" | "profiles" | "clients" | "webhooks" | "auth" | "capabilities";
 type LoadState = "loading" | "ready" | "empty" | "error" | "stale";
 
 const navigation: Array<{ id: View; label: string; href: string }> = [
@@ -36,11 +36,12 @@ const navigation: Array<{ id: View; label: string; href: string }> = [
   { id: "clients", label: "Клиенты", href: "#clients" },
   { id: "webhooks", label: "Вебхуки и агенты", href: "#webhooks" },
   { id: "auth", label: "Авторизация", href: "#auth" },
+  { id: "capabilities", label: "Виртуальные MCP", href: "#capabilities" },
 ];
 
 function viewFromHash(): View {
   const hash = window.location.hash;
-  return hash === "#profiles" || hash === "#clients" || hash === "#webhooks" || hash === "#auth" ? hash.slice(1) as View : "instructions";
+  return hash === "#profiles" || hash === "#clients" || hash === "#webhooks" || hash === "#auth" || hash === "#capabilities" ? hash.slice(1) as View : "instructions";
 }
 
 const emptyWorkspace = (): ExternalWorkspaceRef => ({
@@ -901,7 +902,7 @@ export default function App() {
   return (
     <div className="app-shell">
       <aside className="sidebar"><div className="brand"><span className="brand-mark" aria-hidden="true">G</span><span>GPTAdmin</span></div><div className="workspace-label">ОПЕРАЦИОННАЯ КОНСОЛЬ</div><nav aria-label="Основная навигация">{navigation.map((item) => <a className={`nav-item ${view === item.id ? "active" : ""}`} href={item.href} aria-current={view === item.id ? "page" : undefined} key={item.id} onClick={(event) => { event.preventDefault(); setView(item.id); window.history.replaceState(null, "", item.href); }}>{<><span className="nav-dot" aria-hidden="true" /><span>{item.label}</span></>}</a>)}<a className="nav-item" href="/admin/legacy/"><span className="nav-dot" aria-hidden="true" /><span>Операции и MCP</span></a></nav><div className="sidebar-footer"><span className="profile-state">{view === "profiles" ? "Профильный доступ" : "Рабочий контекст"}</span><a className="logout-link" href="/admin/logout">Выйти</a></div></aside>
-      <main className="main-content">{view === "instructions" ? <InstructionsScreen /> : view === "profiles" ? <ProfilesScreen /> : view === "clients" ? <ClientsScreen /> : view === "webhooks" ? <WebhooksScreen /> : <AuthScreen />}</main>
+      <main className="main-content">{view === "instructions" ? <InstructionsScreen /> : view === "profiles" ? <ProfilesScreen /> : view === "clients" ? <ClientsScreen /> : view === "webhooks" ? <WebhooksScreen /> : view === "capabilities" ? <CapabilitiesScreen /> : <AuthScreen />}</main>
     </div>
   );
 }
