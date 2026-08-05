@@ -188,9 +188,10 @@ gptadmin auth-diagnose --token '<paste-token-here>'
 ### 设置（打开 WebUI）
 
 在 Open WebUI 设置中将集线器添加为工具/功能端点：
-- URL：`https://your-hub.bezrabotnyi.com/admin/api`
-- OpenAPI 架构：从 `https://became.bezrabotnyi.com/api.json` 导入
-- Auth：来自 Hub 元数据的 OAuth 授权码 + PKCE
+- URL：`https://your-hub.example/mcp-relay`
+- OpenAPI 架构：导入 `https://your-hub.example/actions/openapi.yaml`
+- Auth：使用 scoped Bearer token，或者在客户端支持动态注册时使用来自 Hub
+  元数据的 OAuth 授权码 + PKCE。
 
 ### 为什么“没有法典限制”
 

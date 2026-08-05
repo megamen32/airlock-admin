@@ -190,9 +190,10 @@ point a Custom GPT at `127.0.0.1`.
 ### Setup (Open WebUI)
 
 Add the hub as a tool/function endpoint in Open WebUI settings:
-- URL: `https://your-hub.bezrabotnyi.com/admin/api`
-- OpenAPI schema: import from `https://became.bezrabotnyi.com/api.json`
-- Auth: OAuth Authorization Code + PKCE from the Hub metadata
+- URL: `https://your-hub.example/mcp-relay`
+- OpenAPI schema: import from `https://your-hub.example/actions/openapi.yaml`
+- Auth: a scoped Bearer token, or OAuth Authorization Code + PKCE from the Hub
+  metadata where the client supports dynamic registration.
 
 ### Why "no Codex limits"
 

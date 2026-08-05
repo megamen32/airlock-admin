@@ -1,6 +1,6 @@
 # Задача: аккуратная консолидация GPTAdmin в локальный main
 
-Status: active
+Status: complete
 
 ## Исходный запрос
 
@@ -47,3 +47,7 @@ Status: active
 - 2026-08-05: Integration is blocked pending conflict policy, not missing data: the webhook recovery overlaps current Hub sources, the OAuth branch conflicts with current `AGENTS.md`, and the v141 artifact recoveries disagree on whether `public/gptadmin-win.zip` is deleted or replaced.
 - 2026-08-05: Read-only Windows canary reached `megam@192.168.2.190`; the scheduled `gptadmin-shellmcp` is running and executes `C:\ProgramData\gptadmin\bin\shellmcp.exe` (8,918,528 bytes, modified 2026-08-02). Its SHA-256 `fa03dc3c...eb5fb46b` differs from both the current/released v141 archive and the recovery rebuild archive, so neither old recovery ZIP can be treated as the current Windows payload.
 - 2026-08-05: Merged all preserved branches into local `main` with `main` as the conflict winner and every competing variant retained by its recovery branch. Canonical work, OAuth, v141 manifest, Go Hub artifact, webhook work, subtree task, and both v141 artifact histories are now ancestors of `main`; the remaining action is to move the legacy nested website checkout aside, attach the canonical checkout to `main`, verify, then remove only clean worktrees.
+- 2026-08-05: User explicitly rejected the old website gitlink. Removed its 1.4 GB recovery archive only after the normal website subtree was established; it is not retained in the canonical checkout.
+- 2026-08-05: Attached `/home/roomhacker/gptadmin` to local `main`, removed 17 clean noncanonical worktrees, and pruned 3 stale worktree registrations. `git worktree list` now reports only the canonical checkout.
+- 2026-08-05: Restored the normal root-to-website docs sync after the gitlink removal, repaired the RU/CN derived Open WebUI literals, and verified 17 canonical documents across root and both website trees.
+- 2026-08-05: A full local test exposed two merge omissions: the configured MCP bearer token-kind constant and newer webhook virtual-MCP tests. Restored each from its preserved parent contract; `pytest -q tests/test_site_docs.py`, `go test ./internal/hub`, `go test ./internal/server`, translation layout/literal checks, and `git diff --check` pass.

@@ -37,6 +37,8 @@ const defaultJWTKeyID = "gptadmin-hs256-v1"
 
 const defaultManagedMCPTokenTTLDays = 5 * 365
 
+const configuredMCPBearerTokenKind = "configured_opaque_migration"
+
 // legacyCtlTokenDeadline is the fixed end of the one-week migration window.
 // After this instant only AdminPassword sessions and scoped OAuth JWTs may
 // authenticate human/MCP requests.

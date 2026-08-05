@@ -188,9 +188,10 @@ gptadmin auth-diagnose --token '<paste-token-here>'
 ### Настройка (открытый веб-интерфейс)
 
 Добавьте хаб в качестве конечной точки инструмента/функции в настройках Open WebUI:
-- URL: `https://your-hub.bezrabotnyi.com/admin/api`
-- Схема OpenAPI: импорт из `https://became.bezrabotnyi.com/api.json`.
-- Аутентификация: код авторизации OAuth + PKCE из метаданных Hub.
+- URL: `https://your-hub.example/mcp-relay`
+- Схема OpenAPI: импортируйте `https://your-hub.example/actions/openapi.yaml`.
+- Аутентификация: scoped Bearer-токен либо OAuth Authorization Code + PKCE из
+  метаданных Hub, если клиент поддерживает динамическую регистрацию.
 
 ### Почему «нет ограничений Кодекса»
 
