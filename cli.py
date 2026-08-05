@@ -42,10 +42,9 @@ try:
 except Exception:
     tomllib = None
 
-# Fixed one-week migration window for the legacy administrator bearer. New
-# installs no longer create it; existing installations are handled by the Hub
-# until this date and must migrate to AdminPassword/OAuth before then.
-LEGACY_CTL_TOKEN_DEADLINE = '2026-07-27'
+# CTL_TOKEN is a deprecated compatibility credential. New and updated
+# installations do not create it, but an existing credential remains valid
+# until its owner explicitly rotates or removes it.
 
 # ===== Platform =====
 IS_MACOS = sys.platform == 'darwin'
@@ -2148,7 +2147,7 @@ def setup_interactive(args):
     print('\n=== Готово ===')
     if install_hub:
         print(f"Hub URL: {env.get('HUB_PUBLIC_URL', '—')}")
-        print(f"Подключение: AdminPassword/OAuth (legacy bearer migration deadline {LEGACY_CTL_TOKEN_DEADLINE})")
+        print('Подключение: AdminPassword/OAuth (existing legacy bearer remains valid until explicitly rotated or removed)')
     if install_shellmcp and not install_hub:
         print(f"HUB_URL для ShellMCP: {env.get('HUB_URL', '—')}")
     if install_shellmcp:

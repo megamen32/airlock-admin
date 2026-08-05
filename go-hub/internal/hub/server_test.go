@@ -675,6 +675,41 @@ func TestAdminIssueMCPTokenUsesPublicOriginAndWorksForRelay(t *testing.T) {
 	}
 }
 
+func TestAdminIssueMCPTokenDefaultsToFiveYears(t *testing.T) {
+	s := New(Config{
+		CtlToken:                 "ctl",
+		OAuthClientSecret:        "oauth-secret",
+		PublicOrigin:             "https://hub.example",
+		MCPResource:              "https://hub.example",
+		OAuthPermissiveResources: true,
+	})
+	req := httptest.NewRequest(http.MethodPost, "/admin/api/mcp/issue-token", bytes.NewBufferString(`{"client_id":"five-year-client"}`))
+	req.Header.Set("Authorization", "Bearer ctl")
+	req.Header.Set("Content-Type", "application/json")
+	response := httptest.NewRecorder()
+	s.Handler().ServeHTTP(response, req)
+	if response.Code != http.StatusOK {
+		t.Fatalf("issue status=%d body=%s", response.Code, response.Body.String())
+	}
+	var body struct {
+		AccessToken string `json:"access_token"`
+		ExpiresIn   int64  `json:"expires_in"`
+	}
+	if err := json.Unmarshal(response.Body.Bytes(), &body); err != nil {
+		t.Fatal(err)
+	}
+	if want := int64(5 * 365 * 24 * 60 * 60); body.ExpiresIn != want {
+		t.Fatalf("expires_in=%d, want %d", body.ExpiresIn, want)
+	}
+	claims, err := s.verifyJWT(body.AccessToken)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := int64(intFromAny(claims["exp"])) - int64(intFromAny(claims["iat"])); got != body.ExpiresIn {
+		t.Fatalf("JWT lifetime=%d, want response lifetime=%d", got, body.ExpiresIn)
+	}
+}
+
 func TestAdminManagedMCPTokenCanBeListedAndRotated(t *testing.T) {
 	configDir := t.TempDir()
 	s := New(Config{
