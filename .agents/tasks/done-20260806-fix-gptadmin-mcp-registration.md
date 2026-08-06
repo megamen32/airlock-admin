@@ -47,3 +47,8 @@ A registration dry-run writes only the aggregate supervisor descriptor, preserve
 - `uv run pytest tests/test_mcp_*.py tests/test_shellmcp_contract.py -q` -> `31 passed`.
 - `bash -n mcp-add` passed.
 - `git diff --check` passed.
+
+## Follow-up skill
+
+- Added `skills/gptadmin-mcp-testing/SKILL.md` with the inspect, TDD, secret-safety, topology, client-routing, and fail-closed acceptance workflow.
+- Remote execution was blocked because the GPTADMIN connector was not exposed in this session; no server mutation was claimed.
