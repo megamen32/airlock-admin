@@ -84,6 +84,8 @@ Bearer → paste only a scoped token value issued by the Hub
 OAuth → use the Hub authorize/token flow from the Hub URL
 ```
 
+An existing legacy compatibility token remains valid until its owner explicitly rotates or removes it.
+
 Never paste an internal service secret into a GPT or client. If you need a
 different adapter, use the dedicated docs below.
 

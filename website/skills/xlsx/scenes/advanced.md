@@ -152,7 +152,7 @@ ws.conditional_formatting.add('B5:H100',
 ```python
 # Protect sheet (allow select + sort, prevent edits)
 ws.protection.sheet = True
-ws.protection.password = 'mypassword'
+ws.protection.password = 'your-password'
 ws.protection.sort = True
 ws.protection.autoFilter = True
 
@@ -163,7 +163,7 @@ for row in range(5, 101):
     ws.cell(row=row, column=4).protection = unlocked  # Column D is editable
 
 # Protect workbook structure (prevent adding/deleting sheets)
-wb.security.workbookPassword = 'structpass'
+wb.security.workbookPassword = 'your-password'
 wb.security.lockStructure = True
 ```
 
