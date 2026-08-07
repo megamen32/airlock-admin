@@ -301,7 +301,7 @@ FRPC_TOKEN_DEFAULT    = 'E10WCLE7ZFT+0NDgOFWwyPV8fb7hG7cLn320aHL0fVk='
 FRPC_DOMAIN_DEFAULT   = 't.gptadmin.bezrabotnyi.com'
 FRPC_SERVER_ENDPOINTS_DEFAULT = os.environ.get(
     'FRPC_SERVER_ENDPOINTS_DEFAULT',
-    'primary=gptadmin.bezrabotnyi.com:7000,vpn2=vpn2.bezrabotnyi.com:27000,vusa=vusa.bezrabotnyi.com:27000'
+    'primary=gptadmin.bezrabotnyi.com:7000,vpn2=vpn2.bezrabotnyi.com:27001,vusa=vusa.bezrabotnyi.com:27000'
 ).strip()
 CLOUDFLARED_VERSION   = os.environ.get('CLOUDFLARED_VERSION', 'latest')
 
