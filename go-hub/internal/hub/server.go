@@ -2774,15 +2774,133 @@ func (s *Server) publicAgentsLocked(r *http.Request) []Agent {
 	for _, virtual := range s.virtualAgentsLocked() {
 		agents = append(agents, s.withExposeMetaLocked(virtual, r))
 	}
+	parents := make([]Agent, 0, len(s.agents))
 	for _, a := range s.agents {
 		cp := *a
+		parents = append(parents, cp)
 		agents = append(agents, s.withExposeMetaLocked(cp, r))
+	}
+	usedSlugs := map[string]bool{}
+	for _, a := range agents {
+		usedSlugs[exposedAgentSlug(a)] = true
+	}
+	for _, parent := range parents {
+		if !strings.HasPrefix(parent.AgentID, "shell:") {
+			continue
+		}
+		children := childMCPAgents(parent)
+		for _, child := range children {
+			slug := agentSlug(firstString(child.Meta, "child_ref"))
+			if slug == "" {
+				continue
+			}
+			if usedSlugs[slug] {
+				slug = agentSlug(parent.AgentID) + "-" + slug
+			}
+			if usedSlugs[slug] {
+				continue
+			}
+			child.Meta["public_mcp_slug"] = slug
+			usedSlugs[slug] = true
+			agents = append(agents, s.withExposeMetaLocked(child, r))
+		}
 	}
 	return agents
 }
 
+func childMCPAgents(parent Agent) []Agent {
+	items := sliceValue(parent.Meta["mcp_agents"])
+	children := make([]Agent, 0, len(items))
+	for _, raw := range items {
+		descriptor := mapValue(raw)
+		ref := strings.TrimSpace(firstString(descriptor, "ref"))
+		if ref == "" || !truthyAny(descriptor["enabled"]) {
+			continue
+		}
+		name := firstString(descriptor, "name")
+		if name == "" {
+			name = ref
+		}
+		status := parent.Status
+		childMeta := map[string]any{
+			"parent_server_id": parent.AgentID,
+			"child_ref":        ref,
+			"enabled":          true,
+		}
+		if health := mapValue(descriptor["health"]); len(health) > 0 {
+			childMeta["health"] = health
+			protocol := mapValue(health["protocol"])
+			process := mapValue(health["process"])
+			if protocol["state"] == "failed" || process["state"] == "exited" {
+				status = "failed"
+			}
+		}
+		children = append(children, Agent{
+			AgentID:      "mcp:" + parent.AgentID + ":" + ref,
+			Name:         name,
+			Kind:         "child_mcp",
+			Transport:    firstString(descriptor, "transport"),
+			Status:       status,
+			LastSeen:     parent.LastSeen,
+			Capabilities: []string{"tools/list", "tools/call"},
+			Meta:         childMeta,
+		})
+	}
+	sort.Slice(children, func(i, j int) bool { return children[i].AgentID < children[j].AgentID })
+	return children
+}
+
+func isChildMCPAgent(agent Agent) bool {
+	return agent.Kind == "child_mcp" && firstString(agent.Meta, "parent_server_id") != "" && firstString(agent.Meta, "child_ref") != ""
+}
+
+func exposedAgentSlug(agent Agent) string {
+	if slug := firstString(agent.Meta, "public_mcp_slug"); slug != "" {
+		return slug
+	}
+	if slug := agentSlug(agent.AgentID); slug != "" {
+		return slug
+	}
+	return agentSlug(agent.Name)
+}
+
+func childMCPResponse(raw map[string]any) map[string]any {
+	response := mapValue(raw["response"])
+	current := mapValue(response["structuredContent"])
+	for range 5 {
+		if firstString(current, "ref") != "" || firstString(current, "name") != "" {
+			return current
+		}
+		if structured := mapValue(current["structuredContent"]); len(structured) > 0 {
+			current = structured
+			continue
+		}
+		if result := mapValue(current["result"]); len(result) > 0 {
+			current = result
+			continue
+		}
+		break
+	}
+	return current
+}
+
+func childMCPTools(raw map[string]any) []map[string]any {
+	child := childMCPResponse(raw)
+	items := sliceValue(child["tools"])
+	tools := make([]map[string]any, 0, len(items))
+	for _, item := range items {
+		if tool := mapValue(item); len(tool) > 0 {
+			tools = append(tools, tool)
+		}
+	}
+	return tools
+}
+
 func (s *Server) withExposeMetaLocked(a Agent, r *http.Request) Agent {
-	slug := agentSlug(a.AgentID)
+	slug := firstString(a.Meta, "public_mcp_slug")
+	if slug == "" {
+		slug = exposedAgentSlug(a)
+	}
 	if slug == "" {
 		slug = agentSlug(a.Name)
 	}
@@ -2827,6 +2945,9 @@ func (s *Server) selectMCPRelayTarget(target string) (string, int, string) {
 	if !exists {
 		exists = s.virtualMCP[target]
 	}
+	if !exists {
+		_, exists = s.exposedAgentByIDLocked(target)
+	}
 	s.mu.Unlock()
 	if exists {
 		return target, http.StatusOK, ""
@@ -2835,6 +2956,15 @@ func (s *Server) selectMCPRelayTarget(target string) (string, int, string) {
 		return "", http.StatusNotFound, fmt.Sprintf("unknown shell server %s", strings.TrimPrefix(target, "shell:"))
 	}
 	return "", http.StatusNotFound, fmt.Sprintf("unknown MCP relay server %s", target)
+}
+
+func (s *Server) exposedAgentByIDLocked(target string) (Agent, bool) {
+	for _, agent := range s.publicAgentsLocked(nil) {
+		if agent.AgentID == target {
+			return agent, true
+		}
+	}
+	return Agent{}, false
 }
 
 func (s *Server) mcpRelayTools(w http.ResponseWriter, r *http.Request) {
@@ -2866,6 +2996,18 @@ func (s *Server) mcpRelayTools(w http.ResponseWriter, r *http.Request) {
 	}
 	if strings.HasPrefix(target, "shell:") {
 		writeJSON(w, http.StatusOK, withActionToolHints(withSchemaContractMetadata(map[string]any{"server_id": target, "status": "completed", "response": map[string]any{"tools": toolsForRequest(r, target, shellTools())}}), target))
+		return
+	}
+	s.mu.Lock()
+	child, isChild := s.exposedAgentByIDLocked(target)
+	s.mu.Unlock()
+	if isChild && isChildMCPAgent(child) {
+		result, err := s.agentToolsListForRequest(r, child)
+		if err != nil {
+			writeJSON(w, http.StatusBadGateway, map[string]any{"server_id": target, "status": "failed", "error": err})
+			return
+		}
+		writeJSON(w, http.StatusOK, withActionToolHints(withSchemaContractMetadata(map[string]any{"server_id": target, "status": "completed", "response": result}), target))
 		return
 	}
 	if requestAccessMode(r) == accessModeReadonly {
@@ -2962,6 +3104,16 @@ func (s *Server) executeMCPTool(r *http.Request, target, toolName string, args m
 		}
 		if strings.HasPrefix(target, "shell:") {
 			return s.callShellToolWithTraceParentAndSecrets(target, toolName, args, background, timeout, requestTraceID(r), requestTraceParent(r), secretValues), http.StatusOK
+		}
+		s.mu.Lock()
+		child, isChild := s.exposedAgentByIDLocked(target)
+		s.mu.Unlock()
+		if isChild && isChildMCPAgent(child) {
+			parent := firstString(child.Meta, "parent_server_id")
+			ref := firstString(child.Meta, "child_ref")
+			return s.callShellToolWithTraceParentAndSecrets(parent, "mcp_call", map[string]any{
+				"ref": ref, "name": toolName, "arguments": args,
+			}, background, timeout, requestTraceID(r), requestTraceParent(r), secretValues), http.StatusOK
 		}
 		jobID := s.enqueueRelayWithTraceParent(target, "tools/call", map[string]any{"name": toolName, "arguments": args}, requestTraceID(r), requestTraceParent(r))
 		if background {
@@ -5340,9 +5492,8 @@ func (s *Server) resolveExposedAgent(slug string) (Agent, bool) {
 	wantCompact := compactSlug(slug)
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	hub := s.hubAgentLocked()
-	for _, a := range append(append([]Agent{hub}, s.virtualAgentsLocked()...), s.agentCopiesLocked()...) {
-		aliases := []string{a.AgentID, a.Name, agentSlug(a.AgentID), agentSlug(a.Name), compactSlug(a.AgentID), compactSlug(a.Name)}
+	for _, a := range s.publicAgentsLocked(nil) {
+		aliases := []string{a.AgentID, a.Name, exposedAgentSlug(a), agentSlug(a.AgentID), agentSlug(a.Name), compactSlug(a.AgentID), compactSlug(a.Name)}
 		for _, alias := range aliases {
 			if strings.EqualFold(slug, alias) || want == agentSlug(alias) || wantCompact == compactSlug(alias) {
 				return a, true
@@ -5454,7 +5605,7 @@ func (s *Server) agentMCPEndpoint(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) agentCard(r *http.Request, agent Agent) map[string]any {
-	slug := agentSlug(agent.AgentID)
+	slug := exposedAgentSlug(agent)
 	path := "/server/" + slug + "/mcp"
 	return map[string]any{
 		"ok":                  true,
@@ -5488,7 +5639,7 @@ func (s *Server) serverActionsOpenAPI(w http.ResponseWriter, r *http.Request, ag
 		return
 	}
 	tools := mcpToolsFromResult(result)
-	slug := agentSlug(agent.AgentID)
+	slug := exposedAgentSlug(agent)
 	if slug == "" {
 		slug = agentSlug(agent.Name)
 	}
@@ -5727,8 +5878,8 @@ func (s *Server) agentMCPJSONRPC(r *http.Request, agent Agent, body map[string]a
 	params := mapValue(body["params"])
 	switch method {
 	case "initialize":
-		if agent.AgentID == "hub" || strings.HasPrefix(agent.AgentID, "shell:") || isVirtualMCPAgent(agent) {
-			return map[string]any{"protocolVersion": "2024-11-05", "capabilities": map[string]any{"tools": map[string]any{}, "resources": map[string]any{}, "prompts": map[string]any{}}, "serverInfo": map[string]any{"name": "gptadmin-server-" + agentSlug(agent.AgentID), "version": BuildVersion}, "instructions": s.startupInstructionsTextForRequest(r)}, nil, false
+		if agent.AgentID == "hub" || strings.HasPrefix(agent.AgentID, "shell:") || isVirtualMCPAgent(agent) || isChildMCPAgent(agent) {
+			return map[string]any{"protocolVersion": "2024-11-05", "capabilities": map[string]any{"tools": map[string]any{}, "resources": map[string]any{}, "prompts": map[string]any{}}, "serverInfo": map[string]any{"name": "gptadmin-server-" + exposedAgentSlug(agent), "version": BuildVersion}, "instructions": s.startupInstructionsTextForRequest(r)}, nil, false
 		}
 		jobID := s.enqueueRelay(agent.AgentID, method, params)
 		result, rpcErr := unwrapMCPUpstream(s.waitRelay(jobID, s.cfg.DefaultTimeout))
@@ -5798,6 +5949,15 @@ func (s *Server) agentToolsList(agent Agent) (any, any) {
 	if strings.HasPrefix(agent.AgentID, "shell:") {
 		return map[string]any{"tools": shellTools()}, nil
 	}
+	if isChildMCPAgent(agent) {
+		parent := firstString(agent.Meta, "parent_server_id")
+		ref := firstString(agent.Meta, "child_ref")
+		raw := s.callShellToolWithTraceParent(parent, "mcp_tools", map[string]any{"ref": ref}, false, s.cfg.DefaultTimeout, "", "")
+		if firstString(raw, "status") == "failed" || truthy(raw["background"]) {
+			return unwrapMCPUpstream(raw)
+		}
+		return map[string]any{"tools": childMCPTools(raw)}, nil
+	}
 	jobID := s.enqueueRelay(agent.AgentID, "tools/list", map[string]any{})
 	return unwrapMCPUpstream(s.waitRelay(jobID, s.cfg.DefaultTimeout))
 }
@@ -5815,6 +5975,13 @@ func (s *Server) agentToolsListForRequest(r *http.Request, agent Agent) (any, an
 	if strings.HasPrefix(agent.AgentID, "shell:") {
 		return map[string]any{"tools": toolsForRequest(r, agent.AgentID, shellTools())}, nil
 	}
+	if isChildMCPAgent(agent) {
+		result, err := s.agentToolsList(agent)
+		if err != nil {
+			return nil, err
+		}
+		return result, nil
+	}
 	return map[string]any{"tools": []map[string]any{}}, nil
 }
 
@@ -5830,6 +5997,23 @@ func (s *Server) agentToolCall(r *http.Request, agent Agent, name string, args m
 	}
 	if strings.HasPrefix(agent.AgentID, "shell:") {
 		return unwrapMCPUpstream(s.callShellToolWithTraceParent(agent.AgentID, name, args, false, s.cfg.DefaultTimeout, requestTraceID(r), requestTraceParent(r)))
+	}
+	if isChildMCPAgent(agent) {
+		parent := firstString(agent.Meta, "parent_server_id")
+		ref := firstString(agent.Meta, "child_ref")
+		raw := s.callShellToolWithTraceParent(parent, "mcp_call", map[string]any{
+			"ref":       ref,
+			"name":      name,
+			"arguments": args,
+		}, false, s.cfg.DefaultTimeout, requestTraceID(r), requestTraceParent(r))
+		if firstString(raw, "status") == "failed" || truthy(raw["background"]) {
+			return unwrapMCPUpstream(raw)
+		}
+		child := childMCPResponse(raw)
+		if result := mapValue(child["result"]); len(result) > 0 {
+			return result, nil
+		}
+		return child, nil
 	}
 	jobID := s.enqueueRelayWithTraceParent(agent.AgentID, "tools/call", map[string]any{"name": name, "arguments": args}, requestTraceID(r), requestTraceParent(r))
 	return unwrapMCPUpstream(s.waitRelay(jobID, s.cfg.DefaultTimeout))
