@@ -107,7 +107,9 @@ options = {
     'shell_token': repl['__SHELLMCP_TOKEN__'],
     'port': 25900,
     'queue': True,
-    'heartbeat': False,
+    # Heartbeats publish the local child-MCP catalog and health to the Hub.
+    # Keep this enabled for production HAOS ShellMCP deployments.
+    'heartbeat': True,
     'mcp_config': '/data/shellmcp-mcp.json',
     'default_cwd': '/config',
     'exec_timeout': 300,
@@ -210,8 +212,12 @@ scp -q -i "$HAOS_SSH_KEY" -o IdentitiesOnly=yes -o BatchMode=yes -o ConnectTimeo
 # Queue mode intentionally has no bound HTTP port. Give one poll enough time to
 # authenticate, then verify the container and its recent transport log instead.
 sleep 8
-status=$("${SSH[@]}" "docker inspect -f '{{.State.Status}}' addon_local_gptadmin_shellmcp 2>/dev/null || true")
-recent=$("${SSH[@]}" "docker logs --since 8s addon_local_gptadmin_shellmcp 2>&1 || true")
+status=$(
+  "${SSH[@]}" "for n in app_local_gptadmin_shellmcp addon_local_gptadmin_shellmcp; do s=\$(docker inspect -f '{{.State.Status}}' \"\$n\" 2>/dev/null || true); if [ -n \"\$s\" ]; then echo \"\$s\"; break; fi; done"
+)
+recent=$(
+  "${SSH[@]}" "for n in app_local_gptadmin_shellmcp addon_local_gptadmin_shellmcp; do if docker inspect \"\$n\" >/dev/null 2>&1; then docker logs --since 8s \"\$n\" 2>&1; break; fi; done"
+)
 echo "container_status=$status"
 if [[ "$status" != "running" ]] || grep -Eq 'HTTP 401|queue poll failed|fatal' <<<"$recent"; then
   printf '%s\n' "$recent" >&2
