@@ -24,3 +24,21 @@ def test_custom_system_mode_uses_explicit_process_flags():
     assert "NoNewPrivileges" not in unit
     assert "ProtectSystem=full" in unit
     assert "ProtectHome" not in unit
+
+
+def test_custom_profile_cannot_claim_privilege_blocking_without_nnp():
+    try:
+        cli.linux_systemd_hardening(
+            "custom",
+            {"allow_privileged_execution": False, "no_new_privileges": False},
+        )
+    except ValueError as exc:
+        assert "no_new_privileges" in str(exc)
+    else:
+        raise AssertionError("contradictory custom profile was accepted")
+
+
+def test_unit_rendering_replaces_import_time_profile_without_prefix_corruption():
+    rendered = cli.render_unit_with_hardening(cli.UNIT_HUB, "")
+    assert rendered.startswith("\n[Unit]")
+    assert "Description=GPTAdmin Hub Proxy" in rendered

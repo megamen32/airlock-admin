@@ -36,7 +36,12 @@ func validateProcessSecurityProfile(profile processSecurityProfile) error {
 			return errors.New("maximum process profile requires all hardening flags and disables privileged execution")
 		}
 	case processSecurityCustom:
-		// Custom mode makes every flag explicit.
+		// Refusing privileged execution must be backed by the systemd
+		// no-new-privileges boundary; otherwise the UI would claim a control
+		// that the generated unit does not actually enforce.
+		if !profile.AllowPrivileged && !profile.NoNewPrivileges {
+			return errors.New("custom profile denying privileged execution requires no_new_privileges")
+		}
 	default:
 		return errors.New("process security mode must be normal, maximum or custom")
 	}

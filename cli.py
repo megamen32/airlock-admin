@@ -1125,6 +1125,8 @@ else:
             for key in flags:
                 if custom and key in custom:
                     flags[key] = bool(custom[key])
+            if custom and custom.get('allow_privileged_execution') is False and not flags['no_new_privileges']:
+                raise ValueError('custom profile denying privileged execution requires no_new_privileges')
         lines = []
         if flags['no_new_privileges']:
             lines.append('NoNewPrivileges=true')
@@ -1159,6 +1161,23 @@ else:
 
     LINUX_SECURITY_MODE, LINUX_SECURITY_CUSTOM = configured_process_security_profile()
     LINUX_HARDENING = '' if IS_USER_INSTALL else linux_systemd_hardening(LINUX_SECURITY_MODE, LINUX_SECURITY_CUSTOM)
+
+    def process_hardening_for_env(env: dict | None = None) -> str:
+        """Render the selected profile at unit-write time, not import time."""
+        if IS_USER_INSTALL:
+            return ''
+        if env and str(env.get('GPTADMIN_SECURITY_MODE', '')).strip().lower() in {'maximum', 'custom'}:
+            mode = str(env['GPTADMIN_SECURITY_MODE']).strip().lower()
+            _, persisted = configured_process_security_profile()
+            return linux_systemd_hardening(mode, persisted)
+        mode, custom = configured_process_security_profile()
+        return linux_systemd_hardening(mode, custom)
+
+    def render_unit_with_hardening(unit: str, hardening: str) -> str:
+        """Replace the import-time profile without corrupting normal units."""
+        if LINUX_HARDENING:
+            unit = unit.replace(LINUX_HARDENING, '', 1)
+        return unit.replace('\n[Install]', f'\n{hardening}[Install]', 1)
 
     UNIT_HUB = f"""
 [Unit]
@@ -1315,12 +1334,12 @@ WantedBy=timers.target
     def write_hub_unit(install_hub: bool, _install_shellmcp: bool):
         if install_hub:
             UNIT_PATH_HUB.parent.mkdir(parents=True, exist_ok=True)
-            UNIT_PATH_HUB.write_text(UNIT_HUB)
+            UNIT_PATH_HUB.write_text(render_unit_with_hardening(UNIT_HUB, process_hardening_for_env(env_read())))
 
     def write_shellmcp_unit(_install_hub: bool, install_shellmcp: bool):
         if install_shellmcp:
             UNIT_PATH_SHELLMCP.parent.mkdir(parents=True, exist_ok=True)
-            UNIT_PATH_SHELLMCP.write_text(UNIT_SHELLMCP)
+            UNIT_PATH_SHELLMCP.write_text(render_unit_with_hardening(UNIT_SHELLMCP, process_hardening_for_env(env_read())))
 
     def write_frpc_unit(frpc_bin: str):
         UNIT_PATH_FRPC.parent.mkdir(parents=True, exist_ok=True)
@@ -1329,7 +1348,7 @@ WantedBy=timers.target
         os.chmod(wrapper, 0o755)
         UNIT_PATH_FRPC.write_text(FRPC_UNIT_TPL.format(
             frpc_bin=wrapper,
-            hardening=LINUX_HARDENING,
+            hardening=process_hardening_for_env(env_read()),
             wanted_by=LINUX_WANTED_BY,
         ))
 
@@ -1337,7 +1356,7 @@ WantedBy=timers.target
         UNIT_PATH_CLOUDFLARED.parent.mkdir(parents=True, exist_ok=True)
         UNIT_PATH_CLOUDFLARED.write_text(CLOUDFLARED_UNIT_TPL.format(
             cloudflared_bin=cloudflared_bin, env_file=ENV_FILE, hub_port=env.get('HUB_PORT', '9001'),
-            hardening=LINUX_HARDENING, wanted_by=LINUX_WANTED_BY))
+            hardening=process_hardening_for_env(env), wanted_by=LINUX_WANTED_BY))
 
 
     def write_autoupdate_unit(env: dict):
@@ -4519,6 +4538,60 @@ def _transactional_update(func):
     return wrapped
 
 
+def cmd_security_profile(args):
+    """Read or persist the process security profile used by unit generation."""
+    path = ETC_DIR / 'security_state.json'
+    try:
+        state = json.loads(path.read_text(encoding='utf-8')) if path.exists() else {}
+    except (OSError, ValueError) as exc:
+        die(f'cannot read security profile: {exc}')
+    if not isinstance(state, dict):
+        die('security state must be a JSON object')
+    current = state.get('process_profile')
+    if not isinstance(current, dict):
+        current = {'mode': 'normal', 'allow_privileged_execution': True}
+    if not getattr(args, 'mode', None):
+        print(json.dumps({'process_profile': current}, ensure_ascii=False, indent=2))
+        return
+
+    mode = args.mode
+    if mode == 'normal':
+        profile = {
+            'mode': mode, 'no_new_privileges': False, 'private_tmp': False,
+            'protect_system': False, 'protect_home': False,
+            'allow_privileged_execution': True,
+        }
+    elif mode == 'maximum':
+        profile = {
+            'mode': mode, 'no_new_privileges': True, 'private_tmp': True,
+            'protect_system': True, 'protect_home': True,
+            'allow_privileged_execution': False,
+        }
+    else:
+        profile = {'mode': mode}
+        for key, value in (
+            ('no_new_privileges', args.no_new_privileges),
+            ('private_tmp', args.private_tmp),
+            ('protect_system', args.protect_system),
+            ('protect_home', args.protect_home),
+            ('allow_privileged_execution', args.allow_privileged_execution),
+        ):
+            profile[key] = bool(current.get(key, False if key != 'allow_privileged_execution' else True)) if value is None else value
+        if not profile['allow_privileged_execution'] and not profile['no_new_privileges']:
+            die('custom profile denying privileged execution must enable --no-new-privileges')
+
+    state['process_profile'] = profile
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_name(f'.{path.name}.{os.getpid()}.tmp')
+    try:
+        tmp.write_text(json.dumps(state, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
+        os.chmod(tmp, 0o600)
+        os.replace(tmp, path)
+    finally:
+        tmp.unlink(missing_ok=True)
+    print(json.dumps({'process_profile': profile, 'restart_bound': True}, ensure_ascii=False, indent=2))
+
+
 @_transactional_update
 def cmd_update(args):
     """In-place upgrade for existing installs.
@@ -5334,6 +5407,22 @@ def main():
     ap_update.add_argument('--system', action='store_true', help='Use system install paths/services')
     ap_update.add_argument('--auto', action='store_true', help='Run from the automatic updater; obey GPTADMIN_AUTO_UPDATE')
     ap_update.set_defaults(func=cmd_update)
+
+    ap_security = sub.add_parser('security', help='Настроить режимы безопасности процессов')
+    security_sub = ap_security.add_subparsers(dest='security_cmd')
+    ap_security_profile = security_sub.add_parser('profile', help='Показать или изменить профиль process hardening')
+    ap_security_profile.add_argument('--mode', choices=['normal', 'maximum', 'custom'], help='normal: штатная работа; maximum: строгая изоляция; custom: явные флаги')
+    for flag, dest in (
+        ('no-new-privileges', 'no_new_privileges'),
+        ('private-tmp', 'private_tmp'),
+        ('protect-system', 'protect_system'),
+        ('protect-home', 'protect_home'),
+    ):
+        ap_security_profile.add_argument(f'--{flag}', dest=dest, action='store_true', default=None)
+        ap_security_profile.add_argument(f'--allow-{flag}', dest=dest, action='store_false')
+    ap_security_profile.add_argument('--allow-privileged-execution', dest='allow_privileged_execution', action='store_true', default=None)
+    ap_security_profile.add_argument('--deny-privileged-execution', dest='allow_privileged_execution', action='store_false')
+    ap_security_profile.set_defaults(func=cmd_security_profile)
 
     ap_autoupdate = sub.add_parser('auto-update', aliases=['autoupdate'], help='Управление автообновлением GPTAdmin')
     ap_autoupdate.add_argument('action', nargs='?', choices=['status', 'enable', 'disable', 'run'], default='status')
