@@ -1483,23 +1483,39 @@ set -Eeuo pipefail
 FRPC_BIN={frpc_bin!r}
 CONFS=({confs})
 pids=()
+next_retry=()
+retry_delay=5
+start_child() {{
+  local index="$1"
+  "$FRPC_BIN" -c "${{CONFS[$index]}}" &
+  pids[$index]="$!"
+  next_retry[$index]=0
+}}
 cleanup() {{
   trap - TERM INT EXIT
   for pid in "${{pids[@]}}"; do
-    kill "$pid" 2>/dev/null || true
+    if [[ -n "$pid" ]]; then
+      kill "$pid" 2>/dev/null || true
+    fi
   done
   wait 2>/dev/null || true
 }}
 trap cleanup TERM INT EXIT
-for conf in "${{CONFS[@]}}"; do
-  "$FRPC_BIN" -c "$conf" &
-  pids+=("$!")
+for index in "${{!CONFS[@]}}"; do
+  start_child "$index"
 done
 while true; do
-  for pid in "${{pids[@]}}"; do
-    if ! kill -0 "$pid" 2>/dev/null; then
-      wait "$pid" || exit $?
-      exit 1
+  now="$(date +%s)"
+  for index in "${{!CONFS[@]}}"; do
+    pid="${{pids[$index]:-}}"
+    if [[ -n "$pid" ]] && kill -0 "$pid" 2>/dev/null; then
+      continue
+    fi
+    if [[ "$now" -ge "${{next_retry[$index]:-0}}" ]]; then
+      # Restart this edge independently; one failed edge must not stop healthy FRP edges.
+      wait "$pid" 2>/dev/null || true
+      start_child "$index"
+      next_retry[$index]="$((now + retry_delay))"
     fi
   done
   sleep 2
