@@ -1,6 +1,6 @@
 # Configurable GPTAdmin/ShellMCP security modes
 
-Status: in_progress
+Status: in_progress (implementation and isolated verification complete; production apply pending explicit canary approval)
 
 ## Исходный запрос
 
@@ -29,3 +29,15 @@ Status: in_progress
 3. Реализовать CLI/config/admin UI и генерацию units.
 4. Добавить red/green unit, auth, process and UI tests.
 5. Провести isolated canary, затем согласовать production mode/apply.
+
+## Implementation progress (English, append-only)
+
+- 2026-08-09: Added process profiles `normal`, `maximum`, and `custom` in Hub security state. Default is `normal` with privileged execution allowed; `maximum` requires all systemd hardening flags and disallows privileged execution; `custom` exposes each flag explicitly and rejects the contradictory state of denying privileged execution without `NoNewPrivileges`.
+- 2026-08-09: Added typed Hub API `GET/PUT /admin/api/security/profile`, admin-dashboard controls, persisted profile state, audit event, and restart-bound response. Existing bearer/OAuth security presets remain separate.
+- 2026-08-09: Added `gptadmin security profile` CLI read/write workflow and setup support. Unit rendering now evaluates the selected profile at write time, so a setup or CLI change cannot be lost because the Python module was imported earlier.
+- 2026-08-09: Focused verification passed: `pytest -q tests/test_security_modes.py tests/test_shellmcp_service_templates.py tests/test_site_docs.py` (13 passed); `go test ./internal/hub -count=1` passed; `python -m py_compile cli.py` passed; temporary-directory CLI maximum-profile canary passed; `git diff --check` passed.
+- 2026-08-09: Commits `2e1118c` and `4a40c7e` contain only this feature's selected files. Unrelated shared-worktree changes remain unstaged and untouched.
+
+## Remaining acceptance boundary
+
+Production units have not been regenerated or restarted in this task. Before applying a non-normal mode, run a host-local canary showing normal ShellMCP privilege flow, then obtain explicit confirmation for the restart/apply boundary. The default source behavior is normal/frictionless; existing production units are not silently changed by these commits.
