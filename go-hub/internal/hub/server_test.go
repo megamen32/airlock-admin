@@ -2298,6 +2298,44 @@ func TestJWTRequestContextRejectsWrongAudienceAndExpiredConnection(t *testing.T)
 	}
 }
 
+func TestRelaxAuthChecksAcceptsSignedJWTWithLegacyClaims(t *testing.T) {
+	s := New(Config{
+		OAuthClientSecret: "oauth-secret",
+		AdminPassword:     "admin-password",
+		PublicOrigin:      "https://hub.example",
+		MCPResource:       "https://hub.example",
+		RelaxAuthChecks:   true,
+	})
+	req := httptest.NewRequest(http.MethodGet, "https://hub.example/mcp", nil)
+	token, err := s.signJWT(map[string]any{
+		"exp":      time.Now().Add(-time.Hour).Unix(),
+		"iat":      time.Now().Add(-2 * time.Hour).Unix(),
+		"iss":      "https://legacy.example",
+		"aud":      "https://legacy.example",
+		"resource": "https://legacy.example",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.verifyJWTForRequest(req, token); err != nil {
+		t.Fatalf("relaxed auth rejected a signed legacy JWT: %v", err)
+	}
+	if _, err := s.verifyJWTForRequest(req, "not-a-token"); err == nil {
+		t.Fatal("relaxed auth accepted an unknown key")
+	}
+}
+
+func TestFromEnvReadsRelaxAuthChecksFlag(t *testing.T) {
+	t.Setenv("GPTADMIN_RELAX_AUTH_CHECKS", "1")
+	if cfg := FromEnv(); !cfg.RelaxAuthChecks {
+		t.Fatal("GPTADMIN_RELAX_AUTH_CHECKS=1 was not enabled")
+	}
+	t.Setenv("GPTADMIN_RELAX_AUTH_CHECKS", "0")
+	if cfg := FromEnv(); cfg.RelaxAuthChecks {
+		t.Fatal("GPTADMIN_RELAX_AUTH_CHECKS=0 remained enabled")
+	}
+}
+
 func TestJWTRequestRejectsWrongIssuerAndNormalizesConfiguredOrigin(t *testing.T) {
 	s := New(Config{OAuthClientSecret: "oauth-secret", PublicOrigin: " HTTPS://Hub.Example/// ", MCPResource: " HTTPS://Hub.Example/// "})
 	if got := s.origin(nil); got != "https://hub.example" {

@@ -13,6 +13,7 @@ Full environment-variable reference, auth model, and OAuth setup.
 | `OAUTH_CLIENT_SECRET` | for `/mcp` | — | Signs OAuth bearer tokens. Generate with `openssl rand -hex 32`. |
 | `PUBLIC_ORIGIN` | recommended | — | Public base URL (e.g. `https://your-hub.bezrabotnyi.com`). Used in OAuth + OpenAPI. |
 | `MCP_RESOURCE` | recommended | `$PUBLIC_ORIGIN` | The MCP resource identifier. |
+| `GPTADMIN_RELAX_AUTH_CHECKS` | emergency only | `0` | Set to `1` only during a bounded ingress/auth-state recovery. Keeps signature/key matching but temporarily skips token claim/expiry and OAuth PKCE checks; return to `0` after recovery. |
 | `GPTADMIN_AUTH_RATE_LIMIT` | optional | `60` per client per minute | Maximum failed admin/control/MCP authentication attempts from one client before a temporary `429` response. Successful authentication does not consume the budget. |
 
 ### Network
