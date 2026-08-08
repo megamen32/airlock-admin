@@ -164,7 +164,7 @@ PY
 python3 - "$OUT_DIR/config.yaml" <<'PY'
 import re, sys
 s = open(sys.argv[1], encoding='utf-8').read()
-s = re.sub(r'((token|secret|password|key): ")[^"]+', r'\1***redacted***', s, flags=re.I)
+s = re.sub(r'((token|secret|password|key|bearer|access[_-]?token|refresh[_-]?token|api[_-]?key): ")[^"]+', r'\1***redacted***', s, flags=re.I)
 print(s)
 PY
 sha256sum "$OUT_DIR/gptadmin_hub"
