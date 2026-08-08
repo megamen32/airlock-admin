@@ -934,6 +934,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/admin/api/security/reauth", s.requireCtl(s.adminSecurityReauth))
 	mux.HandleFunc("/admin/api/security/heartbeat", s.requireCtl(s.adminSecurityHeartbeat))
 	mux.HandleFunc("/admin/api/security/preset", s.requireCtl(s.adminSecurityPreset))
+	mux.HandleFunc("/admin/api/security/profile", s.requireCtl(s.adminSecurityProfile))
 	mux.HandleFunc("/admin/api/security/mfa/totp/enroll", s.requireCtl(s.adminTOTPEnroll))
 	mux.HandleFunc("/admin/api/security/mfa/totp/verify", s.requireCtl(s.adminTOTPVerify))
 	mux.HandleFunc("/admin/api/security/mfa/webauthn/register/begin", s.requireCtl(s.adminWebAuthnRegisterBegin))

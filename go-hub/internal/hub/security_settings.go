@@ -34,24 +34,26 @@ const (
 )
 
 type securitySettings struct {
-	Preset             string    `json:"preset"`
-	TOTPSecret         string    `json:"totp_secret,omitempty"`
-	MFAEnrolledAt      time.Time `json:"mfa_enrolled_at,omitempty"`
-	RecoveryCodeHashes []string  `json:"recovery_code_hashes,omitempty"`
-	UpdatedAt          time.Time `json:"updated_at"`
+	Preset             string                 `json:"preset"`
+	Process            processSecurityProfile `json:"process_profile"`
+	TOTPSecret         string                 `json:"totp_secret,omitempty"`
+	MFAEnrolledAt      time.Time              `json:"mfa_enrolled_at,omitempty"`
+	RecoveryCodeHashes []string               `json:"recovery_code_hashes,omitempty"`
+	UpdatedAt          time.Time              `json:"updated_at"`
 }
 
 type persistedSecuritySettings struct {
-	Preset             string    `json:"preset"`
-	EncryptedTOTP      string    `json:"totp_secret_ciphertext,omitempty"`
-	LegacyTOTP         string    `json:"totp_secret,omitempty"`
-	MFAEnrolledAt      time.Time `json:"mfa_enrolled_at,omitempty"`
-	RecoveryCodeHashes []string  `json:"recovery_code_hashes,omitempty"`
-	UpdatedAt          time.Time `json:"updated_at"`
+	Preset             string                 `json:"preset"`
+	Process            processSecurityProfile `json:"process_profile"`
+	EncryptedTOTP      string                 `json:"totp_secret_ciphertext,omitempty"`
+	LegacyTOTP         string                 `json:"totp_secret,omitempty"`
+	MFAEnrolledAt      time.Time              `json:"mfa_enrolled_at,omitempty"`
+	RecoveryCodeHashes []string               `json:"recovery_code_hashes,omitempty"`
+	UpdatedAt          time.Time              `json:"updated_at"`
 }
 
 func defaultSecuritySettings() securitySettings {
-	return securitySettings{Preset: securityPresetWorkingDefault}
+	return securitySettings{Preset: securityPresetWorkingDefault, Process: defaultProcessSecurityProfile()}
 }
 
 func validateSecurityPreset(preset string) error {
@@ -101,7 +103,13 @@ func loadSecuritySettings(path, key string) (securitySettings, error) {
 	if err := json.Unmarshal(data, &persisted); err != nil {
 		return defaultSecuritySettings(), fmt.Errorf("decode security settings: %w", err)
 	}
-	state = securitySettings{Preset: persisted.Preset, MFAEnrolledAt: persisted.MFAEnrolledAt, RecoveryCodeHashes: persisted.RecoveryCodeHashes, UpdatedAt: persisted.UpdatedAt}
+	state = securitySettings{Preset: persisted.Preset, Process: persisted.Process, MFAEnrolledAt: persisted.MFAEnrolledAt, RecoveryCodeHashes: persisted.RecoveryCodeHashes, UpdatedAt: persisted.UpdatedAt}
+	if state.Process.Mode == "" {
+		state.Process = defaultProcessSecurityProfile()
+	}
+	if err := validateProcessSecurityProfile(state.Process); err != nil {
+		return defaultSecuritySettings(), err
+	}
 	if persisted.EncryptedTOTP != "" {
 		secret, err := decryptSecuritySecret(persisted.EncryptedTOTP, key)
 		if err != nil {
@@ -141,7 +149,7 @@ func saveSecuritySettings(path string, state securitySettings, key string) error
 		return err
 	}
 	persisted := persistedSecuritySettings{
-		Preset: state.Preset, EncryptedTOTP: encrypted, MFAEnrolledAt: state.MFAEnrolledAt,
+		Preset: state.Preset, Process: state.Process, EncryptedTOTP: encrypted, MFAEnrolledAt: state.MFAEnrolledAt,
 		RecoveryCodeHashes: state.RecoveryCodeHashes, UpdatedAt: state.UpdatedAt,
 	}
 	data, err := json.Marshal(persisted)
@@ -303,11 +311,48 @@ func (s *Server) securityPublicSnapshot() map[string]any {
 	}
 	return map[string]any{
 		"preset":                   state.Preset,
+		"process_profile":          state.Process,
 		"mfa_enrolled":             mfaEnrolled,
 		"updated_at":               state.UpdatedAt,
 		"mfa_method":               mfaMethod,
 		"recovery_codes_remaining": len(state.RecoveryCodeHashes),
 		"restart_bound":            true,
+	}
+}
+
+func (s *Server) adminSecurityProfile(w http.ResponseWriter, r *http.Request) {
+	switch r.Method {
+	case http.MethodGet:
+		writeJSON(w, http.StatusOK, map[string]any{"process_profile": s.securitySnapshot().Process})
+	case http.MethodPut:
+		if !s.requireSensitiveSecurityReauth(w, r) {
+			return
+		}
+		var profile processSecurityProfile
+		if err := readJSON(r, &profile); err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]any{"detail": err.Error()})
+			return
+		}
+		profile.Mode = strings.ToLower(strings.TrimSpace(profile.Mode))
+		if err := validateProcessSecurityProfile(profile); err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]any{"detail": err.Error()})
+			return
+		}
+		s.mu.Lock()
+		state := s.security
+		state.Process = profile
+		state.UpdatedAt = s.now()
+		s.security = state
+		s.mu.Unlock()
+		if err := s.persistSecurity(state); err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]any{"detail": "failed to persist process security profile"})
+			return
+		}
+		s.addSecurityAudit("process_security_profile_changed", map[string]any{"mode": profile.Mode})
+		writeJSON(w, http.StatusOK, map[string]any{"process_profile": profile, "restart_bound": true})
+	default:
+		w.Header().Set("Allow", "GET, PUT")
+		writeJSON(w, http.StatusMethodNotAllowed, map[string]any{"detail": "method not allowed"})
 	}
 }
 

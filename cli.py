@@ -1102,7 +1102,63 @@ if IS_MACOS:
 else:
     # Linux systemd. In user mode this uses systemd --user and ~/.config/systemd/user.
     LINUX_WANTED_BY = 'default.target' if IS_USER_INSTALL else 'multi-user.target'
-    LINUX_HARDENING = '' if IS_USER_INSTALL else f'NoNewPrivileges=true\nPrivateTmp=true\nProtectSystem=full\nProtectHome=true\nReadWritePaths={ETC_DIR} {INSTALL_DIR} {Path.home() / ".gptadmin"}\n'
+
+    def linux_systemd_hardening(mode: str, custom: dict | None = None) -> str:
+        """Return systemd restrictions for an explicit security profile.
+
+        The normal profile is intentionally frictionless.  Stronger process
+        isolation is opt-in so it cannot silently invalidate ShellMCP's
+        explicit privileged execution contract.
+        """
+        if str(mode).strip().lower() == 'normal':
+            return ''
+        normalized = str(mode).strip().lower()
+        if normalized not in {'maximum', 'custom'}:
+            raise ValueError('security mode must be normal, maximum or custom')
+        flags = {
+            'no_new_privileges': normalized == 'maximum',
+            'private_tmp': normalized == 'maximum',
+            'protect_system': normalized == 'maximum',
+            'protect_home': normalized == 'maximum',
+        }
+        if normalized == 'custom':
+            for key in flags:
+                if custom and key in custom:
+                    flags[key] = bool(custom[key])
+        lines = []
+        if flags['no_new_privileges']:
+            lines.append('NoNewPrivileges=true')
+        if flags['private_tmp']:
+            lines.append('PrivateTmp=true')
+        if flags['protect_system']:
+            lines.append('ProtectSystem=full')
+        if flags['protect_home']:
+            lines.append('ProtectHome=true')
+        if flags['protect_system'] or flags['protect_home']:
+            lines.append(f'ReadWritePaths={ETC_DIR} {INSTALL_DIR} {Path.home() / ".gptadmin"}')
+        return '\n'.join(lines) + ('\n' if lines else '')
+
+    def configured_process_security_profile() -> tuple[str, dict]:
+        """Read the operator profile persisted by the Hub security API."""
+        env_mode = os.environ.get('GPTADMIN_SECURITY_MODE', '').strip().lower()
+        mode = env_mode or 'normal'
+        custom = {}
+        profile_path = ETC_DIR / 'security_state.json'
+        try:
+            persisted = json.loads(profile_path.read_text(encoding='utf-8'))
+            profile = persisted.get('process_profile') or {}
+            if isinstance(profile, dict) and profile.get('mode'):
+                # An explicit non-normal environment mode is a CLI override;
+                # otherwise the admin-configured profile is authoritative.
+                if env_mode not in {'maximum', 'custom'}:
+                    mode = str(profile.get('mode')).strip().lower()
+                custom = profile
+        except (OSError, ValueError, TypeError):
+            pass
+        return mode, custom
+
+    LINUX_SECURITY_MODE, LINUX_SECURITY_CUSTOM = configured_process_security_profile()
+    LINUX_HARDENING = '' if IS_USER_INSTALL else linux_systemd_hardening(LINUX_SECURITY_MODE, LINUX_SECURITY_CUSTOM)
 
     UNIT_HUB = f"""
 [Unit]
@@ -1930,6 +1986,14 @@ def setup_interactive(args):
 
     env = env_read()
 
+    # The normal profile is intentionally frictionless. Stronger process
+    # isolation is an explicit operator choice, never a hidden system-install
+    # side effect.
+    requested_security_mode = getattr(args, 'security_mode', None)
+    if requested_security_mode:
+        env['GPTADMIN_SECURITY_MODE'] = requested_security_mode
+    else:
+        env.setdefault('GPTADMIN_SECURITY_MODE', 'normal')
     env.setdefault('SHELLMCP_TOKEN', gen_hex())
     env.setdefault('ADMIN_PASSWORD', gen_hex())
     env.setdefault('OAUTH_CLIENT_SECRET', gen_hex(32))
@@ -4484,6 +4548,7 @@ def cmd_update(args):
     env.setdefault('SHELLMCP_TOKEN', gen_hex())
     env.setdefault('ADMIN_PASSWORD', gen_hex())
     env.setdefault('OAUTH_CLIENT_SECRET', gen_hex(32))
+    env.setdefault('GPTADMIN_SECURITY_MODE', 'normal')
     env['INSTALL_HUB'] = 'true' if install_hub else 'false'
     env['INSTALL_SHELLMCP'] = 'true' if install_shellmcp else 'false'
     env.setdefault('GPTADMIN_AUTO_UPDATE', 'true')
@@ -5250,6 +5315,7 @@ def main():
     ap_setup.add_argument('--hub-port', help='Local hub port; default 9001')
     ap_setup.add_argument('--shell-transport', choices=['polling', 'webhook', 'websocket'], default='polling', help='Internal hub↔ShellMCP transport; default polling')
     ap_setup.add_argument('--shell-heartbeat', action='store_true', help='Enable optional ShellMCP heartbeat (disabled by default)')
+    ap_setup.add_argument('--security-mode', choices=['normal', 'maximum', 'custom'], default=None, help='Process security profile; normal is frictionless by default')
     ap_setup.add_argument('--pair', help='Reserved one-time pairing token for GPTAdmin Cloud installs')
     ap_setup.add_argument('--user', action='store_true', help='Use per-user install paths/services')
     ap_setup.add_argument('--system', action='store_true', help='Use system install paths/services')
