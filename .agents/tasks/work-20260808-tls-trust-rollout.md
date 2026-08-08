@@ -39,4 +39,14 @@
 
 ## Status
 
-Диагностика начата; подтверждены public version `145/c970f73`, direct initialize `200`, но tools/list ещё пустой из-за неустойчивого Mac→Hub TLS/network path.
+Диагностика продолжена. Новый Let's Encrypt chain на `185.240.120.152` и
+`212.192.31.128` проходит обычную TLS-проверку. На Mac добавлен `ISRG Root X1`
+в кастомный `roots-bundle.pem`, установлен exact Darwin ShellMCP `145/c970f73`,
+heartbeat включён, auto-update отключён до исправления отдельного manifest edge,
+и BrowserClaw live canary прошёл: tools/list=17, tabs new example.com,
+snapshot Example Domain, tabs close.
+
+Оставшийся внешний blocker: edge `95.165.165.65` всё ещё отдаёт
+`incident-fallback` self-signed certificate для того же hostname; это не
+исправляется trust-store на Mac и требует доступа к владельцу этого внешнего
+edge/DNS path. Public code/Hub и два других edges уже green.
