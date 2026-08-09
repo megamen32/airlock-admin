@@ -16,6 +16,7 @@ type webhookRouteSummary struct {
 	Kind               string `json:"kind"`
 	Target             string `json:"target"`
 	Tool               string `json:"tool,omitempty"`
+	ActionCount        int    `json:"action_count"`
 	AuthMode           string `json:"auth_mode"`
 	CallbackConfigured bool   `json:"callback_configured"`
 }
@@ -121,11 +122,14 @@ func summarizeWebhookRoute(route WebhookRoute) webhookRouteSummary {
 	if route.HMACSecret != "" {
 		authMode = "hmac"
 	}
+	actions := webhookActions(route)
+	first := actions[0]
 	return webhookRouteSummary{
 		ID:                 route.ID,
-		Kind:               route.Action.Kind,
-		Target:             route.Action.Target,
-		Tool:               route.Action.Tool,
+		Kind:               first.Kind,
+		Target:             first.Target,
+		Tool:               first.Tool,
+		ActionCount:        len(actions),
 		AuthMode:           authMode,
 		CallbackConfigured: route.Callback != nil,
 	}

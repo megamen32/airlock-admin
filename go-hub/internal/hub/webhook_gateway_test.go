@@ -59,6 +59,34 @@ func TestWebhookGatewayRejectsMissingOrInvalidHMAC(t *testing.T) {
 	}
 }
 
+func TestWebhookRouteSupportsOrderedMCPActionsWithDelay(t *testing.T) {
+	route := WebhookRoute{
+		ID:    "incident-chain",
+		Token: "webhook-token",
+		Actions: []WebhookAction{
+			{Kind: "mcp", Target: "agent-herder", Tool: "new_or_resume"},
+			{Kind: "mcp", Target: "noticeplace", Tool: "notify_event", DelaySeconds: 2},
+		},
+	}
+	if err := validateWebhookRoutes([]WebhookRoute{route}); err != nil {
+		t.Fatalf("ordered actions rejected: %v", err)
+	}
+	encoded, err := json.Marshal(route)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var decoded WebhookRoute
+	if err := json.Unmarshal(encoded, &decoded); err != nil {
+		t.Fatal(err)
+	}
+	if len(webhookActions(decoded)) != 2 || webhookActions(decoded)[1].DelaySeconds != 2 {
+		t.Fatalf("actions were not preserved: %#v", decoded.Actions)
+	}
+	if summary := summarizeWebhookRoute(decoded); summary.ActionCount != 2 || summary.Target != "agent-herder" {
+		t.Fatalf("summary=%#v", summary)
+	}
+}
+
 func TestWebhookGatewayRendersJSONAndDispatchesConfiguredShell(t *testing.T) {
 	s := New(Config{WebhookRoutes: []WebhookRoute{{
 		ID:    "build",

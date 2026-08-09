@@ -499,6 +499,7 @@ type WebhookRouteSummary = {
   kind: "mcp" | "prompt" | "shell";
   target: string;
   tool?: string;
+  action_count: number;
   auth_mode: "hmac" | "token";
   callback_configured: boolean;
 };
@@ -518,6 +519,7 @@ type WebhookRouteDraft = {
   promptArg: string;
   command: string;
   cwd: string;
+  additionalActionsJson: string;
   callbackUrl: string;
   callbackAuthMode: "none" | "token" | "hmac";
   callbackSecret: string;
@@ -550,6 +552,7 @@ const emptyWebhookRoute = (): WebhookRouteDraft => ({
   promptArg: "",
   command: "",
   cwd: "",
+  additionalActionsJson: "[]",
   callbackUrl: "",
   callbackAuthMode: "none",
   callbackSecret: "",
@@ -589,6 +592,7 @@ function asRouteSummary(value: unknown): WebhookRouteSummary | null {
     kind: route.kind,
     target: route.target,
     tool: typeof route.tool === "string" ? route.tool : undefined,
+    action_count: typeof route.action_count === "number" && route.action_count > 0 ? route.action_count : 1,
     auth_mode: route.auth_mode === "token" ? "token" : "hmac",
     callback_configured: route.callback_configured === true,
   };
@@ -662,6 +666,7 @@ function WebhooksScreen() {
       target: route.target,
       tool: route.tool ?? "",
       callbackAuthMode: route.callback_configured ? "hmac" : "none",
+      additionalActionsJson: "[]",
     });
     setConfirmDelete(false);
     setMessage("Для полной замены повторно введите секрет и поля действия. Сохранённые секреты Hub не возвращает.");
@@ -698,7 +703,19 @@ function WebhooksScreen() {
       }
     }
 
-    const route: Record<string, unknown> = { id, action };
+    let additionalActions: unknown[] = [];
+    if (draft.additionalActionsJson.trim()) {
+      const parsed = JSON.parse(draft.additionalActionsJson) as unknown;
+      if (!Array.isArray(parsed)) throw new Error("Дополнительные действия должны быть JSON-массивом.");
+      additionalActions = parsed;
+      for (const [index, item] of parsed.entries()) {
+        if (typeof item !== "object" || item === null || Array.isArray(item)) {
+          throw new Error(`Дополнительное действие ${index + 1} должно быть JSON-объектом.`);
+        }
+      }
+    }
+
+    const route: Record<string, unknown> = { id, ...(additionalActions.length ? { actions: [action, ...additionalActions] } : { action }) };
     if (draft.authMode === "hmac") {
       route.hmac_secret = secret;
       route.signature_version = draft.signatureVersion;
@@ -794,7 +811,7 @@ function WebhooksScreen() {
           <aside className="route-list card" aria-label="Список webhook-маршрутов">
             <div className="list-heading"><div><p className="section-kicker">МАРШРУТЫ</p><h3>Разрешённые действия</h3></div><button className="text-button" type="button" onClick={startCreate}>+ Новый</button></div>
             {routes.length === 0 && <div className="route-empty"><strong>Маршрутов пока нет</strong><span>Создайте первый подписанный маршрут.</span></div>}
-            {routes.map((route) => <article className={`route-row ${editingId === route.id ? "selected" : ""}`} key={route.id}><div><strong>{route.id}</strong><span>{route.target}</span><small>{route.kind.toUpperCase()} · {route.auth_mode === "hmac" ? "HMAC" : "Bearer"}{route.callback_configured ? " · callback" : ""}</small></div><button className="text-button" type="button" onClick={() => startEdit(route)}>Изменить {route.id}</button></article>)}
+            {routes.map((route) => <article className={`route-row ${editingId === route.id ? "selected" : ""}`} key={route.id}><div><strong>{route.id}</strong><span>{route.target}</span><small>{route.action_count} действий · {route.kind.toUpperCase()} · {route.auth_mode === "hmac" ? "HMAC" : "Bearer"}{route.callback_configured ? " · callback" : ""}</small></div><button className="text-button" type="button" onClick={() => startEdit(route)}>Изменить {route.id}</button></article>)}
           </aside>
 
           <section className="card route-editor" aria-labelledby="route-editor-title">
@@ -812,6 +829,7 @@ function WebhooksScreen() {
                 <label>Режим подтверждения<select value={draft.approvalMode} onChange={(event) => setDraft({ ...draft, approvalMode: event.target.value as WebhookRouteDraft["approvalMode"] })}><option value="">По умолчанию</option><option value="ask_before_write">Запрос перед записью</option><option value="bounded_autonomous">Ограниченно автономный</option></select></label>
               </div>
               {draft.kind === "shell" ? <div className="form-grid"><label>Команда<input value={draft.command} onChange={(event) => setDraft({ ...draft, command: event.target.value })} /></label><label>Рабочий каталог<input value={draft.cwd} onChange={(event) => setDraft({ ...draft, cwd: event.target.value })} /></label></div> : <><div className="form-grid"><label>Инструмент<input value={draft.tool} onChange={(event) => setDraft({ ...draft, tool: event.target.value })} /></label>{draft.kind === "prompt" && <label>Аргумент prompt<input value={draft.promptArg} onChange={(event) => setDraft({ ...draft, promptArg: event.target.value })} placeholder="message" /></label>}</div><label>Аргументы JSON<textarea className="short-textarea" value={draft.argumentsJson} onChange={(event) => setDraft({ ...draft, argumentsJson: event.target.value })} spellCheck="false" /></label>{draft.kind === "prompt" && <label>Шаблон сообщения<textarea className="short-textarea" value={draft.prompt} onChange={(event) => setDraft({ ...draft, prompt: event.target.value })} /></label>}</>}
+              <label>Дополнительные действия JSON<textarea className="short-textarea" value={draft.additionalActionsJson} onChange={(event) => setDraft({ ...draft, additionalActionsJson: event.target.value })} spellCheck="false" placeholder='[{"kind":"mcp","target":"noticeplace","tool":"notify_event","arguments":{},"delay_seconds":0}]' /><small>Выполняются по порядку; `delay_seconds` задаёт паузу перед шагом.</small></label>
               <fieldset className="callback-fieldset"><legend>Callback (необязательно)</legend><div className="form-grid"><label>URL callback<input type="url" value={draft.callbackUrl} onChange={(event) => setDraft({ ...draft, callbackUrl: event.target.value })} /></label><label>Авторизация callback<select value={draft.callbackAuthMode} onChange={(event) => setDraft({ ...draft, callbackAuthMode: event.target.value as WebhookRouteDraft["callbackAuthMode"] })}><option value="none">Без авторизации</option><option value="hmac">HMAC</option><option value="token">Bearer token</option></select></label>{draft.callbackAuthMode !== "none" && <label>Секрет callback<input type="password" autoComplete="new-password" value={draft.callbackSecret} onChange={(event) => setDraft({ ...draft, callbackSecret: event.target.value })} /></label>}</div>{editingRoute?.callback_configured && <p className="field-help">Текущий callback скрыт. Чтобы сохранить его при замене, повторно заполните URL и авторизацию.</p>}</fieldset>
               <div className="route-actions"><button className="button primary" type="submit" disabled={mutating}>{mutating ? "Сохраняем…" : editingId ? "Заменить маршрут" : "Создать маршрут"}</button>{editingId && <button className="button danger" type="button" onClick={() => setConfirmDelete(true)} disabled={mutating}>Удалить маршрут</button>}</div>
             </form>

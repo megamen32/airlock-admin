@@ -32,7 +32,8 @@ type WebhookRoute struct {
 	HMACSecret       string           `json:"hmac_secret,omitempty"`
 	SignatureVersion string           `json:"signature_version,omitempty"`
 	MaxSkewSeconds   int              `json:"max_skew_seconds,omitempty"`
-	Action           WebhookAction    `json:"action"`
+	Action           WebhookAction    `json:"action,omitempty"` // legacy single-action route
+	Actions          []WebhookAction  `json:"actions,omitempty"`
 	Callback         *WebhookCallback `json:"callback,omitempty"`
 }
 
@@ -49,6 +50,7 @@ type WebhookAction struct {
 	PromptArg    string         `json:"prompt_arg,omitempty"`
 	Command      string         `json:"command,omitempty"`
 	Cwd          string         `json:"cwd,omitempty"`
+	DelaySeconds float64        `json:"delay_seconds,omitempty"`
 }
 
 type WebhookCallback struct {
@@ -116,7 +118,16 @@ func validateWebhookRoutes(routes []WebhookRoute) error {
 		if route.SignatureVersion != "" && route.HMACSecret == "" {
 			return fmt.Errorf("webhook route %q signature_version requires hmac_secret", route.ID)
 		}
-		if err := validateWebhookAction(route.ID, route.Action); err != nil {
+		if len(route.Actions) > 0 {
+			if route.Action.Kind != "" || route.Action.Target != "" {
+				return fmt.Errorf("webhook route %q must configure action or actions, not both", route.ID)
+			}
+			for index, action := range route.Actions {
+				if err := validateWebhookAction(route.ID, action); err != nil {
+					return fmt.Errorf("webhook route %q action %d: %w", route.ID, index+1, err)
+				}
+			}
+		} else if err := validateWebhookAction(route.ID, route.Action); err != nil {
 			return err
 		}
 		if route.Callback != nil {
@@ -138,6 +149,9 @@ func validateWebhookAction(routeID string, action WebhookAction) error {
 	}
 	if action.ApprovalMode != "" && action.ApprovalMode != approvalModeAskBeforeWrite && action.ApprovalMode != approvalModeBoundedAutonomous {
 		return fmt.Errorf("webhook route %q has invalid approval_mode", routeID)
+	}
+	if action.DelaySeconds < 0 || action.DelaySeconds > 24*60*60 {
+		return fmt.Errorf("webhook route %q action delay_seconds must be between 0 and 86400", routeID)
 	}
 	switch action.Kind {
 	case "mcp":
@@ -162,6 +176,9 @@ func webhookRouteMap(routes []WebhookRoute) map[string]WebhookRoute {
 	result := make(map[string]WebhookRoute, len(routes))
 	for _, route := range routes {
 		route.Action.Arguments = cloneMap(route.Action.Arguments)
+		for index := range route.Actions {
+			route.Actions[index].Arguments = cloneMap(route.Actions[index].Arguments)
+		}
 		if route.Callback != nil {
 			callback := *route.Callback
 			route.Callback = &callback
@@ -383,7 +400,7 @@ func (s *Server) runWebhookJob(jobID string, route WebhookRoute, event any) {
 	}
 	s.mu.Unlock()
 
-	result, err := s.dispatchWebhookAction(route.Action, event)
+	result, err := s.dispatchWebhookActions(route, event)
 	s.mu.Lock()
 	job = s.webhookJobs[jobID]
 	if job != nil {
@@ -424,6 +441,32 @@ func (s *Server) runWebhookJob(jobID string, route WebhookRoute, event any) {
 		}
 		s.mu.Unlock()
 	}
+}
+
+func webhookActions(route WebhookRoute) []WebhookAction {
+	if len(route.Actions) > 0 {
+		return route.Actions
+	}
+	return []WebhookAction{route.Action}
+}
+
+func (s *Server) dispatchWebhookActions(route WebhookRoute, event any) (map[string]any, error) {
+	actions := webhookActions(route)
+	if len(actions) == 1 && len(route.Actions) == 0 {
+		return s.dispatchWebhookAction(actions[0], event)
+	}
+	results := make([]map[string]any, 0, len(actions))
+	for index, action := range actions {
+		if index > 0 && action.DelaySeconds > 0 {
+			time.Sleep(time.Duration(action.DelaySeconds * float64(time.Second)))
+		}
+		result, err := s.dispatchWebhookAction(action, event)
+		if err != nil {
+			return nil, fmt.Errorf("webhook action %d failed: %w", index+1, err)
+		}
+		results = append(results, result)
+	}
+	return map[string]any{"action_count": len(results), "actions": results}, nil
 }
 
 func (s *Server) dispatchWebhookAction(action WebhookAction, event any) (map[string]any, error) {

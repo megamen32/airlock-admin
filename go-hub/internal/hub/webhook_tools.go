@@ -212,6 +212,7 @@ func webhookRouteInputSchema() map[string]any {
 			"prompt_arg":    map[string]any{"type": "string"},
 			"command":       map[string]any{"type": "string"},
 			"cwd":           map[string]any{"type": "string"},
+			"delay_seconds": map[string]any{"type": "number", "minimum": 0, "maximum": 86400},
 		},
 		"required":             []string{"kind", "target"},
 		"additionalProperties": false,
@@ -225,9 +226,10 @@ func webhookRouteInputSchema() map[string]any {
 			"signature_version": map[string]any{"type": "string", "enum": []string{"v1", "v2"}},
 			"max_skew_seconds":  map[string]any{"type": "integer", "minimum": 1},
 			"action":            action,
+			"actions":           map[string]any{"type": "array", "minItems": 1, "items": action},
 			"callback":          callback,
 		},
-		"required":             []string{"id", "action"},
+		"required":             []string{"id"},
 		"additionalProperties": false,
 	}
 }
