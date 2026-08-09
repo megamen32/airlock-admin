@@ -420,6 +420,43 @@ describe("Вебхуки и агенты", () => {
     }));
   });
 
+  it("builds ordered MCP steps from visual action cards", async () => {
+    window.history.replaceState(null, "", "#webhooks");
+    let createdBody: Record<string, unknown> | null = null;
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      if (String(input) === "/webhook-routes" && !init?.method) return webhookResponse({ routes: [] });
+      if (String(input) === "/webhook-routes" && init?.method === "POST") {
+        createdBody = JSON.parse(String(init.body)) as Record<string, unknown>;
+        return webhookResponse({ ...webhookRouteFixture, action_count: 2 }, 201);
+      }
+      throw new Error(`Unexpected request: ${String(input)} ${init?.method ?? "GET"}`);
+    });
+
+    render(<App />);
+    await screen.findByText("Маршрутов пока нет");
+    await userEvent.type(screen.getByLabelText("Идентификатор маршрута"), "ordered-100");
+    await userEvent.type(screen.getByLabelText("Секрет маршрута"), "ordered-secret");
+    await userEvent.clear(screen.getByLabelText("Цель"));
+    await userEvent.type(screen.getByLabelText("Цель"), "mcp:shell:roomhacker-server-100:Notify");
+    await userEvent.type(screen.getByLabelText("Инструмент"), "send_message");
+    await userEvent.click(screen.getByRole("button", { name: "+ Добавить шаг" }));
+    await userEvent.type(screen.getByLabelText("Пауза перед шагом, секунд"), "30");
+    const targets = screen.getAllByLabelText("Цель");
+    await userEvent.type(targets[1], "mcp:shell:roomhacker-server-100:AgentHerder");
+    const tools = screen.getAllByLabelText("Инструмент");
+    await userEvent.type(tools[1], "new_or_resume");
+    await userEvent.click(screen.getByRole("button", { name: "Создать маршрут" }));
+
+    expect(await screen.findByText("Маршрут создан")).toBeInTheDocument();
+    expect(createdBody).toEqual(expect.objectContaining({
+      id: "ordered-100",
+      actions: [
+        expect.objectContaining({ target: "mcp:shell:roomhacker-server-100:Notify", tool: "send_message" }),
+        expect.objectContaining({ target: "mcp:shell:roomhacker-server-100:AgentHerder", tool: "new_or_resume", delay_seconds: 30 }),
+      ],
+    }));
+  });
+
   it("replaces a selected route and requires explicit confirmation before delete", async () => {
     window.history.replaceState(null, "", "#webhooks");
     const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {

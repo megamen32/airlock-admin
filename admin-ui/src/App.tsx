@@ -519,10 +519,23 @@ type WebhookRouteDraft = {
   promptArg: string;
   command: string;
   cwd: string;
-  additionalActionsJson: string;
+  additionalActions: WebhookActionDraft[];
   callbackUrl: string;
   callbackAuthMode: "none" | "token" | "hmac";
   callbackSecret: string;
+};
+
+type WebhookActionDraft = {
+  kind: "mcp" | "prompt" | "shell";
+  target: string;
+  approvalMode: "" | "ask_before_write" | "bounded_autonomous";
+  tool: string;
+  argumentsJson: string;
+  prompt: string;
+  promptArg: string;
+  command: string;
+  cwd: string;
+  delaySeconds: string;
 };
 
 type WebhookJob = {
@@ -552,10 +565,23 @@ const emptyWebhookRoute = (): WebhookRouteDraft => ({
   promptArg: "",
   command: "",
   cwd: "",
-  additionalActionsJson: "[]",
+  additionalActions: [],
   callbackUrl: "",
   callbackAuthMode: "none",
   callbackSecret: "",
+});
+
+const emptyWebhookAction = (): WebhookActionDraft => ({
+  kind: "mcp",
+  target: "",
+  approvalMode: "",
+  tool: "",
+  argumentsJson: "{}",
+  prompt: "",
+  promptArg: "",
+  command: "",
+  cwd: "",
+  delaySeconds: "0",
 });
 
 async function webhookRequest<T>(path: string, init: RequestInit = {}): Promise<T> {
@@ -666,7 +692,7 @@ function WebhooksScreen() {
       target: route.target,
       tool: route.tool ?? "",
       callbackAuthMode: route.callback_configured ? "hmac" : "none",
-      additionalActionsJson: "[]",
+      additionalActions: Array.from({ length: Math.max(0, route.action_count - 1) }, emptyWebhookAction),
     });
     setConfirmDelete(false);
     setMessage("Для полной замены повторно введите секрет и поля действия. Сохранённые секреты Hub не возвращает.");
@@ -703,17 +729,33 @@ function WebhooksScreen() {
       }
     }
 
-    let additionalActions: unknown[] = [];
-    if (draft.additionalActionsJson.trim()) {
-      const parsed = JSON.parse(draft.additionalActionsJson) as unknown;
-      if (!Array.isArray(parsed)) throw new Error("Дополнительные действия должны быть JSON-массивом.");
-      additionalActions = parsed;
-      for (const [index, item] of parsed.entries()) {
-        if (typeof item !== "object" || item === null || Array.isArray(item)) {
-          throw new Error(`Дополнительное действие ${index + 1} должно быть JSON-объектом.`);
+    const additionalActions = draft.additionalActions.map((additional, index) => {
+      if (!additional.target.trim()) throw new Error(`Укажите цель для шага ${index + 2}.`);
+      const action: Record<string, unknown> = { kind: additional.kind, target: additional.target.trim() };
+      if (additional.approvalMode) action.approval_mode = additional.approvalMode;
+      const delay = Number(additional.delaySeconds);
+      if (!Number.isFinite(delay) || delay < 0) throw new Error(`Пауза перед шагом ${index + 2} должна быть неотрицательным числом.`);
+      if (delay > 0) action.delay_seconds = delay;
+      if (additional.kind === "shell") {
+        if (!additional.command.trim()) throw new Error(`Для шага ${index + 2} укажите Shell-команду.`);
+        action.command = additional.command;
+        if (additional.cwd.trim()) action.cwd = additional.cwd.trim();
+      } else {
+        if (!additional.tool.trim()) throw new Error(`Для шага ${index + 2} укажите инструмент.`);
+        action.tool = additional.tool.trim();
+        if (additional.argumentsJson.trim()) {
+          const parsed = JSON.parse(additional.argumentsJson) as unknown;
+          if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) throw new Error(`Аргументы шага ${index + 2} должны быть JSON-объектом.`);
+          action.arguments = parsed;
+        }
+        if (additional.kind === "prompt") {
+          if (!additional.prompt.trim()) throw new Error(`Для шага ${index + 2} укажите шаблон prompt.`);
+          action.prompt = additional.prompt;
+          if (additional.promptArg.trim()) action.prompt_arg = additional.promptArg.trim();
         }
       }
-    }
+      return action;
+    });
 
     const route: Record<string, unknown> = { id, ...(additionalActions.length ? { actions: [action, ...additionalActions] } : { action }) };
     if (draft.authMode === "hmac") {
@@ -829,7 +871,20 @@ function WebhooksScreen() {
                 <label>Режим подтверждения<select value={draft.approvalMode} onChange={(event) => setDraft({ ...draft, approvalMode: event.target.value as WebhookRouteDraft["approvalMode"] })}><option value="">По умолчанию</option><option value="ask_before_write">Запрос перед записью</option><option value="bounded_autonomous">Ограниченно автономный</option></select></label>
               </div>
               {draft.kind === "shell" ? <div className="form-grid"><label>Команда<input value={draft.command} onChange={(event) => setDraft({ ...draft, command: event.target.value })} /></label><label>Рабочий каталог<input value={draft.cwd} onChange={(event) => setDraft({ ...draft, cwd: event.target.value })} /></label></div> : <><div className="form-grid"><label>Инструмент<input value={draft.tool} onChange={(event) => setDraft({ ...draft, tool: event.target.value })} /></label>{draft.kind === "prompt" && <label>Аргумент prompt<input value={draft.promptArg} onChange={(event) => setDraft({ ...draft, promptArg: event.target.value })} placeholder="message" /></label>}</div><label>Аргументы JSON<textarea className="short-textarea" value={draft.argumentsJson} onChange={(event) => setDraft({ ...draft, argumentsJson: event.target.value })} spellCheck="false" /></label>{draft.kind === "prompt" && <label>Шаблон сообщения<textarea className="short-textarea" value={draft.prompt} onChange={(event) => setDraft({ ...draft, prompt: event.target.value })} /></label>}</>}
-              <label>Дополнительные действия JSON<textarea className="short-textarea" value={draft.additionalActionsJson} onChange={(event) => setDraft({ ...draft, additionalActionsJson: event.target.value })} spellCheck="false" placeholder='[{"kind":"mcp","target":"noticeplace","tool":"notify_event","arguments":{},"delay_seconds":0}]' /><small>Выполняются по порядку; `delay_seconds` задаёт паузу перед шагом.</small></label>
+              <section className="action-builder" aria-label="Последовательность действий">
+                <div className="card-heading"><div><p className="section-kicker">ORDERED FLOW</p><h3>Следующие шаги</h3><p className="muted">Каждый шаг знает только свои параметры. Пауза задаётся перед этим шагом.</p></div><button className="button secondary" type="button" onClick={() => setDraft({ ...draft, additionalActions: [...draft.additionalActions, emptyWebhookAction()] })}>+ Добавить шаг</button></div>
+                {draft.additionalActions.length === 0 && <p className="field-help">После первого действия пока ничего не выполняется.</p>}
+                {draft.additionalActions.map((action, index) => <article className="action-card" key={index}>
+                  <div className="action-card-heading"><strong>Шаг {index + 2}</strong><button className="text-button" type="button" onClick={() => setDraft({ ...draft, additionalActions: draft.additionalActions.filter((_, actionIndex) => actionIndex !== index) })}>Удалить шаг</button></div>
+                  <div className="form-grid">
+                    <label>Тип действия<select value={action.kind} onChange={(event) => { const next = event.target.value as WebhookActionDraft["kind"]; setDraft({ ...draft, additionalActions: draft.additionalActions.map((item, actionIndex) => actionIndex === index ? { ...item, kind: next } : item) }); }}><option value="mcp">MCP</option><option value="prompt">Prompt</option><option value="shell">Shell</option></select></label>
+                    <label>Пауза перед шагом, секунд<input type="number" min="0" step="0.1" value={action.delaySeconds} onChange={(event) => setDraft({ ...draft, additionalActions: draft.additionalActions.map((item, actionIndex) => actionIndex === index ? { ...item, delaySeconds: event.target.value } : item) })} /></label>
+                    <label>Цель<input value={action.target} onChange={(event) => setDraft({ ...draft, additionalActions: draft.additionalActions.map((item, actionIndex) => actionIndex === index ? { ...item, target: event.target.value } : item) })} placeholder="mcp:shell:...:Notify" /></label>
+                    <label>Режим подтверждения<select value={action.approvalMode} onChange={(event) => setDraft({ ...draft, additionalActions: draft.additionalActions.map((item, actionIndex) => actionIndex === index ? { ...item, approvalMode: event.target.value as WebhookActionDraft["approvalMode"] } : item) })}><option value="">По умолчанию</option><option value="ask_before_write">Запрос перед записью</option><option value="bounded_autonomous">Ограниченно автономный</option></select></label>
+                  </div>
+                  {action.kind === "shell" ? <div className="form-grid"><label>Команда<input value={action.command} onChange={(event) => setDraft({ ...draft, additionalActions: draft.additionalActions.map((item, actionIndex) => actionIndex === index ? { ...item, command: event.target.value } : item) })} /></label><label>Рабочий каталог<input value={action.cwd} onChange={(event) => setDraft({ ...draft, additionalActions: draft.additionalActions.map((item, actionIndex) => actionIndex === index ? { ...item, cwd: event.target.value } : item) })} /></label></div> : <><div className="form-grid"><label>Инструмент<input value={action.tool} onChange={(event) => setDraft({ ...draft, additionalActions: draft.additionalActions.map((item, actionIndex) => actionIndex === index ? { ...item, tool: event.target.value } : item) })} /></label>{action.kind === "prompt" && <label>Аргумент prompt<input value={action.promptArg} onChange={(event) => setDraft({ ...draft, additionalActions: draft.additionalActions.map((item, actionIndex) => actionIndex === index ? { ...item, promptArg: event.target.value } : item) })} /></label>}</div><label>Аргументы JSON<textarea className="short-textarea" value={action.argumentsJson} onChange={(event) => setDraft({ ...draft, additionalActions: draft.additionalActions.map((item, actionIndex) => actionIndex === index ? { ...item, argumentsJson: event.target.value } : item) })} spellCheck="false" /></label>{action.kind === "prompt" && <label>Шаблон сообщения<textarea className="short-textarea" value={action.prompt} onChange={(event) => setDraft({ ...draft, additionalActions: draft.additionalActions.map((item, actionIndex) => actionIndex === index ? { ...item, prompt: event.target.value } : item) })} /></label>}</>}
+                </article>)}
+              </section>
               <fieldset className="callback-fieldset"><legend>Callback (необязательно)</legend><div className="form-grid"><label>URL callback<input type="url" value={draft.callbackUrl} onChange={(event) => setDraft({ ...draft, callbackUrl: event.target.value })} /></label><label>Авторизация callback<select value={draft.callbackAuthMode} onChange={(event) => setDraft({ ...draft, callbackAuthMode: event.target.value as WebhookRouteDraft["callbackAuthMode"] })}><option value="none">Без авторизации</option><option value="hmac">HMAC</option><option value="token">Bearer token</option></select></label>{draft.callbackAuthMode !== "none" && <label>Секрет callback<input type="password" autoComplete="new-password" value={draft.callbackSecret} onChange={(event) => setDraft({ ...draft, callbackSecret: event.target.value })} /></label>}</div>{editingRoute?.callback_configured && <p className="field-help">Текущий callback скрыт. Чтобы сохранить его при замене, повторно заполните URL и авторизацию.</p>}</fieldset>
               <div className="route-actions"><button className="button primary" type="submit" disabled={mutating}>{mutating ? "Сохраняем…" : editingId ? "Заменить маршрут" : "Создать маршрут"}</button>{editingId && <button className="button danger" type="button" onClick={() => setConfirmDelete(true)} disabled={mutating}>Удалить маршрут</button>}</div>
             </form>
