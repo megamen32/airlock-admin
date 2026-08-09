@@ -102,4 +102,16 @@ jobs:
           set -euo pipefail
           tag="${{ needs.tag.outputs.tag }}"
           echo "Dispatching build-and-sync.yml on ref ${tag}"
-          gh workflow run build-and-sync.yml --ref "${tag}"
+          for attempt in 1 2 3 4 5 6; do
+            # A just-pushed tag can take a few seconds to become visible to
+            # the Actions dispatch API. Do not lose the release to HTTP 422.
+            if gh api "repos/${GH_REPO}/git/ref/tags/${tag}" >/dev/null 2>&1; then
+              if gh workflow run build-and-sync.yml --ref "${tag}"; then
+                exit 0
+              fi
+            fi
+            echo "Tag ${tag} is not dispatchable yet (attempt ${attempt}); retrying."
+            sleep 5
+          done
+          echo "ERROR: could not dispatch build-and-sync.yml for ${tag}" >&2
+          exit 1

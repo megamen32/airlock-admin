@@ -158,6 +158,17 @@ def test_auto_tag_runs_on_every_main_push_and_advances_published_version() -> No
     assert "git push origin HEAD:main" in script
 
 
+def test_auto_tag_retries_dispatch_until_new_tag_is_visible() -> None:
+    """A successful tag push must survive GitHub's short ref propagation lag."""
+
+    workflow = yaml.safe_load(AUTO_TAG_WORKFLOW.read_text(encoding="utf-8"))
+    script = workflow["jobs"]["release"]["steps"][0]["run"]
+    assert "for attempt in 1 2 3 4 5 6" in script
+    assert 'gh api "repos/${GH_REPO}/git/ref/tags/${tag}"' in script
+    assert "sleep 5" in script
+    assert "could not dispatch build-and-sync.yml" in script
+
+
 def test_release_job_attests_artifacts_and_scans_dependencies_before_publication() -> None:
     """Require provenance attestation and vulnerability checks before release sync."""
 
