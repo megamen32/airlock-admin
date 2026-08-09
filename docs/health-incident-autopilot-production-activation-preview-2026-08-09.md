@@ -319,3 +319,11 @@ focused tests (`11 passed`), and the full Agent-Herder suite (`105 passed`)
 are green. The previous live PID predates this build; restart and a fresh
 post-restart canary are therefore still deployment-gated. No Telegram send was
 performed.
+
+## Current-dist Hermes canary (2026-08-10)
+
+The fresh isolated `dist` canary completed with accepted-to-stopped Hermes CLI
+delivery, native session `20260810_003911_bcf369`, observable progress and 10
+evidence refs. A parser correction now supports the CLI's progress-visible
+`Session: <id>` receipt. No production restart or Telegram send occurred; the
+live unit still requires the explicit restart boundary.

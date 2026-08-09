@@ -315,3 +315,19 @@ the current source: request-bound profile validation, `observed-cli-output`
 trace export with redaction, real CLI output progress, and the 20-minute
 watchdog are covered by the 11 focused tests. The current source is built, but
 the service restart and post-restart live canary remain deployment-gated.
+
+## Current-dist isolated canary (2026-08-10)
+
+An isolated localhost process running the fresh `dist` (Hermes only, no
+Telegram/OpenCode adapters) completed the no-send canary. The CLI receipt
+parser was corrected after observing the progress-visible Hermes format
+`Session: <id>`; it now accepts both `Session:` and `session_id:` and excludes
+the receipt line from useful progress.
+
+Receipt: Agent-Herder session
+`hermes-job-c7edec59-fb65-48e8-8cfe-59453e84c4f5`, native Hermes session
+`20260810_003911_bcf369`, terminal `stopped`, transport `hermes-cli-job`,
+history `observed-cli-output`, progress fingerprint present, 10 evidence refs,
+and exact canary response. Focused tests remain `11 passed`; full suite
+`105 passed`. This proves the current artifact in isolation, not the stale
+production PID and not the full incident/Telegram business canary.

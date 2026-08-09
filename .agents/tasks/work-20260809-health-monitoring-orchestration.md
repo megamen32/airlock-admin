@@ -1248,3 +1248,20 @@ explicit deployment boundary; the previous canary belongs to the older PID.
   outside the approved credential/timer boundary.
 - Agent-Herder is active on PID `3832628`, started before the current build.
   No daemon-reload or restart has been performed after the review fixes.
+
+## Current-dist isolated canary and receipt parser correction (2026-08-10)
+
+The first isolated current-dist canary reached `stopped` with useful progress
+but exposed that progress-visible Hermes CLI prints `Session: <id>` rather than
+`session_id: <id>`. The adapter parser now accepts both receipt formats and
+omits the receipt line from progress. Build, focused tests (`11 passed`), and
+full suite (`105 passed`) are green after the fix.
+
+The fresh isolated no-send canary against the current `dist` then returned:
+
+- `accepted → stopped`, `transport=hermes-cli-job`;
+- Agent-Herder session `hermes-job-c7edec59-fb65-48e8-8cfe-59453e84c4f5`;
+- native Hermes session `20260810_003911_bcf369`;
+- history source `observed-cli-output`, progress fingerprint present, 10
+  bounded evidence refs, and exact canary response accepted;
+- no tools, file mutation, Telegram delivery, or production restart.
