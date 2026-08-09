@@ -186,3 +186,11 @@
 - Which skill, MCP, or tool is missing? none; a bounded isolated current-dist canary exposed the gap.
 - What operation or error repeated? 1 parser miss; guard is a fixture for both receipt formats plus a current-dist canary asserting native ID, progress, and terminal status.
 - State: fixed now
+
+## 2026-08-10 — NoticePlace Hermes handoff (Full)
+
+- What slowed or confused L? Fleet had already switched the live profile to Hermes, but NoticePlace `agent_job_helper.py` still rejected Hermes and expected the old OpenCode model string.
+- Which instruction should change? none; keep profile allowlists and deployment examples tested against the applied Fleet profile.
+- Which skill, MCP, or tool is missing? none; read-only source/live profile comparison found the mismatch.
+- What operation or error repeated? 1 full NoticePlace suite failure remains in an unrelated Telegram severity-route test (`147 passed, 1 failed`); guard is the recorded bounded todo, not an opportunistic fix.
+- State: fixed now; live NoticePlace deploy and restart need human decision
