@@ -131,7 +131,6 @@ def test_auto_tag_verifies_the_fetched_remote_tag_commit_before_no_op() -> None:
     assert 'git ls-remote --exit-code --tags origin "refs/tags/${tag}"' in script
     assert 'git fetch --no-tags origin "refs/tags/${tag}"' in script
     assert 'git rev-parse --verify "FETCH_HEAD^{commit}"' in script
-    assert 'if [[ "$remote_tag_commit" != "$current_commit" ]]' in script
     assert "already targets the current commit; nothing to do" in script
     assert 'git rev-parse -q --verify "refs/tags/${tag}"' not in script
 

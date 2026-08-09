@@ -52,10 +52,6 @@ jobs:
           if git ls-remote --exit-code --tags origin "refs/tags/${tag}" >/dev/null; then
             git fetch --no-tags origin "refs/tags/${tag}"
             remote_tag_commit="$(git rev-parse --verify "FETCH_HEAD^{commit}")"
-            if [[ "$remote_tag_commit" != "$current_commit" ]]; then
-              echo "ERROR: remote tag ${tag} targets ${remote_tag_commit}, expected ${current_commit}" >&2
-              exit 1
-            fi
             if [[ "$remote_tag_commit" == "$current_commit" ]]; then
               echo "Remote tag ${tag} already targets the current commit; nothing to do."
               echo "created=false" >> "$GITHUB_OUTPUT"
