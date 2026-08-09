@@ -202,3 +202,11 @@
 - Which skill, MCP, or tool is missing? Fleet has health activation workflows but no canonical NoticePlace application deploy adapter; smallest useful capability is a backup-first preview/apply for `/opt/noticeplace` plus notification-center restart proof.
 - What operation or error repeated? 1 full suite failure (`notify/tests/test_telegram_controls.py`, `147 passed, 1 failed`); guard remains the bounded Telegram-routing todo.
 - State: needs human decision
+
+## 2026-08-10 — Fleet timer verification and pytest path race (Full)
+
+- What slowed or confused L? The approved credential/timer path was live, but a full NoticePlace run referenced a sibling `notify` test file that disappeared before the follow-up inspection; the focused NoticePlace test was green.
+- Which instruction should change? none; distinguish a reproducible product failure from a shared-worktree/test-collection race and preserve the bounded todo.
+- Which skill, MCP, or tool is missing? Proposed: a canonical Fleet status receipt that reports timer last-run status, target count, and no-send mode without dumping event payloads.
+- What operation or error repeated? One nondeterministic full-suite path mismatch; guard is focused tests plus `PYTEST_DISABLE_PLUGIN_AUTOLOAD=1` collection evidence before any Telegram change.
+- State: needs human decision
