@@ -62,7 +62,10 @@ func requestAccessMode(r *http.Request) string {
 		return accessModeReadonly
 	}
 	scopes := strings.Fields(firstString(claims, "scope"))
-	if containsString(scopes, "gptadmin.exec") {
+	// ``gptadmin.write`` is the deployed OAuth compatibility spelling for the
+	// execute capability. Keep accepting the canonical ``gptadmin.exec`` too;
+	// read-only clients must not inherit either write-capable scope.
+	if containsString(scopes, "gptadmin.exec") || containsString(scopes, "gptadmin.write") {
 		return accessModeFull
 	}
 	if containsString(scopes, "gptadmin.read") || containsString(scopes, "gptadmin.inspect") {
