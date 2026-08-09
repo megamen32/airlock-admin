@@ -109,3 +109,11 @@
 - Which skill, MCP, or tool is missing? Proposed: a secret-safe per-edge TLS/SNI canary and a rollout script that discovers the Supervisor-generated `app_` container name.
 - What operation or error repeated? Mac ShellMCP started with `heartbeat=false` or could not trust the bad edge; guard: set both heartbeat env names, pin/route only a valid edge, and verify direct initialize/tools/list/browser flow.
 - State: fixed now
+
+## 2026-08-10 — Health runtime deploy and branch drift (Full)
+
+- What slowed or confused L? The shared GPTAdmin checkout changed branches during the active task, so the previous parent task record was absent even though Fleet/NoticePlace/Agent-Herder runtime evidence remained current.
+- Which instruction should change? Require the active branch and task-record path in every deployment receipt; never infer authoritative source from prior thread memory after an external branch switch.
+- Which skill, MCP, or tool is missing? Overseer was useful for safety review, but its independent context also needed current branch reconciliation; a compact branch/task/runtime evidence bundle would prevent stale “ASK_USER” findings.
+- What operation or error repeated? One pre-apply runtime workflow review exposed hash fail-open, root-backup user-unit rollback, and missing post-apply verification; these were fixed and covered before apply.
+- State: fixed now; full business canary and real user-facing surface remain pending
