@@ -1294,3 +1294,25 @@ isolated localhost port, the real cross-repo handoff completed:
   refs, exact canary response;
 - no production `/opt` deployment, systemd restart, Telegram send, or
   infrastructure mutation.
+
+## Credential/timer activation and current boundary (2026-08-10)
+
+The explicitly approved Fleet boundary is active: `health-incident-fleet.timer`
+is enabled and waiting for its one-minute schedule; the legacy health timer is
+not active. The latest run exited successfully (`status=0`) and fanned out
+redacted host/service/log health events to the configured NoticePlace health
+scope. `notification-center.service` is active. This proves the producer and
+timer path, not the selected-plan remediation path.
+
+Fleet owns this activation through its health workflow over SSH: it reconciles
+the installed collector, credentials, timer, routes, and Agent-Herder profile.
+It does not currently deploy the NoticePlace application source from this
+worktree or materialize a new Agent-Herder `dist` into the live service. The
+remaining production boundary is therefore a backup-first NoticePlace source
+deployment plus Agent-Herder daemon-reload/restart, followed by a live
+no-send canary. No Telegram message or Hermes egress start is authorized.
+
+The full NoticePlace suite has one nondeterministic/path-topology failure
+(`147 passed, 1 failed`) whose traceback points at a disappearing sibling
+`notify` test; the focused NoticePlace routing test passes. It remains a
+separate todo and is not used as Health acceptance evidence.
