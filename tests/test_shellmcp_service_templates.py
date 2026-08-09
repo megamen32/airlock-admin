@@ -17,3 +17,10 @@ def test_systemd_shellmcp_uses_installed_go_binary() -> None:
 
 def test_cli_uses_the_canonical_shellmcp_unit_name() -> None:
     assert cli.SYSTEMD_SHELLMCP == "shellmcp.service"
+
+
+def test_server100_user_mode_dropin_does_not_override_normal_security_profile() -> None:
+    dropin = (ROOT / "deploy/systemd/shellmcp-server100-user-mode.conf").read_text(encoding="utf-8")
+    assert "User=roomhacker" in dropin
+    assert "Group=roomhacker" in dropin
+    assert "ProtectHome" not in dropin
