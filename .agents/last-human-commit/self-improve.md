@@ -125,3 +125,11 @@
 - Which skill, MCP, or tool is missing? The current harness exposes Touchpoint but not the registered BrowserOS namespace; Mac BrowserClaw raw MCP over its documented SSH loopback forward remains the reliable fallback.
 - What operation or error repeated? Fresh Testers returned `STOP_MISSING_REAL_SURFACE` despite direct BrowserOS 9000 and Mac BrowserClaw 9010 handshakes; guard: require fresh Tester tool enumeration plus `tabs → snapshot/read` evidence before claiming user-facing acceptance.
 - State: BrowserOS registration corrected backup-first; current harness reload and real Health UI canary remain pending
+
+## 2026-08-10 — Hermes BrowserOS CDP drift (Full)
+
+- What slowed or confused L? The capability skill/check expected CDP 9103 while the live BrowserOS service, Hermes config, and tests consistently used 9223; this created a false integration failure.
+- Which instruction should change? Derive capability ports from the canonical live service/config and keep the secret-safe check synchronized; require MCP 9000 plus CDP 9223 evidence.
+- Which skill, MCP, or tool is missing? Fresh Tester still lacks the registered BrowserOS namespace even after `codex mcp get` reports it enabled; a harness reload boundary must be explicit.
+- What operation or error repeated? BrowserOS daemon/MCP was healthy but subagents exposed only Touchpoint; guard: separate daemon health, Codex registration, and fresh Tester tool enumeration.
+- State: skill check corrected and green; fresh Tester/user Health topic remains pending

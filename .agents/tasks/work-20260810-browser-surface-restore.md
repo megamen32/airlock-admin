@@ -50,6 +50,9 @@ Work started; no external send or Hermes egress permitted.
 - Linux is not a target for copying the macOS `.app`; the existing BrowserOS MCP is the platform-appropriate equivalent. Touchpoint remains a separate failed transport.
 - The Codex MCP registration was stale: `/home/roomhacker/.codex/config.toml` pointed `browseros` at dead `127.0.0.1:9200/mcp` while the canonical daemon answered on `127.0.0.1:9000/mcp`. Created backup `/home/roomhacker/.codex/config.toml.bak.browseros-9000-20260810` and switched only that URL to port 9000. No secrets or browser profile data changed.
 - Mac BrowserClaw semantic read-only canary through a temporary localhost-only SSH forward succeeded: `initialize` 200 with session, `tools/list` 200 with 17 tools, and `tabs(action=list)` 200 with 33 browser pages. No prompt, click, message, or external send was performed.
+- Direct Linux BrowserOS semantic read-only probe also succeeded for the existing `tgb.bezrabotnyi.com` tab: `tabs(list)` and `snapshot` returned data, but the rendered page contained no visible Health/Telegram/topic labels. This is surface reachability only, not proof of the required Health topic.
+- The Hermes capability check initially failed only because its skill expected obsolete CDP port 9103. Current `browseros-shared.service`, Hermes runtime config, and BrowserOS tests all use CDP 9223 with MCP 9000. Updated the secret-safe skill topology/check script to the observed canonical ports; rerun now passes service, SearXNG, STT, and BrowserOS CDP checks.
+- Codex `mcp get browseros` now reports enabled Streamable HTTP at `http://127.0.0.1:9000/mcp`, but the already-running Codex harness still exposes no `mcp__browseros` tools to fresh subagents. A new harness load is required before Tester can use the registered surface.
 
 ### Overseer audit (2026-08-10T01:56:22+03:00)
 
