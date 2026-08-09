@@ -194,3 +194,11 @@
 - Which skill, MCP, or tool is missing? none; read-only source/live profile comparison found the mismatch.
 - What operation or error repeated? 1 full NoticePlace suite failure remains in an unrelated Telegram severity-route test (`147 passed, 1 failed`); guard is the recorded bounded todo, not an opportunistic fix.
 - State: fixed now; live NoticePlace deploy and restart need human decision
+
+## 2026-08-10 — live NoticePlace deployment boundary (Full)
+
+- What slowed or confused L? Source helper hash `36e9bc...` and live `/opt/noticeplace` hash `a166a2...` differ; the source fix cannot be called live from a passing isolated canary.
+- Which instruction should change? none; require source/live hash equality after every service deployment before accepting an integration claim.
+- Which skill, MCP, or tool is missing? Fleet has health activation workflows but no canonical NoticePlace application deploy adapter; smallest useful capability is a backup-first preview/apply for `/opt/noticeplace` plus notification-center restart proof.
+- What operation or error repeated? 1 full suite failure (`notify/tests/test_telegram_controls.py`, `147 passed, 1 failed`); guard remains the bounded Telegram-routing todo.
+- State: needs human decision
