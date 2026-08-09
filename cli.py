@@ -4592,6 +4592,47 @@ def cmd_security_profile(args):
     print(json.dumps({'process_profile': profile, 'restart_bound': True}, ensure_ascii=False, indent=2))
 
 
+def cmd_security_bearer(args):
+    """Read or persist the claim/protocol checks for signed bearers."""
+    path = ETC_DIR / 'security_state.json'
+    try:
+        state = json.loads(path.read_text(encoding='utf-8')) if path.exists() else {}
+    except (OSError, ValueError) as exc:
+        die(f'cannot read security profile: {exc}')
+    if not isinstance(state, dict):
+        die('security state must be a JSON object')
+    current = state.get('bearer_profile')
+    if not isinstance(current, dict):
+        current = {'mode': 'normal'}
+    mode = getattr(args, 'mode', None)
+    if not mode:
+        print(json.dumps({'bearer_profile': current}, ensure_ascii=False, indent=2))
+        return
+    keys = ('issuer', 'audience', 'resource', 'scope', 'subject', 'issued_at', 'expiry', 'pkce')
+    if mode == 'maximum':
+        profile = {'mode': mode, **{f'require_{key}': True for key in keys}, 'enforce_token_lifecycle': True, 'enforce_redirect_allowlist': True, 'enforce_resource_allowlist': True}
+    elif mode == 'normal':
+        profile = {'mode': mode, 'require_issuer': False, **{f'require_{key}': True for key in keys if key != 'issuer'}, 'enforce_token_lifecycle': True, 'enforce_redirect_allowlist': False, 'enforce_resource_allowlist': False}
+    else:
+        profile = {'mode': mode}
+        for key in keys:
+            value = getattr(args, f'require_{key}', None)
+            profile[f'require_{key}'] = bool(current.get(f'require_{key}', True)) if value is None else value
+        for key in ('token_lifecycle', 'redirect_allowlist', 'resource_allowlist'):
+            value = getattr(args, f'enforce_{key}', None)
+            profile[f'enforce_{key}'] = bool(current.get(f'enforce_{key}', True)) if value is None else value
+    state['bearer_profile'] = profile
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_name(f'.{path.name}.{os.getpid()}.tmp')
+    try:
+        tmp.write_text(json.dumps(state, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
+        os.chmod(tmp, 0o600)
+        os.replace(tmp, path)
+    finally:
+        tmp.unlink(missing_ok=True)
+    print(json.dumps({'bearer_profile': profile, 'restart_bound': True}, ensure_ascii=False, indent=2))
+
+
 @_transactional_update
 def cmd_update(args):
     """In-place upgrade for existing installs.
@@ -5423,6 +5464,17 @@ def main():
     ap_security_profile.add_argument('--allow-privileged-execution', dest='allow_privileged_execution', action='store_true', default=None)
     ap_security_profile.add_argument('--deny-privileged-execution', dest='allow_privileged_execution', action='store_false')
     ap_security_profile.set_defaults(func=cmd_security_profile)
+    ap_security_bearer = security_sub.add_parser('bearer', help='Показать или изменить проверки подписанного bearer/OAuth')
+    ap_security_bearer.add_argument('--mode', choices=['normal', 'maximum', 'custom'], help='normal: рабочий auth-контракт; maximum: все проверки; custom: явные проверки')
+    for key in ('issuer', 'audience', 'resource', 'scope', 'subject', 'issued-at', 'expiry', 'pkce'):
+        dest = 'require_' + key.replace('-', '_')
+        ap_security_bearer.add_argument(f'--require-{key}', dest=dest, action='store_true', default=None)
+        ap_security_bearer.add_argument(f'--allow-{key}', dest=dest, action='store_false')
+    for key in ('token-lifecycle', 'redirect-allowlist', 'resource-allowlist'):
+        dest = 'enforce_' + key.replace('-', '_')
+        ap_security_bearer.add_argument(f'--enforce-{key}', dest=dest, action='store_true', default=None)
+        ap_security_bearer.add_argument(f'--allow-{key}', dest=dest, action='store_false')
+    ap_security_bearer.set_defaults(func=cmd_security_bearer)
 
     ap_autoupdate = sub.add_parser('auto-update', aliases=['autoupdate'], help='Управление автообновлением GPTAdmin')
     ap_autoupdate.add_argument('action', nargs='?', choices=['status', 'enable', 'disable', 'run'], default='status')

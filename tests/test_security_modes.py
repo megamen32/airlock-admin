@@ -1,4 +1,5 @@
 import cli
+from pathlib import Path
 
 
 def test_normal_system_mode_does_not_add_privilege_blocking_hardening():
@@ -42,3 +43,9 @@ def test_unit_rendering_replaces_import_time_profile_without_prefix_corruption()
     rendered = cli.render_unit_with_hardening(cli.UNIT_HUB, "")
     assert rendered.startswith("\n[Unit]")
     assert "Description=GPTAdmin Hub Proxy" in rendered
+
+
+def test_admin_dashboard_exposes_process_and_bearer_profiles():
+    dashboard = (Path(__file__).parents[1] / "public" / "admin_dashboard.html").read_text(encoding="utf-8")
+    for marker in ("processSecurityMode", "bearerSecurityMode", "require_issuer", "/admin/api/security/profile"):
+        assert marker in dashboard
