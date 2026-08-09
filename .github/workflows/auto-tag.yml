@@ -1,7 +1,7 @@
 name: Auto-tag release
 
-# When VERSION is bumped on main (the "Release build N" commits), create and
-# push a v<VERSION> git tag if it does not already exist, then dispatch
+# On every main push, create and push a v<VERSION> git tag if it does not
+# already exist, then dispatch
 # .github/workflows/build-and-sync.yml on that tag, which builds the binaries,
 # mirrors source into the public repo, and publishes the binaries as a GitHub
 # Release (assets) on megamen32/gptadmin_opensource.
@@ -11,13 +11,17 @@ name: Auto-tag release
 # GITHUB_TOKEN does NOT fire push events for other workflows — GitHub
 # suppresses that to prevent loops. An explicit workflow_dispatch is not
 # subject to that suppression.
-# Idempotent: a repeat push of the same VERSION skips tagging and re-dispatch.
+# If a main push reuses an already-published VERSION, advance VERSION in a
+# bot commit before tagging. This keeps release numbering automatic.
 
 on:
   push:
     branches: [main]
-    paths: ['VERSION']
   workflow_dispatch:
+
+concurrency:
+  group: auto-tag-release-main
+  cancel-in-progress: false
 
 permissions:
   contents: write
@@ -52,9 +56,24 @@ jobs:
               echo "ERROR: remote tag ${tag} targets ${remote_tag_commit}, expected ${current_commit}" >&2
               exit 1
             fi
-            echo "Remote tag ${tag} already targets the current commit; nothing to do."
+            if [[ "$remote_tag_commit" == "$current_commit" ]]; then
+              echo "Remote tag ${tag} already targets the current commit; nothing to do."
+              echo "created=false" >> "$GITHUB_OUTPUT"
+              echo "tag=${tag}" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+            echo "VERSION ${v} is already published; advancing it before release."
+            next=$((v + 1))
+            while git ls-remote --exit-code --tags origin "refs/tags/v${next}" >/dev/null 2>&1; do
+              next=$((next + 1))
+            done
+            printf '%s\n' "$next" > VERSION
+            git add VERSION
+            git commit -m "build: advance release version to ${next}"
+            git push origin HEAD:main
+            echo "VERSION was advanced to ${next}; the follow-up push will create v${next}."
             echo "created=false" >> "$GITHUB_OUTPUT"
-            echo "tag=${tag}" >> "$GITHUB_OUTPUT"
+            echo "tag=v${next}" >> "$GITHUB_OUTPUT"
             exit 0
           else
             remote_status=$?

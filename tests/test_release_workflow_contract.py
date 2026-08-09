@@ -145,6 +145,20 @@ def test_auto_tag_retries_dispatch_after_a_verified_existing_tag() -> None:
     assert "if" not in release
 
 
+def test_auto_tag_runs_on_every_main_push_and_advances_published_version() -> None:
+    """A code push must not get stuck on an already-published VERSION."""
+
+    workflow = yaml.safe_load(AUTO_TAG_WORKFLOW.read_text(encoding="utf-8"))
+    trigger = workflow.get("on", workflow[True])  # PyYAML 1.1 treats on as a boolean.
+    assert trigger["push"]["branches"] == ["main"]
+    assert "paths" not in trigger["push"]
+    assert workflow["concurrency"]["cancel-in-progress"] is False
+    script = next(step for step in workflow["jobs"]["tag"]["steps"] if step.get("id") == "maybe_tag")["run"]
+    assert "VERSION ${v} is already published" in script
+    assert "next=$((v + 1))" in script
+    assert "git push origin HEAD:main" in script
+
+
 def test_release_job_attests_artifacts_and_scans_dependencies_before_publication() -> None:
     """Require provenance attestation and vulnerability checks before release sync."""
 
