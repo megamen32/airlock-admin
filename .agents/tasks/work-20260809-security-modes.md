@@ -37,6 +37,9 @@ Status: in_progress (implementation and isolated verification complete; producti
 - 2026-08-09: Added `gptadmin security profile` CLI read/write workflow and setup support. Unit rendering now evaluates the selected profile at write time, so a setup or CLI change cannot be lost because the Python module was imported earlier.
 - 2026-08-09: Focused verification passed: `pytest -q tests/test_security_modes.py tests/test_shellmcp_service_templates.py tests/test_site_docs.py` (13 passed); `go test ./internal/hub -count=1` passed; `python -m py_compile cli.py` passed; temporary-directory CLI maximum-profile canary passed; `git diff --check` passed.
 - 2026-08-09: Commits `2e1118c` and `4a40c7e` contain only this feature's selected files. Unrelated shared-worktree changes remain unstaged and untouched.
+- 2026-08-09: Added a typed `bearer_profile` alongside `process_profile`. Signature verification remains unconditional; maximum requires issuer, audience, resource, scope, subject, issued-at, expiry, PKCE, token lifecycle, and redirect/resource allowlists. Normal preserves the established legacy-compatible contract; custom controls these checks individually. Added CLI `gptadmin security bearer` and dashboard controls.
+- 2026-08-09: Full Go Hub suite passed after regression repair (`go test ./... -count=1 -timeout=120s`); ShellMCP full suite passed (`go test ./... -count=1 -timeout=120s`); Python focused suite passed (14 tests). Isolated live Go Hub canary passed health, profile update `normal -> maximum`, bearer issuance, and real MCP `initialize`; isolated ShellMCP stdio canary passed `initialize` and explicit `shell_exec`.
+- 2026-08-09: Read-only production probe shows server-100 Hub is healthy on build 147 but still has the old unit hardening (`NoNewPrivileges=true`, `ProtectSystem=full`, `ProtectHome=true`). New code is not live there yet.
 
 ## Remaining acceptance boundary
 
