@@ -56,6 +56,12 @@ It can list, create, replace, and delete routes and inspect a durable job by
 ID. Route credentials are write-only: the UI and every read API return only
 secret-free metadata.
 
+One route may contain either one legacy `action` or an ordered `actions` array.
+The admin console renders every additional step as an editable card with its
+own target, operation, arguments, approval mode, and `delay_seconds`. A step
+does not inspect or select the next step; the gateway owns only the configured
+order and waits before each step whose delay is non-zero.
+
 The same five operations are available to AI clients through MCP:
 
 - `webhook_routes_list`
@@ -104,6 +110,33 @@ Supported actions:
   other MCP server exposing the desired operation.
 - `shell`: queues `shell_exec` on the configured `shell:<name>` target and
   renders `command` and `cwd`.
+
+Example of a two-step event flow:
+
+```json
+{
+  "id": "incident-escalation",
+  "hmac_secret": "operator-managed-secret",
+  "signature_version": "v2",
+  "actions": [
+    {
+      "kind": "mcp",
+      "target": "mcp:shell:roomhacker-server-100:Notify",
+      "tool": "send_message",
+      "approval_mode": "bounded_autonomous",
+      "arguments": {"title": "CRITICAL", "message": "{{event.message}}"}
+    },
+    {
+      "kind": "mcp",
+      "target": "mcp:shell:roomhacker-server-100:AgentHerder",
+      "tool": "new_or_resume",
+      "approval_mode": "bounded_autonomous",
+      "delay_seconds": 30,
+      "arguments": {"harness": "codex", "message": "Handle {{event.correlation_id}}"}
+    }
+  ]
+}
+```
 
 Write-capable webhook actions are policy-controlled. The default
 `approval_mode` is `ask_before_write`, so the action is rejected with an
