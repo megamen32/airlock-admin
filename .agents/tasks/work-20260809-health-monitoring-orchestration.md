@@ -1316,3 +1316,17 @@ The full NoticePlace suite has one nondeterministic/path-topology failure
 (`147 passed, 1 failed`) whose traceback points at a disappearing sibling
 `notify` test; the focused NoticePlace routing test passes. It remains a
 separate todo and is not used as Health acceptance evidence.
+
+## Fleet deployment topology re-audit (2026-08-10)
+
+The canonical Fleet health-monitor skill explicitly installs a central SSH
+fan-out adapter on the Fleet controller; it does not install a sidecar on each
+target host. The activation workflow likewise assumes the collector is already
+installed and reconciles credentials, routes, profiles, and timers. Neither
+workflow copies NoticePlace application source nor publishes a new
+Agent-Herder `dist` release. This confirms the remaining gap is a missing
+canonical application-runtime deploy adapter, not a missing health collector.
+
+No production mutation was made during this re-audit. A deploy-preview can be
+prepared locally, but the actual backup/copy/restart boundary still requires
+the exact operator approval recorded in the task exclusions.

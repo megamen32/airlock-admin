@@ -210,3 +210,11 @@
 - Which skill, MCP, or tool is missing? Proposed: a canonical Fleet status receipt that reports timer last-run status, target count, and no-send mode without dumping event payloads.
 - What operation or error repeated? One nondeterministic full-suite path mismatch; guard is focused tests plus `PYTEST_DISABLE_PLUGIN_AUTOLOAD=1` collection evidence before any Telegram change.
 - State: needs human decision
+
+## 2026-08-10 — Fleet runtime deployment seam re-audit (Full)
+
+- What slowed or confused L? The Fleet health workflows are intentionally central SSH fan-out and configuration activation; they do not publish NoticePlace application source or Agent-Herder `dist`, so a source/live mismatch remained after a successful timer rollout.
+- Which instruction should change? none; distinguish collector installation, configuration activation, and application-runtime release as separate seams with separate evidence.
+- Which skill, MCP, or tool is missing? A canonical backup-first application-runtime deploy workflow for NoticePlace plus Agent-Herder, with preview/apply/verify and no-send canary.
+- What operation or error repeated? 1 false assumption that Fleet activation implied source deployment; guard is source/live hash comparison and an explicit restart boundary.
+- State: needs human decision
