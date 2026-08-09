@@ -38,3 +38,11 @@ PASS only with observable user-facing UI evidence for a safe no-send health path
 - Result: no page was opened and no rendered health/operations UI or safe no-send health canary was observable. No external message, Hermes egress, remediation choice, restart, or infrastructure mutation occurred.
 - Verdict: `STOP_MISSING_REAL_SURFACE`.
 - Safe reason: the required canonical BrowserOS real-user transport is unavailable to this Tester session; using Touchpoint, shell, direct APIs, or source inspection as a substitute would violate the black-box boundary. Smallest unblock is to expose an authenticated canonical BrowserOS MCP session/tool surface, then rerun this Tester.
+
+## Tester evidence — 2026-08-10 (fresh black-box run, bounded)
+
+- Surface/tool: canonical BrowserOS MCP; existing page 23 at `https://syncllm.bezrabotnyi.com/#hosts`.
+- Journey: listed existing tabs, inspected the rendered Fleet “Устройства” operations surface, then performed one safe semantic read action by clicking the first visible “Инвентаризация” control. No new tab was opened; no wait, external site, mutation, remediation, restart, Telegram send, or Hermes egress was used.
+- Observed: the UI visibly exposes Fleet navigation, device inventory cards, “Предпросмотр”, “Инвентаризация”, and device-management controls. BrowserOS returned `ok (click)` but the rendered page diff reported “no change since last snapshot”; no health result, diagnosis, or safe no-send health receipt became visible.
+- Verdict: `STOP_MISSING_REAL_SURFACE`.
+- Safe reason: the canonical browser and operations surface were reachable, but the requested user-visible health/no-send canary could not be observed within the single permitted read action; no success may be inferred from the unchanged UI. Smallest unblock is a visible health/operations path that exposes a read-only health result/receipt and rerun the bounded Tester.

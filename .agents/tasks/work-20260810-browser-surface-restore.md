@@ -54,6 +54,13 @@ Work started; no external send or Hermes egress permitted.
 - The Hermes capability check initially failed only because its skill expected obsolete CDP port 9103. Current `browseros-shared.service`, Hermes runtime config, and BrowserOS tests all use CDP 9223 with MCP 9000. Updated the secret-safe skill topology/check script to the observed canonical ports; rerun now passes service, SearXNG, STT, and BrowserOS CDP checks.
 - Codex `mcp get browseros` now reports enabled Streamable HTTP at `http://127.0.0.1:9000/mcp`, but the already-running Codex harness still exposes no `mcp__browseros` tools to fresh subagents. A new harness load is required before Tester can use the registered surface.
 
+### Product-boundary check (2026-08-10)
+
+- The live Mac check is BrowserClaw 0.48.1: BrowserClaw app plus its bundled `browseros-claw-server`, with CDP `9112`, direct server `9210`, and MCP proxy `9010`. The read-only Mac canary uses MCP initialize/tools discovery and semantic tab listing through a localhost-only SSH tunnel; it does not use Touchpoint.
+- The vendor-supported BrowserClaw/BrowserOS neo desktop app targets macOS and Windows. Linux is supported by BrowserOS, not by the BrowserClaw desktop app. The Linux BrowserOS installation already running here is therefore the supported platform equivalent; copying the macOS `.app` would be invalid and a second browser would create an unnecessary profile/port boundary.
+- The exact BrowserClaw server has a separate Linux x64 artifact, but installing that sidecar alone would not install the Mac user-facing BrowserClaw browser/dashboard and would introduce a second CDP/MCP owner. It is not installed without a proven business canary requiring it.
+- Current action: keep the existing Linux BrowserOS runtime, repair/reload its Codex MCP registration, and verify it with a fresh black-box Tester. No Telegram send, Hermes egress, profile migration, or production restart was performed for this comparison.
+
 ### Overseer audit (2026-08-10T01:56:22+03:00)
 
 - Result: `ASK_USER`.
