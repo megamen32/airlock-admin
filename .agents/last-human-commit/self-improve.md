@@ -178,3 +178,11 @@
 - Which skill, MCP, or tool is missing? A canonical Agent-Herder restart/status probe is missing from `service-ops`; smallest useful addition is a read-only status plus explicit approval-bound restart for that unit.
 - What operation or error repeated? 2 related stale probes: service-ops user DBus/9119 versus direct Hermes 8644; guard is to report direct endpoint authority separately.
 - State: needs human decision
+
+## 2026-08-10 — current-dist Hermes receipt parser (Full)
+
+- What slowed or confused L? The first progress-visible Hermes canary returned a valid answer but no native ID because the CLI emitted `Session: <id>` instead of `session_id:`.
+- Which instruction should change? none; the adapter must accept documented and observed CLI receipt variants.
+- Which skill, MCP, or tool is missing? none; a bounded isolated current-dist canary exposed the gap.
+- What operation or error repeated? 1 parser miss; guard is a fixture for both receipt formats plus a current-dist canary asserting native ID, progress, and terminal status.
+- State: fixed now
