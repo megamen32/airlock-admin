@@ -346,3 +346,14 @@ operator documentation were synchronized. Focused NoticePlace/health tests
 pass (`37 passed`) and the example JSON parses. The fix is committed as
 `1ee7365`; live `/opt/noticeplace` deployment and service restart are still
 explicit production boundaries.
+
+## Isolated NoticePlace to Agent-Herder Hermes canary (2026-08-10)
+
+The corrected NoticePlace helper was exercised against a fresh isolated
+Agent-Herder `dist` process. It accepted the Hermes profile and dispatched a
+real CLI job: session `hermes-job-0ff20c98-dc82-499b-a786-964292d5ccc8`, native
+Hermes session `20260810_005140_cc3024`, terminal `stopped`, transport
+`hermes-cli-job`, history `observed-cli-output`, progress fingerprint and 10
+evidence refs present, exact canary response. This proves the current
+NoticePlace→Agent-Herder→Hermes handoff in isolation, not production delivery,
+Telegram, user selection, independent verification, or resolution.

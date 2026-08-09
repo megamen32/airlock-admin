@@ -1279,3 +1279,18 @@ the applied Fleet profile. NoticePlace focused tests and health workflow tests:
 `37 passed`; JSON example validation passed. Commit: NoticePlace `1ee7365`.
 The live `/opt/noticeplace` copy and notification-center restart remain
 deployment-gated; no production mutation was performed.
+
+## Isolated NoticePlace to Agent-Herder Hermes canary (2026-08-10)
+
+Using the corrected NoticePlace helper and fresh Agent-Herder `dist` on an
+isolated localhost port, the real cross-repo handoff completed:
+
+- helper receipt: `profile=health-remediation`, `harness=hermes`,
+  `model=gpt-5.6-luna`, `delivery=accepted`;
+- Agent-Herder session `hermes-job-0ff20c98-dc82-499b-a786-964292d5ccc8`;
+- terminal `stopped`, transport `hermes-cli-job`, native Hermes session
+  `20260810_005140_cc3024`;
+- history `observed-cli-output`, progress fingerprint present, 10 evidence
+  refs, exact canary response;
+- no production `/opt` deployment, systemd restart, Telegram send, or
+  infrastructure mutation.

@@ -335,3 +335,12 @@ profile (`hermes`, `gpt-5.6-luna`, `high`, `health`) and reject the legacy
 OpenCode/model shape. NoticePlace focused health/job tests pass (`37 passed`).
 The correction is committed as `1ee7365`; the live `/opt/noticeplace` copy has
 not been replaced and notification-center has not been restarted.
+
+## Isolated NoticePlace to Hermes handoff (2026-08-10)
+
+The corrected source helper successfully dispatched a no-send health-remediation
+canary to a fresh isolated Agent-Herder process. Native Hermes session:
+`20260810_005140_cc3024`; terminal `stopped`; progress and 10 evidence refs
+were present. This does not authorize or prove the live `/opt/noticeplace`
+deployment, notification-center restart, Telegram delivery, or user-facing
+plan selection.
