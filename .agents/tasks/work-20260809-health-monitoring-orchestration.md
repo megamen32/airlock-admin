@@ -1265,3 +1265,17 @@ The fresh isolated no-send canary against the current `dist` then returned:
 - history source `observed-cli-output`, progress fingerprint present, 10
   bounded evidence refs, and exact canary response accepted;
 - no tools, file mutation, Telegram delivery, or production restart.
+
+## NoticePlace to Hermes profile seam correction (2026-08-10)
+
+Read-only comparison of the applied Fleet profile with the NoticePlace helper
+found that the helper still rejected `harness=hermes` and expected the legacy
+`openai-codex/gpt-5.6-luna` model string. This would have stopped a real
+selected-plan delivery before Agent Herder.
+
+The source helper now allowlists Hermes, requires the health-remediation profile
+to pin `hermes/gpt-5.6-luna/high/health`, and the examples/documentation match
+the applied Fleet profile. NoticePlace focused tests and health workflow tests:
+`37 passed`; JSON example validation passed. Commit: NoticePlace `1ee7365`.
+The live `/opt/noticeplace` copy and notification-center restart remain
+deployment-gated; no production mutation was performed.

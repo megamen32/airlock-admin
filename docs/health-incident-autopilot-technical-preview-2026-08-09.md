@@ -331,3 +331,18 @@ history `observed-cli-output`, progress fingerprint present, 10 evidence refs,
 and exact canary response. Focused tests remain `11 passed`; full suite
 `105 passed`. This proves the current artifact in isolation, not the stale
 production PID and not the full incident/Telegram business canary.
+
+## NoticePlace to Hermes profile seam correction (2026-08-10)
+
+The applied Fleet profile was read back as `harness=hermes`,
+`model=gpt-5.6-luna`, `reasoning=high`, `topic=health`, but the source
+NoticePlace helper still rejected Hermes and checked the old
+`openai-codex/gpt-5.6-luna` profile. That was a real delivery blocker between
+plan selection and Agent Herder.
+
+NoticePlace source now allowlists Hermes and fail-closed pins the exact
+`hermes/gpt-5.6-luna/high/health` remediation profile. The example JSON and
+operator documentation were synchronized. Focused NoticePlace/health tests
+pass (`37 passed`) and the example JSON parses. The fix is committed as
+`1ee7365`; live `/opt/noticeplace` deployment and service restart are still
+explicit production boundaries.

@@ -327,3 +327,11 @@ delivery, native session `20260810_003911_bcf369`, observable progress and 10
 evidence refs. A parser correction now supports the CLI's progress-visible
 `Session: <id>` receipt. No production restart or Telegram send occurred; the
 live unit still requires the explicit restart boundary.
+
+## NoticePlace Hermes profile correction (2026-08-10)
+
+The source helper was corrected to accept the applied Fleet remediation
+profile (`hermes`, `gpt-5.6-luna`, `high`, `health`) and reject the legacy
+OpenCode/model shape. NoticePlace focused health/job tests pass (`37 passed`).
+The correction is committed as `1ee7365`; the live `/opt/noticeplace` copy has
+not been replaced and notification-center has not been restarted.
