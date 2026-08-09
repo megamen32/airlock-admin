@@ -117,3 +117,11 @@
 - Which skill, MCP, or tool is missing? Overseer was useful for safety review, but its independent context also needed current branch reconciliation; a compact branch/task/runtime evidence bundle would prevent stale “ASK_USER” findings.
 - What operation or error repeated? One pre-apply runtime workflow review exposed hash fail-open, root-backup user-unit rollback, and missing post-apply verification; these were fixed and covered before apply.
 - State: fixed now; full business canary and real user-facing surface remain pending
+
+## 2026-08-10 — Touchpoint replacement and BrowserOS registration (Full)
+
+- What slowed or confused L? The Linux BrowserOS daemon was healthy, but the fresh Tester could not see it because Codex MCP registration still pointed at dead port 9200; a live daemon probe alone was insufficient evidence.
+- Which instruction should change? Treat “daemon healthy” and “fresh Tester has the semantic tool surface” as separate gates; require a new-harness reload after MCP config changes.
+- Which skill, MCP, or tool is missing? The current harness exposes Touchpoint but not the registered BrowserOS namespace; Mac BrowserClaw raw MCP over its documented SSH loopback forward remains the reliable fallback.
+- What operation or error repeated? Fresh Testers returned `STOP_MISSING_REAL_SURFACE` despite direct BrowserOS 9000 and Mac BrowserClaw 9010 handshakes; guard: require fresh Tester tool enumeration plus `tabs → snapshot/read` evidence before claiming user-facing acceptance.
+- State: BrowserOS registration corrected backup-first; current harness reload and real Health UI canary remain pending
