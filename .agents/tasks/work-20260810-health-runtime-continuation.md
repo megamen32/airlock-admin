@@ -131,3 +131,83 @@ current branch/task drift finding is recorded above.
 - Drift check: no unsolicited security, permissions, rollback, backup,
   observability, cleanup, deployment, or other scope expansion is authorized by
   this audit.
+
+## Overseer audit receipt (2026-08-10 02:49 MSK)
+
+- Eligibility: `ASK_USER`. The prior independent receipt was at 02:28 MSK;
+  the mandatory 30-minute interval has not elapsed. The fresh black-box Tester
+  result is nevertheless a material business trigger: it reached the canonical
+  Fleet `Устройства` surface, but the read-only inventory action produced no
+  visible Health/no-send receipt and therefore stopped with
+  `STOP_MISSING_REAL_SURFACE`.
+- Business delta: surface reachability is now partially demonstrated, but there
+  is still no user-facing proof that the read-only inventory action emits a
+  visible Health/no-send receipt, nor proof of the real Health topic,
+  explicit selection, remediation, independent source verification, or a
+  resolved NoticePlace receipt.
+- Avoidable spend: another BrowserOS retry or disposable/direct canary cannot
+  close the missing visible receipt contract; repeating either before that
+  contract is observable would be process spend without business delta.
+- Minimum next action: after the eligibility window, expose/verify one visible
+  Health/no-send receipt from the existing read-only inventory action on the
+  canonical Fleet surface, then run exactly one fresh context-free Tester
+  through that business path; keep Telegram/Hermes egress behind the existing
+  explicit gate.
+- Drift check: no implementation, deployment, restart, disposable canary,
+  security, permissions, rollback, backup, observability, cleanup, or other
+  scope expansion was performed or authorized by this audit.
+
+## Live user-facing delivery boundary (2026-08-10 03:02 MSK)
+
+- Current compact fleet probe remains read-only and reports all configured
+  targets `status=ok`; actionable leads remain `vpn2` load1 66.08 on 1 CPU and
+  `vusa` disk 85%. Hermes is gateway-active with `egress_listening=no`.
+- Current NoticePlace DB read-only aggregate: 4,341 `health.degraded` events,
+  10 `health.plans_attached`, and zero `health.plan_selected`,
+  `health.remediation_requested`, `health.progress`,
+  `health.verification_recorded`, or `health.resolved`. There are 54 open
+  health incidents. No health Telegram delivery is sent; plan deliveries are
+  cancelled because the active Telegram mode set is only
+  `emergency/important/log`.
+- The live topic state contains only `emergency`, `important`, and `log`, each
+  with a thread. The live route environment likewise activates only those
+  three modes and has no `health` route. Current diagnosis delivery failures
+  report only the bounded terminal class `GPTAdmin agent job reported terminal
+  failure`; no raw error or secret was recorded here.
+- Fresh BrowserOS black-box testers inspected the visible TChat home, opened
+  `БЕЗРАБОТНЫЙ NEWS` read-only, and opened the visible `Chat БЕЗРАБОТНЫЙ NEWS`
+  entry read-only. The first is a broadcast channel; the second is a 49-member
+  group. Neither exposed a visible topic list, `Health`/`Хил` topic, health
+  card, or three-plan receipt. No message mutation, send, callback, or Hermes
+  egress occurred.
+- Remaining external boundary: creating/enabling a Telegram forum topic or
+  sending a canary requires explicit approval at the exact Telegram action.
+  Do not add a guessed thread ID, route Health into a general chat, or send a
+  synthetic message. Until that boundary is approved and a visible receipt
+  exists, selection/remediation/resolution cannot be honestly accepted.
+
+## Overseer audit receipt (2026-08-10 03:03 MSK)
+
+- Eligibility: `CONTINUE`. The prior independent receipt was at 02:49 MSK;
+  the mandatory 30-minute interval has elapsed, and the live read-only DB
+  delta plus two fresh black-box Telegram inspections are material triggers.
+- Business delta: health intake has grown to 4,341 `health.degraded` events
+  and 10 `plans_attached`, but there are still zero `plan_selected`,
+  remediation, progress, verification, or resolved events; active Telegram
+  modes remain only `emergency`, `important`, and `log`. Neither the visible
+  broadcast channel nor the separate `Chat БЕЗРАБОТНЫЙ NEWS` group shows a
+  Health/Хил topic or health card. The real user-facing canary therefore has
+  no proved route from intake to selection or resolution.
+- Avoidable spend: further DB inspection, disposable/direct canaries, or
+  BrowserOS retries without a visible Health/no-send receipt cannot move the
+  business canary and would add process spend only; no Telegram send, topic
+  creation, or Hermes egress occurred.
+- Minimum next action: expose and verify one visible Health/no-send receipt
+  from the existing read-only inventory action on the supported
+  BrowserOS/Touchpoint surface, then run exactly one fresh context-free Tester
+  through that real business path; keep Telegram/Hermes egress behind the
+  existing explicit gate.
+- Drift check: no implementation, Telegram topic creation, send, Hermes
+  egress, canary, deployment, restart, security, permissions, rollback,
+  backup, observability, cleanup, or other scope expansion was performed or
+  authorized by this audit.
