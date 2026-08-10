@@ -141,3 +141,11 @@
 - Which skill, MCP, or tool is missing? none; official release metadata plus direct MCP initialize/tools/list were sufficient.
 - What operation or error repeated? One sidecar launch failed; guard: preflight binary compatibility and reject a second owner when the existing BrowserOS MCP already passes the Mac-equivalent canary.
 - State: fixed now; Health Telegram topic remains a separate business blocker
+
+## 2026-08-10 — Health remediation receipt c2bf01d (Full)
+
+- What slowed or confused L? The first independent review found four real gaps after the local canary: state-derived progress idempotency, prefix-form secret leakage, malformed callback exceptions, and unbounded agent elapsed time.
+- Which instruction should change? Proposed: require a fresh Reviewer rerun and Critic after every CHANGES_REQUIRED fix set; current multi-agent thread limit prevented both reruns.
+- Which skill, MCP, or tool is missing? none; the missing capability was reviewer-thread capacity, not a domain tool.
+- What operation or error repeated? Full NoticePlace invocations were slow in journal commit wait, while focused suites were stable; guard: use focused gates first, then run full suite only after the diff settles.
+- State: fixed now; production deploy and live Telegram/Hermes gates remain pending
