@@ -1,0 +1,828 @@
+use crate::config::{default_exclude_globs, LimitsConfig};
+use anyhow::{anyhow, Context, Result};
+use globset::Glob;
+use serde::{Deserialize, Serialize};
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    fs,
+    path::{Path, PathBuf},
+    process::{Command, Stdio},
+    time::Duration,
+};
+use tokio::{
+    io::AsyncReadExt,
+    process::Command as TokioCommand,
+    time::{timeout, Instant},
+};
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MatchLine {
+    pub line_number: usize,
+    pub text: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SearchHit {
+    pub host_id: String,
+    pub path: String,
+    pub line_number: usize,
+    pub context: Vec<MatchLine>,
+    #[serde(default)]
+    pub text: String,
+    #[serde(default)]
+    pub column: usize,
+}
+
+#[derive(Debug)]
+pub struct SearchOutcome {
+    pub hits: Vec<SearchHit>,
+    pub truncated: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum SearchMode {
+    #[default]
+    Literal,
+    Regex,
+    CaseInsensitiveLiteral,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub enum IndexState {
+    Ready,
+    Building,
+    Degraded,
+    Corrupt,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ReadChunk {
+    pub start_line: usize,
+    pub end_line: usize,
+    pub lines: Vec<MatchLine>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct HostStatus {
+    pub host_id: String,
+    pub root: String,
+    pub backend: String,
+    pub file_count: usize,
+    #[serde(default)]
+    pub index_state: Option<IndexState>,
+    #[serde(default)]
+    pub index_generation: u64,
+    #[serde(default)]
+    pub indexed_files: usize,
+    #[serde(default)]
+    pub index_last_error: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PerHostStatus {
+    pub host_id: String,
+    pub ok: bool,
+    pub error: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SearchResponse<T> {
+    pub request_id: String,
+    pub origin_host: String,
+    pub hop_count: u8,
+    pub host_id: String,
+    pub partial: bool,
+    pub truncated: bool,
+    pub results: Vec<T>,
+    pub host_status: Vec<PerHostStatus>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ReadResponse {
+    pub request_id: String,
+    pub origin_host: String,
+    pub hop_count: u8,
+    pub host_id: String,
+    pub target_host_id: String,
+    pub partial: bool,
+    pub truncated: bool,
+    pub path: String,
+    pub start_line: usize,
+    pub end_line: usize,
+    pub chunks: Vec<ReadChunk>,
+    pub host_status: Vec<PerHostStatus>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct StatusResponse {
+    pub request_id: String,
+    pub origin_host: String,
+    pub hop_count: u8,
+    pub host_id: String,
+    pub partial: bool,
+    pub host_status: Vec<PerHostStatus>,
+    pub local: HostStatus,
+    #[serde(default)]
+    pub nodes: Vec<HostStatus>,
+    pub topology: crate::topology::TopologyStatus,
+}
+
+#[derive(Clone)]
+pub struct LocalBackend {
+    pub host_id: String,
+    pub root: PathBuf,
+    pub root_paths: BTreeMap<String, Vec<PathBuf>>,
+    pub limits: LimitsConfig,
+    pub exclude_globs: Vec<String>,
+}
+
+impl LocalBackend {
+    pub fn new(host_id: impl Into<String>, root: impl Into<PathBuf>, limits: LimitsConfig) -> Self {
+        let root = root.into();
+        let mut root_paths = BTreeMap::new();
+        root_paths.insert("local".to_string(), vec![root.clone()]);
+        Self {
+            host_id: host_id.into(),
+            root,
+            root_paths,
+            limits,
+            exclude_globs: default_exclude_globs(),
+        }
+    }
+
+    pub fn with_excludes(mut self, excludes: Vec<String>) -> Self {
+        self.exclude_globs.extend(excludes);
+        self.exclude_globs.sort();
+        self.exclude_globs.dedup();
+        self
+    }
+
+    pub fn with_named_roots(mut self, roots: BTreeMap<String, Vec<PathBuf>>) -> Self {
+        let mut configured = BTreeMap::new();
+        for (name, paths) in roots {
+            let paths = paths
+                .into_iter()
+                .filter(|path| path.is_absolute())
+                .collect::<Vec<_>>();
+            if !paths.is_empty() {
+                configured.insert(name, paths);
+            }
+        }
+        configured.insert("local".to_string(), vec![self.root.clone()]);
+        self.root_paths = configured;
+        self
+    }
+
+    pub fn status(&self) -> Result<HostStatus> {
+        let roots = self.selected_roots(&[])?;
+        let file_count = roots
+            .iter()
+            .map(|root| count_files(root, &self.exclude_globs))
+            .collect::<Result<Vec<_>>>()?
+            .into_iter()
+            .sum();
+        Ok(HostStatus {
+            host_id: self.host_id.clone(),
+            root: self.root.display().to_string(),
+            backend: "rg".to_string(),
+            file_count,
+            index_state: None,
+            index_generation: 0,
+            indexed_files: 0,
+            index_last_error: None,
+        })
+    }
+
+    fn selected_roots(&self, names: &[String]) -> Result<Vec<PathBuf>> {
+        let mut roots = Vec::new();
+        if names.is_empty() {
+            for paths in self.root_paths.values() {
+                roots.extend(paths.iter().cloned());
+            }
+        } else {
+            for name in names {
+                let paths = self
+                    .root_paths
+                    .get(name)
+                    .ok_or_else(|| anyhow!("unknown root {}", name))?;
+                roots.extend(paths.iter().cloned());
+            }
+        }
+        roots.sort();
+        roots.dedup();
+        if roots.is_empty() {
+            roots.push(self.root.clone());
+        }
+        Ok(roots)
+    }
+
+    pub async fn search_text(
+        &self,
+        query: &str,
+        limit: usize,
+        context_lines: usize,
+        mode: SearchMode,
+        path_globs: Vec<String>,
+        root_names: Vec<String>,
+    ) -> Result<Vec<SearchHit>> {
+        Ok(self
+            .search_text_bounded(query, limit, context_lines, mode, path_globs, root_names)
+            .await?
+            .hits)
+    }
+
+    pub async fn search_text_bounded(
+        &self,
+        query: &str,
+        limit: usize,
+        context_lines: usize,
+        mode: SearchMode,
+        path_globs: Vec<String>,
+        root_names: Vec<String>,
+    ) -> Result<SearchOutcome> {
+        let host_id = self.host_id.clone();
+        let roots = self.selected_roots(&root_names)?;
+        let query = query.to_string();
+        let exclude_globs = self.exclude_globs.clone();
+        let max_file_bytes = self.limits.max_file_bytes;
+        let max_response_bytes = self.limits.max_response_bytes;
+        let deadline = Instant::now() + Duration::from_millis(self.limits.overall_timeout_ms);
+        let mut hits = Vec::new();
+        let mut truncated = false;
+        for root in roots {
+            let remaining = limit.saturating_sub(hits.len());
+            if remaining == 0 {
+                truncated = true;
+                break;
+            }
+            let remaining_time = deadline.saturating_duration_since(Instant::now());
+            if remaining_time.is_zero() {
+                return Err(anyhow!("local rg search timed out"));
+            }
+            let outcome = search_text_impl(
+                &host_id,
+                &root,
+                &query,
+                remaining,
+                context_lines,
+                &mode,
+                &path_globs,
+                &exclude_globs,
+                max_file_bytes,
+                max_response_bytes,
+                deadline,
+            )
+            .await?;
+            hits.extend(outcome.hits);
+            if outcome.truncated {
+                truncated = true;
+                break;
+            }
+        }
+        hits.sort_by(|a, b| a.path.cmp(&b.path).then(a.line_number.cmp(&b.line_number)));
+        hits.truncate(limit);
+        Ok(SearchOutcome { hits, truncated })
+    }
+
+    pub async fn find_paths(
+        &self,
+        query: &str,
+        limit: usize,
+        root_names: Vec<String>,
+    ) -> Result<Vec<SearchHit>> {
+        Ok(self
+            .find_paths_bounded(query, limit, root_names)
+            .await?
+            .hits)
+    }
+
+    pub async fn find_paths_bounded(
+        &self,
+        query: &str,
+        limit: usize,
+        root_names: Vec<String>,
+    ) -> Result<SearchOutcome> {
+        let host_id = self.host_id.clone();
+        let roots = self.selected_roots(&root_names)?;
+        let query = query.to_string();
+        let exclude_globs = self.exclude_globs.clone();
+        let max_response_bytes = self.limits.max_response_bytes;
+        let deadline = Instant::now() + Duration::from_millis(self.limits.overall_timeout_ms);
+        let mut hits = Vec::new();
+        let mut truncated = false;
+        for root in roots {
+            let remaining = limit.saturating_sub(hits.len());
+            if remaining == 0 {
+                truncated = true;
+                break;
+            }
+            if deadline.saturating_duration_since(Instant::now()).is_zero() {
+                return Err(anyhow!("local rg path search timed out"));
+            }
+            let outcome = find_paths_impl(
+                &host_id,
+                &root,
+                &query,
+                remaining,
+                &exclude_globs,
+                max_response_bytes,
+                deadline,
+            )
+            .await?;
+            hits.extend(outcome.hits);
+            if outcome.truncated {
+                truncated = true;
+                break;
+            }
+        }
+        hits.sort_by(|a, b| a.path.cmp(&b.path));
+        hits.truncate(limit);
+        Ok(SearchOutcome { hits, truncated })
+    }
+
+    pub fn read_text(
+        &self,
+        path: &Path,
+        start_line: Option<usize>,
+        end_line: Option<usize>,
+    ) -> Result<Vec<ReadChunk>> {
+        let roots = self.selected_roots(&[])?;
+        let abs = normalize_absolute_path_any(&roots, path)?;
+        let size = fs::metadata(&abs)
+            .with_context(|| format!("metadata {}", abs.display()))?
+            .len();
+        if size > self.limits.max_file_bytes {
+            return Err(anyhow!(
+                "file {} exceeds max_file_bytes {}",
+                abs.display(),
+                self.limits.max_file_bytes
+            ));
+        }
+        let text = fs::read_to_string(&abs).with_context(|| format!("read {}", abs.display()))?;
+        let lines: Vec<_> = text.lines().collect();
+        let start = start_line.unwrap_or(1).max(1);
+        let end = end_line
+            .unwrap_or(lines.len().max(1))
+            .max(start)
+            .min(lines.len().max(start));
+        let mut out = Vec::new();
+        let mut chunk = Vec::new();
+        for idx in start..=end {
+            if idx == 0 || idx > lines.len() {
+                break;
+            }
+            chunk.push(MatchLine {
+                line_number: idx,
+                text: lines[idx - 1].to_string(),
+            });
+        }
+        out.push(ReadChunk {
+            start_line: start,
+            end_line: end,
+            lines: chunk,
+        });
+        Ok(out)
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+async fn search_text_impl(
+    host_id: &str,
+    root: &Path,
+    query: &str,
+    limit: usize,
+    context_lines: usize,
+    mode: &SearchMode,
+    path_globs: &[String],
+    exclude_globs: &[String],
+    max_file_bytes: u64,
+    max_response_bytes: usize,
+    deadline: Instant,
+) -> Result<SearchOutcome> {
+    let mut command = TokioCommand::new("rg");
+    command.arg("-n").arg("--hidden").arg("--no-messages");
+    match mode {
+        SearchMode::Literal => {
+            command.arg("-F");
+        }
+        SearchMode::Regex => {}
+        SearchMode::CaseInsensitiveLiteral => {
+            command.arg("-F").arg("-i");
+        }
+    }
+    for glob in path_globs {
+        command.arg("--glob").arg(glob);
+    }
+    for glob in exclude_globs {
+        command.arg("--glob").arg(format!("!{glob}"));
+    }
+    command
+        .arg("--max-filesize")
+        .arg(max_file_bytes.to_string());
+    command.arg("--");
+    command.arg(query);
+    command.arg(".");
+    let mut child = command
+        .current_dir(root)
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .kill_on_drop(true)
+        .spawn()
+        .with_context(|| "run rg search")?;
+    let Some(mut stdout) = child.stdout.take() else {
+        terminate_child(&mut child).await;
+        return Err(anyhow!("rg search did not provide stdout"));
+    };
+    let mut hits = Vec::new();
+    let mut pending = Vec::new();
+    let mut stdout_bytes = 0usize;
+    // A zero response limit is the existing configuration convention for an
+    // unbounded response. Otherwise, cap the total bytes consumed from this
+    // rg invocation and stop as soon as the global match/byte bound is met.
+    let byte_limit = (max_response_bytes != 0).then_some(max_response_bytes);
+    let mut stopped_early = limit == 0;
+    let mut buffer = [0u8; 8192];
+
+    while !stopped_early {
+        let read_size = match byte_limit {
+            Some(byte_limit) => {
+                let remaining_bytes = byte_limit.saturating_sub(stdout_bytes);
+                if remaining_bytes == 0 {
+                    stopped_early = true;
+                    break;
+                }
+                remaining_bytes.min(buffer.len())
+            }
+            None => buffer.len(),
+        };
+        let read = match timeout(
+            deadline.saturating_duration_since(Instant::now()),
+            stdout.read(&mut buffer[..read_size]),
+        )
+        .await
+        {
+            Ok(Ok(read)) => read,
+            Ok(Err(err)) => {
+                terminate_child(&mut child).await;
+                return Err(err).context("read rg search output");
+            }
+            Err(_) => {
+                terminate_child(&mut child).await;
+                return Err(anyhow!("rg search timed out"));
+            }
+        };
+        if read == 0 {
+            break;
+        }
+        stdout_bytes = stdout_bytes.saturating_add(read);
+        pending.extend_from_slice(&buffer[..read]);
+
+        while let Some(line_end) = pending.iter().position(|byte| *byte == b'\n') {
+            let line = pending.drain(..=line_end).collect::<Vec<_>>();
+            let hit = match search_hit_from_rg_line(
+                host_id,
+                root,
+                query,
+                context_lines,
+                mode,
+                &line,
+                deadline,
+            )
+            .await
+            {
+                Ok(hit) => hit,
+                Err(err) => {
+                    terminate_child(&mut child).await;
+                    return Err(err);
+                }
+            };
+            if let Some(hit) = hit {
+                hits.push(hit);
+            }
+            if hits.len() >= limit {
+                stopped_early = true;
+                break;
+            }
+        }
+    }
+
+    if !stopped_early && !pending.is_empty() {
+        let hit = match search_hit_from_rg_line(
+            host_id,
+            root,
+            query,
+            context_lines,
+            mode,
+            &pending,
+            deadline,
+        )
+        .await
+        {
+            Ok(hit) => hit,
+            Err(err) => {
+                terminate_child(&mut child).await;
+                return Err(err);
+            }
+        };
+        if let Some(hit) = hit {
+            hits.push(hit);
+        }
+    }
+
+    drop(stdout);
+    if stopped_early {
+        terminate_child(&mut child).await;
+    }
+    let status = if stopped_early {
+        None
+    } else {
+        match timeout(
+            deadline.saturating_duration_since(Instant::now()),
+            child.wait(),
+        )
+        .await
+        {
+            Ok(Ok(status)) => Some(status),
+            Ok(Err(err)) => return Err(err).context("wait for rg search"),
+            Err(_) => {
+                terminate_child(&mut child).await;
+                return Err(anyhow!("rg search timed out"));
+            }
+        }
+    };
+    if let Some(status) = status {
+        if !status.success() && status.code() != Some(1) {
+            return Err(anyhow!("rg search failed with {}", status));
+        }
+    }
+    Ok(SearchOutcome {
+        hits,
+        truncated: stopped_early,
+    })
+}
+
+async fn terminate_child(child: &mut tokio::process::Child) {
+    let _ = child.start_kill();
+    let _ = child.wait().await;
+}
+
+async fn search_hit_from_rg_line(
+    host_id: &str,
+    root: &Path,
+    query: &str,
+    context_lines: usize,
+    mode: &SearchMode,
+    raw_line: &[u8],
+    deadline: Instant,
+) -> Result<Option<SearchHit>> {
+    let line = String::from_utf8_lossy(raw_line);
+    let line = line.strip_suffix('\n').unwrap_or(&line);
+    let line = line.strip_suffix('\r').unwrap_or(line);
+    let Some((rel_path, line_no, text)) = parse_rg_line(line) else {
+        return Ok(None);
+    };
+    let abs = root.join(strip_current_dir_prefix(rel_path));
+    let remaining = deadline.saturating_duration_since(Instant::now());
+    let context = timeout(remaining, read_context(&abs, line_no, context_lines))
+        .await
+        .map_err(|_| anyhow!("rg search timed out"))??;
+    Ok(Some(SearchHit {
+        host_id: host_id.to_string(),
+        path: abs.display().to_string(),
+        line_number: line_no,
+        context,
+        text: text.to_string(),
+        column: match mode {
+            SearchMode::Regex => 1,
+            SearchMode::Literal => text.find(query).map(|index| index + 1).unwrap_or(1),
+            SearchMode::CaseInsensitiveLiteral => text
+                .to_ascii_lowercase()
+                .find(&query.to_ascii_lowercase())
+                .map(|index| index + 1)
+                .unwrap_or(1),
+        },
+    }))
+}
+
+async fn find_paths_impl(
+    host_id: &str,
+    root: &Path,
+    query: &str,
+    limit: usize,
+    exclude_globs: &[String],
+    max_response_bytes: usize,
+    deadline: Instant,
+) -> Result<SearchOutcome> {
+    let mut command = TokioCommand::new("rg");
+    command.arg("--files").arg("--hidden").arg("--no-messages");
+    for glob in exclude_globs {
+        command.arg("--glob").arg(format!("!{glob}"));
+    }
+    let mut child = command
+        .arg(".")
+        .current_dir(root)
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .kill_on_drop(true)
+        .spawn()
+        .with_context(|| "run rg --files")?;
+    let Some(mut stdout) = child.stdout.take() else {
+        terminate_child(&mut child).await;
+        return Err(anyhow!("rg --files did not provide stdout"));
+    };
+    let mut hits = Vec::new();
+    let mut pending = Vec::new();
+    let mut stdout_bytes = 0usize;
+    let byte_limit = (max_response_bytes != 0).then_some(max_response_bytes);
+    let mut stopped_early = limit == 0;
+    let mut buffer = [0u8; 8192];
+
+    while !stopped_early {
+        let read_size = match byte_limit {
+            Some(byte_limit) => {
+                let remaining_bytes = byte_limit.saturating_sub(stdout_bytes);
+                if remaining_bytes == 0 {
+                    stopped_early = true;
+                    break;
+                }
+                remaining_bytes.min(buffer.len())
+            }
+            None => buffer.len(),
+        };
+        let read = match timeout(
+            deadline.saturating_duration_since(Instant::now()),
+            stdout.read(&mut buffer[..read_size]),
+        )
+        .await
+        {
+            Ok(Ok(read)) => read,
+            Ok(Err(err)) => {
+                terminate_child(&mut child).await;
+                return Err(err).context("read rg path output");
+            }
+            Err(_) => {
+                terminate_child(&mut child).await;
+                return Err(anyhow!("rg path search timed out"));
+            }
+        };
+        if read == 0 {
+            break;
+        }
+        stdout_bytes = stdout_bytes.saturating_add(read);
+        pending.extend_from_slice(&buffer[..read]);
+
+        while let Some(line_end) = pending.iter().position(|byte| *byte == b'\n') {
+            let line = pending.drain(..=line_end).collect::<Vec<_>>();
+            if let Some(hit) = path_hit_from_rg_line(host_id, root, query, &line) {
+                hits.push(hit);
+            }
+            if hits.len() >= limit {
+                stopped_early = true;
+                break;
+            }
+        }
+    }
+
+    if !stopped_early && !pending.is_empty() {
+        if let Some(hit) = path_hit_from_rg_line(host_id, root, query, &pending) {
+            hits.push(hit);
+        }
+    }
+
+    drop(stdout);
+    if stopped_early {
+        terminate_child(&mut child).await;
+    } else {
+        let status = match timeout(
+            deadline.saturating_duration_since(Instant::now()),
+            child.wait(),
+        )
+        .await
+        {
+            Ok(Ok(status)) => status,
+            Ok(Err(err)) => return Err(err).context("wait for rg --files"),
+            Err(_) => {
+                terminate_child(&mut child).await;
+                return Err(anyhow!("rg path search timed out"));
+            }
+        };
+        if !status.success() && status.code() != Some(1) {
+            return Err(anyhow!("rg --files failed with {}", status));
+        }
+    }
+    Ok(SearchOutcome {
+        hits,
+        truncated: stopped_early,
+    })
+}
+
+fn path_hit_from_rg_line(
+    host_id: &str,
+    root: &Path,
+    query: &str,
+    raw_line: &[u8],
+) -> Option<SearchHit> {
+    let line = String::from_utf8_lossy(raw_line);
+    let line = line.strip_suffix('\n').unwrap_or(&line);
+    let line = line.strip_suffix('\r').unwrap_or(line);
+    if !path_query_matches(query, line) {
+        return None;
+    }
+    let abs = root.join(strip_current_dir_prefix(line));
+    Some(SearchHit {
+        host_id: host_id.to_string(),
+        path: abs.display().to_string(),
+        line_number: 0,
+        context: Vec::new(),
+        text: String::new(),
+        column: 0,
+    })
+}
+
+fn path_query_matches(pattern: &str, path: &str) -> bool {
+    if pattern.contains('*') || pattern.contains('?') {
+        return Glob::new(pattern)
+            .map(|glob| glob.compile_matcher().is_match(path))
+            .unwrap_or(false);
+    }
+    path.contains(pattern)
+}
+
+fn parse_rg_line(line: &str) -> Option<(&str, usize, &str)> {
+    let (path, rest) = line.split_once(':')?;
+    let (line_no, text) = rest.split_once(':')?;
+    Some((path, line_no.parse().ok()?, text))
+}
+
+fn strip_current_dir_prefix(path: &str) -> &str {
+    path.strip_prefix("./").unwrap_or(path)
+}
+
+async fn read_context(
+    path: &Path,
+    line_number: usize,
+    context_lines: usize,
+) -> Result<Vec<MatchLine>> {
+    let text = tokio::fs::read_to_string(path)
+        .await
+        .with_context(|| format!("read {}", path.display()))?;
+    let lines: Vec<_> = text.lines().collect();
+    let start = line_number.saturating_sub(context_lines).max(1);
+    let end = std::cmp::min(lines.len(), line_number + context_lines);
+    let mut out = Vec::new();
+    for idx in start..=end {
+        out.push(MatchLine {
+            line_number: idx,
+            text: lines[idx - 1].to_string(),
+        });
+    }
+    Ok(out)
+}
+
+fn count_files(root: &Path, exclude_globs: &[String]) -> Result<usize> {
+    let mut command = Command::new("rg");
+    command.arg("--files").arg("--hidden").arg("--no-messages");
+    for glob in exclude_globs {
+        command.arg("--glob").arg(format!("!{glob}"));
+    }
+    let output = command
+        .arg(".")
+        .current_dir(root)
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .output()
+        .with_context(|| "run rg --files for count")?;
+    if !output.status.success() && output.status.code() != Some(1) {
+        return Err(anyhow!("rg --files failed with {}", output.status));
+    }
+    Ok(String::from_utf8_lossy(&output.stdout).lines().count())
+}
+
+fn normalize_absolute_path_any(roots: &[PathBuf], path: &Path) -> Result<PathBuf> {
+    if !path.is_absolute() {
+        return Err(anyhow!("path must be absolute: {}", path.display()));
+    }
+    if !roots.iter().any(|root| path.starts_with(root)) {
+        return Err(anyhow!(
+            "path {} is outside configured roots",
+            path.display(),
+        ));
+    }
+    Ok(path.to_path_buf())
+}
+
+pub fn dedup_hits<T, F>(items: Vec<T>, key: F) -> Vec<T>
+where
+    F: Fn(&T) -> (String, String, usize),
+{
+    let mut seen = BTreeSet::new();
+    let mut out = Vec::new();
+    for item in items {
+        let k = key(&item);
+        if seen.insert(k) {
+            out.push(item);
+        }
+    }
+    out
+}
