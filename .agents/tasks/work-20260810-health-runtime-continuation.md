@@ -157,6 +157,29 @@ current branch/task drift finding is recorded above.
   security, permissions, rollback, backup, observability, cleanup, or other
   scope expansion was performed or authorized by this audit.
 
+## Browser surface parity continuation (2026-08-10)
+
+- The user-facing surface correction is now resolved at the transport layer:
+  Mac BrowserClaw `0.48.1` was checked through its documented SSH-local MCP
+  forward (`initialize 200`, protocol `2025-03-26`, `tools/list 200`, 17
+  tools, then read-only tabs). Linux already had the supported BrowserOS
+  AppImage and service; its MCP returned the same protocol and `tools/list 200`
+  with 23 tools including `tabs`, `snapshot`, `act`, `read`, `grep`, and
+  `wait`. The stale Codex registration was repaired from `9200` to `9000` with
+  a backup. No second BrowserClaw sidecar was installed: the upstream Linux
+  x64 server artifact requires glibc `2.38/2.39` unavailable on this Ubuntu
+  host and would not provide the Mac desktop UI.
+- NoticePlace commit `ed8804e` now prevents Health destinations from falling
+  back to a general Telegram chat and keeps Health deliveries queued for
+  retry while the dedicated topic route is inactive. Focused NoticePlace
+  tests: `37 passed`; the previously observed full-suite mapping failure was
+  not changed. Existing production cancelled deliveries were not requeued.
+- This removes Touchpoint as the transport blocker, but does not create or
+  enable the Telegram `Health`/`Хил` topic. Fresh browser inspection still
+  found no visible topic/card, so plan selection, remediation, independent
+  verification, and resolved receipt remain unconfirmed. Telegram send and
+  Hermes egress remain disabled.
+
 ## Live user-facing delivery boundary (2026-08-10 03:02 MSK)
 
 - Current compact fleet probe remains read-only and reports all configured
