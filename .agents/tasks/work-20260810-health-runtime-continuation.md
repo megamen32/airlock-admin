@@ -180,6 +180,45 @@ current branch/task drift finding is recorded above.
   verification, and resolved receipt remain unconfirmed. Telegram send and
   Hermes egress remain disabled.
 
+## Health remediation receipt implementation slice (2026-08-10)
+
+- Added a red regression and implementation for the missing terminal seam in
+  NoticePlace: completed `health-remediation` receipts now persist useful
+  progress, require `source_id`/matching `source_fingerprint`, a distinct
+  `verifier_id`, and `verification_id`, then record
+  `health.verification_recorded` and `health.resolved` with bounded elapsed
+  time and merged diagnosis/remediation trace refs. Resolution schedules a
+  `telegram.main` `health.resolved` delivery; it does not send immediately.
+- `GptAdminAgentJobAdapter` now forwards useful progress during polling and
+  fails a health remediation whose useful progress becomes stale. Worker
+  retries are idempotent; a completed remediation without a resolved receipt
+  is terminally marked failed instead of being reported as sent.
+- Fleet health-remediation instruction now requires `source_fingerprint` and
+  `verifier_id` in the terminal JSON. Focused NoticePlace suites: `66 passed`;
+  health-monitor suites: `19 passed`; disposable real-local HTTP canary:
+  `signals_seen=5`, `plans=3`, `resolved=true`, `external_sends=false`.
+- Still not proven: deployed live remediation callback with the new receipt
+  fields, the real Telegram Health/Хил topic and user click, and a final
+  fresh black-box Tester through that visible path. No deployment, Telegram
+  send, or Hermes egress was performed in this slice.
+
+## Reviewer fixes and source commits (2026-08-10)
+
+- Independent Reviewer initially returned `CHANGES_REQUIRED` with four
+  concrete findings. Red regressions were added and fixed: same-key progress
+  retry, prefix/Bearer secret redaction, malformed callback handling, and
+  terminal elapsed bounds. NoticePlace now passes `70` focused tests after
+  the fixes and is committed as `c2bf01d`; Fleet activation/prompt contract
+  is committed as `d97fbcf`.
+- The first Reviewer was independent and read-only; a fresh rerun and Critic
+  are still pending because the multi-agent harness currently reports its
+  child-thread limit. This is a review-gate capability blocker, not a live
+  business success claim.
+- No production deployment of `c2bf01d`, Telegram topic creation/send, or
+  Hermes egress has occurred. The next consequential boundary is a
+  backup-first deploy to `/opt/noticeplace` followed by the approved
+  notification-center/Agent-Herder restart and no-send canary.
+
 ## Live user-facing delivery boundary (2026-08-10 03:02 MSK)
 
 - Current compact fleet probe remains read-only and reports all configured
