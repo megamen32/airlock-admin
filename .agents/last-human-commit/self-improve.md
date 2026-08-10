@@ -133,3 +133,11 @@
 - Which skill, MCP, or tool is missing? Fresh Tester still lacks the registered BrowserOS namespace even after `codex mcp get` reports it enabled; a harness reload boundary must be explicit.
 - What operation or error repeated? BrowserOS daemon/MCP was healthy but subagents exposed only Touchpoint; guard: separate daemon health, Codex registration, and fresh Tester tool enumeration.
 - State: skill check corrected and green; fresh Tester/user Health topic remains pending
+
+## 2026-08-10 — Linux BrowserClaw parity 6c96c06 (Short)
+
+- What slowed or confused L? “Same as Mac” separates the Mac-only BrowserClaw.app from the supported Linux BrowserOS AppImage; the standalone Linux sidecar also failed its first `--help` with glibc 2.38/2.39 requirements.
+- Which instruction should change? Proposed: browser-surface guidance should preflight OS, glibc, and existing MCP/CDP ownership before recommending a sidecar.
+- Which skill, MCP, or tool is missing? none; official release metadata plus direct MCP initialize/tools/list were sufficient.
+- What operation or error repeated? One sidecar launch failed; guard: preflight binary compatibility and reject a second owner when the existing BrowserOS MCP already passes the Mac-equivalent canary.
+- State: fixed now; Health Telegram topic remains a separate business blocker
