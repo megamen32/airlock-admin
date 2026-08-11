@@ -185,6 +185,9 @@ fn walk(
         }
         return Ok(1);
     }
+    if !metadata.is_dir() {
+        return Ok(0);
+    }
     let entries = match fs::read_dir(path) {
         Ok(entries) => entries,
         Err(error) if error.kind() == ErrorKind::PermissionDenied => return Ok(0),
@@ -255,6 +258,28 @@ mod tests {
         fs::set_permissions(&denied, restore).unwrap();
         let (count, candidates) = result.unwrap();
         assert!(count >= 1);
+        assert!(candidates
+            .get("ind")
+            .is_some_and(|paths| paths.contains(&readable)));
+    }
+
+    #[test]
+    fn special_files_do_not_break_the_entire_index() {
+        let root = tempfile::tempdir().unwrap();
+        let readable = root.path().join("readable.txt");
+        let fifo = root.path().join("console");
+        fs::write(&readable, "INDEX_SPECIAL_FILE_TOKEN\n").unwrap();
+        let status = std::process::Command::new("mkfifo")
+            .arg(&fifo)
+            .status()
+            .unwrap();
+        assert!(status.success());
+
+        let mut roots = BTreeMap::new();
+        roots.insert("home".to_string(), vec![root.path().to_path_buf()]);
+        let (count, candidates) = build_index(&roots, &[], 0).unwrap();
+
+        assert_eq!(count, 1);
         assert!(candidates
             .get("ind")
             .is_some_and(|paths| paths.contains(&readable)));
