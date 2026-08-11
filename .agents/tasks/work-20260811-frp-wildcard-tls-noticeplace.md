@@ -108,3 +108,26 @@ sync need a separately authorized DNS-01/credential-owner decision; the
 immediate unique-client TLS incident is resolved, but this is not durable
 renewal proof. NoticePlace monitoring remains pending its precise delivery
 policy because the existing `health` producer can trigger broader automation.
+
+## Fresh client registration canary (2026-08-11)
+
+The first TLS-only result did not prove new-client registration, so an isolated
+real FRPC canary was run. A temporary unique subdomain was generated, three
+temporary `frpc` processes cloned the canonical primary/vpn2/vusa client
+configurations, and each proxied only the existing local `127.0.0.1:9001`
+health endpoint. No user client configuration was changed.
+
+- The canary initially exposed FRPS 404 from remote edges because their
+  temporary proxy names accidentally collided with the existing client's proxy
+  names; this was a test setup error, not a TLS result. All temporary processes
+  and files were cleaned before retry.
+- The corrected canary used distinct proxy names per edge and the new ID
+  `u-e2e20260811d`.
+- Strict HTTPS requests with DNS bypass (`--resolve`) returned HTTP 200 and
+  `ssl_verify_result=0` for all three public ingress addresses:
+  `95.165.165.65`, `185.240.120.152`, and `212.192.31.128`.
+- The temporary FRPC processes and their root-only `/run` configuration/log
+  directory exited and were removed at the end of the canary.
+
+Result: `DELIVERY P0 CONFIRMED` for newly registered unique client IDs across
+the current three-edge FRP ingress and strict wildcard TLS path.
