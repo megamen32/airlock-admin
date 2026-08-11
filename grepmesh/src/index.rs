@@ -245,8 +245,13 @@ fn scan_directory_unit(
         .map_err(|error| format!("{}: {error}", root.display()))?
         .dev();
     let mut map = BTreeMap::new();
-    let metadata =
-        fs::symlink_metadata(unit).map_err(|error| format!("{}: {error}", unit.display()))?;
+    let metadata = match fs::symlink_metadata(unit) {
+        Ok(metadata) => metadata,
+        Err(error) if error.kind() == ErrorKind::PermissionDenied => {
+            return Ok((0, map, Vec::new()))
+        }
+        Err(error) => return Err(format!("{}: {error}", unit.display())),
+    };
     if metadata.dev() != root_device
         || metadata.file_type().is_symlink()
         || excluded(unit, root, excludes)
@@ -267,10 +272,13 @@ fn scan_directory_unit(
     if !metadata.is_dir() {
         return Ok((0, map, Vec::new()));
     }
-    let children = fs::read_dir(unit)
-        .map_err(|error| format!("{}: {error}", unit.display()))?
-        .filter_map(|entry| entry.ok().map(|entry| entry.path()))
-        .collect();
+    let children = match fs::read_dir(unit) {
+        Ok(entries) => entries
+            .filter_map(|entry| entry.ok().map(|entry| entry.path()))
+            .collect(),
+        Err(error) if error.kind() == ErrorKind::PermissionDenied => Vec::new(),
+        Err(error) => return Err(format!("{}: {error}", unit.display())),
+    };
     Ok((0, map, children))
 }
 
