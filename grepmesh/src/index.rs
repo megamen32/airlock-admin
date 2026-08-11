@@ -163,9 +163,8 @@ fn rebuild_index(
         ready.clear();
     }
     for root in ordered_roots(roots) {
-        let result = build_root_index_with_matcher(&root, &matcher, max_file_bytes);
-        let (root_count, next) = match result {
-            Ok(result) => result,
+        let units = match root_units(&root) {
+            Ok(units) => units,
             Err(error) => {
                 if let Ok(mut current) = state.write() {
                     current.state = IndexState::Degraded;
@@ -175,19 +174,33 @@ fn rebuild_index(
                 return;
             }
         };
-        if let Ok(mut map) = candidates.write() {
-            for (gram, paths) in next {
-                map.entry(gram).or_default().extend(paths);
+        for unit in units {
+            let result = build_unit_index_with_matcher(&unit, &root, &matcher, max_file_bytes);
+            let (unit_count, next) = match result {
+                Ok(result) => result,
+                Err(error) => {
+                    if let Ok(mut current) = state.write() {
+                        current.state = IndexState::Degraded;
+                        current.last_error = Some(error);
+                        current.generation = generation.saturating_add(1);
+                    }
+                    return;
+                }
+            };
+            if let Ok(mut map) = candidates.write() {
+                for (gram, paths) in next {
+                    map.entry(gram).or_default().extend(paths);
+                }
+            }
+            count += unit_count;
+            *generation += 1;
+            if let Ok(mut current) = state.write() {
+                current.indexed_files = count;
+                current.generation = *generation;
             }
         }
         if let Ok(mut ready) = ready_roots.write() {
             ready.insert(root);
-        }
-        count += root_count;
-        *generation += 1;
-        if let Ok(mut current) = state.write() {
-            current.indexed_files = count;
-            current.generation = *generation;
         }
     }
     if let Ok(mut current) = state.write() {
@@ -203,10 +216,23 @@ fn build_root_index(
     max_file_bytes: u64,
 ) -> Result<(usize, BTreeMap<String, BTreeSet<PathBuf>>), String> {
     let matcher = compile_excludes(excludes)?;
-    build_root_index_with_matcher(root, &matcher, max_file_bytes)
+    let root_device = fs::symlink_metadata(root)
+        .map_err(|error| format!("{}: {error}", root.display()))?
+        .dev();
+    let mut map = BTreeMap::new();
+    let count = walk(
+        &root.to_path_buf(),
+        root,
+        root_device,
+        &matcher,
+        max_file_bytes,
+        &mut map,
+    )?;
+    Ok((count, map))
 }
 
-fn build_root_index_with_matcher(
+fn build_unit_index_with_matcher(
+    unit: &Path,
     root: &Path,
     excludes: &GlobSet,
     max_file_bytes: u64,
@@ -216,7 +242,7 @@ fn build_root_index_with_matcher(
         .dev();
     let mut map = BTreeMap::new();
     let count = walk(
-        &root.to_path_buf(),
+        &unit.to_path_buf(),
         root,
         root_device,
         excludes,
@@ -224,6 +250,21 @@ fn build_root_index_with_matcher(
         &mut map,
     )?;
     Ok((count, map))
+}
+
+fn root_units(root: &Path) -> Result<Vec<PathBuf>, String> {
+    let mut units: Vec<_> = fs::read_dir(root)
+        .map_err(|error| format!("{}: {error}", root.display()))?
+        .filter_map(|entry| entry.ok().map(|entry| entry.path()))
+        .collect();
+    units.sort_by_key(|path| {
+        let name = path
+            .file_name()
+            .and_then(|name| name.to_str())
+            .unwrap_or_default();
+        (name != ".grepmesh-canary", path.clone())
+    });
+    Ok(units)
 }
 
 fn ordered_roots(roots: &BTreeMap<String, Vec<PathBuf>>) -> Vec<PathBuf> {
