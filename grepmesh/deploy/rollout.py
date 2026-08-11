@@ -253,7 +253,7 @@ if sudo -n test -e {shlex.quote(manifest['source']['install_path'])}; then sudo 
 if sudo -n test -e {shlex.quote(q['config_path'])}; then sudo -n cp -a {shlex.quote(q['config_path'])} {shlex.quote(backup_dir)}/config.json; previous_config=1; fi
 if sudo -n test -e /etc/systemd/system/{shlex.quote(q['unit_name'])}; then sudo -n cp -a /etc/systemd/system/{shlex.quote(q['unit_name'])} {shlex.quote(backup_dir)}/unit; previous_unit=1; fi
 sudo -n install -o root -g root -m 0755 {shlex.quote(remote_artifact)} {shlex.quote(manifest['source']['install_path'])}
-sudo -n install -o root -g root -m 0640 {shlex.quote(remote_config)} {shlex.quote(q['config_path'])}
+sudo -n install -o root -g root -m 0644 {shlex.quote(remote_config)} {shlex.quote(q['config_path'])}
 sudo -n install -o root -g root -m 0644 {shlex.quote(remote_unit)} /etc/systemd/system/{shlex.quote(q['unit_name'])}
 sudo -n systemctl daemon-reload
 sudo -n systemctl enable --now {shlex.quote(q['unit_name'])}
@@ -336,7 +336,7 @@ sudo -n test -s {shlex.quote(str(rollback_path / 'binary'))}
 sudo -n test -s {shlex.quote(str(rollback_path / 'config.json'))}
 sudo -n test -s {shlex.quote(str(rollback_path / 'unit'))}
 sudo -n install -o root -g root -m 0755 {shlex.quote(str(rollback_path / 'binary'))} {shlex.quote(manifest['source']['install_path'])}
-sudo -n install -o root -g root -m 0640 {shlex.quote(str(rollback_path / 'config.json'))} {shlex.quote(q['config_path'])}
+sudo -n install -o root -g root -m 0644 {shlex.quote(str(rollback_path / 'config.json'))} {shlex.quote(q['config_path'])}
 sudo -n install -o root -g root -m 0644 {shlex.quote(str(rollback_path / 'unit'))} /etc/systemd/system/{shlex.quote(q['unit_name'])}
 sudo -n systemctl daemon-reload
 sudo -n systemctl restart {shlex.quote(q['unit_name'])}
