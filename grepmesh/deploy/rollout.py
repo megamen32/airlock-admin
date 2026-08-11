@@ -10,7 +10,6 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
-import os
 import shlex
 import subprocess
 import sys
@@ -88,6 +87,7 @@ def confirmation_payload(manifest: dict[str, Any], digest: str | None) -> dict[s
     unit = repo_root(manifest) / manifest["service"]["unit"]
     return {
         "manifest_sha256": canonical_sha256(manifest),
+        "rollout_helper_sha256": sha256(Path(__file__).resolve()),
         "revision": manifest["source"]["revision"],
         "artifact": manifest["source"]["artifact"],
         "sha256": digest,
@@ -139,6 +139,7 @@ def preview(manifest: dict[str, Any]) -> dict[str, Any]:
         "artifact_exists": artifact.exists(),
         "artifact_sha256": digest,
         "manifest_sha256": canonical_sha256(manifest),
+        "rollout_helper_sha256": sha256(Path(__file__).resolve()),
         "unit_sha256": sha256(repo_root(manifest) / manifest["service"]["unit"])
         if (repo_root(manifest) / manifest["service"]["unit"]).exists()
         else None,
@@ -219,9 +220,6 @@ def apply(manifest: dict[str, Any], supplied_confirmation: str) -> None:
     expected = confirmation(confirmation_payload(manifest, digest))
     if supplied_confirmation != expected:
         raise RolloutError("confirmation does not match the current preview")
-    if not os.environ.get(manifest["service"]["peer_token_env"], "").strip():
-        raise RolloutError("peer token is not present in the operator environment; no mutation made")
-
     unit = repo_root(manifest) / manifest["service"]["unit"]
     if not unit.exists():
         raise RolloutError(f"missing unit template: {unit}")
