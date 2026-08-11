@@ -74,3 +74,37 @@ Installing/enabling the systemd monitor is a deployment and begins an outbound
 event path. It requires exact human approval and an attested producer-secret
 handoff. No service reload/restart, certificate issue, DNS mutation, or event
 delivery has occurred.
+
+## Corrected objective and execution (2026-08-11)
+
+The user clarified that the required fix is not a certificate for one existing
+client ID: every current and future assigned `u-<id>` hostname must pass TLS.
+
+- DNS returns three ingress addresses: `95.165.165.65`, `185.240.120.152`, and
+  `212.192.31.128`.
+- Before the fix, the latter two served a valid Let’s Encrypt wildcard
+  `*.t.gptadmin.bezrabotnyi.com`; server-100 (`95.165.165.65`) instead served
+  a leaf certificate for only `u-f1102930`. A random future ID therefore failed
+  hostname validation only when DNS selected server-100.
+- The valid existing wildcard from the two matching ingress peers was securely
+  synchronized to root-owned `/etc/nginx/ssl/gptadmin-frp-wildcard/` on
+  server-100. The key was never written to command output; its public key was
+  verified against the certificate.
+- Only `/etc/nginx/sites-enabled/t.gptadmin.bezrabotnyi.com` was changed, with
+  its pre-change copy preserved under `/etc/nginx/rollback-receipts/`. Nginx
+  configuration validation passed, then Nginx was reloaded.
+- After reload, a strict SNI handshake for a never-issued random subdomain
+  received the wildcard certificate from all three public addresses. Its HTTP
+  response is the expected FRP 404 because no proxy is registered for that ID.
+- The registered live client `u-f1102930` now has strict TLS plus `/healthz`
+  HTTP 200 on all three ingress addresses.
+
+## Remaining durability note
+
+The wildcard certificate currently expires on 2026-08-28. The two peer
+ingresses contain the same certificate, but no local ACME renewal contract was
+found on any inspected host. Renewal and automatic cross-ingress certificate
+sync need a separately authorized DNS-01/credential-owner decision; the
+immediate unique-client TLS incident is resolved, but this is not durable
+renewal proof. NoticePlace monitoring remains pending its precise delivery
+policy because the existing `health` producer can trigger broader automation.
