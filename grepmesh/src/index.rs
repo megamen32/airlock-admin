@@ -177,10 +177,11 @@ fn walk(
     if metadata.file_type().is_symlink() {
         return Ok(0);
     }
+    if excluded(path, root, excludes) {
+        return Ok(0);
+    }
     if metadata.is_file() {
-        if excluded(path, root, excludes)
-            || (max_file_bytes != 0 && metadata.len() > max_file_bytes)
-        {
+        if max_file_bytes != 0 && metadata.len() > max_file_bytes {
             return Ok(0);
         }
         let bytes = match fs::read(path) {
