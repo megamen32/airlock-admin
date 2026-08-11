@@ -35,6 +35,7 @@ impl Default for IndexSnapshot {
 pub struct IndexManager {
     snapshot: Arc<RwLock<IndexSnapshot>>,
     candidates: Arc<RwLock<BTreeMap<String, BTreeSet<PathBuf>>>>,
+    ready_roots: Arc<RwLock<BTreeSet<PathBuf>>>,
 }
 
 impl IndexManager {
@@ -50,6 +51,8 @@ impl IndexManager {
         let state = Arc::clone(&snapshot);
         let candidates = Arc::new(RwLock::new(BTreeMap::new()));
         let candidate_state = Arc::clone(&candidates);
+        let ready_roots = Arc::new(RwLock::new(BTreeSet::new()));
+        let ready_root_state = Arc::clone(&ready_roots);
         thread::spawn(move || {
             let (events, rx) = mpsc::channel();
             let event_state = Arc::clone(&state);
@@ -60,30 +63,20 @@ impl IndexManager {
                 let _ = events.send(());
             })
             .expect("create GrepMesh watcher");
-            for root in unique_roots(&roots) {
+            for root in ordered_roots(&roots) {
                 let _ = watcher.watch(&root, RecursiveMode::Recursive);
             }
             let mut generation = 0;
-            let mut rebuild = || match build_index(&roots, &excludes, max_file_bytes) {
-                Ok((count, next)) => {
-                    if let Ok(mut map) = candidate_state.write() {
-                        *map = next;
-                    }
-                    if let Ok(mut current) = state.write() {
-                        generation += 1;
-                        current.state = IndexState::Ready;
-                        current.indexed_files = count;
-                        current.last_error = None;
-                        current.generation = generation;
-                    }
-                }
-                Err(error) => {
-                    if let Ok(mut current) = state.write() {
-                        current.state = IndexState::Degraded;
-                        current.last_error = Some(error);
-                        current.generation = generation.saturating_add(1);
-                    }
-                }
+            let mut rebuild = || {
+                rebuild_index(
+                    &roots,
+                    &excludes,
+                    max_file_bytes,
+                    &state,
+                    &candidate_state,
+                    &ready_root_state,
+                    &mut generation,
+                )
             };
             rebuild();
             loop {
@@ -96,6 +89,7 @@ impl IndexManager {
         Self {
             snapshot,
             candidates,
+            ready_roots,
         }
     }
 
@@ -110,8 +104,12 @@ impl IndexManager {
     }
 
     pub fn candidate_paths(&self, query: &str, root: &Path) -> Option<Vec<PathBuf>> {
-        let status = self.status();
-        if status.state != IndexState::Ready || status.indexed_files == 0 {
+        if !self
+            .ready_roots
+            .read()
+            .ok()
+            .is_some_and(|roots| roots.iter().any(|ready| root.starts_with(ready)))
+        {
             return None;
         }
         let grams = trigrams(&query.to_ascii_lowercase());
@@ -119,10 +117,12 @@ impl IndexManager {
             return None;
         }
         let map = self.candidates.read().ok()?;
-        let mut sets = grams.iter().filter_map(|gram| map.get(gram));
-        let first = sets.next().cloned().unwrap_or_default();
+        let mut sets = grams.iter().map(|gram| map.get(gram));
+        let first = sets.next()?.cloned()?;
         let result: Vec<_> = sets
-            .fold(first, |acc, set| acc.intersection(set).cloned().collect())
+            .try_fold(first, |acc, set| {
+                set.map(|set| acc.intersection(set).cloned().collect())
+            })?
             .into_iter()
             .filter(|path| path.starts_with(root))
             .collect();
@@ -130,32 +130,122 @@ impl IndexManager {
     }
 }
 
-fn build_index(
+fn rebuild_index(
     roots: &BTreeMap<String, Vec<PathBuf>>,
+    excludes: &[String],
+    max_file_bytes: u64,
+    state: &Arc<RwLock<IndexSnapshot>>,
+    candidates: &Arc<RwLock<BTreeMap<String, BTreeSet<PathBuf>>>>,
+    ready_roots: &Arc<RwLock<BTreeSet<PathBuf>>>,
+    generation: &mut u64,
+) {
+    let matcher = match compile_excludes(excludes) {
+        Ok(matcher) => matcher,
+        Err(error) => {
+            if let Ok(mut current) = state.write() {
+                current.state = IndexState::Degraded;
+                current.last_error = Some(error);
+                current.generation = generation.saturating_add(1);
+            }
+            return;
+        }
+    };
+    let mut count = 0;
+    if let Ok(mut current) = state.write() {
+        current.state = IndexState::Building;
+        current.indexed_files = 0;
+        current.last_error = None;
+    }
+    if let Ok(mut map) = candidates.write() {
+        map.clear();
+    }
+    if let Ok(mut ready) = ready_roots.write() {
+        ready.clear();
+    }
+    for root in ordered_roots(roots) {
+        let result = build_root_index_with_matcher(&root, &matcher, max_file_bytes);
+        let (root_count, next) = match result {
+            Ok(result) => result,
+            Err(error) => {
+                if let Ok(mut current) = state.write() {
+                    current.state = IndexState::Degraded;
+                    current.last_error = Some(error);
+                    current.generation = generation.saturating_add(1);
+                }
+                return;
+            }
+        };
+        if let Ok(mut map) = candidates.write() {
+            for (gram, paths) in next {
+                map.entry(gram).or_default().extend(paths);
+            }
+        }
+        if let Ok(mut ready) = ready_roots.write() {
+            ready.insert(root);
+        }
+        count += root_count;
+        *generation += 1;
+        if let Ok(mut current) = state.write() {
+            current.indexed_files = count;
+            current.generation = *generation;
+        }
+    }
+    if let Ok(mut current) = state.write() {
+        current.state = IndexState::Ready;
+        current.last_error = None;
+    }
+}
+
+#[cfg(test)]
+fn build_root_index(
+    root: &Path,
     excludes: &[String],
     max_file_bytes: u64,
 ) -> Result<(usize, BTreeMap<String, BTreeSet<PathBuf>>), String> {
     let matcher = compile_excludes(excludes)?;
-    let mut count = 0;
+    build_root_index_with_matcher(root, &matcher, max_file_bytes)
+}
+
+fn build_root_index_with_matcher(
+    root: &Path,
+    excludes: &GlobSet,
+    max_file_bytes: u64,
+) -> Result<(usize, BTreeMap<String, BTreeSet<PathBuf>>), String> {
+    let root_device = fs::symlink_metadata(root)
+        .map_err(|error| format!("{}: {error}", root.display()))?
+        .dev();
     let mut map = BTreeMap::new();
-    for root in unique_roots(roots) {
-        let root_device = fs::symlink_metadata(&root)
-            .map_err(|error| format!("{}: {error}", root.display()))?
-            .dev();
-        count += walk(
-            &root,
-            &root,
-            root_device,
-            &matcher,
-            max_file_bytes,
-            &mut map,
-        )?;
-    }
+    let count = walk(
+        &root.to_path_buf(),
+        root,
+        root_device,
+        excludes,
+        max_file_bytes,
+        &mut map,
+    )?;
     Ok((count, map))
 }
 
-fn unique_roots(roots: &BTreeMap<String, Vec<PathBuf>>) -> BTreeSet<PathBuf> {
-    roots.values().flatten().cloned().collect()
+fn ordered_roots(roots: &BTreeMap<String, Vec<PathBuf>>) -> Vec<PathBuf> {
+    let mut ordered = Vec::new();
+    let mut seen = BTreeSet::new();
+    for name in ["home", "opt", "etc", "local"] {
+        if let Some(paths) = roots.get(name) {
+            for path in paths {
+                if seen.insert(path.clone()) {
+                    ordered.push(path.clone());
+                }
+            }
+        }
+    }
+    for paths in roots.values() {
+        for path in paths {
+            if seen.insert(path.clone()) {
+                ordered.push(path.clone());
+            }
+        }
+    }
+    ordered
 }
 
 fn walk(
@@ -274,7 +364,7 @@ mod tests {
 
         let mut roots = BTreeMap::new();
         roots.insert("home".to_string(), vec![root.path().to_path_buf()]);
-        let result = build_index(&roots, &[], 0);
+        let result = build_root_index(root.path(), &[], 0);
 
         let mut restore = fs::metadata(&denied).unwrap().permissions();
         restore.set_mode(0o755);
@@ -300,11 +390,27 @@ mod tests {
 
         let mut roots = BTreeMap::new();
         roots.insert("home".to_string(), vec![root.path().to_path_buf()]);
-        let (count, candidates) = build_index(&roots, &[], 0).unwrap();
+        let (count, candidates) = build_root_index(root.path(), &[], 0).unwrap();
 
         assert_eq!(count, 1);
         assert!(candidates
             .get("ind")
             .is_some_and(|paths| paths.contains(&readable)));
+    }
+
+    #[test]
+    fn roots_prioritize_home_before_other_named_roots() {
+        let mut roots = BTreeMap::new();
+        roots.insert("etc".to_string(), vec![PathBuf::from("/etc")]);
+        roots.insert("home".to_string(), vec![PathBuf::from("/home/roomhacker")]);
+        roots.insert("opt".to_string(), vec![PathBuf::from("/opt")]);
+        assert_eq!(
+            ordered_roots(&roots),
+            vec![
+                PathBuf::from("/home/roomhacker"),
+                PathBuf::from("/opt"),
+                PathBuf::from("/etc"),
+            ]
+        );
     }
 }
