@@ -2,7 +2,7 @@ use crate::backend::IndexState;
 use globset::{Glob, GlobSet, GlobSetBuilder};
 use notify::{RecommendedWatcher, RecursiveMode, Watcher};
 use std::{
-    collections::{BTreeMap, BTreeSet},
+    collections::{BTreeMap, BTreeSet, VecDeque},
     fs,
     io::ErrorKind,
     os::unix::fs::MetadataExt,
@@ -11,6 +11,9 @@ use std::{
     thread,
     time::Duration,
 };
+
+type IndexMap = BTreeMap<String, BTreeSet<PathBuf>>;
+type DirectoryScan = (usize, IndexMap, Vec<PathBuf>);
 
 #[derive(Clone, Debug)]
 pub struct IndexSnapshot {
@@ -163,8 +166,8 @@ fn rebuild_index(
         ready.clear();
     }
     for root in ordered_roots(roots) {
-        let units = match root_units(&root) {
-            Ok(units) => units,
+        let mut units: VecDeque<_> = match root_units(&root) {
+            Ok(units) => units.into(),
             Err(error) => {
                 if let Ok(mut current) = state.write() {
                     current.state = IndexState::Degraded;
@@ -174,9 +177,9 @@ fn rebuild_index(
                 return;
             }
         };
-        for unit in units {
-            let result = build_unit_index_with_matcher(&unit, &root, &matcher, max_file_bytes);
-            let (unit_count, next) = match result {
+        while let Some(unit) = units.pop_front() {
+            let result = scan_directory_unit(&unit, &root, &matcher, max_file_bytes);
+            let (unit_count, next, children) = match result {
                 Ok(result) => result,
                 Err(error) => {
                     if let Ok(mut current) = state.write() {
@@ -192,6 +195,7 @@ fn rebuild_index(
                     map.entry(gram).or_default().extend(paths);
                 }
             }
+            units.extend(children);
             count += unit_count;
             *generation += 1;
             if let Ok(mut current) = state.write() {
@@ -231,25 +235,43 @@ fn build_root_index(
     Ok((count, map))
 }
 
-fn build_unit_index_with_matcher(
+fn scan_directory_unit(
     unit: &Path,
     root: &Path,
     excludes: &GlobSet,
     max_file_bytes: u64,
-) -> Result<(usize, BTreeMap<String, BTreeSet<PathBuf>>), String> {
+) -> Result<DirectoryScan, String> {
     let root_device = fs::symlink_metadata(root)
         .map_err(|error| format!("{}: {error}", root.display()))?
         .dev();
     let mut map = BTreeMap::new();
-    let count = walk(
-        &unit.to_path_buf(),
-        root,
-        root_device,
-        excludes,
-        max_file_bytes,
-        &mut map,
-    )?;
-    Ok((count, map))
+    let metadata =
+        fs::symlink_metadata(unit).map_err(|error| format!("{}: {error}", unit.display()))?;
+    if metadata.dev() != root_device
+        || metadata.file_type().is_symlink()
+        || excluded(unit, root, excludes)
+    {
+        return Ok((0, map, Vec::new()));
+    }
+    if metadata.is_file() {
+        let count = walk(
+            &unit.to_path_buf(),
+            root,
+            root_device,
+            excludes,
+            max_file_bytes,
+            &mut map,
+        )?;
+        return Ok((count, map, Vec::new()));
+    }
+    if !metadata.is_dir() {
+        return Ok((0, map, Vec::new()));
+    }
+    let children = fs::read_dir(unit)
+        .map_err(|error| format!("{}: {error}", unit.display()))?
+        .filter_map(|entry| entry.ok().map(|entry| entry.path()))
+        .collect();
+    Ok((0, map, children))
 }
 
 fn root_units(root: &Path) -> Result<Vec<PathBuf>, String> {
