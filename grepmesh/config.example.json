@@ -27,5 +27,6 @@
   "topology_cache_path": "/var/lib/grepmesh-mcp/topology.json",
   "gptadmin_topology_url": "https://gptadmin.internal/mcp-relay/grepmesh",
   "gptadmin_token_env": "GPTADMIN_GREPMESH_TOKEN",
+  "peer_auth_token_env": "GREPMESH_PEER_TOKEN",
   "topology_ttl_ms": 30000
 }
