@@ -338,11 +338,14 @@ fn trigrams(value: &str) -> BTreeSet<String> {
 }
 
 fn excluded(path: &Path, root: &Path, excludes: &GlobSet) -> bool {
-    excludes.is_match(path)
-        || path
-            .strip_prefix(root)
-            .map(|relative| excludes.is_match(relative))
-            .unwrap_or(false)
+    let matches = |candidate: &Path| {
+        excludes.is_match(candidate)
+            || candidate
+                .strip_prefix(root)
+                .map(|relative| excludes.is_match(relative))
+                .unwrap_or(false)
+    };
+    matches(path) || matches(&path.join(".grepmesh-directory-probe"))
 }
 
 #[cfg(test)]
@@ -412,5 +415,12 @@ mod tests {
                 PathBuf::from("/etc"),
             ]
         );
+    }
+
+    #[test]
+    fn directory_exclusion_prunes_the_directory_itself() {
+        let root = PathBuf::from("/workspace");
+        let matcher = compile_excludes(&["**/.cache/**".to_string()]).unwrap();
+        assert!(excluded(&root.join(".cache"), &root, &matcher));
     }
 }
