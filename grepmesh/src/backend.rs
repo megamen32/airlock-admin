@@ -1,4 +1,5 @@
 use crate::config::{default_exclude_globs, LimitsConfig};
+use crate::index::IndexManager;
 use anyhow::{anyhow, Context, Result};
 use globset::Glob;
 use serde::{Deserialize, Serialize};
@@ -6,7 +7,7 @@ use std::{
     collections::{BTreeMap, BTreeSet},
     fs,
     path::{Path, PathBuf},
-    process::{Command, Stdio},
+    process::Stdio,
     time::Duration,
 };
 use tokio::{
@@ -135,6 +136,7 @@ pub struct LocalBackend {
     pub root_paths: BTreeMap<String, Vec<PathBuf>>,
     pub limits: LimitsConfig,
     pub exclude_globs: Vec<String>,
+    pub index: IndexManager,
 }
 
 impl LocalBackend {
@@ -142,12 +144,45 @@ impl LocalBackend {
         let root = root.into();
         let mut root_paths = BTreeMap::new();
         root_paths.insert("local".to_string(), vec![root.clone()]);
+        let excludes = default_exclude_globs();
+        let index =
+            IndexManager::start(root_paths.clone(), excludes.clone(), limits.max_file_bytes);
         Self {
             host_id: host_id.into(),
             root,
             root_paths,
             limits,
-            exclude_globs: default_exclude_globs(),
+            exclude_globs: excludes,
+            index,
+        }
+    }
+
+    pub fn from_config(
+        host_id: impl Into<String>,
+        root: impl Into<PathBuf>,
+        limits: LimitsConfig,
+        roots: BTreeMap<String, Vec<PathBuf>>,
+        exclude_globs: Vec<String>,
+    ) -> Self {
+        let root = root.into();
+        let mut root_paths = roots
+            .into_iter()
+            .filter(|(_, paths)| !paths.is_empty())
+            .collect::<BTreeMap<_, _>>();
+        root_paths.insert("local".to_string(), vec![root.clone()]);
+        let mut excludes = default_exclude_globs();
+        excludes.extend(exclude_globs);
+        excludes.sort();
+        excludes.dedup();
+        let index =
+            IndexManager::start(root_paths.clone(), excludes.clone(), limits.max_file_bytes);
+        Self {
+            host_id: host_id.into(),
+            root,
+            root_paths,
+            limits,
+            exclude_globs: excludes,
+            index,
         }
     }
 
@@ -155,6 +190,11 @@ impl LocalBackend {
         self.exclude_globs.extend(excludes);
         self.exclude_globs.sort();
         self.exclude_globs.dedup();
+        self.index = IndexManager::start(
+            self.root_paths.clone(),
+            self.exclude_globs.clone(),
+            self.limits.max_file_bytes,
+        );
         self
     }
 
@@ -171,34 +211,35 @@ impl LocalBackend {
         }
         configured.insert("local".to_string(), vec![self.root.clone()]);
         self.root_paths = configured;
+        self.index = IndexManager::start(
+            self.root_paths.clone(),
+            self.exclude_globs.clone(),
+            self.limits.max_file_bytes,
+        );
         self
     }
 
     pub fn status(&self) -> Result<HostStatus> {
-        let roots = self.selected_roots(&[])?;
-        let file_count = roots
-            .iter()
-            .map(|root| count_files(root, &self.exclude_globs))
-            .collect::<Result<Vec<_>>>()?
-            .into_iter()
-            .sum();
+        let index = self.index.status();
         Ok(HostStatus {
             host_id: self.host_id.clone(),
             root: self.root.display().to_string(),
-            backend: "rg".to_string(),
-            file_count,
-            index_state: None,
-            index_generation: 0,
-            indexed_files: 0,
-            index_last_error: None,
+            backend: "indexed+rg-fallback".to_string(),
+            file_count: index.indexed_files,
+            index_state: Some(index.state),
+            index_generation: index.generation,
+            indexed_files: index.indexed_files,
+            index_last_error: index.last_error,
         })
     }
 
     fn selected_roots(&self, names: &[String]) -> Result<Vec<PathBuf>> {
         let mut roots = Vec::new();
         if names.is_empty() {
-            for paths in self.root_paths.values() {
-                roots.extend(paths.iter().cloned());
+            for (name, paths) in &self.root_paths {
+                if name != "local" {
+                    roots.extend(paths.iter().cloned());
+                }
             }
         } else {
             for name in names {
@@ -260,6 +301,15 @@ impl LocalBackend {
             if remaining_time.is_zero() {
                 return Err(anyhow!("local rg search timed out"));
             }
+            let candidate_paths = if path_globs.is_empty()
+                && matches!(
+                    mode,
+                    SearchMode::Literal | SearchMode::CaseInsensitiveLiteral
+                ) {
+                self.index.candidate_paths(&query, &root)
+            } else {
+                None
+            };
             let outcome = search_text_impl(
                 &host_id,
                 &root,
@@ -272,6 +322,7 @@ impl LocalBackend {
                 max_file_bytes,
                 max_response_bytes,
                 deadline,
+                candidate_paths,
             )
             .await?;
             hits.extend(outcome.hits);
@@ -399,6 +450,7 @@ async fn search_text_impl(
     max_file_bytes: u64,
     max_response_bytes: usize,
     deadline: Instant,
+    candidate_paths: Option<Vec<PathBuf>>,
 ) -> Result<SearchOutcome> {
     let mut command = TokioCommand::new("rg");
     command.arg("-n").arg("--hidden").arg("--no-messages");
@@ -420,9 +472,27 @@ async fn search_text_impl(
     command
         .arg("--max-filesize")
         .arg(max_file_bytes.to_string());
+    if candidate_paths
+        .as_ref()
+        .is_some_and(|paths| !paths.is_empty())
+    {
+        command.arg("--with-filename");
+    }
     command.arg("--");
     command.arg(query);
-    command.arg(".");
+    if let Some(paths) = candidate_paths {
+        if paths.is_empty() {
+            return Ok(SearchOutcome {
+                hits: Vec::new(),
+                truncated: false,
+            });
+        }
+        for path in paths {
+            command.arg(path);
+        }
+    } else {
+        command.arg(".");
+    }
     let mut child = command
         .current_dir(root)
         .stdout(Stdio::piped())
@@ -729,7 +799,12 @@ fn path_hit_from_rg_line(
     if !path_query_matches(query, line) {
         return None;
     }
-    let abs = root.join(strip_current_dir_prefix(line));
+    let reported_path = Path::new(strip_current_dir_prefix(line));
+    let abs = if reported_path.is_absolute() {
+        reported_path.to_path_buf()
+    } else {
+        root.join(reported_path)
+    };
     Some(SearchHit {
         host_id: host_id.to_string(),
         path: abs.display().to_string(),
@@ -778,25 +853,6 @@ async fn read_context(
         });
     }
     Ok(out)
-}
-
-fn count_files(root: &Path, exclude_globs: &[String]) -> Result<usize> {
-    let mut command = Command::new("rg");
-    command.arg("--files").arg("--hidden").arg("--no-messages");
-    for glob in exclude_globs {
-        command.arg("--glob").arg(format!("!{glob}"));
-    }
-    let output = command
-        .arg(".")
-        .current_dir(root)
-        .stdout(Stdio::piped())
-        .stderr(Stdio::null())
-        .output()
-        .with_context(|| "run rg --files for count")?;
-    if !output.status.success() && output.status.code() != Some(1) {
-        return Err(anyhow!("rg --files failed with {}", output.status));
-    }
-    Ok(String::from_utf8_lossy(&output.stdout).lines().count())
 }
 
 fn normalize_absolute_path_any(roots: &[PathBuf], path: &Path) -> Result<PathBuf> {

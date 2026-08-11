@@ -2,16 +2,16 @@ use crate::{
     backend::LocalBackend, config::AppConfig, gptadmin::GptAdminTopologyClient, mcp::MeshService,
     topology::Topology, topology_cache::TopologySnapshot,
 };
-use anyhow::Result;
+use anyhow::{anyhow, Result};
 use axum::{
     extract::State,
-    http::{HeaderMap, StatusCode, Uri},
+    http::{header, HeaderMap, StatusCode, Uri},
     response::{IntoResponse, Response},
     routing::{get, post},
     Json, Router,
 };
 use serde_json::{json, Value};
-use std::{sync::Arc, time::Duration};
+use std::{env, sync::Arc, time::Duration};
 
 const DEFAULT_PROTOCOL_VERSION: &str = "2025-06-18";
 const CURRENT_PROTOCOL_VERSION: &str = "2026-07-28";
@@ -19,6 +19,8 @@ const CURRENT_PROTOCOL_VERSION: &str = "2026-07-28";
 #[derive(Clone)]
 struct AppState {
     service: Arc<MeshService>,
+    peer_auth_token: Option<String>,
+    require_peer_auth: bool,
 }
 
 pub async fn run_server(config: AppConfig) -> Result<()> {
@@ -80,16 +82,34 @@ pub async fn run_server(config: AppConfig) -> Result<()> {
     } else {
         Topology::new(config.host_id.clone(), config.peers.clone())
     };
-    let mut local = LocalBackend::new(
+    let local = LocalBackend::from_config(
         config.host_id.clone(),
         config.root.clone(),
         config.limits.clone(),
-    )
-    .with_excludes(config.exclude_globs.clone());
-    if !config.roots.is_empty() {
-        local = local.with_named_roots(config.roots.clone());
+        config.roots.clone(),
+        config.exclude_globs.clone(),
+    );
+    let peer_auth_token = config
+        .peer_auth_token_env
+        .as_deref()
+        .map(env::var)
+        .transpose()?
+        .filter(|token| !token.trim().is_empty());
+    let remote_bind = config.bind;
+    let local_bind = config.local_bind;
+    let require_peer_auth = !remote_bind.ip().is_loopback();
+    if require_peer_auth && local_bind.is_none() {
+        return Err(anyhow!(
+            "non-loopback bind requires a separate local_bind for the agent entrypoint"
+        ));
     }
-    let service = Arc::new(MeshService::new(local, topology));
+    if require_peer_auth && peer_auth_token.is_none() {
+        return Err(anyhow!(
+            "non-loopback bind requires a non-empty peer_auth_token_env"
+        ));
+    }
+    let service =
+        Arc::new(MeshService::new(local, topology).with_peer_auth_token(peer_auth_token.clone()));
     if let Some(client) = topology_client {
         let refresh_service = Arc::clone(&service);
         let cache_path = config.topology_cache_path.clone();
@@ -127,26 +147,47 @@ pub async fn run_server(config: AppConfig) -> Result<()> {
             }
         });
     }
-    let state = AppState { service };
-    let app = Router::new()
-        .route("/", get(health).post(handle_rpc))
-        .route("/mcp", post(handle_rpc))
-        .with_state(state);
-    let listener = tokio::net::TcpListener::bind(config.bind).await?;
-    if let Some(local_bind) = config.local_bind.filter(|bind| *bind != config.bind) {
+    let remote_app = build_app(AppState {
+        service: Arc::clone(&service),
+        peer_auth_token: peer_auth_token.clone(),
+        require_peer_auth,
+    });
+    let listener = tokio::net::TcpListener::bind(remote_bind).await?;
+    if let Some(local_bind) = local_bind.filter(|bind| *bind != remote_bind) {
         let local_listener = tokio::net::TcpListener::bind(local_bind).await?;
+        let local_app = build_app(AppState {
+            service,
+            peer_auth_token,
+            require_peer_auth: false,
+        });
         tokio::try_join!(
-            axum::serve(listener, app.clone()),
-            axum::serve(local_listener, app)
+            axum::serve(listener, remote_app),
+            axum::serve(local_listener, local_app)
         )?;
     } else {
-        axum::serve(listener, app).await?;
+        axum::serve(listener, remote_app).await?;
     }
     Ok(())
 }
 
-async fn health() -> Json<Value> {
-    Json(json!({"ok": true}))
+fn build_app(state: AppState) -> Router {
+    Router::new()
+        .route("/", get(health).post(handle_rpc))
+        .route("/mcp", post(handle_rpc))
+        .with_state(state)
+}
+
+async fn health(State(state): State<AppState>, headers: HeaderMap) -> Response {
+    if state.require_peer_auth
+        && validate_peer_auth(&headers, state.peer_auth_token.as_deref()).is_err()
+    {
+        return (
+            StatusCode::UNAUTHORIZED,
+            Json(json!({"ok": false, "error": "peer authentication failed"})),
+        )
+            .into_response();
+    }
+    (StatusCode::OK, Json(json!({"ok": true}))).into_response()
 }
 
 fn now_ms() -> u64 {
@@ -163,6 +204,19 @@ async fn handle_rpc(
     Json(payload): Json<Value>,
 ) -> Response {
     let id = payload.get("id").cloned().unwrap_or(Value::Null);
+    if state.require_peer_auth
+        && validate_peer_auth(&headers, state.peer_auth_token.as_deref()).is_err()
+    {
+        return (
+            StatusCode::UNAUTHORIZED,
+            Json(json!({
+                "jsonrpc": "2.0",
+                "error": {"code": -32003, "message": "peer authentication failed"},
+                "id": id,
+            })),
+        )
+            .into_response();
+    }
     if let Err(err) = validate_origin(&headers) {
         return (
             StatusCode::FORBIDDEN,
@@ -197,6 +251,22 @@ async fn handle_rpc(
     } else {
         (StatusCode::OK, Json(response)).into_response()
     }
+}
+
+fn validate_peer_auth(headers: &HeaderMap, expected: Option<&str>) -> anyhow::Result<()> {
+    let expected = expected
+        .filter(|token| !token.trim().is_empty())
+        .ok_or_else(|| anyhow!("peer authentication is not configured"))?;
+    let provided = headers
+        .get(header::AUTHORIZATION)
+        .ok_or_else(|| anyhow!("missing Authorization header"))?
+        .to_str()
+        .map_err(|_| anyhow!("invalid Authorization header"))?;
+    let expected_header = format!("Bearer {expected}");
+    if provided != expected_header {
+        return Err(anyhow!("invalid peer bearer token"));
+    }
+    Ok(())
 }
 
 async fn handle_rpc_inner(state: AppState, payload: Value) -> Result<Value> {
@@ -466,5 +536,15 @@ mod tests {
             negotiate_protocol_version(&json!({})),
             DEFAULT_PROTOCOL_VERSION
         );
+    }
+
+    #[test]
+    fn peer_auth_requires_exact_bearer_token() {
+        let mut headers = HeaderMap::new();
+        assert!(validate_peer_auth(&headers, Some("secret")).is_err());
+        headers.insert(header::AUTHORIZATION, "Bearer wrong".parse().unwrap());
+        assert!(validate_peer_auth(&headers, Some("secret")).is_err());
+        headers.insert(header::AUTHORIZATION, "Bearer secret".parse().unwrap());
+        assert!(validate_peer_auth(&headers, Some("secret")).is_ok());
     }
 }

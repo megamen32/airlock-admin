@@ -123,6 +123,8 @@ pub struct AppConfig {
     pub gptadmin_topology_url: Option<String>,
     #[serde(default)]
     pub gptadmin_token_env: Option<String>,
+    #[serde(default)]
+    pub peer_auth_token_env: Option<String>,
     #[serde(default = "default_topology_ttl_ms")]
     pub topology_ttl_ms: u64,
 }

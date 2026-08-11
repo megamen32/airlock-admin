@@ -209,6 +209,7 @@ pub struct MeshService {
     pub local: LocalBackend,
     pub topology: Arc<RwLock<Topology>>,
     pub client: Client,
+    peer_auth_token: Option<String>,
     seen_requests: Arc<std::sync::Mutex<BTreeMap<String, Instant>>>,
 }
 
@@ -218,8 +219,14 @@ impl MeshService {
             local,
             topology: Arc::new(RwLock::new(topology)),
             client: Client::new(),
+            peer_auth_token: None,
             seen_requests: Arc::new(std::sync::Mutex::new(BTreeMap::new())),
         }
+    }
+
+    pub fn with_peer_auth_token(mut self, token: Option<String>) -> Self {
+        self.peer_auth_token = token.filter(|value| !value.trim().is_empty());
+        self
     }
 
     pub fn replace_topology(&self, topology: Topology) {
@@ -881,13 +888,17 @@ impl MeshService {
         let value = timeout(
             Duration::from_millis(self.local.limits.peer_timeout_ms),
             async {
-                let resp = self
+                let mut request = self
                     .client
                     .post(url)
                     .header("Accept", "application/json, text/event-stream")
                     .header("MCP-Protocol-Version", "2026-07-28")
                     .header("Mcp-Method", "tools/call")
-                    .header("Mcp-Name", tool)
+                    .header("Mcp-Name", tool);
+                if let Some(token) = self.peer_auth_token.as_deref() {
+                    request = request.bearer_auth(token);
+                }
+                let resp = request
                     .json(&payload)
                     .send()
                     .await

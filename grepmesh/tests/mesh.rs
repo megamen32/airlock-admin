@@ -82,7 +82,7 @@ fn write_config(path: &PathBuf, cfg: &AppConfig) {
 }
 
 fn spawn_server(config: &PathBuf) -> Child {
-    Command::new(env!("CARGO_BIN_EXE_grepmesh"))
+    Command::new(env!("CARGO_BIN_EXE_grepmesh-mcp"))
         .arg("--config")
         .arg(config)
         .stdout(Stdio::null())
@@ -133,6 +133,7 @@ async fn black_box_two_process_peer_fanout_and_partial_results() {
         topology_cache_path: None,
         gptadmin_topology_url: None,
         gptadmin_token_env: None,
+        peer_auth_token_env: None,
         topology_ttl_ms: 30_000,
     };
     let cfg_a = AppConfig {
@@ -151,6 +152,7 @@ async fn black_box_two_process_peer_fanout_and_partial_results() {
         topology_cache_path: None,
         gptadmin_topology_url: None,
         gptadmin_token_env: None,
+        peer_auth_token_env: None,
         topology_ttl_ms: 30_000,
     };
     let path_a = temp_a.path().join("a.json");
@@ -186,7 +188,7 @@ async fn black_box_two_process_peer_fanout_and_partial_results() {
     .await;
     let status_text = status["result"]["content"][0]["text"].as_str().unwrap();
     let status_value: serde_json::Value = serde_json::from_str(status_text).unwrap();
-    assert_eq!(status_value["local"]["backend"], "rg");
+    assert_eq!(status_value["local"]["backend"], "indexed+rg-fallback");
 
     let search = rpc(
         &url_a,
@@ -347,6 +349,7 @@ async fn remote_partial_status_and_local_results_survive_fanout() {
         topology_cache_path: None,
         gptadmin_topology_url: None,
         gptadmin_token_env: None,
+        peer_auth_token_env: None,
         topology_ttl_ms: 30_000,
     };
     let path = temp.path().join("config.json");
@@ -449,6 +452,7 @@ async fn stalled_peer_body_keeps_completed_local_results() {
         topology_cache_path: None,
         gptadmin_topology_url: None,
         gptadmin_token_env: None,
+        peer_auth_token_env: None,
         topology_ttl_ms: 30_000,
     };
     let path = temp.path().join("config.json");

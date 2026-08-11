@@ -3,11 +3,16 @@ name = "grepmesh"
 version = "0.1.0"
 edition = "2021"
 
+[[bin]]
+name = "grepmesh-mcp"
+path = "src/main.rs"
+
 [dependencies]
 anyhow = "1"
 axum = "0.7"
 clap = { version = "4", features = ["derive"] }
 globset = "0.4"
+notify = "6"
 futures = "0.3"
 http = "1"
 reqwest = { version = "0.12", default-features = false, features = ["json", "stream", "rustls-tls"] }

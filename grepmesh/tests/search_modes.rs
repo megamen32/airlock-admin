@@ -2,6 +2,7 @@ use grepmesh::{
     backend::{LocalBackend, SearchMode},
     config::LimitsConfig,
 };
+use std::time::Duration;
 use std::{collections::BTreeMap, fs};
 
 #[tokio::test]
@@ -116,7 +117,7 @@ async fn rg_search_sees_files_created_after_backend_construction() {
     )
     .unwrap();
     let status = backend.status().unwrap();
-    assert_eq!(status.backend, "rg");
+    assert_eq!(status.backend, "indexed+rg-fallback");
     let hits = backend
         .search_text(
             "fresh-rg-content",
@@ -130,6 +131,45 @@ async fn rg_search_sees_files_created_after_backend_construction() {
         .unwrap();
     assert_eq!(hits.len(), 1);
     assert_eq!(hits[0].host_id, "A");
+}
+
+#[test]
+fn index_candidates_reconcile_create_and_delete() {
+    let root = tempfile::tempdir().unwrap();
+    let path = root.path().join("candidate.txt");
+    fs::write(&path, "INDEX_WATCH_TOKEN\n").unwrap();
+    let backend = LocalBackend::new("A", root.path(), Default::default());
+    let deadline = std::time::Instant::now() + Duration::from_secs(3);
+    while std::time::Instant::now() < deadline
+        && !backend
+            .index
+            .candidate_paths("INDEX_WATCH_TOKEN", root.path())
+            .unwrap_or_default()
+            .contains(&path)
+    {
+        std::thread::sleep(Duration::from_millis(50));
+    }
+    assert!(backend
+        .index
+        .candidate_paths("INDEX_WATCH_TOKEN", root.path())
+        .unwrap_or_default()
+        .contains(&path));
+    fs::remove_file(&path).unwrap();
+    let deadline = std::time::Instant::now() + Duration::from_secs(3);
+    while std::time::Instant::now() < deadline
+        && backend
+            .index
+            .candidate_paths("INDEX_WATCH_TOKEN", root.path())
+            .unwrap_or_default()
+            .contains(&path)
+    {
+        std::thread::sleep(Duration::from_millis(50));
+    }
+    assert!(!backend
+        .index
+        .candidate_paths("INDEX_WATCH_TOKEN", root.path())
+        .unwrap_or_default()
+        .contains(&path));
 }
 
 #[tokio::test]
