@@ -59,3 +59,22 @@ the prior incorrect footer URL/missing asset contract.
 
 Acceptance: the targeted regression test and `website` build pass; a deliberate
 bad canonical URL or absent docs asset makes the gate fail.
+
+## Worker implementation slice
+
+- Mode / subtype: implement / bugfix-TDD
+- Allowed paths: `website/src/components/site/footer.tsx`,
+  `website/scripts/check-docs-build.mjs`, `website/package.json`, and one
+  focused test under `website/scripts/` or `website/tests/` only.
+- Excluded paths: CI files, deployment configuration, generated `.next/`, all
+  other website source, and all unrelated dirty paths.
+- Maximum active minutes: 20.
+- One goal: correct the footer's canonical GPTAdmin link and add a standalone
+  build-output gate that fails when a manifest-generated public docs asset or
+  canonical link is missing/incorrect.
+- One acceptance gate: prove the new test fails against a deliberately mutated
+  fixture, then passes with current sources; `npm run build` invokes the gate
+  successfully.
+- Stop conditions: dependency/install failure, a need to modify CI/deployment,
+  or any required path outside the allowlist. Append detailed evidence here and
+  return only changed paths, commands, and results.
