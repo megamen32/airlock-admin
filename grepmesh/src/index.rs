@@ -5,6 +5,7 @@ use std::{
     collections::{BTreeMap, BTreeSet},
     fs,
     io::ErrorKind,
+    os::unix::fs::MetadataExt,
     path::{Path, PathBuf},
     sync::{mpsc, Arc, RwLock},
     thread,
@@ -138,7 +139,17 @@ fn build_index(
     let mut count = 0;
     let mut map = BTreeMap::new();
     for root in unique_roots(roots) {
-        count += walk(&root, &root, &matcher, max_file_bytes, &mut map)?;
+        let root_device = fs::symlink_metadata(&root)
+            .map_err(|error| format!("{}: {error}", root.display()))?
+            .dev();
+        count += walk(
+            &root,
+            &root,
+            root_device,
+            &matcher,
+            max_file_bytes,
+            &mut map,
+        )?;
     }
     Ok((count, map))
 }
@@ -150,6 +161,7 @@ fn unique_roots(roots: &BTreeMap<String, Vec<PathBuf>>) -> BTreeSet<PathBuf> {
 fn walk(
     path: &PathBuf,
     root: &Path,
+    root_device: u64,
     excludes: &GlobSet,
     max_file_bytes: u64,
     map: &mut BTreeMap<String, BTreeSet<PathBuf>>,
@@ -159,6 +171,9 @@ fn walk(
         Err(error) if error.kind() == ErrorKind::PermissionDenied => return Ok(0),
         Err(error) => return Err(format!("{}: {error}", path.display())),
     };
+    if metadata.dev() != root_device {
+        return Ok(0);
+    }
     if metadata.file_type().is_symlink() {
         return Ok(0);
     }
@@ -200,7 +215,14 @@ fn walk(
             Err(error) if error.kind() == ErrorKind::PermissionDenied => continue,
             Err(error) => return Err(error.to_string()),
         };
-        count += walk(&entry.path(), root, excludes, max_file_bytes, map)?;
+        count += walk(
+            &entry.path(),
+            root,
+            root_device,
+            excludes,
+            max_file_bytes,
+            map,
+        )?;
     }
     Ok(count)
 }
