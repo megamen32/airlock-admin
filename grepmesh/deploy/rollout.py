@@ -256,7 +256,8 @@ sudo -n install -o root -g root -m 0755 {shlex.quote(remote_artifact)} {shlex.qu
 sudo -n install -o root -g root -m 0644 {shlex.quote(remote_config)} {shlex.quote(q['config_path'])}
 sudo -n install -o root -g root -m 0644 {shlex.quote(remote_unit)} /etc/systemd/system/{shlex.quote(q['unit_name'])}
 sudo -n systemctl daemon-reload
-sudo -n systemctl enable --now {shlex.quote(q['unit_name'])}
+sudo -n systemctl enable {shlex.quote(q['unit_name'])}
+sudo -n systemctl restart {shlex.quote(q['unit_name'])}
 sudo -n sha256sum {shlex.quote(manifest['source']['install_path'])}
 sudo -n systemctl is-active {shlex.quote(q['unit_name'])}
 printf '__GREPMESH_BACKUP__|%s|%s|%s|%s\\n' {shlex.quote(backup_dir)} "$previous_binary" "$previous_config" "$previous_unit"
