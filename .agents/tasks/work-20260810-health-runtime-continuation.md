@@ -1311,3 +1311,26 @@ Overseer receipt: `CONTINUE` — read retry result, no new resend/churn before e
 - This removes the known local state-store/doctor latency contributor. It does
   not prove a remediation succeeded and does not authorize or start a new
   Hermes remediation attempt for the contained incident.
+
+## Authorized plan-003 retry receipt (2026-08-11)
+
+- The operator explicitly authorized one controlled remediation retry for the
+  already-selected `plan-003`. Before mutation, the durable delivery was read
+  as `failed`, attempt 4. An online SQLite backup was created at
+  `/var/backups/noticeplace-health/notify-center.sqlite3.before-remediation-attempt5-20260811T142906Z`
+  (84,377,600 bytes), then one conditional transition of exactly
+  `dlv_2c7160a0bc604e19b2ff86e7ad4ac918` moved it to `queued`. No new Telegram
+  card was created.
+- NoticePlace claimed it as attempt 5 and reserved it as `sending`. Agent-Herder
+  started Hermes job `hermes-job-b0d1f569-a65c-476f-8880-7c2a31052135` with the
+  fixed `openai-codex / gpt-5.6-luna / high / terminal` profile. One real useful
+  CLI action was observed (`pwd + 4 commands`); it was therefore not the earlier
+  initialization-only condition.
+- The delivery nevertheless reached terminal `failed` with `GPTAdmin agent job
+  reported terminal failure`, without a strict result object, independent
+  verification, or `health.resolved`. It then left the Hermes process alive
+  after the delivery had failed. The supervisor sent one scoped stop to this
+  exact job; Agent-Herder reports `stopped` and a later process check found no
+  matching Hermes remediation child.
+- No further retry, Telegram delivery, or remediation was started. The incident
+  remains degraded according to the independent verifier and is not resolved.
