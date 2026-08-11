@@ -88,6 +88,7 @@ pub async fn run_server(config: AppConfig) -> Result<()> {
         config.limits.clone(),
         config.roots.clone(),
         config.exclude_globs.clone(),
+        config.index_path.clone(),
     );
     let peer_auth_token = config
         .peer_auth_token_env

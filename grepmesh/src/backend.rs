@@ -163,6 +163,7 @@ impl LocalBackend {
         limits: LimitsConfig,
         roots: BTreeMap<String, Vec<PathBuf>>,
         exclude_globs: Vec<String>,
+        _index_path: PathBuf,
     ) -> Self {
         let root = root.into();
         let mut root_paths = roots

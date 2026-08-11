@@ -120,6 +120,8 @@ pub struct AppConfig {
     pub exclude_globs: Vec<String>,
     #[serde(default)]
     pub topology_cache_path: Option<PathBuf>,
+    #[serde(default = "default_index_path")]
+    pub index_path: PathBuf,
     #[serde(default)]
     pub gptadmin_topology_url: Option<String>,
     #[serde(default)]
@@ -132,6 +134,10 @@ pub struct AppConfig {
 
 fn default_topology_ttl_ms() -> u64 {
     30_000
+}
+
+fn default_index_path() -> PathBuf {
+    PathBuf::from("/var/lib/grepmesh-mcp/index.sqlite")
 }
 
 impl AppConfig {
