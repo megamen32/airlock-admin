@@ -4,6 +4,7 @@ use notify::{RecommendedWatcher, RecursiveMode, Watcher};
 use std::{
     collections::{BTreeMap, BTreeSet},
     fs,
+    io::ErrorKind,
     path::{Path, PathBuf},
     sync::{mpsc, Arc, RwLock},
     thread,
@@ -153,7 +154,11 @@ fn walk(
     max_file_bytes: u64,
     map: &mut BTreeMap<String, BTreeSet<PathBuf>>,
 ) -> Result<usize, String> {
-    let metadata = fs::symlink_metadata(path).map_err(|e| format!("{}: {e}", path.display()))?;
+    let metadata = match fs::symlink_metadata(path) {
+        Ok(metadata) => metadata,
+        Err(error) if error.kind() == ErrorKind::PermissionDenied => return Ok(0),
+        Err(error) => return Err(format!("{}: {error}", path.display())),
+    };
     if metadata.file_type().is_symlink() {
         return Ok(0);
     }
@@ -163,7 +168,11 @@ fn walk(
         {
             return Ok(0);
         }
-        let bytes = fs::read(path).map_err(|e| format!("{}: {e}", path.display()))?;
+        let bytes = match fs::read(path) {
+            Ok(bytes) => bytes,
+            Err(error) if error.kind() == ErrorKind::PermissionDenied => return Ok(0),
+            Err(error) => return Err(format!("{}: {error}", path.display())),
+        };
         if bytes.contains(&0) {
             return Ok(0);
         }
@@ -176,15 +185,19 @@ fn walk(
         }
         return Ok(1);
     }
+    let entries = match fs::read_dir(path) {
+        Ok(entries) => entries,
+        Err(error) if error.kind() == ErrorKind::PermissionDenied => return Ok(0),
+        Err(error) => return Err(format!("{}: {error}", path.display())),
+    };
     let mut count = 0;
-    for entry in fs::read_dir(path).map_err(|e| format!("{}: {e}", path.display()))? {
-        count += walk(
-            &entry.map_err(|e| e.to_string())?.path(),
-            root,
-            excludes,
-            max_file_bytes,
-            map,
-        )?;
+    for entry in entries {
+        let entry = match entry {
+            Ok(entry) => entry,
+            Err(error) if error.kind() == ErrorKind::PermissionDenied => continue,
+            Err(error) => return Err(error.to_string()),
+        };
+        count += walk(&entry.path(), root, excludes, max_file_bytes, map)?;
     }
     Ok(count)
 }
@@ -214,4 +227,36 @@ fn excluded(path: &Path, root: &Path, excludes: &GlobSet) -> bool {
             .strip_prefix(root)
             .map(|relative| excludes.is_match(relative))
             .unwrap_or(false)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::os::unix::fs::PermissionsExt;
+
+    #[test]
+    fn permission_denied_subtree_does_not_degrade_the_entire_index() {
+        let root = tempfile::tempdir().unwrap();
+        let readable = root.path().join("readable.txt");
+        let denied = root.path().join("denied");
+        fs::write(&readable, "INDEX_ACCESS_TOKEN\n").unwrap();
+        fs::create_dir(&denied).unwrap();
+        fs::write(denied.join("secret.txt"), "should-not-break-index\n").unwrap();
+        let mut permissions = fs::metadata(&denied).unwrap().permissions();
+        permissions.set_mode(0o000);
+        fs::set_permissions(&denied, permissions).unwrap();
+
+        let mut roots = BTreeMap::new();
+        roots.insert("home".to_string(), vec![root.path().to_path_buf()]);
+        let result = build_index(&roots, &[], 0);
+
+        let mut restore = fs::metadata(&denied).unwrap().permissions();
+        restore.set_mode(0o755);
+        fs::set_permissions(&denied, restore).unwrap();
+        let (count, candidates) = result.unwrap();
+        assert!(count >= 1);
+        assert!(candidates
+            .get("ind")
+            .is_some_and(|paths| paths.contains(&readable)));
+    }
 }
