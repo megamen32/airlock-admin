@@ -39,6 +39,7 @@
       "roots": {
         "home": ["/home/roomhacker"],
         "opt": ["/opt"],
+        "mobile-browser": ["/opt/mobile-browser"],
         "etc": ["/etc"]
       },
       "peers": [
@@ -58,6 +59,7 @@
       "roots": {
         "home": ["/home/roomhacker"],
         "opt": ["/opt"],
+        "mobile-browser": ["/opt/mobile-browser"],
         "etc": ["/etc"]
       },
       "peers": [
