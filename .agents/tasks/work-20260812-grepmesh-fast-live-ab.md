@@ -216,6 +216,35 @@ canary completes the two-node proof and restores the service afterward.
   access-only `Permission denied` diagnostics. This matches the new partial
   classification branch.
 
+## Live completion evidence
+
+- Deployed artifact SHA-256
+  `340083c3a6ba3a4969907fe53ef8dcb951236495272336c32855696d5ee67a2c`
+  to server-100 and server-88; rollout verifier reports both services active.
+- Memory after rollout: server-100 about 7.4 MB and server-88 about 6.3 MB,
+  down from about 9.3 GB and 33.5 GB respectively.
+- Added the bounded named root `mobile-browser=/opt/mobile-browser` on both
+  nodes after the first live `/opt` search exposed a 4.93-second broad-scan
+  bottleneck against the 2-second peer deadline.
+- Real server-100 MCP search for `scramjet-demo` on host `server-88` returned
+  `/opt/mobile-browser/package.json`, `partial=false`, host `ok=true`: local
+  10-sample median 13.4 ms and p95 39.2 ms. Remote `read_text` returned line 2
+  in 1.6 ms.
+- Independent `gpt-5.4-mini` A/B #1: direct SSH+rg 25/25, median 291.8 ms,
+  p95 304.7 ms; GrepMesh 25/25, median 12.7 ms, p95 14.5 ms. GrepMesh was
+  about 23x faster by median.
+- Independent `gpt-5.4-mini` A/B #2: GrepMesh 20/20, median 32.1 ms, p95
+  33.5 ms, no partial/failure. Its direct-A semantic parser reported a
+  contradictory 0/20 despite measured median 288.2 ms; a separate direct
+  five-run check returned the expected line every time at 280-310 ms, so that
+  A correctness count is recorded as a tester-harness defect, not product
+  evidence.
+- Controlled node-loss: with server-88 stopped, server-100 returned in 3.4 ms
+  with `partial=true`, zero results, and server-88 `ok=false`. The service was
+  restored by shell trap; `systemctl is-active` returned `active`, and a fresh
+  remote read returned `"name": "scramjet-demo"`.
+- Status: business objective complete and live-verified.
+
 ### Findings
 
 No task-scoped implementation findings.
