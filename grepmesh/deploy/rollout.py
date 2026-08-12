@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Preview-bound two-node GrepMesh install/verify/rollback helper.
+"""Preview-bound GrepMesh install/verify/rollback helper.
 
 The manifest contains no token. Apply refuses to run until the operator has
 provisioned the existing peer token and transport/firewall gate on both hosts.
@@ -27,8 +27,8 @@ def load_manifest(path: Path) -> dict[str, Any]:
     data = json.loads(path.read_text(encoding="utf-8"))
     if data.get("schema_version") != 1:
         raise RolloutError("unsupported manifest schema")
-    if len(data.get("targets", [])) != 2:
-        raise RolloutError("the vertical manifest must contain exactly two targets")
+    if len(data.get("targets", [])) < 2:
+        raise RolloutError("the mesh manifest must contain at least two targets")
     return data
 
 
