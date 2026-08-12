@@ -19,6 +19,15 @@ Status: planned
 
 <!-- Add new requests here before work starts. Name priority tradeoff. -->
 
+- [ ] Health Incident Autopilot: monitor current hosts, failed services, and
+  selected error/keyword log signals; route one deduplicated incident through
+  NoticePlace → GPTAdmin → Agent Herder → OpenCode/Hermes/OmniRoute, require
+  explicit plan choice, supervise progress, and prove a resolved Telegram/
+  NoticePlace trace. Research and three implementation plans are recorded in
+  `docs/health-incident-autopilot-current-state-2026-08-09.md` and
+  `docs/health-incident-autopilot-plans-2026-08-09.md`; implementation awaits
+  plan selection and technical-preview approval.
+
 - [ ] Windows/Android ShellMCP autostart everywhere: Windows is reboot-proven;
   the S21 exact-serial maintainer is installed and safely waiting for physical
   reconnect before its authorized reboot/Hub/relay acceptance.

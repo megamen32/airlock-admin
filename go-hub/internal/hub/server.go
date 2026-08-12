@@ -878,6 +878,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/mcp-relay/poll/", s.mcpRelayPoll)
 	mux.HandleFunc("/mcp-relay/result/", s.mcpRelayResult)
 	mux.HandleFunc("/mcp-relay/servers", s.requireCtl(s.mcpRelayServers))
+	mux.HandleFunc("/mcp-relay/grepmesh", s.requireCtl(s.mcpRelayGrepMeshTopology))
 	mux.HandleFunc("/mcp-relay/list_mcp_servers", s.requireCtl(s.mcpRelayServers))
 	// Legacy aliases kept for old clients only. Do not expose in OpenAPI.
 	mux.HandleFunc("/mcp-relay/agents", s.requireCtl(s.mcpRelayAgents))

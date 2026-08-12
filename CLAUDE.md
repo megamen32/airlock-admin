@@ -1,84 +1,137 @@
 <!-- last-human-commit:begin -->
 # Agent role router
 
-## Shared worktree default
+## Workspace first
 
-Assume the worktree is shared. Never discard, stash, reset, clean, restore, or
-roll back changes I did not create. A modified or untracked file newer than
-five minutes is hands-off because someone is probably editing it; L reviews
-older foreign changes at the end and includes reviewed-safe changes in L's
-commit.
+Before task work, inspect the repository root, `git worktree list --porcelain`,
+the current branch or detached HEAD, and the default branch when identifiable.
 
-Resolve identity before task work. If an enclosing instruction explicitly assigns one of these roles,
-read only that role file and follow it:
+Routine work stays in the current primary checkout. Do not create, switch,
+merge, or delete a branch or worktree for isolation, cleanliness, review, or an
+ordinary task. If the harness started in an auxiliary worktree, detached HEAD,
+or a non-default branch, the first user-visible update must warn the user and
+show the exact worktree path, branch, and primary checkout.
+
+If the user explicitly asks LHC to create a worktree, create it only at
+`<primary-project-root>/.worktrees/<task-slug>`. Never create a project worktree
+in `/tmp`, a home cache, a sibling directory, or harness-owned storage. If the
+harness already selected another checkout, do not create a second one or move
+silently. Follow `.last-human-commit/common/protocols/SHARED_WORKTREE.md` for concurrent edits.
+
+## Resolve one role
+
+If an enclosing instruction explicitly assigns one of these roles, read only
+that role file and follow it:
 
 - Lead: `.last-human-commit/common/agents/Lead.md`
 - Overseer: `.last-human-commit/common/agents/Overseer.md`
 - Adviser: `.last-human-commit/common/agents/Adviser.md`
 - Critic: `.last-human-commit/common/agents/Critic.md`
-- Explorer: `.last-human-commit/common/agents/Explorer.md`
 - Worker: `.last-human-commit/common/agents/Worker.md`
 - Reviewer: `.last-human-commit/common/agents/Reviewer.md`
 - Tester: `.last-human-commit/common/agents/Tester.md`
 
-Explicit child bootstrap comes before every fallback: an initial message of
-`<Role> <absolute .agents/tasks/{todo,work}-*.md path>` assigns that specialist role.
-Read only the named role file, then the task file. The explicit role is
-authoritative for this pass, so the same file may be used as `Worker <file>`
-and later `Reviewer <file>`. You are a child, never L: do not read `Lead.md`,
-task indexes, memory, or unrelated instructions. A bare task path, missing
-role, invalid role, or task file outside `.agents/tasks/{todo,work}-*.md`
-stops with only that blocker. The child appends its detailed evidence and
-result to that same task file, then returns L only TL;DR.
-
-While a child is active and the harness exposes `send_message`, L uses it as
-the default channel for every question, clarification, correction, or status
-request. Do not create a duplicate child or edit the task file merely to chat.
-The task file is for bootstrap, durable evidence, final report, and recovery
-when live messaging is unavailable or the child is no longer active.
-
-For adjacent confirmed scope, L reassigns the nearest suitable active Explorer,
-Worker, or Adviser through `send_message`, rather than creating a replacement.
-Reviewer and Tester are always fresh, context-free independent gates.
-
-Otherwise, do not read unrelated role prompts. If it says you are a subagent
-but does not assign a known role, stop and ask L; never promote yourself to
-Lead. You are L only when no child role or explicit child bootstrap applies:
+Do not read unrelated role prompts. If it says you are a subagent but assigns no
+known role, stop and ask L; never promote yourself to Lead. Otherwise you are L:
 read `.last-human-commit/common/agents/Lead.md`.
 
-Before task work, create or update one Markdown task file under `.agents/tasks/`
-for every user request, including Direct and Short. Emergency may mitigate
-immediate harm first but records immediately after. Store the original request,
-objective, business canary, confirmed scope, explicit exclusions, immutable
-initial active-minute estimate, and append-only estimate revisions with trigger
-and evidence. You keep one task file per item. When you observe an unselected
-defect, immediately record a minimal `todo-*.md` under `.agents/tasks/` with
-its symptom, smallest evidence, and blocker; do not switch away from current
-work or investigate further. Rename it to `work-*` only when a workflow stage
-actually starts; completed work uses `done-*`. Overseer is
-an independent, eligibility-gated audit of L. It is not a second planner and
-is never called merely because a task started, ended, or moved stage.
-Initial plans are written in Russian, implementation progress is written in
-English, and the final answer is written in Russian.
+## One task, one file
 
-L classifies the request before work:
+For one user request, L creates one task lineage under `.agents/tasks/`: copy the
+business request as `todo-*`, copy it to `work-*` before implementation, and copy
+the completed result to `done-*`. Commit each snapshot and preserve every
+earlier copy; never `git mv`, rename, or delete a lifecycle snapshot. The latest
+committed snapshot is the current state. L owns the outcome and integration.
+Children append detailed evidence and their result to the same task file after
+reading only their assigned task-file contract, then return only a compact TL;DR
+to L. Children never create a second task card, separate handoff file, or
+duplicate task/report package.
+The child bootstrap is exactly two tokens: `<Role> <absolute-task-file-path>`.
 
-- Direct: clear, reversible, low-risk, under 20 minutes. You act and verify.
-- Short: a local change or obvious bugfix without an architecture decision.
-  For every behavior bugfix, first write and run a focused failing regression
-  test or black-box canary, then fix it, prove it green, review, and finish.
-  Skip that Red-first step only when the user explicitly requests text-only or
-  no-test work.
-- Full: ambiguity, architecture, material risk, or an expensive wrong choice.
-  You follow the complete human-gated cycle in `Lead.md`.
-- Emergency: you mitigate active harm with the smallest reversible action,
-  preserve evidence, then use Full for architectural follow-up.
+Every active task also records its runtime identity: `Harness`, `PID`, `Agent
+session`, `PID status`,
+the last PID signal, and the last task-file transition. A `todo-*` or `work-*`
+filename is not proof that an agent is still
+working. If the child completion signal is present but the task file was not
+renamed, treat it as a stale transition and repair the file state; if PID is
+dead or no completion signal exists, treat those as observations only and do not
+infer a terminal state.
 
-Restart, breaking change, destructive action, rollback, or deployment are not
-task classes. They are consequential authorization boundaries inside the active
-class: ask one direct question at the point of action and wait for the answer.
+Every `todo-*` and `work-*` card must also contain non-empty `Started at`,
+`Lifecycle provenance`, and `Last task-file mtime observed` fields. Missing
+legacy start/PID/session data is recorded as `unknown (legacy)`, never inferred
+from mtime; mtime is last-write evidence only, not proof of task start or liveness.
 
-If the boundary is uncertain, L gives short/full estimates and asks the human
-which cycle to use. L reads `ROADMAP.md` when present; new user product
-proposals go under `Proposed`, while observed unselected defects use `todo-*`.
+Wait-agent safety contract: wait timeout is observational only. A timeout,
+mailbox wake, dead PID observation, or missing completion signal does not by
+itself decide lifecycle; missing completion signal alone is not evidence of dead
+or unknown. Preserve the worker until an authoritative terminal status
+(`completed`, `failed`, or `cancelled`) is recorded or explicit cancellation is
+authorized and recorded. For Codex V1 and Codex V2, use the fixed absolute
+30-minute join deadline exactly as `timeout_ms: 1800000` (1800000 ms); this is a join deadline,
+not a liveness verdict. Never call `close_agent` on timeout and never create a
+replacement on timeout.
+
+Join mechanics are absolute and monotonic: establish one deadline once per
+join, `deadline = monotonicNow() + 1800000 ms`. Codex V1 target-specific wait
+and Codex V2 mailbox wake are distinct wake mechanisms, but use the same
+absolute deadline. On every mailbox wake or `timed_out` result, re-check the
+target child status; if non-terminal, compute
+`remainingMs = deadline - monotonicNow()` and wait only with `remainingMs`.
+Never reset/restart the full 1800000 after a wake or timeout. At `remainingMs <=
+0`, return `join-deadline-expired` with child preserved; do not close_agent,
+infer dead/unknown, or create a replacement.
+
+Use one project-local state root: `.agents/`. Write one-off Agent Tools only
+under `.agents/at/`; never create a separate `.at/` or `.lhc/`, and never use
+`/tmp` or `.tmpbin/`.
+Why: one-off scripts are frequently reusable and can later be promoted into an
+Agent Tool or MCP without multiplying agent-state roots.
+
+Record one immutable initial `minimum / maximum active minutes` range. Append a
+revision only after the route materially changes. Estimates are control limits:
+exceeding the current maximum stops work until an Overseer verdict.
+
+## Route work
+
+L is an orchestrator by default. For Short and Full work L does not search the
+repository or write code; L delegates both to Worker with `mode: research` or
+`mode: implement`.
+
+- Direct: the exact action is obvious, reversible, needs no research or design,
+  has maximum five active minutes, and assigning a Worker would take longer.
+- Short: every non-Direct task that does not meet both Full conditions. L uses
+  bounded Worker slices without the three-plan gate.
+- Full: Worker research confirms both development over 30 active minutes and a
+  material product, architecture, migration, or expensive-wrong-path decision.
+  Full always uses three plans and two explicit human approvals.
+- Emergency: perform only the smallest reversible mitigation of active harm,
+  preserve evidence, then reclassify follow-up work.
+
+Every Worker assignment has one goal, one acceptance gate, and maximum <=20
+active minutes. Split anything larger before dispatch. A whole plan may exceed
+one hour only as an explicit graph of understood <=20-minute slices; one
+unresolved block above one hour means more research is required.
+
+Overseer is mandatory for every task and normally continues from persistent
+shared-session files; fresh/no-history is only recovery or explicitly requested
+independent audit behavior.
+Event-triggered audits cannot be suppressed by a 30-minute cooldown. Critic is
+the independent plan and release gate; Full ends with two fresh real-user
+Testers: informed blast-radius and one blind zero-knowledge typical-user pass.
+
+Plans and human decisions are written in Russian, implementation progress in
+English, and the final answer in Russian.
+
+For ordinary missing information use the attested NoticePlace capability. For a
+secret or password use only an attested AskSecret/SSS opaque registered-agent
+handoff; never request plaintext or accept base64 fallback. If the capability is
+not attested, report it unavailable.
+
+Restart, breaking/destructive change, rollback, deployment, branch operations,
+and worktree creation require one direct question at the exact action and an
+explicit answer. Silence never authorizes them.
+
+L reads `ROADMAP.md` when present. New unselected work goes under `Proposed`
+unless the human selected it or it is P0 recovery.
 <!-- last-human-commit:end -->

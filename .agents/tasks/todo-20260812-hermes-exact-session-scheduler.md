@@ -58,3 +58,9 @@ Return format: append detailed evidence here, then return only a TL;DR to Lead. 
 - Classification: research first; likely Full if the research confirms more than 30 active minutes and a material core/plugin boundary decision.
 - Current checkout warning already issued to user: `/home/roomhacker/gptadmin` is on `agent/gptadmin-parallel-browser-flows-scoped`; `main` and `origin/main` exist, but no branch operation is authorized.
 - Existing working tree is dirty (158 paths observed; 65 outside `.agents/`). Preserve all foreign work and stage only this task's snapshots when/if a checkpoint commit is safe.
+
+## Worker stop note — superseded target (2026-08-12)
+
+- User clarified that the target is the Hermes core/upstream exact-session ingress, not only the GPTAdmin/local adapter seam.
+- No repository source, installed runtime, adapter implementation, or plugin seam was explored in this worker turn; therefore no technical evidence is added and no claim about supportability is made.
+- No source files, runtime state, branches, worktrees, or task lifecycle snapshots were modified by this worker. Further exploration is intentionally stopped pending Lead re-routing/redecomposition for the Hermes core/upstream target.

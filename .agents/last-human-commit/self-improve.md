@@ -149,3 +149,104 @@
 - Which skill, MCP, or tool is missing? none; the missing capability was reviewer-thread capacity, not a domain tool.
 - What operation or error repeated? Full NoticePlace invocations were slow in journal commit wait, while focused suites were stable; guard: use focused gates first, then run full suite only after the diff settles.
 - State: fixed now; production deploy and live Telegram/Hermes gates remain pending
+## 2026-08-10 — GrepMesh MCP Full planning (handoff)
+
+- What slowed or confused L? `ctx_execute_file` rejected skill files outside its project root, and wrapped shell `if ... then` commands failed before execution.
+- Which instruction should change? context-mode skill: document a safe external-skill read fallback and preserve shell compound-command syntax when injecting `NODE_OPTIONS`.
+- Which skill, MCP, or tool is missing? Proposed: a host-authorized skill-reader or context-mode mode for absolute instruction files.
+- What operation or error repeated? 2 external-file access blocks and 2 `unexpected token then` wrapper errors; guard: use direct `sed` only for skill instructions and `test ... && ... || ...` for probes.
+- State: Proposed
+
+## 2026-08-10 — GrepMesh MCP normal plan selection (approval wait)
+
+- What slowed or confused L? none; the user selected the recommended plan directly.
+- Which instruction should change? none
+- Which skill, MCP, or tool is missing? none; graphify fast-path confirmed the existing managed-MCP ownership.
+- What operation or error repeated? 1 read-only graphify query; no repeated error, guard: preserve the isolated `grepmesh/` root and existing lifecycle owners.
+- State: needs human decision
+
+## 2026-08-10 — GrepMesh MCP implementation and Inspector handoff (Full)
+
+- What slowed or confused L? The first custom Streamable HTTP adapter always
+  advertised `2026-07-28`, which the independent Inspector rejected; later
+  black-box runs also exposed a temporary listener-readiness race and stale
+  test processes.
+- Which instruction should change? Require an independent MCP consumer after
+  every transport change, explicit protocol negotiation evidence, bounded
+  listener readiness, and a final process-cleanup audit before handoff.
+- Which skill, MCP, or tool is missing? none; the official Inspector CLI via
+  ephemeral `npx` supplied the missing real surface.
+- What operation or error repeated? Unit/e2e green initially masked consumer
+  incompatibility; guard: raw Inspector `tools/list` plus omitted-host,
+  remote-read, partial-failure output is now a release gate.
+- State: fixed now; production enrollment/auth/restart and official `rmcp`
+  crate migration remain explicit future gates
+
+## 2026-08-10 — Health topic boundary (Full handoff)
+
+- What slowed or confused L? Admin `save_topic` read auto-create only from primary env; the enabled flag existed in route env, so the first POST rejected without creating the topic.
+- Which instruction should change? Proposed: NoticePlace admin seam should preflight both documented env sources or expose the source of the auto-create flag in its validation error.
+- Which skill, MCP, or tool is missing? none; the deployed Bot-API helper plus protected admin HTTP seam were sufficient.
+- What operation or error repeated? 1 configuration rejection, then 1 successful topic creation and 1 route persistence; guard: preflight env ownership before external topic mutation.
+- State: needs human decision; no code change made because the user explicitly excluded env changes and Telegram sends.
+
+## 2026-08-11 — Health card ordering regression (Full)
+
+- What slowed or confused L? `service-ops` reported Hermes down because user D-Bus variables were absent and probed stale port `9119`; machine user-systemd showed `hermes-gateway.service` active on `18791`. Separately, the first real health send exposed plan-ordering failure.
+- Which instruction should change? Proposed: service-ops status/health must distinguish user-bus probe failure from unit state and support start-only without invoking the tracked-change-blocked updater.
+- Which skill, MCP, or tool is missing? none; BrowserOS plus the live NoticePlace DB supplied the missing business proof.
+- What operation or error repeated? 2 health cards sent before plans, including 1 synthetic canary; guard added: retry until exactly three validated plans and supersede initial delivery on `health.plans_attached`.
+- State: fixed now locally; fresh Reviewer/Critic and production deploy remain pending.
+
+## 2026-08-11 — Health delivery coalescing and lease generation (Short)
+
+- What slowed or confused L? The first delivery fix handled only queued legacy rows and two named delivery-key suffixes; claimed rows and generic Telegram policy roots still produced duplicate sends.
+- Which instruction should change? Health reconciliation must inspect every `telegram.*` row, choose one canonical active slot, cancel all other queued/claimed rows under the send lock, and compare the worker's lease generation before external delivery.
+- Which skill, MCP, or tool is missing? none; red-first temporary-database reproductions and the selected delivery suite supplied the required evidence.
+- What operation or error repeated? Fresh Reviewer/Critic found the same P0 three-row/race class twice; guard: do not deploy until mixed `claimed`, `sent`, and generic-root regressions are green and a fresh pair passes.
+- State: fixed locally (`110 passed` selected suite); production queue audit, Fleet deploy, live canary, Hermes egress, remediation, and fresh black-box Tester remain pending.
+
+## 2026-08-11 — GrepMesh rg-only federation (Full)
+
+- What slowed or confused L? The untracked GrepMesh tree plus a Worker shutdown left a partial source edit; ownership and compile checks had to be re-established before each gate.
+- Which instruction should change? SHARED_WORKTREE: after a child shutdown, explicitly inspect and label partial owned paths before reassignment.
+- Which skill, MCP, or tool is missing? none; the official MCP Inspector CLI supplied the required real consumer surface.
+- What operation or error repeated? 2 wrong-root combined commands (`cargo`/`go`); guard: run each tool with its explicit project cwd and record exit code separately.
+- State: fixed now; production install/auth/restart and five-host rollout remain explicit future gates.
+
+## 2026-08-11 — GrepMesh deploy preflight and Earn or Halt MCP canary (Full)
+
+- What slowed or confused L? No GrepMesh deploy manifest/target list existed; a broad `rg` over `/home` also produced multi-megabyte dependency output before path scoping was tightened.
+- Which instruction should change? SHARED_WORKTREE or graphify: provide a bounded source-search recipe that excludes caches, dependencies, task logs, and generated artifacts by default.
+- Which skill, MCP, or tool is missing? A GrepMesh rollout/preview skill is missing; the existing `lhc-rollout` manifest targets LastHumanCommit and cannot deploy GrepMesh.
+- What operation or error repeated? 1 artifact/unit naming mismatch (`grepmesh` vs `/usr/local/bin/grepmesh-mcp`); guard: require an artifact-to-ExecStart check in the deployment preview.
+- State: Proposed; no production mutation made.
+
+## 2026-08-11 — GrepMesh recovery vertical slice
+- What slowed or confused L? The product gap was deployment/trust topology, not another local search benchmark.
+- Which instruction should change? Require a real transport/auth preflight and a release artifact preview before any service restart claim.
+- Which skill, MCP, or tool is missing? A first-class GrepMesh rollout adapter for GPTAdmin ShellMCP is missing; current helper is SSH/local oriented.
+- What operation or error repeated? Peer env was absent on both hosts; guard: fail closed on non-loopback bind and ask for explicit trust-material authority.
+- State: code/tests/release/preview complete; install and canary blocked on peer trust material.
+
+## 2026-08-11 — GrepMesh rollout provenance preflight
+- What slowed or confused L? A manifest pinned to its own checkout HEAD made a reproducible committed rollout impossible.
+- Which instruction should change? Deployment confirmation must bind the manifest, unit, generated config, artifact, and a committed binary-source revision separately.
+- Which skill, MCP, or tool is missing? GPTAdmin ShellMCP needs a rollout adapter that can transfer sealed artifacts without falling back to SSH.
+- What operation or error repeated? server-88 home traversal would fail for a new service user; guard: preflight directory mode and encode a minimum supplementary group in the unit.
+- State: committed two-stage provenance and permission fix; production token/install gate remains explicit.
+
+## 2026-08-11 — GrepMesh deployment block
+- What slowed or confused L? The secure transport was available but did not imply authority to mint shared inter-node credentials.
+- Which instruction should change? Deployment requests should specify whether a missing peer secret may be generated or must come from an existing secret authority.
+- Which skill, MCP, or tool is missing? GPTAdmin needs an auditable create-or-reference peer-secret workflow.
+- What operation or error repeated? Three continuations reached the absent `peer.env` gate; guard: mark the goal blocked instead of retrying a credential-creating action.
+- State: blocked pending one explicit authorization or secret reference.
+
+## 2026-08-11 — Dual-agent GrepMesh speed and all-host source trace (Full)
+
+- What slowed or confused L? Broad GrepMesh roots plus server load around 47-51 made the first MCP agent exceed 120 seconds; a local canary could not cross the remote upstream boundary.
+- Which instruction should change? GrepMesh task guidance should require bounded root aliases and a remote-peer target before comparing MCP against bare `rg`.
+- Which skill, MCP, or tool is missing? A production GrepMesh mesh/deployment manifest is missing; the temporary single-node MCP cannot inspect server-88.
+- What operation or error repeated? 5 SSH probes used nonexistent alias `server-88` before the configured alias `88` succeeded; guard: validate SSH aliases from `~/.ssh/config` before remote probes.
+- State: Proposed; no production mutation made.

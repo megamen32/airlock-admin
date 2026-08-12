@@ -1,6 +1,7 @@
 use crate::backend::IndexState;
 use globset::{Glob, GlobSet, GlobSetBuilder};
 use notify::{RecommendedWatcher, RecursiveMode, Watcher};
+use rusqlite::{params, Connection};
 use std::{
     collections::{BTreeMap, BTreeSet, VecDeque},
     fs,
@@ -13,7 +14,86 @@ use std::{
 };
 
 type IndexMap = BTreeMap<String, BTreeSet<PathBuf>>;
-type DirectoryScan = (usize, IndexMap, Vec<PathBuf>);
+type DirectoryScan = (usize, IndexMap, Vec<IndexedDocument>, Vec<PathBuf>);
+
+#[derive(Clone, Debug)]
+struct IndexedDocument {
+    path: PathBuf,
+    body: String,
+}
+
+struct RebuildState<'a> {
+    snapshot: &'a Arc<RwLock<IndexSnapshot>>,
+    candidates: &'a Arc<RwLock<BTreeMap<String, BTreeSet<PathBuf>>>>,
+    ready_roots: &'a Arc<RwLock<BTreeSet<PathBuf>>>,
+    persistent: Option<&'a PersistentIndex>,
+}
+
+#[derive(Clone, Debug)]
+pub struct PersistentIndex {
+    path: PathBuf,
+}
+
+impl PersistentIndex {
+    pub fn open(path: PathBuf) -> Result<Self, String> {
+        if let Some(parent) = path.parent() {
+            fs::create_dir_all(parent).map_err(|error| format!("{}: {error}", parent.display()))?;
+        }
+        let store = Self { path };
+        store.connection()?;
+        Ok(store)
+    }
+
+    fn connection(&self) -> Result<Connection, String> {
+        let connection = Connection::open(&self.path).map_err(|error| error.to_string())?;
+        connection
+            .execute_batch(
+                "PRAGMA journal_mode=WAL;\
+                 CREATE VIRTUAL TABLE IF NOT EXISTS grepmesh_documents \
+                 USING fts5(path UNINDEXED, body, tokenize='trigram');",
+            )
+            .map_err(|error| error.to_string())?;
+        Ok(connection)
+    }
+
+    pub fn replace_document(&self, path: &Path, body: &str) -> Result<(), String> {
+        let connection = self.connection()?;
+        let path = path.display().to_string();
+        connection
+            .execute(
+                "DELETE FROM grepmesh_documents WHERE path = ?1",
+                params![path],
+            )
+            .map_err(|error| error.to_string())?;
+        connection
+            .execute(
+                "INSERT INTO grepmesh_documents(path, body) VALUES (?1, ?2)",
+                params![path, body],
+            )
+            .map_err(|error| error.to_string())?;
+        Ok(())
+    }
+
+    pub fn clear(&self) -> Result<(), String> {
+        let connection = self.connection()?;
+        connection
+            .execute("DELETE FROM grepmesh_documents", [])
+            .map_err(|error| error.to_string())?;
+        Ok(())
+    }
+
+    pub fn candidates(&self, query: &str) -> Result<Vec<PathBuf>, String> {
+        let connection = self.connection()?;
+        let mut statement = connection
+            .prepare("SELECT path FROM grepmesh_documents WHERE body MATCH ?1")
+            .map_err(|error| error.to_string())?;
+        let rows = statement
+            .query_map(params![query], |row| row.get::<_, String>(0))
+            .map_err(|error| error.to_string())?;
+        rows.map(|row| row.map(PathBuf::from).map_err(|error| error.to_string()))
+            .collect()
+    }
+}
 
 #[derive(Clone, Debug)]
 pub struct IndexSnapshot {
@@ -39,6 +119,7 @@ pub struct IndexManager {
     snapshot: Arc<RwLock<IndexSnapshot>>,
     candidates: Arc<RwLock<BTreeMap<String, BTreeSet<PathBuf>>>>,
     ready_roots: Arc<RwLock<BTreeSet<PathBuf>>>,
+    persistent: Option<PersistentIndex>,
 }
 
 impl IndexManager {
@@ -46,6 +127,7 @@ impl IndexManager {
         roots: BTreeMap<String, Vec<PathBuf>>,
         excludes: Vec<String>,
         max_file_bytes: u64,
+        persistent_path: Option<PathBuf>,
     ) -> Self {
         let snapshot = Arc::new(RwLock::new(IndexSnapshot {
             state: IndexState::Building,
@@ -56,6 +138,19 @@ impl IndexManager {
         let candidate_state = Arc::clone(&candidates);
         let ready_roots = Arc::new(RwLock::new(BTreeSet::new()));
         let ready_root_state = Arc::clone(&ready_roots);
+        let persistent =
+            persistent_path.and_then(|path| match PersistentIndex::open(path.clone()) {
+                Ok(index) => Some(index),
+                Err(error) => {
+                    if let Ok(mut current) = state.write() {
+                        current.state = IndexState::Degraded;
+                        current.last_error =
+                            Some(format!("open persistent index {}: {error}", path.display()));
+                    }
+                    None
+                }
+            });
+        let persistent_state = persistent.clone();
         thread::spawn(move || {
             let (events, rx) = mpsc::channel();
             let event_state = Arc::clone(&state);
@@ -75,9 +170,12 @@ impl IndexManager {
                     &roots,
                     &excludes,
                     max_file_bytes,
-                    &state,
-                    &candidate_state,
-                    &ready_root_state,
+                    RebuildState {
+                        snapshot: &state,
+                        candidates: &candidate_state,
+                        ready_roots: &ready_root_state,
+                        persistent: persistent_state.as_ref(),
+                    },
                     &mut generation,
                 )
             };
@@ -93,6 +191,7 @@ impl IndexManager {
             snapshot,
             candidates,
             ready_roots,
+            persistent,
         }
     }
 
@@ -119,6 +218,19 @@ impl IndexManager {
         if grams.is_empty() {
             return None;
         }
+        if let Some(persistent) = &self.persistent {
+            match persistent.candidates(query) {
+                Ok(paths) => {
+                    return Some(
+                        paths
+                            .into_iter()
+                            .filter(|path| path.starts_with(root))
+                            .collect(),
+                    );
+                }
+                Err(_) => return None,
+            }
+        }
         let map = self.candidates.read().ok()?;
         let mut sets = grams.iter().map(|gram| map.get(gram));
         let first = sets.next()?.cloned()?;
@@ -137,15 +249,13 @@ fn rebuild_index(
     roots: &BTreeMap<String, Vec<PathBuf>>,
     excludes: &[String],
     max_file_bytes: u64,
-    state: &Arc<RwLock<IndexSnapshot>>,
-    candidates: &Arc<RwLock<BTreeMap<String, BTreeSet<PathBuf>>>>,
-    ready_roots: &Arc<RwLock<BTreeSet<PathBuf>>>,
+    rebuild: RebuildState<'_>,
     generation: &mut u64,
 ) {
     let matcher = match compile_excludes(excludes) {
         Ok(matcher) => matcher,
         Err(error) => {
-            if let Ok(mut current) = state.write() {
+            if let Ok(mut current) = rebuild.snapshot.write() {
                 current.state = IndexState::Degraded;
                 current.last_error = Some(error);
                 current.generation = generation.saturating_add(1);
@@ -154,22 +264,32 @@ fn rebuild_index(
         }
     };
     let mut count = 0;
-    if let Ok(mut current) = state.write() {
+    if let Ok(mut current) = rebuild.snapshot.write() {
         current.state = IndexState::Building;
         current.indexed_files = 0;
         current.last_error = None;
     }
-    if let Ok(mut map) = candidates.write() {
+    if let Ok(mut map) = rebuild.candidates.write() {
         map.clear();
     }
-    if let Ok(mut ready) = ready_roots.write() {
+    if let Ok(mut ready) = rebuild.ready_roots.write() {
         ready.clear();
+    }
+    if let Some(persistent) = rebuild.persistent {
+        if let Err(error) = persistent.clear() {
+            if let Ok(mut current) = rebuild.snapshot.write() {
+                current.state = IndexState::Degraded;
+                current.last_error = Some(error);
+                current.generation = generation.saturating_add(1);
+            }
+            return;
+        }
     }
     for root in ordered_roots(roots) {
         let mut units: VecDeque<_> = match root_units(&root) {
             Ok(units) => units.into(),
             Err(error) => {
-                if let Ok(mut current) = state.write() {
+                if let Ok(mut current) = rebuild.snapshot.write() {
                     current.state = IndexState::Degraded;
                     current.last_error = Some(error);
                     current.generation = generation.saturating_add(1);
@@ -179,10 +299,10 @@ fn rebuild_index(
         };
         while let Some(unit) = units.pop_front() {
             let result = scan_directory_unit(&unit, &root, &matcher, max_file_bytes);
-            let (unit_count, next, children) = match result {
+            let (unit_count, next, documents, children) = match result {
                 Ok(result) => result,
                 Err(error) => {
-                    if let Ok(mut current) = state.write() {
+                    if let Ok(mut current) = rebuild.snapshot.write() {
                         current.state = IndexState::Degraded;
                         current.last_error = Some(error);
                         current.generation = generation.saturating_add(1);
@@ -190,24 +310,38 @@ fn rebuild_index(
                     return;
                 }
             };
-            if let Ok(mut map) = candidates.write() {
+            if let Ok(mut map) = rebuild.candidates.write() {
                 for (gram, paths) in next {
                     map.entry(gram).or_default().extend(paths);
+                }
+            }
+            if let Some(persistent) = rebuild.persistent {
+                for document in documents {
+                    if let Err(error) = persistent.replace_document(&document.path, &document.body)
+                    {
+                        if let Ok(mut current) = rebuild.snapshot.write() {
+                            current.state = IndexState::Degraded;
+                            current.last_error =
+                                Some(format!("{}: {error}", document.path.display()));
+                            current.generation = generation.saturating_add(1);
+                        }
+                        return;
+                    }
                 }
             }
             units.extend(children);
             count += unit_count;
             *generation += 1;
-            if let Ok(mut current) = state.write() {
+            if let Ok(mut current) = rebuild.snapshot.write() {
                 current.indexed_files = count;
                 current.generation = *generation;
             }
         }
-        if let Ok(mut ready) = ready_roots.write() {
+        if let Ok(mut ready) = rebuild.ready_roots.write() {
             ready.insert(root);
         }
     }
-    if let Ok(mut current) = state.write() {
+    if let Ok(mut current) = rebuild.snapshot.write() {
         current.state = IndexState::Ready;
         current.last_error = None;
     }
@@ -224,6 +358,7 @@ fn build_root_index(
         .map_err(|error| format!("{}: {error}", root.display()))?
         .dev();
     let mut map = BTreeMap::new();
+    let mut documents = Vec::new();
     let count = walk(
         &root.to_path_buf(),
         root,
@@ -231,6 +366,7 @@ fn build_root_index(
         &matcher,
         max_file_bytes,
         &mut map,
+        &mut documents,
     )?;
     Ok((count, map))
 }
@@ -248,7 +384,7 @@ fn scan_directory_unit(
     let metadata = match fs::symlink_metadata(unit) {
         Ok(metadata) => metadata,
         Err(error) if error.kind() == ErrorKind::PermissionDenied => {
-            return Ok((0, map, Vec::new()))
+            return Ok((0, map, Vec::new(), Vec::new()))
         }
         Err(error) => return Err(format!("{}: {error}", unit.display())),
     };
@@ -256,9 +392,10 @@ fn scan_directory_unit(
         || metadata.file_type().is_symlink()
         || excluded(unit, root, excludes)
     {
-        return Ok((0, map, Vec::new()));
+        return Ok((0, map, Vec::new(), Vec::new()));
     }
     if metadata.is_file() {
+        let mut documents = Vec::new();
         let count = walk(
             &unit.to_path_buf(),
             root,
@@ -266,11 +403,12 @@ fn scan_directory_unit(
             excludes,
             max_file_bytes,
             &mut map,
+            &mut documents,
         )?;
-        return Ok((count, map, Vec::new()));
+        return Ok((count, map, documents, Vec::new()));
     }
     if !metadata.is_dir() {
-        return Ok((0, map, Vec::new()));
+        return Ok((0, map, Vec::new(), Vec::new()));
     }
     let children = match fs::read_dir(unit) {
         Ok(entries) => entries
@@ -279,7 +417,7 @@ fn scan_directory_unit(
         Err(error) if error.kind() == ErrorKind::PermissionDenied => Vec::new(),
         Err(error) => return Err(format!("{}: {error}", unit.display())),
     };
-    Ok((0, map, children))
+    Ok((0, map, Vec::new(), children))
 }
 
 fn root_units(root: &Path) -> Result<Vec<PathBuf>, String> {
@@ -326,6 +464,7 @@ fn walk(
     excludes: &GlobSet,
     max_file_bytes: u64,
     map: &mut BTreeMap<String, BTreeSet<PathBuf>>,
+    documents: &mut Vec<IndexedDocument>,
 ) -> Result<usize, String> {
     let metadata = match fs::symlink_metadata(path) {
         Ok(metadata) => metadata,
@@ -354,12 +493,16 @@ fn walk(
             return Ok(0);
         }
         let text = match String::from_utf8(bytes) {
-            Ok(text) => text.to_ascii_lowercase(),
+            Ok(text) => text,
             Err(_) => return Ok(0),
         };
-        for gram in trigrams(&text) {
+        for gram in trigrams(&text.to_ascii_lowercase()) {
             map.entry(gram).or_default().insert(path.clone());
         }
+        documents.push(IndexedDocument {
+            path: path.clone(),
+            body: text,
+        });
         return Ok(1);
     }
     if !metadata.is_dir() {
@@ -384,6 +527,7 @@ fn walk(
             excludes,
             max_file_bytes,
             map,
+            documents,
         )?;
     }
     Ok(count)
@@ -493,5 +637,31 @@ mod tests {
         let root = PathBuf::from("/workspace");
         let matcher = compile_excludes(&["**/.cache/**".to_string()]).unwrap();
         assert!(excluded(&root.join(".cache"), &root, &matcher));
+    }
+
+    #[test]
+    fn persistent_index_replaces_documents_and_survives_reopen() {
+        let dir = tempfile::tempdir().unwrap();
+        let db = dir.path().join("index.sqlite");
+        let document = dir.path().join("producer.rs");
+        let index = PersistentIndex::open(db.clone()).unwrap();
+        index
+            .replace_document(&document, "pub struct HealthProducer")
+            .unwrap();
+        assert_eq!(
+            index.candidates("HealthProducer").unwrap(),
+            vec![document.clone()]
+        );
+        index
+            .replace_document(&document, "replacement body")
+            .unwrap();
+        assert!(index.candidates("HealthProducer").unwrap().is_empty());
+        assert_eq!(
+            PersistentIndex::open(db)
+                .unwrap()
+                .candidates("replacement")
+                .unwrap(),
+            vec![document]
+        );
     }
 }

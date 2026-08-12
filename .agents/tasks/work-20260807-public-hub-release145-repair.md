@@ -88,3 +88,16 @@ User authorized all required restarts and requested an FRP watchdog. Apply only 
 ## Status
 
 Complete. Runtime, tests, and real per-edge Custom GPT/MCP canaries are green; ready to commit and publish.
+
+## BrowserClaw direct browser-flow gate 2026-08-07
+
+- Rechecked through the actual GPTAdmin app surface on `shell:mac-mini-2012.lan`, not only by probing the public HTTP endpoint.
+- Initial `gptadmin_execute(mcp_tools, ref=BrowserClaw)` and `gptadmin_execute(mcp_call, name=tabs)` remained `running`; BrowserClaw status showed the child and `mcp-remote` processes alive, so process health alone was not accepted as proof.
+- Direct local BrowserClaw handshake from the selected Mac host returned HTTP 200, protocol `2025-06-18`, server `browserclaw 0.0.14`, 17 browser tools, and a real `tabs(action=list)` response containing the current Telegram and ChatGPT tabs.
+- Restarted only the configured BrowserClaw child using the previously authorized restart scope. After restart, GPTAdmin `mcp_tools(ref=BrowserClaw)` completed and returned the full 17-tool catalog.
+- Actual GPTAdmin child call then completed: `mcp_call(ref=BrowserClaw, name=tabs, arguments={action:list})` returned the real tab list.
+- Full browser canary through GPTAdmin completed: `tabs(action:new, url=https://example.com, background=true)` opened page 3 and returned an `Example Domain` snapshot; explicit `snapshot(page=3, mode=interactive)` returned the page accessibility tree; `tabs(action=close, page=3)` cleaned up successfully.
+
+## Status
+
+Complete. Separate BrowserClaw MCP and its real browser flow are now confirmed through GPTAdmin after a bounded child restart; the earlier green claim was corrected because the first live call had been stuck.

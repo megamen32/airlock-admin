@@ -145,8 +145,12 @@ impl LocalBackend {
         let mut root_paths = BTreeMap::new();
         root_paths.insert("local".to_string(), vec![root.clone()]);
         let excludes = default_exclude_globs();
-        let index =
-            IndexManager::start(root_paths.clone(), excludes.clone(), limits.max_file_bytes);
+        let index = IndexManager::start(
+            root_paths.clone(),
+            excludes.clone(),
+            limits.max_file_bytes,
+            None,
+        );
         Self {
             host_id: host_id.into(),
             root,
@@ -163,7 +167,7 @@ impl LocalBackend {
         limits: LimitsConfig,
         roots: BTreeMap<String, Vec<PathBuf>>,
         exclude_globs: Vec<String>,
-        _index_path: PathBuf,
+        index_path: PathBuf,
     ) -> Self {
         let root = root.into();
         let mut root_paths = roots
@@ -175,8 +179,12 @@ impl LocalBackend {
         excludes.extend(exclude_globs);
         excludes.sort();
         excludes.dedup();
-        let index =
-            IndexManager::start(root_paths.clone(), excludes.clone(), limits.max_file_bytes);
+        let index = IndexManager::start(
+            root_paths.clone(),
+            excludes.clone(),
+            limits.max_file_bytes,
+            Some(index_path),
+        );
         Self {
             host_id: host_id.into(),
             root,
@@ -195,6 +203,7 @@ impl LocalBackend {
             self.root_paths.clone(),
             self.exclude_globs.clone(),
             self.limits.max_file_bytes,
+            None,
         );
         self
     }
@@ -216,6 +225,7 @@ impl LocalBackend {
             self.root_paths.clone(),
             self.exclude_globs.clone(),
             self.limits.max_file_bytes,
+            None,
         );
         self
     }

@@ -1,6 +1,7 @@
 use grepmesh::{
-    backend::{LocalBackend, SearchMode},
+    backend::{IndexState, LocalBackend, SearchMode},
     config::LimitsConfig,
+    index::PersistentIndex,
 };
 use std::time::Duration;
 use std::{collections::BTreeMap, fs};
@@ -172,6 +173,41 @@ fn index_candidates_reconcile_create_and_delete() {
         .contains(&path));
 }
 
+#[test]
+fn configured_index_path_receives_scanned_documents_and_reconciles_deletes() {
+    let root = tempfile::tempdir().unwrap();
+    let db = root.path().join("grepmesh-index.sqlite");
+    let document = root.path().join("persistent.txt");
+    fs::write(&document, "PERSISTENT_INDEX_TOKEN\n").unwrap();
+
+    let backend = LocalBackend::from_config(
+        "A",
+        root.path(),
+        Default::default(),
+        BTreeMap::new(),
+        vec![],
+        db.clone(),
+    );
+    wait_until_ready(&backend);
+
+    assert_eq!(
+        PersistentIndex::open(db.clone())
+            .unwrap()
+            .candidates("PERSISTENT_INDEX_TOKEN")
+            .unwrap(),
+        vec![document.clone()]
+    );
+
+    fs::remove_file(&document).unwrap();
+    wait_until_missing(&backend, "PERSISTENT_INDEX_TOKEN", root.path(), &document);
+    wait_until_ready(&backend);
+    assert!(PersistentIndex::open(db)
+        .unwrap()
+        .candidates("PERSISTENT_INDEX_TOKEN")
+        .unwrap()
+        .is_empty());
+}
+
 #[tokio::test]
 async fn rg_search_stops_after_the_requested_match_limit() {
     let root = tempfile::tempdir().unwrap();
@@ -241,4 +277,34 @@ async fn rg_path_search_is_bounded_and_reports_truncation() {
         .unwrap();
     assert!(outcome.truncated);
     assert!(outcome.hits.len() < 100);
+}
+
+fn wait_until_ready(backend: &LocalBackend) {
+    let deadline = std::time::Instant::now() + Duration::from_secs(3);
+    while std::time::Instant::now() < deadline {
+        let status = backend.status().unwrap();
+        if status.index_state == Some(IndexState::Ready) {
+            return;
+        }
+        std::thread::sleep(Duration::from_millis(50));
+    }
+    panic!("index did not reach Ready: {:?}", backend.status().unwrap());
+}
+
+fn wait_until_missing(
+    backend: &LocalBackend,
+    query: &str,
+    root: &std::path::Path,
+    path: &std::path::Path,
+) {
+    let deadline = std::time::Instant::now() + Duration::from_secs(3);
+    while std::time::Instant::now() < deadline
+        && backend
+            .index
+            .candidate_paths(query, root)
+            .unwrap_or_default()
+            .contains(&path.to_path_buf())
+    {
+        std::thread::sleep(Duration::from_millis(50));
+    }
 }

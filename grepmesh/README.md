@@ -29,11 +29,12 @@ Tools:
 - `read_text`: bounded line-range reads from a selected remote host.
 - `search_status`: local `rg`/topology status and per-host status.
 
-Local search deliberately runs the installed `rg` binary directly for every
-request. This keeps results current while files change and avoids a second
-indexing engine, startup scan, and watcher in the MCP request path. Binary
-files, excluded trees, oversized files, symlink traversal, and sensitive
-credential paths are excluded by default.
+Local literal search uses the persistent trigram index to narrow candidate
+files, then runs the installed `rg` binary to render exact matches, metadata,
+and context lines. Regex, glob-filtered, or not-yet-ready searches fall back to
+bounded `rg` over the selected roots. Binary files, excluded trees, oversized
+files, symlink traversal, and sensitive credential paths are excluded by
+default.
 
 GPTAdmin is used only for the read-only topology projection at
 `/mcp-relay/grepmesh`. Search and reads do not traverse GPTAdmin. If discovery

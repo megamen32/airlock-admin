@@ -78,3 +78,25 @@ bad canonical URL or absent docs asset makes the gate fail.
 - Stop conditions: dependency/install failure, a need to modify CI/deployment,
   or any required path outside the allowlist. Append detailed evidence here and
   return only changed paths, commands, and results.
+
+## Worker implementation evidence (2026-08-11)
+
+- Ownership collision: before this Worker acted, all allowed implementation
+  files had a shared mtime of `2026-08-11 22:43:29+03:00`, later than this
+  task's implementation handoff. They were already dirty/untracked, so this
+  Worker did not edit, stage, or commit them.
+- Inspected implementation: `footer.tsx` now contains two canonical
+  `https://gptadmin.bezrabotnyi.com` footer links. `check-docs-build.mjs`
+  reads `scripts/docs-manifest.json`, checks all `en`, `ru`, and `cn` docs
+  assets in `.next/standalone/public/docs`, and is invoked at the end of the
+  `build` script.
+- Focused red/green proof: `node website/scripts/check-docs-build.test.mjs`
+  passed. It accepts a valid fixture and deliberately rejects a missing
+  `ru/Home.md` asset and the old `https://bezrabotnyi.com` footer target.
+- Build canary: `npm run build` from `website/` passed. `sync-docs` mirrored
+  17 documents for each locale; the final gate reported
+  `[docs-build] verified 17 docs across 3 locales and canonical footer links`.
+- Scope: no CI/deployment files changed; generated `.next/` was produced by
+  the required local build only. Remaining risk is integration ownership: Lead
+  must review and intentionally commit the pre-existing dirty implementation
+  files; this Worker made no code changes.

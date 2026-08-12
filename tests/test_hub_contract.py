@@ -560,7 +560,15 @@ def test_hub_contract_webhook_route_job_and_callback_through_process(hub_contrac
     try:
         status, created, _ = hub_contract.request("POST", "/webhook-routes", payload=route)
         assert status == 201, created
-        assert created == {"id": "process-hook", "kind": "mcp", "target": "hub", "tool": "demo", "auth_mode": "token", "callback_configured": True}
+        assert created == {
+            "id": "process-hook",
+            "kind": "mcp",
+            "target": "hub",
+            "tool": "demo",
+            "auth_mode": "token",
+            "callback_configured": True,
+            "action_count": 1,
+        }
 
         status, accepted, _ = hub_contract.request(
             "POST",
