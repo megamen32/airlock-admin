@@ -167,7 +167,7 @@ impl LocalBackend {
         limits: LimitsConfig,
         roots: BTreeMap<String, Vec<PathBuf>>,
         exclude_globs: Vec<String>,
-        index_path: PathBuf,
+        index_path: Option<PathBuf>,
     ) -> Self {
         let root = root.into();
         let mut root_paths = roots
@@ -179,12 +179,15 @@ impl LocalBackend {
         excludes.extend(exclude_globs);
         excludes.sort();
         excludes.dedup();
-        let index = IndexManager::start(
-            root_paths.clone(),
-            excludes.clone(),
-            limits.max_file_bytes,
-            Some(index_path),
-        );
+        let index = match index_path {
+            Some(index_path) => IndexManager::start(
+                root_paths.clone(),
+                excludes.clone(),
+                limits.max_file_bytes,
+                Some(index_path),
+            ),
+            None => IndexManager::disabled(),
+        };
         Self {
             host_id: host_id.into(),
             root,
@@ -235,7 +238,12 @@ impl LocalBackend {
         Ok(HostStatus {
             host_id: self.host_id.clone(),
             root: self.root.display().to_string(),
-            backend: "indexed+rg-fallback".to_string(),
+            backend: if self.index.is_enabled() {
+                "indexed+rg-fallback"
+            } else {
+                "rg"
+            }
+            .to_string(),
             file_count: index.indexed_files,
             index_state: Some(index.state),
             index_generation: index.generation,
@@ -633,7 +641,10 @@ async fn search_text_impl(
         }
     };
     if let Some(status) = status {
-        if !status.success() && status.code() != Some(1) {
+        // `rg` returns 2 when a broad configured root contains an unreadable
+        // subtree, even when it emitted valid matches. Search roots are
+        // intentionally broad; keep those accessible results usable.
+        if !status.success() && status.code() != Some(1) && status.code() != Some(2) {
             return Err(anyhow!("rg search failed with {}", status));
         }
     }
@@ -788,7 +799,7 @@ async fn find_paths_impl(
                 return Err(anyhow!("rg path search timed out"));
             }
         };
-        if !status.success() && status.code() != Some(1) {
+        if !status.success() && status.code() != Some(1) && status.code() != Some(2) {
             return Err(anyhow!("rg --files failed with {}", status));
         }
     }

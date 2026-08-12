@@ -120,8 +120,11 @@ pub struct AppConfig {
     pub exclude_globs: Vec<String>,
     #[serde(default)]
     pub topology_cache_path: Option<PathBuf>,
-    #[serde(default = "default_index_path")]
-    pub index_path: PathBuf,
+    /// Persistent full-text indexing is opt-in. `rg` is the production default:
+    /// it avoids a background full-tree scan for repositories that already
+    /// search quickly with ripgrep.
+    #[serde(default)]
+    pub index_path: Option<PathBuf>,
     #[serde(default)]
     pub gptadmin_topology_url: Option<String>,
     #[serde(default)]
@@ -134,10 +137,6 @@ pub struct AppConfig {
 
 fn default_topology_ttl_ms() -> u64 {
     30_000
-}
-
-fn default_index_path() -> PathBuf {
-    PathBuf::from("/var/lib/grepmesh-mcp/index.sqlite")
 }
 
 impl AppConfig {

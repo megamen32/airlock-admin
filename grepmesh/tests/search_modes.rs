@@ -140,7 +140,7 @@ fn index_candidates_reconcile_create_and_delete() {
     let path = root.path().join("candidate.txt");
     fs::write(&path, "INDEX_WATCH_TOKEN\n").unwrap();
     let backend = LocalBackend::new("A", root.path(), Default::default());
-    let deadline = std::time::Instant::now() + Duration::from_secs(3);
+    let deadline = std::time::Instant::now() + Duration::from_secs(6);
     while std::time::Instant::now() < deadline
         && !backend
             .index
@@ -156,7 +156,7 @@ fn index_candidates_reconcile_create_and_delete() {
         .unwrap_or_default()
         .contains(&path));
     fs::remove_file(&path).unwrap();
-    let deadline = std::time::Instant::now() + Duration::from_secs(3);
+    let deadline = std::time::Instant::now() + Duration::from_secs(6);
     while std::time::Instant::now() < deadline
         && backend
             .index
@@ -186,7 +186,7 @@ fn configured_index_path_receives_scanned_documents_and_reconciles_deletes() {
         Default::default(),
         BTreeMap::new(),
         vec![],
-        db.clone(),
+        Some(db.clone()),
     );
     wait_until_ready(&backend);
 
@@ -199,13 +199,41 @@ fn configured_index_path_receives_scanned_documents_and_reconciles_deletes() {
     );
 
     fs::remove_file(&document).unwrap();
-    wait_until_missing(&backend, "PERSISTENT_INDEX_TOKEN", root.path(), &document);
+    wait_until_persistent_missing(&db, "PERSISTENT_INDEX_TOKEN");
     wait_until_ready(&backend);
     assert!(PersistentIndex::open(db)
         .unwrap()
         .candidates("PERSISTENT_INDEX_TOKEN")
         .unwrap()
         .is_empty());
+}
+
+#[test]
+fn config_without_index_path_is_immediately_ready_and_skips_scanning() {
+    let root = tempfile::tempdir().unwrap();
+    fs::write(
+        root.path().join("large-enough-to-index.txt"),
+        "DIRECT_RG_DEFAULT_TOKEN\n",
+    )
+    .unwrap();
+
+    let backend = LocalBackend::from_config(
+        "A",
+        root.path(),
+        Default::default(),
+        BTreeMap::new(),
+        vec![],
+        None,
+    );
+
+    let status = backend.status().unwrap();
+    assert_eq!(status.index_state, Some(IndexState::Ready));
+    assert_eq!(status.indexed_files, 0);
+    assert_eq!(status.backend, "rg");
+    assert!(backend
+        .index
+        .candidate_paths("DIRECT_RG_DEFAULT_TOKEN", root.path())
+        .is_none());
 }
 
 #[tokio::test]
@@ -280,7 +308,7 @@ async fn rg_path_search_is_bounded_and_reports_truncation() {
 }
 
 fn wait_until_ready(backend: &LocalBackend) {
-    let deadline = std::time::Instant::now() + Duration::from_secs(3);
+    let deadline = std::time::Instant::now() + Duration::from_secs(6);
     while std::time::Instant::now() < deadline {
         let status = backend.status().unwrap();
         if status.index_state == Some(IndexState::Ready) {
@@ -291,20 +319,18 @@ fn wait_until_ready(backend: &LocalBackend) {
     panic!("index did not reach Ready: {:?}", backend.status().unwrap());
 }
 
-fn wait_until_missing(
-    backend: &LocalBackend,
-    query: &str,
-    root: &std::path::Path,
-    path: &std::path::Path,
-) {
-    let deadline = std::time::Instant::now() + Duration::from_secs(3);
-    while std::time::Instant::now() < deadline
-        && backend
-            .index
-            .candidate_paths(query, root)
-            .unwrap_or_default()
-            .contains(&path.to_path_buf())
-    {
+fn wait_until_persistent_missing(db: &std::path::Path, query: &str) {
+    let deadline = std::time::Instant::now() + Duration::from_secs(6);
+    while std::time::Instant::now() < deadline {
+        if PersistentIndex::open(db.to_path_buf())
+            .unwrap()
+            .candidates(query)
+            .unwrap()
+            .is_empty()
+        {
+            return;
+        }
         std::thread::sleep(Duration::from_millis(50));
     }
+    panic!("persistent index did not remove {query}");
 }

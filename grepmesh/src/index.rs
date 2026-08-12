@@ -10,7 +10,7 @@ use std::{
     path::{Path, PathBuf},
     sync::{mpsc, Arc, RwLock},
     thread,
-    time::Duration,
+    time::{Duration, Instant},
 };
 
 type IndexMap = BTreeMap<String, BTreeSet<PathBuf>>;
@@ -27,6 +27,14 @@ struct RebuildState<'a> {
     candidates: &'a Arc<RwLock<BTreeMap<String, BTreeSet<PathBuf>>>>,
     ready_roots: &'a Arc<RwLock<BTreeSet<PathBuf>>>,
     persistent: Option<&'a PersistentIndex>,
+}
+
+struct ScanContext<'a> {
+    root: &'a Path,
+    root_device: u64,
+    excludes: &'a GlobSet,
+    max_file_bytes: u64,
+    build_candidates: bool,
 }
 
 #[derive(Clone, Debug)]
@@ -120,9 +128,23 @@ pub struct IndexManager {
     candidates: Arc<RwLock<BTreeMap<String, BTreeSet<PathBuf>>>>,
     ready_roots: Arc<RwLock<BTreeSet<PathBuf>>>,
     persistent: Option<PersistentIndex>,
+    enabled: bool,
 }
 
 impl IndexManager {
+    pub fn disabled() -> Self {
+        Self {
+            snapshot: Arc::new(RwLock::new(IndexSnapshot {
+                state: IndexState::Ready,
+                ..Default::default()
+            })),
+            candidates: Arc::new(RwLock::new(BTreeMap::new())),
+            ready_roots: Arc::new(RwLock::new(BTreeSet::new())),
+            persistent: None,
+            enabled: false,
+        }
+    }
+
     pub fn start(
         roots: BTreeMap<String, Vec<PathBuf>>,
         excludes: Vec<String>,
@@ -153,11 +175,7 @@ impl IndexManager {
         let persistent_state = persistent.clone();
         thread::spawn(move || {
             let (events, rx) = mpsc::channel();
-            let event_state = Arc::clone(&state);
             let mut watcher: RecommendedWatcher = notify::recommended_watcher(move |_| {
-                if let Ok(mut current) = event_state.write() {
-                    current.state = IndexState::Building;
-                }
                 let _ = events.send(());
             })
             .expect("create GrepMesh watcher");
@@ -182,7 +200,18 @@ impl IndexManager {
             rebuild();
             loop {
                 if rx.recv_timeout(Duration::from_secs(30)).is_ok() {
-                    while rx.try_recv().is_ok() {}
+                    // Filesystems commonly emit a burst of events for one
+                    // logical update. Wait for a quiet interval before the
+                    // expensive reconciliation and never advertise Building
+                    // until a rebuild actually starts.
+                    let debounce_deadline = Instant::now() + Duration::from_secs(2);
+                    while let Some(remaining) =
+                        debounce_deadline.checked_duration_since(Instant::now())
+                    {
+                        if rx.recv_timeout(remaining).is_err() {
+                            break;
+                        }
+                    }
                     rebuild();
                 }
             }
@@ -192,6 +221,7 @@ impl IndexManager {
             candidates,
             ready_roots,
             persistent,
+            enabled: true,
         }
     }
 
@@ -203,6 +233,10 @@ impl IndexManager {
                 state: IndexState::Degraded,
                 ..Default::default()
             })
+    }
+
+    pub fn is_enabled(&self) -> bool {
+        self.enabled
     }
 
     pub fn candidate_paths(&self, query: &str, root: &Path) -> Option<Vec<PathBuf>> {
@@ -298,7 +332,13 @@ fn rebuild_index(
             }
         };
         while let Some(unit) = units.pop_front() {
-            let result = scan_directory_unit(&unit, &root, &matcher, max_file_bytes);
+            let result = scan_directory_unit(
+                &unit,
+                &root,
+                &matcher,
+                max_file_bytes,
+                rebuild.persistent.is_none(),
+            );
             let (unit_count, next, documents, children) = match result {
                 Ok(result) => result,
                 Err(error) => {
@@ -310,9 +350,11 @@ fn rebuild_index(
                     return;
                 }
             };
-            if let Ok(mut map) = rebuild.candidates.write() {
-                for (gram, paths) in next {
-                    map.entry(gram).or_default().extend(paths);
+            if rebuild.persistent.is_none() {
+                if let Ok(mut map) = rebuild.candidates.write() {
+                    for (gram, paths) in next {
+                        map.entry(gram).or_default().extend(paths);
+                    }
                 }
             }
             if let Some(persistent) = rebuild.persistent {
@@ -359,15 +401,14 @@ fn build_root_index(
         .dev();
     let mut map = BTreeMap::new();
     let mut documents = Vec::new();
-    let count = walk(
-        &root.to_path_buf(),
+    let context = ScanContext {
         root,
         root_device,
-        &matcher,
+        excludes: &matcher,
         max_file_bytes,
-        &mut map,
-        &mut documents,
-    )?;
+        build_candidates: true,
+    };
+    let count = walk(&root.to_path_buf(), &context, &mut map, &mut documents)?;
     Ok((count, map))
 }
 
@@ -376,6 +417,7 @@ fn scan_directory_unit(
     root: &Path,
     excludes: &GlobSet,
     max_file_bytes: u64,
+    build_candidates: bool,
 ) -> Result<DirectoryScan, String> {
     let root_device = fs::symlink_metadata(root)
         .map_err(|error| format!("{}: {error}", root.display()))?
@@ -396,15 +438,14 @@ fn scan_directory_unit(
     }
     if metadata.is_file() {
         let mut documents = Vec::new();
-        let count = walk(
-            &unit.to_path_buf(),
+        let context = ScanContext {
             root,
             root_device,
             excludes,
             max_file_bytes,
-            &mut map,
-            &mut documents,
-        )?;
+            build_candidates,
+        };
+        let count = walk(&unit.to_path_buf(), &context, &mut map, &mut documents)?;
         return Ok((count, map, documents, Vec::new()));
     }
     if !metadata.is_dir() {
@@ -459,10 +500,7 @@ fn ordered_roots(roots: &BTreeMap<String, Vec<PathBuf>>) -> Vec<PathBuf> {
 
 fn walk(
     path: &PathBuf,
-    root: &Path,
-    root_device: u64,
-    excludes: &GlobSet,
-    max_file_bytes: u64,
+    context: &ScanContext<'_>,
     map: &mut BTreeMap<String, BTreeSet<PathBuf>>,
     documents: &mut Vec<IndexedDocument>,
 ) -> Result<usize, String> {
@@ -471,17 +509,17 @@ fn walk(
         Err(error) if error.kind() == ErrorKind::PermissionDenied => return Ok(0),
         Err(error) => return Err(format!("{}: {error}", path.display())),
     };
-    if metadata.dev() != root_device {
+    if metadata.dev() != context.root_device {
         return Ok(0);
     }
     if metadata.file_type().is_symlink() {
         return Ok(0);
     }
-    if excluded(path, root, excludes) {
+    if excluded(path, context.root, context.excludes) {
         return Ok(0);
     }
     if metadata.is_file() {
-        if max_file_bytes != 0 && metadata.len() > max_file_bytes {
+        if context.max_file_bytes != 0 && metadata.len() > context.max_file_bytes {
             return Ok(0);
         }
         let bytes = match fs::read(path) {
@@ -496,8 +534,10 @@ fn walk(
             Ok(text) => text,
             Err(_) => return Ok(0),
         };
-        for gram in trigrams(&text.to_ascii_lowercase()) {
-            map.entry(gram).or_default().insert(path.clone());
+        if context.build_candidates {
+            for gram in trigrams(&text.to_ascii_lowercase()) {
+                map.entry(gram).or_default().insert(path.clone());
+            }
         }
         documents.push(IndexedDocument {
             path: path.clone(),
@@ -520,15 +560,7 @@ fn walk(
             Err(error) if error.kind() == ErrorKind::PermissionDenied => continue,
             Err(error) => return Err(error.to_string()),
         };
-        count += walk(
-            &entry.path(),
-            root,
-            root_device,
-            excludes,
-            max_file_bytes,
-            map,
-            documents,
-        )?;
+        count += walk(&entry.path(), context, map, documents)?;
     }
     Ok(count)
 }
