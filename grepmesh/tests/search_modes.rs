@@ -63,6 +63,37 @@ async fn search_modes_and_globs_preserve_match_metadata() {
 }
 
 #[tokio::test]
+async fn malformed_regex_and_glob_remain_search_errors() {
+    let root = tempfile::tempdir().unwrap();
+    fs::write(root.path().join("config.rs"), "SEARCH_INPUT_TOKEN\n").unwrap();
+    let backend = LocalBackend::from_config(
+        "A",
+        root.path(),
+        Default::default(),
+        BTreeMap::new(),
+        vec![],
+        None,
+    );
+
+    let invalid_regex = backend
+        .search_text_bounded("(", 10, 0, SearchMode::Regex, vec![], vec![])
+        .await;
+    assert!(invalid_regex.is_err());
+
+    let invalid_glob = backend
+        .search_text_bounded(
+            "SEARCH_INPUT_TOKEN",
+            10,
+            0,
+            SearchMode::Literal,
+            vec!["[".into()],
+            vec![],
+        )
+        .await;
+    assert!(invalid_glob.is_err());
+}
+
+#[tokio::test]
 async fn named_roots_are_selectable_and_paths_remain_absolute() {
     let home = tempfile::tempdir().unwrap();
     let opt = tempfile::tempdir().unwrap();

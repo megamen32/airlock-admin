@@ -1,7 +1,8 @@
 use grepmesh::{
+    backend::{LocalBackend, SearchMode},
     config::AppConfig,
-    mcp::{normalize_request, HostsInput},
-    topology::PeerConfig,
+    mcp::{normalize_request, HostsInput, MeshService, SearchArgs},
+    topology::{PeerConfig, Topology},
 };
 use std::{
     fs,
@@ -67,6 +68,112 @@ fn read_text_routes_by_host_and_path() {
     let chunks = backend.read_text(&path, Some(1), Some(2)).unwrap();
     assert_eq!(chunks[0].lines.len(), 2);
     assert_eq!(chunks[0].lines[0].text, "hello");
+}
+
+#[tokio::test]
+async fn malformed_search_inputs_are_failed_partial_mcp_results() {
+    let root = tempfile::tempdir().unwrap();
+    fs::write(root.path().join("config.rs"), "SEARCH_INPUT_TOKEN\n").unwrap();
+    let service = MeshService::new(
+        LocalBackend::from_config(
+            "A",
+            root.path(),
+            Default::default(),
+            std::collections::BTreeMap::new(),
+            vec![],
+            None,
+        ),
+        Topology::new("A", vec![]),
+    );
+
+    for (request_id, query, mode, path_globs) in [
+        ("invalid-regex", "(", SearchMode::Regex, vec![]),
+        (
+            "invalid-glob",
+            "SEARCH_INPUT_TOKEN",
+            SearchMode::Literal,
+            vec!["[".into()],
+        ),
+    ] {
+        let result = service
+            .call_search(SearchArgs {
+                query: query.into(),
+                hosts: Some(HostsInput::One("local".into())),
+                request_id: Some(request_id.into()),
+                origin_host: None,
+                hop_count: None,
+                limit: Some(10),
+                context_lines: Some(0),
+                mode,
+                path_globs,
+                roots: vec![],
+            })
+            .await
+            .unwrap();
+
+        assert!(result.partial, "{request_id}");
+        assert!(result.data["results"].as_array().unwrap().is_empty());
+        let status = result
+            .host_status
+            .iter()
+            .find(|status| status.host_id == "A")
+            .unwrap();
+        assert!(!status.ok, "{request_id}");
+        assert!(status
+            .error
+            .as_deref()
+            .is_some_and(|error| !error.is_empty()));
+    }
+}
+
+#[cfg(target_os = "linux")]
+#[tokio::test]
+async fn permission_denied_search_is_partial_and_keeps_readable_match() {
+    let service = MeshService::new(
+        LocalBackend::from_config(
+            "A",
+            "/proc/1",
+            Default::default(),
+            std::collections::BTreeMap::new(),
+            vec![],
+            None,
+        ),
+        Topology::new("A", vec![]),
+    );
+    let result = service
+        .call_search(SearchArgs {
+            query: "Name".into(),
+            hosts: Some(HostsInput::One("local".into())),
+            request_id: Some("permission-partial".into()),
+            origin_host: None,
+            hop_count: None,
+            limit: Some(10),
+            context_lines: Some(0),
+            mode: SearchMode::Literal,
+            path_globs: vec!["**/status".into()],
+            roots: vec![],
+        })
+        .await
+        .unwrap();
+
+    assert!(result.partial);
+    assert!(result.data["results"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|hit| hit["text"]
+            .as_str()
+            .is_some_and(|text| text.contains("Name"))));
+    let status = result
+        .host_status
+        .iter()
+        .find(|status| status.host_id == "A")
+        .unwrap();
+    assert!(!status.ok);
+    assert!(status
+        .error
+        .as_deref()
+        .is_some_and(|error| error.contains("Permission denied")));
 }
 
 fn free_port() -> u16 {

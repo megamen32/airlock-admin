@@ -619,14 +619,15 @@ impl MeshService {
                             )
                             .await?;
                         let truncated = outcome.truncated;
+                        let partial = outcome.partial;
                         Ok((
                             outcome.hits,
                             vec![PerHostStatus {
                                 host_id: target.clone(),
-                                ok: true,
-                                error: None,
+                                ok: !partial,
+                                error: outcome.partial_error,
                             }],
-                            false,
+                            partial,
                             truncated,
                         ))
                     } else {

@@ -250,3 +250,18 @@
 - Which skill, MCP, or tool is missing? A production GrepMesh mesh/deployment manifest is missing; the temporary single-node MCP cannot inspect server-88.
 - What operation or error repeated? 5 SSH probes used nonexistent alias `server-88` before the configured alias `88` succeeded; guard: validate SSH aliases from `~/.ssh/config` before remote probes.
 - State: Proposed; no production mutation made.
+# 2026-08-12 — GrepMesh business-result drift
+
+- Friction: source repair and A/B baseline were ready, but Lead spent repeated
+  Overseer/Reviewer/task-lineage cycles while the live rollout remained undone.
+- Time: the active P0 began about 07:09; a later 07:50 task record reset the
+  clock to 30/90 minutes. At 09:37 actual elapsed was about 148 minutes, already
+  58 minutes over the stated maximum.
+- Owning instructions: mandatory serial Overseer/Reviewer/Critic/Tester gates,
+  lifecycle snapshots, and exact restart approval displaced the shortest path.
+- Useful gate: Reviewer caught the real exit-2 false-success regression.
+- Waste: missing-context reconstruction and repeated serial audits added no
+  live-canary delta; elapsed-time control was not enforced.
+- Proposed: estimates inherit actual objective start; after one correctness
+  review, ask one rollout question and stop all process-only gates until answer.
+- State: Proposed; live rollout still needs the existing explicit restart gate.

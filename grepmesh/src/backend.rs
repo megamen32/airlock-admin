@@ -38,6 +38,8 @@ pub struct SearchHit {
 pub struct SearchOutcome {
     pub hits: Vec<SearchHit>,
     pub truncated: bool,
+    pub partial: bool,
+    pub partial_error: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -310,6 +312,8 @@ impl LocalBackend {
         let deadline = Instant::now() + Duration::from_millis(self.limits.overall_timeout_ms);
         let mut hits = Vec::new();
         let mut truncated = false;
+        let mut partial = false;
+        let mut partial_error = None;
         for root in roots {
             let remaining = limit.saturating_sub(hits.len());
             if remaining == 0 {
@@ -345,6 +349,10 @@ impl LocalBackend {
             )
             .await?;
             hits.extend(outcome.hits);
+            partial |= outcome.partial;
+            if partial_error.is_none() {
+                partial_error = outcome.partial_error;
+            }
             if outcome.truncated {
                 truncated = true;
                 break;
@@ -352,7 +360,12 @@ impl LocalBackend {
         }
         hits.sort_by(|a, b| a.path.cmp(&b.path).then(a.line_number.cmp(&b.line_number)));
         hits.truncate(limit);
-        Ok(SearchOutcome { hits, truncated })
+        Ok(SearchOutcome {
+            hits,
+            truncated,
+            partial,
+            partial_error,
+        })
     }
 
     pub async fn find_paths(
@@ -408,7 +421,12 @@ impl LocalBackend {
         }
         hits.sort_by(|a, b| a.path.cmp(&b.path));
         hits.truncate(limit);
-        Ok(SearchOutcome { hits, truncated })
+        Ok(SearchOutcome {
+            hits,
+            truncated,
+            partial: false,
+            partial_error: None,
+        })
     }
 
     pub fn read_text(
@@ -472,7 +490,7 @@ async fn search_text_impl(
     candidate_paths: Option<Vec<PathBuf>>,
 ) -> Result<SearchOutcome> {
     let mut command = TokioCommand::new("rg");
-    command.arg("-n").arg("--hidden").arg("--no-messages");
+    command.arg("-n").arg("--hidden");
     match mode {
         SearchMode::Literal => {
             command.arg("-F");
@@ -504,6 +522,8 @@ async fn search_text_impl(
             return Ok(SearchOutcome {
                 hits: Vec::new(),
                 truncated: false,
+                partial: false,
+                partial_error: None,
             });
         }
         for path in paths {
@@ -515,7 +535,7 @@ async fn search_text_impl(
     let mut child = command
         .current_dir(root)
         .stdout(Stdio::piped())
-        .stderr(Stdio::null())
+        .stderr(Stdio::piped())
         .kill_on_drop(true)
         .spawn()
         .with_context(|| "run rg search")?;
@@ -523,6 +543,26 @@ async fn search_text_impl(
         terminate_child(&mut child).await;
         return Err(anyhow!("rg search did not provide stdout"));
     };
+    let Some(mut stderr) = child.stderr.take() else {
+        terminate_child(&mut child).await;
+        return Err(anyhow!("rg search did not provide stderr"));
+    };
+    let stderr_task = tokio::spawn(async move {
+        let mut output = Vec::new();
+        let mut buffer = [0u8; 8192];
+        let mut overflowed = false;
+        loop {
+            let read = stderr.read(&mut buffer).await?;
+            if read == 0 {
+                break;
+            }
+            let remaining = (64 * 1024usize).saturating_sub(output.len());
+            let kept = read.min(remaining);
+            output.extend_from_slice(&buffer[..kept]);
+            overflowed |= kept != read;
+        }
+        Ok::<_, std::io::Error>((output, overflowed))
+    });
     let mut hits = Vec::new();
     let mut pending = Vec::new();
     let mut stdout_bytes = 0usize;
@@ -620,38 +660,69 @@ async fn search_text_impl(
     }
 
     drop(stdout);
+    let mut partial = false;
+    let mut partial_error = None;
     if stopped_early {
         terminate_child(&mut child).await;
-    }
-    let status = if stopped_early {
-        None
     } else {
-        match timeout(
+        let status = match timeout(
             deadline.saturating_duration_since(Instant::now()),
             child.wait(),
         )
         .await
         {
-            Ok(Ok(status)) => Some(status),
+            Ok(Ok(status)) => status,
             Ok(Err(err)) => return Err(err).context("wait for rg search"),
             Err(_) => {
                 terminate_child(&mut child).await;
                 return Err(anyhow!("rg search timed out"));
             }
+        };
+        let (stderr, stderr_overflowed) = stderr_task
+            .await
+            .context("collect rg search diagnostics")??;
+        if stderr_overflowed {
+            return Err(anyhow!("rg search diagnostics exceeded 65536 bytes"));
         }
-    };
-    if let Some(status) = status {
-        // `rg` returns 2 when a broad configured root contains an unreadable
-        // subtree, even when it emitted valid matches. Search roots are
-        // intentionally broad; keep those accessible results usable.
-        if !status.success() && status.code() != Some(1) && status.code() != Some(2) {
-            return Err(anyhow!("rg search failed with {}", status));
+        if status.code() == Some(2) {
+            let diagnostic = permission_denied_diagnostic(&stderr).ok_or_else(|| {
+                anyhow!(
+                    "rg search failed with {}: {}",
+                    status,
+                    String::from_utf8_lossy(&stderr).trim()
+                )
+            })?;
+            partial = true;
+            partial_error = Some(diagnostic);
+        } else if !status.success() && status.code() != Some(1) {
+            return Err(anyhow!(
+                "rg search failed with {}: {}",
+                status,
+                String::from_utf8_lossy(&stderr).trim()
+            ));
         }
     }
     Ok(SearchOutcome {
         hits,
         truncated: stopped_early,
+        partial,
+        partial_error,
     })
+}
+
+fn permission_denied_diagnostic(stderr: &[u8]) -> Option<String> {
+    let diagnostic = String::from_utf8_lossy(stderr).trim().to_string();
+    let mut lines = diagnostic
+        .lines()
+        .filter(|line| !line.trim().is_empty())
+        .peekable();
+    lines.peek()?;
+    lines
+        .all(|line| {
+            let line = line.to_ascii_lowercase();
+            line.contains("permission denied") || line.contains("operation not permitted")
+        })
+        .then_some(diagnostic)
 }
 
 async fn terminate_child(child: &mut tokio::process::Child) {
@@ -806,6 +877,8 @@ async fn find_paths_impl(
     Ok(SearchOutcome {
         hits,
         truncated: stopped_early,
+        partial: false,
+        partial_error: None,
     })
 }
 
