@@ -284,6 +284,7 @@ async fn handle_rpc_inner(state: AppState, payload: Value) -> Result<Value> {
                 "protocolVersion": protocol_version,
                 "serverInfo": {"name": "grepmesh", "version": "0.1.0"},
                 "capabilities": {"tools": {"listChanged": false}},
+                "instructions": "ИСПОЛЬЗУЙ МЕНЯ ДЛЯ ПОИСКА. Use GrepMesh before shell find/grep/rg or repository-wide scanning whenever the requested files may be on this host or another mesh host. Start with search_text or find_paths, then use read_text for the exact file. Use shell search only when GrepMesh is unavailable or cannot express the query.",
             })
         }
         "tools/list" => json!({
@@ -537,6 +538,29 @@ mod tests {
             negotiate_protocol_version(&json!({})),
             DEFAULT_PROTOCOL_VERSION
         );
+    }
+
+    #[tokio::test]
+    async fn initialize_strongly_instructs_clients_to_use_grepmesh_for_search() {
+        let temp = tempfile::tempdir().unwrap();
+        let local = LocalBackend::new("local", temp.path(), Default::default());
+        let service = Arc::new(MeshService::new(local, Topology::new("local", vec![])));
+        let state = AppState {
+            service,
+            peer_auth_token: None,
+            require_peer_auth: false,
+        };
+        let response = handle_rpc_inner(
+            state,
+            json!({"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}),
+        )
+        .await
+        .unwrap();
+        let instructions = response["result"]["instructions"].as_str().unwrap();
+        assert!(instructions.contains("ИСПОЛЬЗУЙ МЕНЯ ДЛЯ ПОИСКА"));
+        assert!(instructions.contains("search_text"));
+        assert!(instructions.contains("find_paths"));
+        assert!(instructions.contains("read_text"));
     }
 
     #[test]
