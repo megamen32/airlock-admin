@@ -29,3 +29,12 @@ def test_release_windows_package_builds_and_archives_the_go_hub():
     assert 'GOOS=windows GOARCH=amd64 go build "${GO_HUB_LDFLAGS[@]}"' in script
     assert '"$ART_DIR/windows/gptadmin-hub.exe"' in script
     assert 'zip -q -9 "../gptadmin-win.zip" gptadmin-hub.exe shellmcp.exe' in script
+    assert 'cp -f public/gptadmin-win.zip public/gptadmin-win.zip.sha256 public/install_win.ps1 "$ART_DIR/public/"' in script
+
+
+def test_all_archive_is_created_after_windows_payload_is_current():
+    """The aggregate package must not embed a stale pre-hub Windows zip."""
+    script = BUILD_SCRIPT.read_text(encoding="utf-8")
+    all_block = script.split("if want all; then", 1)[1].split("else", 1)[0]
+
+    assert all_block.index("build_windows_shellmcp") < all_block.index("archive_all")

@@ -488,6 +488,9 @@ build_windows_shellmcp() {
   cp -f deploy/install_win.ps1 public/install_win.ps1
   unzip -l public/gptadmin-win.zip
   sha256sum public/gptadmin-win.zip > public/gptadmin-win.zip.sha256
+  if [[ -d "$ART_DIR/public" ]]; then
+    cp -f public/gptadmin-win.zip public/gptadmin-win.zip.sha256 public/install_win.ps1 "$ART_DIR/public/"
+  fi
   echo "built: public/gptadmin-win.zip"
 }
 
@@ -624,12 +627,12 @@ if want all; then
   package_hub_platform_binaries
   copy_support_payloads
   copy_admin_static_payloads
+  build_windows_shellmcp
   archive_component_cli
   archive_component_hub
   archive_component_shellmcp
   archive_all
   archive_platforms
-  build_windows_shellmcp
   build_android_shellmcp
   build_network_tunnel
   smoke_linux
