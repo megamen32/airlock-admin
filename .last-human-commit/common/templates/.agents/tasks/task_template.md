@@ -1,144 +1,115 @@
 # Task
 
-Status: in progress | blocked | complete
-Lifecycle snapshot: todo | work | done
-Supersedes: <previous lifecycle snapshot path or none>
-Snapshot commit: <commit or pending>
-Result file: `.agents/shared-session/results/<task-id>/result-<result-slug>.md`
-Original user request:
-Objective:
-Business canary:
-Confirmed scope:
+Status: todo | in progress | waiting | blocked | complete
+Latest user request:
+Accepted business outcome / Definition of Done:
+Exact business canary:
+Cheapest sufficient proof:
+Actual production consumer path:
+Scope:
 Explicit exclusions:
-Acceptance proof:
-Cycle: direct | short | full | emergency
+Current blocker:
+Next shortest action:
+
 Harness:
-PID:
 Agent session:
-PID status: alive | completed | dead | unknown
-Last PID signal (UTC+3):
-Last task-file transition (UTC+3): todo | work | done
-Current stage: research | planning | YAGNI | Normal | Ultimate | review | release
-Current owner:
+Workspace / branch:
 Started at (UTC+3):
-Lifecycle provenance: recorded at creation | legacy-missing (do not infer)
-Last task-file mtime observed (UTC+3):
-Workspace: primary checkout | auxiliary worktree | detached HEAD
-Worktree path:
-Branch:
 Initial estimate (minimum / maximum active minutes):
-Estimate revisions (append-only: UTC+3, previous -> new, trigger, evidence):
-Stop when:
-Abandon/rethink when:
-Forbidden without explicit user authorization:
-Consequential authorization questions (append-only):
+Actual active minutes:
+Actual wall-clock minutes:
+Last business delta:
 
-## Research
+## Route
 
-Use this section for compact Worker findings only.
+Execution mode: direct Lead | Worker research | Worker implement | mixed
+Why this is least-cost:
+Agent/model, only when material:
+Gate value test:
+Consequential-action / active-harness boundary:
+Cycle estimates (cycle / minimum / maximum / actual):
+Time-guard state: `.agents/shared-session/time/<cycle-id>.json`
+Compaction count / last loaded count:
+Current handoff: `.agents/shared-session/compaction/<session-id>/current-handoff.md`
 
-Decisive findings:
-Existing mechanism:
-Canary blocker:
-Checked/excluded:
-Unknowns:
-Proposed <=20-minute slices and dependencies:
+Every declared work cycle has its own immutable minimum / maximum estimate
+before execution. Tiny commands share their enclosing coherent cycle.
 
-## Three plans — Full only
+Actual active time always names its source. If it was not continuously measured,
+write `не контролировал`; never infer it from wall-clock or file mtime.
 
-### 1. Максимально идеальный
+## Decomposition — only when multiple leaves remain
 
-Outcome / scope / omissions / trade-offs / risks / minimum-maximum estimate /
-verification / migration / execution graph:
+- Leaf / owner / dependency / artifact-or-proof / primary check / min-max:
 
-### 2. Нормальный
+Use the smallest independent business-verifiable leaves and parallelize only
+non-conflicting work. Load `$task-decomposition` for the complete contract.
 
-Outcome / scope / omissions / trade-offs / risks / minimum-maximum estimate /
-verification / migration / execution graph:
+Two consecutive substantively equivalent approval prompts for the same
+still-pending action, with no material change to scope, target, or risk, count
+as confirmation.
 
-### 3. YAGNI 80/20 — полный результат
+## Worker checkpoint — only when delegated
 
-Outcome / scope / omissions / trade-offs / risks / minimum-maximum estimate /
-verification / migration / execution graph:
-
-Recommendation:
-First human selection (verbatim):
-
-## Selected-plan technical preview — Full only
-
-Call-stack tree:
-File-tree diff:
-Key types and method signatures:
-Pseudocode:
-Migration description:
-Exact canary:
-Consequential authorization boundaries:
-Execution graph (each node: owner, paths, acceptance, dependencies, max <=20):
-Second explicit human approval (verbatim):
-
-## Execution — append-only
+Every 20 active minutes is a reporting checkpoint, not a lifetime limit.
 
 - UTC+3:
-  Slice:
-  Mode: research | implement: bugfix/TDD | implement: feature
-  Owner:
-  Estimate (minimum / maximum; maximum <=20):
-  Paths:
-  Acceptance check:
-  Result: DONE | BLOCKED | NEEDS_REDECOMPOSITION | NEEDS_RETHINK
+  Progress:
   Business delta:
-  Evidence:
-  Next:
+  Blocker:
+  Route still shortest:
+  Shortest next action:
+  L action: continue | redirect/resume | consult Overseer | exceptional cancel
 
-## Overseer receipts — append-only
+Use the harness wait/join tool while a required child is non-terminal. A wait
+timeout is observational. Prefer the same Worker; cancellation is exceptional.
 
-- UTC+3:
-  Trigger:
-  VERDICT: CONTINUE | RETHINK | ASK_USER | STOP_SCOPE_DRIFT | STOP_MISSING_CONTEXT
-  BUSINESS_DELTA:
-  ESTIMATE:
-  WASTE:
-  NEXT:
-  QUESTION:
-
-## Critic decisions — append-only
+## Worker questions for L — only when delegated
 
 - UTC+3:
-  Current user P0:
+  Decision boundary:
   Evidence:
-  P0 distance: CLOSER | SAME | FARTHER
-  Questions for L:
-  Decision: PASS | RETHINK | STOP | STOP_SCOPE_DRIFT | STOP_MISSING_CONTEXT
-  Minimum proof to proceed:
+  Recommendation and proposed default:
+  Safe independent work continuing in parallel:
+  Exact action waiting for L:
+  Parent transport / delivery state:
+  L decision:
 
-## Child assignment and detailed report — append-only
+## Hourly business report — while active beyond one hour
 
-The explicit `<Role> <absolute-task-file-path>` bootstrap is authoritative.
-The child reads only this assigned task file. Children append their detailed
-evidence and result to that file, then return only TL;DR to L. Children never create a second task
-card, report, ledger, specification, or recovery file.
+At every crossed wall-clock hour while the task remains active, run
+`lhc_time_guard.py` and report:
 
-- Role:
-  Mode:
-  Started:
-  Allowed/excluded paths:
-  Acceptance and stop conditions:
-  Detailed evidence and result:
-  L-facing return: TL;DR only
+- Какие реальные задачи закрыты:
+- Реальная бизнес-дельта:
+- Завершённые файлы:
+- План minimum/maximum активных минут:
+- Факт active / wall-clock:
+- Что мешает:
+- Какие гейты или инструкции задерживают бизнес-результат:
+- Контроль времени и следующий самый короткий маршрут:
 
-## Independent gates — append-only
+## Decisive evidence
 
-Overseer:
-Reviewer:
-Tester:
-Critic:
+- Evidence / changed path / check:
+
+Keep this section compact. Use a named result file only when handoff, recovery,
+reuse, audit, or rediscovery cost justifies it. Do not duplicate the same detail
+in both places.
+
+## Optional risk-triggered roles
+
+Overseer, Adviser, Critic, Reviewer, and Tester are risk-triggered, not required
+milestones. Record only roles actually used and why their value exceeded cost.
+
+- Role / trigger / decision:
 
 ## Result
 
-Summary:
-Business canary evidence:
-Tests/checks:
-Review:
-Workspace/branch at finish:
-Commit (only if created):
-Unresolved:
+Business result:
+Claim strength proven:
+Source/test proof:
+Deployment state:
+Real canary proof:
+Deferred non-blocking findings:
+Commit, only if requested/created:

@@ -1,59 +1,50 @@
 # Worker research protocol
 
-Use only for `Worker(mode=research)`. This protocol is read-only.
-
-The first 3 active minutes are basic project orientation. At the 3-minute
-boundary, create two named files in different trees: `search-<task-slug>.md` for
-the append-only search journal under
-`.agents/shared-session/search/<task-id>/`, and `result-<result-slug>.md` for
-the separately rewritten current final result under
-`.agents/shared-session/results/<task-id>/`. The search tree is physically
-Git-ignored but retained for later bulk analysis. After 10 active minutes,
-`result-<result-slug>.md` is mandatory evidence, may never be
-ignored, and the completed change must include a Git commit. Chat returns only a
-compact TL;DR and the file paths; never leave the detailed result only in a
-transcript that a dead harness may discard.
-
-One-off scripts must be written under `.agents/at/`; never create a separate
-`.at/` or `.lhc/`, and `/tmp` and `.tmpbin/` are forbidden. Why: useful one-off
-scripts are often promoted into reusable Agent Tools or MCPs, so one `.agents/`
-root keeps them discoverable.
-
-## Goal
-
-Reduce uncertainty until L can choose a route and split implementation into
-concrete <=20-minute slices. Find the existing mechanism before proposing new
-infrastructure.
+Use only for `Worker(mode=research)`. Research is read-only and exists to find
+the cheapest route to the next real business proof.
 
 ## Method
 
-1. Read the raw task objective, canary, scope, exclusions, and known evidence.
-2. Locate the actual user path, owning files/symbols/config, interfaces,
-   dependencies, and failure boundary.
-3. Verify assumptions with the smallest useful probes. Prefer repository and
-   live source-of-truth evidence over speculation.
-4. Identify reuse, contradictions, unknowns, and the exact fact blocking a
-   confident implementation package.
-5. Propose an execution graph of independent slices. Every slice has one owner,
-   owned paths, one acceptance check, dependencies/join point, and maximum <=20
-   active minutes.
+Prefer the installed `worker-research` skill as the executable procedure. Its
+tool order is normative:
 
-A whole plan may exceed one hour only as an understood graph of such slices. If
-one unresolved block still appears to exceed one hour, return
-`NEEDS_MORE_RESEARCH` and the next bounded probe; do not disguise uncertainty as
-a long implementation estimate.
+1. Search the project-local reusable code map and check hit freshness.
+2. Use `rg --files` and targeted `rg -n -C` as the default source-of-truth
+   search. Trace the actual production consumer path before nearby
+   abstractions, beginning at the real consumer.
+3. Use context-mode to process large outputs without flooding the Worker
+   context; do not treat its index as the durable canonical project map.
+4. Use an existing Graphify graph only for genuinely multi-hop architecture or
+   ownership questions; verify decisive edges with current source and do not
+   build a graph for a simple lookup.
+5. Find the existing mechanism, first real blocker, and cheapest discriminating
+   probe. Stop once L can implement directly or assign a coherent lane.
 
-## Return
+Upsert verified, likely-to-recur production paths, ownership, configuration,
+test paths, decisions, and failure shields into
+`.agents/shared-session/knowledge/code-map.json`. The map is bounded and
+rewritable by stable key, not append-only. Never store secrets, raw logs,
+temporary status, or guesses as verified facts.
 
-Return one of `READY_FOR_PLAN`, `READY_TO_IMPLEMENT`, `NEEDS_MORE_RESEARCH`, or
-`BLOCKED`, followed by:
+Persist research when handoff, recovery, reuse, or the cost of rediscovery
+justifies it. Use a named file under `.agents/shared-session/results/<task-id>/`
+when a durable result is valuable, and an ignored search journal only when the
+search history itself has reuse value. No elapsed-time threshold by itself
+requires a file or Git commit. Chat may carry the complete compact answer when
+that is cheaper and recoverable enough.
 
-- decisive findings with `path:line`, symbol, command result, or dated source;
-- existing mechanism and real canary blocker;
-- checked and excluded hypotheses;
-- unknowns;
-- proposed <=20-minute slices and dependencies;
-- recommended next probe or lane.
+At every 20 active minutes report progress, business delta, blocker, whether the
+route remains shortest, and the smallest next probe. The expected total range
+may exceed 20 minutes. The checkpoint does not end the Worker; remain available
+for L to continue, redirect, or resume.
 
-Do not write code, edit configuration, deploy, commit, or produce an architecture
-essay unrelated to the decision.
+Ask L at every decision boundary that needs its broader user/session context.
+Send evidence, recommendation, proposed default, parallel-safe work, and the
+exact blocked action through a non-blocking parent transport when available;
+continue safe independent research while waiting.
+
+Return `READY_TO_IMPLEMENT`, `PROGRESS`, `NEEDS_MORE_RESEARCH`, or `BLOCKED`,
+with decisive evidence, production path, existing mechanism, checked/excluded
+hypotheses, reused/updated code-map keys, unknowns that affect the decision, and
+the cheapest next action. Do not write code, mutate configuration, deploy, or
+produce an unrelated architecture essay.

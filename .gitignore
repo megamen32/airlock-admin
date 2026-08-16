@@ -65,3 +65,7 @@ public/gptadmin_infrastructure_mcp_instructions.md
 *.db-shm
 *.db-wal
 private/Cloud/.juggler/
+
+# --- Local LHC runtime state and snapshots ---
+/.agents/shared-session/
+/.last-human-commit.prev-*/
