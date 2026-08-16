@@ -38,7 +38,7 @@ Targets:
   hub        Build/package GPTAdmin hub: build/gptadmin-hub.tar.gz
   shellmcp   Build/package Linux ShellMCP: build/gptadmin-shellmcp.tar.gz
   platform   Package install convenience bundles: build/gptadmin-<os>-<arch>.tar.gz
-  windows    Cross-build Windows ShellMCP and public/gptadmin-win.zip
+  windows    Cross-build Windows hub + ShellMCP and public/gptadmin-win.zip
   android    Cross-build Android/Termux ShellMCP and build/gptadmin-android-arm64.tar.gz
   network-tunnel Build the isolated Network Tunnel relay, ticket issuer and edge binaries
   smoke      Smoke-test existing Linux hub+shellmcp binaries
@@ -469,17 +469,21 @@ build_go_shellmcp_cross_platforms() {
 }
 
 build_windows_shellmcp() {
-  step "Cross-build Windows ShellMCP"
+  step "Cross-build Windows hub and ShellMCP"
   mkdir -p "$ART_DIR/windows" public
+  pushd go-hub >/dev/null
+  export CGO_ENABLED=0
+  GOOS=windows GOARCH=amd64 go build "${GO_HUB_LDFLAGS[@]}" -o "../$ART_DIR/windows/gptadmin-hub.exe" ./cmd/gptadmin-hub
+  popd >/dev/null
   pushd go-shellmcp >/dev/null
   export CGO_ENABLED=0
   GOOS=windows GOARCH=amd64 go build "${GO_SHELLMCP_LDFLAGS[@]}" -o "../$ART_DIR/windows/shellmcp.exe" ./cmd/shellmcp-go
   popd >/dev/null
-  ls -lh "$ART_DIR/windows/shellmcp.exe"
-  file "$ART_DIR/windows/shellmcp.exe" || true
+  ls -lh "$ART_DIR/windows/gptadmin-hub.exe" "$ART_DIR/windows/shellmcp.exe"
+  file "$ART_DIR/windows/gptadmin-hub.exe" "$ART_DIR/windows/shellmcp.exe" || true
   step "Archive: gptadmin-win.zip"
   rm -f "$ART_DIR/gptadmin-win.zip" public/gptadmin-win.zip
-  (cd "$ART_DIR/windows" && zip -q -9 "../gptadmin-win.zip" shellmcp.exe)
+  (cd "$ART_DIR/windows" && zip -q -9 "../gptadmin-win.zip" gptadmin-hub.exe shellmcp.exe)
   cp -f "$ART_DIR/gptadmin-win.zip" public/gptadmin-win.zip
   cp -f deploy/install_win.ps1 public/install_win.ps1
   unzip -l public/gptadmin-win.zip

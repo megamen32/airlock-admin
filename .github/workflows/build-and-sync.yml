@@ -406,6 +406,7 @@ jobs:
       - name: Compile every Go Hub package for Windows
         shell: pwsh
         run: |
+          New-Item -ItemType Directory -Force build/windows | Out-Null
           Set-Location go-hub
           go test -run '^$' ./...
           go build -o ../build/windows/gptadmin-hub.exe ./cmd/gptadmin-hub

@@ -5,6 +5,7 @@ import yaml
 
 ROOT = Path(__file__).resolve().parents[1]
 WORKFLOW = ROOT / ".github" / "workflows" / "build-and-sync.yml"
+BUILD_SCRIPT = ROOT / "tools" / "build.sh"
 
 
 def test_windows_job_compiles_the_complete_go_hub_package():
@@ -15,6 +16,16 @@ def test_windows_job_compiles_the_complete_go_hub_package():
     commands = hub_step["run"]
 
     assert hub_step["shell"] == "pwsh"
+    assert "New-Item -ItemType Directory -Force build/windows" in commands
     assert "Set-Location go-hub" in commands
     assert "go test -run '^$' ./..." in commands
     assert "go build -o ../build/windows/gptadmin-hub.exe ./cmd/gptadmin-hub" in commands
+
+
+def test_release_windows_package_builds_and_archives_the_go_hub():
+    """The release archive must contain the Windows hub, not only ShellMCP."""
+    script = BUILD_SCRIPT.read_text(encoding="utf-8")
+
+    assert 'GOOS=windows GOARCH=amd64 go build "${GO_HUB_LDFLAGS[@]}"' in script
+    assert '"$ART_DIR/windows/gptadmin-hub.exe"' in script
+    assert 'zip -q -9 "../gptadmin-win.zip" gptadmin-hub.exe shellmcp.exe' in script
