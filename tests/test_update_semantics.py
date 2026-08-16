@@ -79,6 +79,21 @@ def test_update_rejects_missing_manifest_metadata_when_required(monkeypatch, tmp
             pytest.fail(f"missing metadata raised the wrong error: {exc}")
 
 
+def test_runtime_binary_install_replaces_running_binary_atomically(tmp_path: Path):
+    """Updating a live executable must not write through the existing inode."""
+    source = tmp_path / "source"
+    destination = tmp_path / "bin" / "gptadmin_hub"
+    source.write_bytes(b"version-new")
+    destination.parent.mkdir()
+    destination.write_bytes(b"version-old")
+
+    cli._install_runtime_binary(source, destination)
+
+    assert destination.read_bytes() == b"version-new"
+    assert destination.stat().st_mode & 0o111
+    assert not list(destination.parent.glob("*.new"))
+
+
 def test_update_restores_auth_material_if_package_install_rewrites_env(monkeypatch, tmp_path):
     """An interrupted/package update must not invalidate existing JWTs."""
     monkeypatch.setenv("GPTADMIN_UPDATE_SKIP_MANIFEST", "1")
