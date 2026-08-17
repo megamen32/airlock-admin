@@ -3,7 +3,7 @@
   "project": "grepmesh-mcp",
   "source": {
     "repository": "/home/roomhacker/gptadmin",
-    "revision": "4ae9b0a",
+    "revision": "13f3729",
     "source_paths": [
       "grepmesh/Cargo.toml",
       "grepmesh/Cargo.lock",
