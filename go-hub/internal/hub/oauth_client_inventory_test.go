@@ -219,7 +219,7 @@ func TestOAuthRedirectMatchesAllowsOnlyLoopbackPortVariation(t *testing.T) {
 	}
 }
 
-func TestNativeLoopbackOAuthClientCompletesAcrossEphemeralCallbackPorts(t *testing.T) {
+func TestNativeLoopbackOAuthClientCompletesAcrossEphemeralCallbackPortsWithBasicClientAuth(t *testing.T) {
 	cfg := Config{AdminPassword: "test-password", OAuthClientSecret: "test-secret", PublicOrigin: "https://hub.example", MCPResource: "https://hub.example", OAuthPermissiveRedirects: true, OAuthPermissiveResources: true}
 	s := New(cfg)
 	verifier := "native-loopback-pkce-verifier"
@@ -234,10 +234,14 @@ func TestNativeLoopbackOAuthClientCompletesAcrossEphemeralCallbackPorts(t *testi
 	}
 	code := oauthInventoryRedirectCode(t, issued.Header().Get("Location"))
 	token := url.Values{
-		"grant_type": {"authorization_code"}, "code": {code}, "client_id": {"native-client"},
+		"grant_type": {"authorization_code"}, "code": {code},
 		"redirect_uri": {"http://127.0.0.1:52008/callback/native"}, "resource": {cfg.MCPResource}, "code_verifier": {verifier},
 	}
-	result := oauthInventoryRequestBody(t, s, http.MethodPost, "/oauth/token", "", token.Encode(), "application/x-www-form-urlencoded")
+	req := httptest.NewRequest(http.MethodPost, "/oauth/token", strings.NewReader(token.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.SetBasicAuth("native-client", "opaque-client-secret")
+	result := httptest.NewRecorder()
+	s.Handler().ServeHTTP(result, req)
 	if result.Code != http.StatusOK {
 		t.Fatalf("native loopback token status=%d body=%s", result.Code, result.Body.String())
 	}
