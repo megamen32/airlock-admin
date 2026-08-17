@@ -124,6 +124,11 @@ jobs:
           cache: npm
           cache-dependency-path: admin-ui/package-lock.json
 
+      - name: Install Android NDK for x64 release bundles
+        run: |
+          sdkmanager --install "ndk;27.0.12077973"
+          echo "ANDROID_X86_64_CC=${ANDROID_HOME}/ndk/27.0.12077973/toolchains/llvm/prebuilt/linux-x86_64/bin/x86_64-linux-android24-clang" >> "$GITHUB_ENV"
+
       - name: Install Python dependencies and test
         run: |
           uv sync
@@ -157,11 +162,27 @@ jobs:
             ./tools/build.sh
           fi
 
-      - name: Verify Android release artifact
+      - name: Verify user-facing release matrix
         run: |
-          test -s build/gptadmin-android-arm64.tar.gz
-          tar -tzf build/gptadmin-android-arm64.tar.gz | grep -qx 'bin/shellmcp'
-          test "$(cat build/gptadmin-android-arm64.version)" = "$(cat VERSION)"
+          python3 - <<'PY'
+          import hashlib, json
+          from pathlib import Path
+          root = Path("build")
+          matrix = json.loads((root / "gptadmin-release-matrix.json").read_text())
+          artifacts = matrix["artifacts"]
+          assert len(artifacts) == 16, len(artifacts)
+          assert {(a["platform"], a["arch"], a["edition"]) for a in artifacts} == {
+              (platform, arch, edition)
+              for platform in ("windows", "macos", "ubuntu", "android")
+              for arch in ("x64", "arm64")
+              for edition in ("full", "client")
+          }
+          for artifact in artifacts:
+              path = root / artifact["file"]
+              assert path.is_file() and path.stat().st_size > 0, path
+              assert hashlib.sha256(path.read_bytes()).hexdigest() == artifact["sha256"], path
+          assert len((root / "gptadmin-checksums.txt").read_text().splitlines()) == 16
+          PY
 
       - name: Verify complete release provenance manifest
         run: |
@@ -263,9 +284,21 @@ jobs:
           fi
 
           expected_public_commit="$(git rev-parse HEAD)"
-          shopt -s nullglob
-          release_assets=("$SRC"/build/*.tar.gz "$SRC"/build/*.zip "$SRC"/build/manifest.json "$SRC"/build/gptadmin-sbom.spdx.json)
-          shopt -u nullglob
+          # User-facing release: 16 named OS/architecture/edition bundles,
+          # one checksum list and one machine-readable catalogue. Internal
+          # component archives, SBOM and provenance stay CI artifacts.
+          release_assets=()
+          for asset in "$SRC"/build/gptadmin-{windows,macos,ubuntu,android}-{x64,arm64}-{full,client}.{zip,tar.gz}; do
+            [[ -f "$asset" ]] && release_assets+=("$asset")
+          done
+          release_assets+=(
+            "$SRC"/build/gptadmin-checksums.txt"
+            "$SRC"/build/gptadmin-release-matrix.json"
+          )
+          [[ ${#release_assets[@]} -eq 18 ]] || {
+            echo "ERROR: expected 16 bundles plus checksums and matrix, got ${#release_assets[@]}" >&2
+            exit 1
+          }
           for asset in "${release_assets[@]}"; do
             if [[ ! -f "$asset" ]]; then
               echo "ERROR: missing release asset: $asset" >&2
@@ -406,6 +439,7 @@ jobs:
       - name: Compile every Go Hub package for Windows
         shell: pwsh
         run: |
+          New-Item -ItemType Directory -Force build/windows | Out-Null
           Set-Location go-hub
           go test -run '^$' ./...
           go build -o ../build/windows/gptadmin-hub.exe ./cmd/gptadmin-hub

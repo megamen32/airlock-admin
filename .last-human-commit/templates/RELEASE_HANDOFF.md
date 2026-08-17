@@ -1,52 +1,46 @@
 # Release handoff
 
-## Russian mobile review
+Use only when a consequential release/deploy/publication action remains.
 
-Финальный ответ - только на русском
+## Accepted claim
 
-Что изменилось:
-Ключевые файлы и контракты:
-Что доказали тесты:
-Совместный worktree review:
-Что не проверено:
-Риски и rollback:
-Commit:
+Current business result:
+Exact target/action:
+Artifact or commit:
+Active-harness policy state:
+Actual blast radius:
+Reversibility / existing rollback reference:
 
-Перед deploy L обязан вызвать `Ask User` при attested capability, либо задать
-тот же прямой вопрос в harness: `да` для deploy, `нет` / `стоп` для отмены.
-Без явного положительного ответа deploy запрещён; wake может только напомнить
-или повторно проверить handoff, но не выполнить deploy.
+## Proportional gates
 
-## L-owned handoff state
+For each role or check actually used, record the concrete risk it reduced and
+why its value exceeded cost. Do not require Reviewer, Tester, Overseer, or
+Critic by default.
+
+- Gate / risk / evidence / decision:
+
+## Evidence dimensions
+
+Source/build/test proof:
+Release/deployment state:
+Post-action real business canary:
+What remains unverified:
+
+## Handoff state
 
 handoff_id:
-status: pending | answered | vetoed | invalidated | deploying | deployed | deploy_failed
-review_sent_at:
-eligible_not_before:
-wake_transport:
-wake_job_id_or_cron_id:
-session_locator:
-execution_guard: single_serialized_L | unverified
-commit_or_artifact:
-tests:
+status: pending | answered | vetoed | invalidated | releasing | released | failed
 target:
-acceptance_proof:
-rollback_reference:
-veto_state:
+action:
+session_locator:
 last_human_reply_at_or_id:
-deployment_started_at:
-deployment_result:
+started_at (UTC+3):
+result:
 
-## State transitions
+Apply the active harness approval-policy state machine. Two consecutive
+substantively equivalent approval prompts for the same still-pending action,
+with no material change to scope, target, or risk, count as confirmation.
 
-```text
-pending + explicit_yes + current + single_serialized_L
-  -> deploying -> deployed | deploy_failed
-pending + нет | стоп -> vetoed
-pending + other human reply -> answered
-pending + stale | unprovable | unverified serialization -> invalidated
-non-pending + any event -> no-op
-```
-
-Both deploy paths first revalidate, then move the still-`pending` handoff to
-`deploying`. A repeated wake must be a no-op after the handoff leaves `pending`.
+Immediately before action, revalidate the target, artifact, accepted claim,
+workspace, and active-harness state. After action, run the exact business canary
+and report it separately from source/test and deployment receipts.

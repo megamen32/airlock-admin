@@ -95,6 +95,7 @@ func TestWebhookGatewayRendersJSONAndDispatchesConfiguredShell(t *testing.T) {
 			Kind:         "shell",
 			Target:       "shell:runner",
 			ApprovalMode: approvalModeBoundedAutonomous,
+			TimeoutSeconds: 77,
 			Command:      `printf '%s:%s' '{{event.repository.name}}' '{{event.number}}'`,
 			Cwd:          "/srv/project",
 		},
@@ -132,6 +133,9 @@ func TestWebhookGatewayRendersJSONAndDispatchesConfiguredShell(t *testing.T) {
 		}
 		s.mu.Unlock()
 		if rendered != nil {
+			if rendered.Timeout != 77 {
+				t.Fatalf("shell job timeout = %d, want 77", rendered.Timeout)
+			}
 			return
 		}
 		time.Sleep(5 * time.Millisecond)
@@ -454,6 +458,193 @@ func TestWebhookJobsSurviveRestart(t *testing.T) {
 	restarted.Handler().ServeHTTP(replayed, duplicate)
 	if replayed.Code != http.StatusAccepted || !strings.Contains(replayed.Body.String(), `"duplicate":true`) || !strings.Contains(replayed.Body.String(), jobID) {
 		t.Fatalf("replayed delivery = %d/%s", replayed.Code, replayed.Body.String())
+	}
+}
+
+func TestWebhookGatewayCapturesCorrelationAndTraceRefsFromHealthEvent(t *testing.T) {
+	s := New(Config{WebhookRoutes: []WebhookRoute{{
+		ID:     "status",
+		Token:  "route-secret",
+		Action: WebhookAction{Kind: "mcp", Target: "hub", Tool: "status"},
+	}}})
+	request := webhookRequest(http.MethodPost, "/webhooks/v1/status", []byte(`{"correlation_id":"corr-123","trace_refs":["trace-a","trace-b"],"event":"healthy"}`))
+	request.Header.Set("Authorization", "Bearer route-secret")
+	accepted := httptest.NewRecorder()
+	s.Handler().ServeHTTP(accepted, request)
+	if accepted.Code != http.StatusAccepted {
+		t.Fatalf("submit status = %d, body = %s", accepted.Code, accepted.Body.String())
+	}
+	var response map[string]any
+	if err := json.Unmarshal(accepted.Body.Bytes(), &response); err != nil {
+		t.Fatal(err)
+	}
+	jobID := response["job_id"].(string)
+	deadline := time.Now().Add(time.Second)
+	for time.Now().Before(deadline) {
+		s.mu.Lock()
+		job := cloneWebhookJob(s.webhookJobs[jobID])
+		s.mu.Unlock()
+		if job != nil && job.CorrelationID == "corr-123" && len(job.TraceRefs) == 2 {
+			return
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	t.Fatalf("captured job was not populated with correlation metadata")
+}
+
+func TestWebhookGatewayProgressUpdateRequiresUsefulChangeAndRejectsTerminalJob(t *testing.T) {
+	s := New(Config{WebhookRoutes: []WebhookRoute{{
+		ID:     "status",
+		Token:  "route-secret",
+		Action: WebhookAction{Kind: "shell", Target: "shell:runner", ApprovalMode: approvalModeBoundedAutonomous, Command: "sleep 1"},
+	}}})
+	s.mu.Lock()
+	s.agents["shell:runner"] = &Agent{AgentID: "shell:runner", Status: "online"}
+	s.mu.Unlock()
+	request := webhookRequest(http.MethodPost, "/webhooks/v1/status", []byte(`{"correlation_id":"corr-123","trace_refs":["trace-a"],"event":"healthy"}`))
+	request.Header.Set("Authorization", "Bearer route-secret")
+	accepted := httptest.NewRecorder()
+	s.Handler().ServeHTTP(accepted, request)
+	if accepted.Code != http.StatusAccepted {
+		t.Fatalf("submit status = %d, body = %s", accepted.Code, accepted.Body.String())
+	}
+	var submission map[string]any
+	if err := json.Unmarshal(accepted.Body.Bytes(), &submission); err != nil {
+		t.Fatal(err)
+	}
+	jobID := submission["job_id"].(string)
+
+	progress := webhookRequest(http.MethodPost, "/webhook-jobs/"+jobID+"/progress", []byte(`{"step":"checked cpu","evidence_refs":["/tmp/cpu"],"trace_refs":["trace-a"],"fingerprint":"fp-1"}`))
+	progress.Header.Set("Authorization", "Bearer route-secret")
+	progress.Header.Set("Idempotency-Key", "progress-1")
+	progressed := httptest.NewRecorder()
+	s.Handler().ServeHTTP(progressed, progress)
+	if progressed.Code != http.StatusAccepted {
+		t.Fatalf("progress status = %d, body = %s", progressed.Code, progressed.Body.String())
+	}
+	var progressResponse map[string]any
+	if err := json.Unmarshal(progressed.Body.Bytes(), &progressResponse); err != nil {
+		t.Fatal(err)
+	}
+	if progressResponse["useful_progress"] != true {
+		t.Fatalf("progress response = %#v", progressResponse)
+	}
+
+	heartbeat := webhookRequest(http.MethodPost, "/webhook-jobs/"+jobID+"/progress", []byte(`{"step":"checked cpu","evidence_refs":["/tmp/cpu"],"trace_refs":["trace-a"],"fingerprint":"fp-1"}`))
+	heartbeat.Header.Set("Authorization", "Bearer route-secret")
+	heartbeat.Header.Set("Idempotency-Key", "progress-2")
+	replayed := httptest.NewRecorder()
+	s.Handler().ServeHTTP(replayed, heartbeat)
+	if replayed.Code != http.StatusAccepted {
+		t.Fatalf("heartbeat status = %d, body = %s", replayed.Code, replayed.Body.String())
+	}
+	var heartbeatResponse map[string]any
+	if err := json.Unmarshal(replayed.Body.Bytes(), &heartbeatResponse); err != nil {
+		t.Fatal(err)
+	}
+	if heartbeatResponse["useful_progress"] != false {
+		t.Fatalf("heartbeat claimed useful progress: %#v", heartbeatResponse)
+	}
+
+	duplicateProgress := webhookRequest(http.MethodPost, "/webhook-jobs/"+jobID+"/progress", []byte(`{"step":"checked cpu","evidence_refs":["/tmp/cpu"],"trace_refs":["trace-a"],"fingerprint":"fp-1"}`))
+	duplicateProgress.Header.Set("Authorization", "Bearer route-secret")
+	duplicateProgress.Header.Set("Idempotency-Key", "progress-1")
+	duplicateRecord := httptest.NewRecorder()
+	s.Handler().ServeHTTP(duplicateRecord, duplicateProgress)
+	if duplicateRecord.Code != http.StatusAccepted || !strings.Contains(duplicateRecord.Body.String(), `"duplicate":true`) || !strings.Contains(duplicateRecord.Body.String(), `"useful_progress":false`) {
+		t.Fatalf("duplicate progress response = %d/%s", duplicateRecord.Code, duplicateRecord.Body.String())
+	}
+
+	readProgress := webhookRequest(http.MethodGet, "/webhook-jobs/"+jobID+"/progress", nil)
+	readProgress.Header.Set("Authorization", "Bearer route-secret")
+	readRecord := httptest.NewRecorder()
+	s.Handler().ServeHTTP(readRecord, readProgress)
+	if readRecord.Code != http.StatusMethodNotAllowed {
+		t.Fatalf("GET progress status = %d, body = %s", readRecord.Code, readRecord.Body.String())
+	}
+
+	s.mu.Lock()
+	job := s.webhookJobs[jobID]
+	if job == nil || len(job.Progress) != 2 || job.Progress[0].UsefulProgress != true || job.Progress[1].UsefulProgress != false || job.UsefulProgress != false {
+		s.mu.Unlock()
+		t.Fatalf("job progress state = %#v", job)
+	}
+	job.Status = "completed"
+	s.mu.Unlock()
+
+	terminal := webhookRequest(http.MethodPost, "/webhook-jobs/"+jobID+"/progress", []byte(`{"step":"after complete","evidence_refs":["/tmp/late"],"trace_refs":["trace-b"],"fingerprint":"fp-2"}`))
+	terminal.Header.Set("Authorization", "Bearer route-secret")
+	terminalRecord := httptest.NewRecorder()
+	s.Handler().ServeHTTP(terminalRecord, terminal)
+	if terminalRecord.Code != http.StatusConflict {
+		t.Fatalf("terminal progress status = %d, body = %s", terminalRecord.Code, terminalRecord.Body.String())
+	}
+}
+
+func TestWebhookGatewayProgressRejectsMalformedAndOversizedPayloads(t *testing.T) {
+	s := New(Config{WebhookRoutes: []WebhookRoute{{
+		ID:     "status",
+		Token:  "route-secret",
+		Action: WebhookAction{Kind: "mcp", Target: "hub", Tool: "status"},
+	}}})
+	request := webhookRequest(http.MethodPost, "/webhooks/v1/status", []byte(`{"event":"healthy"}`))
+	request.Header.Set("Authorization", "Bearer route-secret")
+	accepted := httptest.NewRecorder()
+	s.Handler().ServeHTTP(accepted, request)
+	var submission map[string]any
+	if err := json.Unmarshal(accepted.Body.Bytes(), &submission); err != nil {
+		t.Fatal(err)
+	}
+	jobID := submission["job_id"].(string)
+
+	malformed := webhookRequest(http.MethodPost, "/webhook-jobs/"+jobID+"/progress", []byte(`{"step":"","evidence_refs":[],"fingerprint":""}`))
+	malformed.Header.Set("Authorization", "Bearer route-secret")
+	malformedRecord := httptest.NewRecorder()
+	s.Handler().ServeHTTP(malformedRecord, malformed)
+	if malformedRecord.Code != http.StatusBadRequest {
+		t.Fatalf("malformed progress status = %d, body = %s", malformedRecord.Code, malformedRecord.Body.String())
+	}
+
+	bigStep := strings.Repeat("x", webhookProgressMaxStepLen+1)
+	oversized := fmt.Sprintf(`{"step":%q,"evidence_refs":["ok"],"fingerprint":"fp-1"}`, bigStep)
+	bigRequest := webhookRequest(http.MethodPost, "/webhook-jobs/"+jobID+"/progress", []byte(oversized))
+	bigRequest.Header.Set("Authorization", "Bearer route-secret")
+	bigRecord := httptest.NewRecorder()
+	s.Handler().ServeHTTP(bigRecord, bigRequest)
+	if bigRecord.Code != http.StatusBadRequest {
+		t.Fatalf("oversized progress status = %d, body = %s", bigRecord.Code, bigRecord.Body.String())
+	}
+}
+
+func TestWebhookGatewayProgressGETIncludesJobReceipts(t *testing.T) {
+	s := New(Config{WebhookRoutes: []WebhookRoute{{
+		ID:     "status",
+		Token:  "route-secret",
+		Action: WebhookAction{Kind: "mcp", Target: "hub", Tool: "status"},
+	}}})
+	s.mu.Lock()
+	s.webhookJobs["job-1"] = &webhookJob{
+		ID:                  "job-1",
+		RouteID:             "status",
+		Status:              "running",
+		CreatedAt:           time.Now(),
+		CorrelationID:       "corr-123",
+		TraceRefs:           []string{"trace-a"},
+		Progress:            []webhookProgress{{ReceivedAt: time.Now(), Step: "checked", EvidenceRefs: []string{"/tmp/a"}, Fingerprint: "fp-1", UsefulProgress: true}},
+		LastProgressAt:      time.Now(),
+		ProgressFingerprint: "fp-1",
+		UsefulProgress:      true,
+	}
+	s.mu.Unlock()
+	get := webhookRequest(http.MethodGet, "/webhook-jobs/job-1", nil)
+	get.Header.Set("Authorization", "Bearer route-secret")
+	record := httptest.NewRecorder()
+	s.Handler().ServeHTTP(record, get)
+	if record.Code != http.StatusOK {
+		t.Fatalf("status = %d, body = %s", record.Code, record.Body.String())
+	}
+	if !strings.Contains(record.Body.String(), `"correlation_id":"corr-123"`) || !strings.Contains(record.Body.String(), `"useful_progress":true`) {
+		t.Fatalf("GET response missing progress receipts: %s", record.Body.String())
 	}
 }
 

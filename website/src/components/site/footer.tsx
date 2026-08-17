@@ -52,7 +52,7 @@ export function Footer() {
               <Github className="h-3.5 w-3.5" /> {t("footer.links.github")}
             </a>
             <a
-              href="https://bezrabotnyi.com"
+              href="https://gptadmin.bezrabotnyi.com"
               target="_blank"
               rel="noopener"
               className="inline-flex items-center gap-1.5 transition-colors hover:text-foreground"
@@ -74,7 +74,7 @@ export function Footer() {
           <p>{t("footer.copyright")}</p>
           <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-2">
             <a
-              href="https://bezrabotnyi.com"
+              href="https://gptadmin.bezrabotnyi.com"
               target="_blank"
               rel="noopener"
               className="inline-flex items-center gap-1.5 transition-colors hover:text-primary"

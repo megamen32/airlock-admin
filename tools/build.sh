@@ -38,7 +38,7 @@ Targets:
   hub        Build/package GPTAdmin hub: build/gptadmin-hub.tar.gz
   shellmcp   Build/package Linux ShellMCP: build/gptadmin-shellmcp.tar.gz
   platform   Package install convenience bundles: build/gptadmin-<os>-<arch>.tar.gz
-  windows    Cross-build Windows ShellMCP and public/gptadmin-win.zip
+  windows    Cross-build Windows hub + ShellMCP and public/gptadmin-win.zip
   android    Cross-build Android/Termux ShellMCP and build/gptadmin-android-arm64.tar.gz
   network-tunnel Build the isolated Network Tunnel relay, ticket issuer and edge binaries
   smoke      Smoke-test existing Linux hub+shellmcp binaries
@@ -297,22 +297,25 @@ build_hub_linux() {
   chmod 755 "$HUB_DIST"
 }
 
-# Cross-build gptadmin_hub for every platform we ship an install bundle for
-# (linux/{amd64,arm64}, darwin/{amd64,arm64}). CGO is disabled, so this is pure
-# Go and needs no C cross-toolchain on the amd64 build host. Mirrors
-# build_go_shellmcp_cross_platforms. Without this, the linux-arm64 (and the
-# darwin) platform archives were skipped because no hub binary existed for
-# those arches — so arm64 hosts (e.g. Orange Pi) fell back to the all-in-one
-# bundle shipping an amd64 hub that cannot run. See CLAUDE.md "Gotchas".
+# Cross-build the two Go binaries for every published operating-system and
+# architecture pair. CGO is disabled, so no host-specific toolchain is needed.
 build_hub_cross_platforms() {
   step "Cross-build Go hub platform binaries"
   pushd go-hub > /dev/null
   export CGO_ENABLED=0
-  for pair in linux_amd64 linux_arm64 darwin_amd64 darwin_arm64; do
+  local pairs=(linux_amd64 linux_arm64 darwin_amd64 darwin_arm64)
+  [[ "${1:-}" == matrix ]] && pairs+=(windows_amd64 windows_arm64 android_amd64 android_arm64)
+  for pair in "${pairs[@]}"; do
     local goos="${pair%%_*}" goarch="${pair##*_}"
     mkdir -p "../$ART_DIR/gptadmin_hub/$pair"
-    GOOS=$goos GOARCH=$goarch go build "${GO_HUB_LDFLAGS[@]}" \
-      -o "../$ART_DIR/gptadmin_hub/$pair/gptadmin_hub" ./cmd/gptadmin-hub
+    if [[ "$pair" == android_amd64 ]]; then
+      [[ -n "${ANDROID_X86_64_CC:-}" ]] || { echo "ERROR: Android x64 requires ANDROID_X86_64_CC from the Android NDK" >&2; exit 1; }
+      CGO_ENABLED=1 CC="$ANDROID_X86_64_CC" GOOS=$goos GOARCH=$goarch go build "${GO_HUB_LDFLAGS[@]}" \
+        -o "../$ART_DIR/gptadmin_hub/$pair/gptadmin_hub" ./cmd/gptadmin-hub
+    else
+      GOOS=$goos GOARCH=$goarch go build "${GO_HUB_LDFLAGS[@]}" \
+        -o "../$ART_DIR/gptadmin_hub/$pair/gptadmin_hub" ./cmd/gptadmin-hub
+    fi
     echo "hub cross-build: $pair/gptadmin_hub"
   done
   popd > /dev/null
@@ -451,17 +454,21 @@ archive_platforms() {
 
 build_go_shellmcp_cross_platforms() {
   step "Cross-build Go ShellMCP platform binaries"
-  mkdir -p \
-    "$ART_DIR/go-shellmcp/linux_amd64" \
-    "$ART_DIR/go-shellmcp/linux_arm64" \
-    "$ART_DIR/go-shellmcp/darwin_amd64" \
-    "$ART_DIR/go-shellmcp/darwin_arm64"
   pushd go-shellmcp > /dev/null
   export CGO_ENABLED=0
-  GOOS=linux GOARCH=amd64 go build "${GO_SHELLMCP_LDFLAGS[@]}" -o "../$ART_DIR/go-shellmcp/linux_amd64/shellmcp-go" ./cmd/shellmcp-go
-  GOOS=linux GOARCH=arm64 go build "${GO_SHELLMCP_LDFLAGS[@]}" -o "../$ART_DIR/go-shellmcp/linux_arm64/shellmcp-go" ./cmd/shellmcp-go
-  GOOS=darwin GOARCH=amd64 go build "${GO_SHELLMCP_LDFLAGS[@]}" -o "../$ART_DIR/go-shellmcp/darwin_amd64/shellmcp-go" ./cmd/shellmcp-go
-  GOOS=darwin GOARCH=arm64 go build "${GO_SHELLMCP_LDFLAGS[@]}" -o "../$ART_DIR/go-shellmcp/darwin_arm64/shellmcp-go" ./cmd/shellmcp-go
+  local pair goos goarch
+  local pairs=(linux_amd64 linux_arm64 darwin_amd64 darwin_arm64)
+  [[ "${1:-}" == matrix ]] && pairs+=(windows_amd64 windows_arm64 android_amd64 android_arm64)
+  for pair in "${pairs[@]}"; do
+    goos="${pair%%_*}"; goarch="${pair##*_}"
+    mkdir -p "../$ART_DIR/go-shellmcp/$pair"
+    if [[ "$pair" == android_amd64 ]]; then
+      [[ -n "${ANDROID_X86_64_CC:-}" ]] || { echo "ERROR: Android x64 requires ANDROID_X86_64_CC from the Android NDK" >&2; exit 1; }
+      CGO_ENABLED=1 CC="$ANDROID_X86_64_CC" GOOS="$goos" GOARCH="$goarch" go build "${GO_SHELLMCP_LDFLAGS[@]}" -o "../$ART_DIR/go-shellmcp/$pair/shellmcp-go" ./cmd/shellmcp-go
+    else
+      GOOS="$goos" GOARCH="$goarch" go build "${GO_SHELLMCP_LDFLAGS[@]}" -o "../$ART_DIR/go-shellmcp/$pair/shellmcp-go" ./cmd/shellmcp-go
+    fi
+  done
   popd > /dev/null
   chmod 755 "$ART_DIR/go-shellmcp"/*/shellmcp-go
   cp -a "$ART_DIR/go-shellmcp/." "$ART_DIR/shellmcp/"
@@ -469,21 +476,28 @@ build_go_shellmcp_cross_platforms() {
 }
 
 build_windows_shellmcp() {
-  step "Cross-build Windows ShellMCP"
+  step "Cross-build Windows hub and ShellMCP"
   mkdir -p "$ART_DIR/windows" public
+  pushd go-hub >/dev/null
+  export CGO_ENABLED=0
+  GOOS=windows GOARCH=amd64 go build "${GO_HUB_LDFLAGS[@]}" -o "../$ART_DIR/windows/gptadmin-hub.exe" ./cmd/gptadmin-hub
+  popd >/dev/null
   pushd go-shellmcp >/dev/null
   export CGO_ENABLED=0
   GOOS=windows GOARCH=amd64 go build "${GO_SHELLMCP_LDFLAGS[@]}" -o "../$ART_DIR/windows/shellmcp.exe" ./cmd/shellmcp-go
   popd >/dev/null
-  ls -lh "$ART_DIR/windows/shellmcp.exe"
-  file "$ART_DIR/windows/shellmcp.exe" || true
+  ls -lh "$ART_DIR/windows/gptadmin-hub.exe" "$ART_DIR/windows/shellmcp.exe"
+  file "$ART_DIR/windows/gptadmin-hub.exe" "$ART_DIR/windows/shellmcp.exe" || true
   step "Archive: gptadmin-win.zip"
   rm -f "$ART_DIR/gptadmin-win.zip" public/gptadmin-win.zip
-  (cd "$ART_DIR/windows" && zip -q -9 "../gptadmin-win.zip" shellmcp.exe)
+  (cd "$ART_DIR/windows" && zip -q -9 "../gptadmin-win.zip" gptadmin-hub.exe shellmcp.exe)
   cp -f "$ART_DIR/gptadmin-win.zip" public/gptadmin-win.zip
   cp -f deploy/install_win.ps1 public/install_win.ps1
   unzip -l public/gptadmin-win.zip
   sha256sum public/gptadmin-win.zip > public/gptadmin-win.zip.sha256
+  if [[ -d "$ART_DIR/public" ]]; then
+    cp -f public/gptadmin-win.zip public/gptadmin-win.zip.sha256 public/install_win.ps1 "$ART_DIR/public/"
+  fi
   echo "built: public/gptadmin-win.zip"
 }
 
@@ -527,6 +541,71 @@ EOF
   sha256sum "$ART_DIR/gptadmin-android-arm64.tar.gz" > "$ART_DIR/gptadmin-android-arm64.sha256"
   printf '%s\n' "$BUILD_VERSION" > "$ART_DIR/gptadmin-android-arm64.version"
   echo "built: $ART_DIR/gptadmin-android-arm64.tar.gz"
+}
+
+# Public releases publish these 16 concise bundles. Legacy component archives
+# remain available in build/ for compatibility, but are not user-facing assets.
+emit_release_bundle() {
+  local platform="$1" arch="$2" edition="$3"
+  local goos goarch extension tmp out hub shell suffix=""
+  case "$platform" in
+    windows) goos=windows; extension=zip; suffix=.exe ;;
+    macos) goos=darwin; extension=tar.gz ;;
+    ubuntu) goos=linux; extension=tar.gz ;;
+    android) goos=android; extension=tar.gz ;;
+    *) echo "ERROR: unsupported release platform: $platform" >&2; exit 1 ;;
+  esac
+  case "$arch" in x64) goarch=amd64 ;; arm64) goarch=arm64 ;; *) echo "ERROR: unsupported release architecture: $arch" >&2; exit 1 ;; esac
+  hub="$ART_DIR/gptadmin_hub/${goos}_${goarch}/gptadmin_hub"
+  shell="$ART_DIR/go-shellmcp/${goos}_${goarch}/shellmcp-go"
+  [[ -x "$shell" ]] || { echo "ERROR: missing ShellMCP for $platform/$arch" >&2; exit 1; }
+  [[ "$edition" == client || "$edition" == full ]] || { echo "ERROR: unsupported release edition: $edition" >&2; exit 1; }
+  if [[ "$edition" == full ]]; then [[ -x "$hub" ]] || { echo "ERROR: missing hub for $platform/$arch" >&2; exit 1; }; fi
+  out="$ART_DIR/gptadmin-${platform}-${arch}-${edition}.${extension}"
+  tmp="$(mktemp -d)"
+  mkdir -p "$tmp/bin"
+  cp -f "$shell" "$tmp/bin/shellmcp$suffix"
+  if [[ "$edition" == full ]]; then cp -f "$hub" "$tmp/bin/gptadmin-hub$suffix"; fi
+  printf 'GPTAdmin %s for %s/%s (%s)\n' "$BUILD_VERSION" "$platform" "$arch" "$edition" > "$tmp/README.txt"
+  if [[ "$extension" == zip ]]; then (cd "$tmp" && zip -q -9 "$REPO_DIR/$out.tmp.$$" README.txt bin/*); else tar -C "$tmp" -czf "$out.tmp.$$" .; fi
+  mv -f "$out.tmp.$$" "$out"
+  rm -rf "$tmp"
+  echo "built: $out"
+}
+
+build_user_release_matrix() {
+  step "Package user-facing release matrix"
+  emit_release_bundle "windows" "x64" "full"
+  emit_release_bundle "windows" "x64" "client"
+  emit_release_bundle "windows" "arm64" "full"
+  emit_release_bundle "windows" "arm64" "client"
+  emit_release_bundle "macos" "x64" "full"
+  emit_release_bundle "macos" "x64" "client"
+  emit_release_bundle "macos" "arm64" "full"
+  emit_release_bundle "macos" "arm64" "client"
+  emit_release_bundle "ubuntu" "x64" "full"
+  emit_release_bundle "ubuntu" "x64" "client"
+  emit_release_bundle "ubuntu" "arm64" "full"
+  emit_release_bundle "ubuntu" "arm64" "client"
+  emit_release_bundle "android" "x64" "full"
+  emit_release_bundle "android" "x64" "client"
+  emit_release_bundle "android" "arm64" "full"
+  emit_release_bundle "android" "arm64" "client"
+  (
+    for file in "$ART_DIR"/gptadmin-{windows,macos,ubuntu,android}-{x64,arm64}-{full,client}.{zip,tar.gz}; do
+      [[ -f "$file" ]] && sha256sum "$file"
+    done | sort -k2 > "$ART_DIR/gptadmin-checksums.txt"
+  )
+  python3 - "$ART_DIR" <<'PY'
+import hashlib, json, pathlib, re, sys
+root = pathlib.Path(sys.argv[1])
+entries = []
+for path in sorted(root.glob("gptadmin-*-*-*.*")):
+    match = re.fullmatch(r"gptadmin-(windows|macos|ubuntu|android)-(x64|arm64)-(full|client)\\.(zip|tar\\.gz)", path.name)
+    if match:
+        entries.append({"platform": match.group(1), "arch": match.group(2), "edition": match.group(3), "file": path.name, "sha256": hashlib.sha256(path.read_bytes()).hexdigest()})
+(root / "gptadmin-release-matrix.json").write_text(json.dumps({"schema": "gptadmin.release-matrix/v1", "artifacts": entries}, indent=2) + "\\n")
+PY
 }
 
 wait_for_http() {
@@ -620,13 +699,16 @@ if want all; then
   package_hub_platform_binaries
   copy_support_payloads
   copy_admin_static_payloads
+  build_windows_shellmcp
   archive_component_cli
   archive_component_hub
   archive_component_shellmcp
   archive_all
   archive_platforms
-  build_windows_shellmcp
   build_android_shellmcp
+  build_hub_cross_platforms matrix
+  build_go_shellmcp_cross_platforms matrix
+  build_user_release_matrix
   build_network_tunnel
   smoke_linux
 else

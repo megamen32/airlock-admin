@@ -53,3 +53,4 @@ Production rollout completed on 2026-08-08: commits `1b58f74` (runtime flag/test
 - GPTADMIN plugin `shell_exec(uptime)` on `shell:roomhacker-server-100`: completed, returncode 0.
 - GPTADMIN plugin BrowserClaw `tabs(new example.com)` returned Example Domain snapshot; `tabs(close)` completed successfully.
 - The Bearer used for the canary was supplied in chat and must be rotated after handoff.
+- Browser UI boundary: the available Touchpoint browser/desktop tester returned `Transport closed`, so an actual ChatGPT Custom GPT conversation was not independently proven in the UI. HTTP OAuth/Bearer, GPTADMIN plugin `uptime`, and plugin BrowserClaw execution were proven separately.

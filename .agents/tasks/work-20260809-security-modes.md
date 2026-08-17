@@ -1,6 +1,6 @@
 # Configurable GPTAdmin/ShellMCP security modes
 
-Status: in_progress (implementation and isolated verification complete; production apply pending explicit canary approval)
+Status: complete (v150 deployed and live canary passed; release-numbering regression follow-up is shipped)
 
 ## Исходный запрос
 
@@ -39,8 +39,11 @@ Status: in_progress (implementation and isolated verification complete; producti
 - 2026-08-09: Commits `2e1118c` and `4a40c7e` contain only this feature's selected files. Unrelated shared-worktree changes remain unstaged and untouched.
 - 2026-08-09: Added a typed `bearer_profile` alongside `process_profile`. Signature verification remains unconditional; maximum requires issuer, audience, resource, scope, subject, issued-at, expiry, PKCE, token lifecycle, and redirect/resource allowlists. Normal preserves the established legacy-compatible contract; custom controls these checks individually. Added CLI `gptadmin security bearer` and dashboard controls.
 - 2026-08-09: Full Go Hub suite passed after regression repair (`go test ./... -count=1 -timeout=120s`); ShellMCP full suite passed (`go test ./... -count=1 -timeout=120s`); Python focused suite passed (14 tests). Isolated live Go Hub canary passed health, profile update `normal -> maximum`, bearer issuance, and real MCP `initialize`; isolated ShellMCP stdio canary passed `initialize` and explicit `shell_exec`.
-- 2026-08-09: Read-only production probe shows server-100 Hub is healthy on build 147 but still has the old unit hardening (`NoNewPrivileges=true`, `ProtectSystem=full`, `ProtectHome=true`). New code is not live there yet.
+- 2026-08-09: v149 rollout completed after fixing the updater's Go Hub health predicate (`gptadmin-go-hub`); v150 release `31287945905` passed all release gates and was deployed with the v150 CLI.
+- 2026-08-09: Production marker is build 150 / git `17344b648a10d9af2d1cbd3505a96970cd53a5f1`; Hub, ShellMCP, and FRP are active. The old `100-gptadmin-user-mode.conf` `ProtectHome=read-only` override was removed by the update cleanup while preserving `User=roomhacker`.
+- 2026-08-09: Production `/admin/api/security/profile` reports process and bearer mode `normal`, `allow_privileged_execution=true`, and all normal-mode process hardening flags false. Real local MCP initialize returned protocol `2024-11-05`, server `gptadmin-go-hub`, version `150`; signed ShellMCP heartbeat endpoint returned a structured registration response.
+- 2026-08-09: Release-numbering follow-up shipped in commits `c9e9aa9`, `afa651a`, and `045125f`: auto-tag now runs on every main push, advances an already-published VERSION without rewriting immutable tags, serializes runs, and retries dispatch while a newly-pushed tag propagates. Contract tests passed (14 tests); auto-tag successfully created v151, dispatched its build, and v151 completed successfully with 13 public release assets.
 
-## Remaining acceptance boundary
+## Acceptance result
 
-Production units have not been regenerated or restarted in this task. Before applying a non-normal mode, run a host-local canary showing normal ShellMCP privilege flow, then obtain explicit confirmation for the restart/apply boundary. The default source behavior is normal/frictionless; existing production units are not silently changed by these commits.
+Production was regenerated and restarted under the previously granted restart authorization. The live normal profile and MCP canary passed. Maximum/custom remain explicit opt-in modes through the Hub API, dashboard, CLI, and persisted security state; no mode switch was applied to production.

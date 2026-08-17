@@ -203,6 +203,50 @@ func TestCanonicalOAuthEndpointsRequirePKCEAndBindClient(t *testing.T) {
 	}
 }
 
+func TestOAuthRedirectMatchesAllowsOnlyLoopbackPortVariation(t *testing.T) {
+	if !oauthRedirectMatches("http://127.0.0.1:49411/callback/native", "http://127.0.0.1:52008/callback/native") {
+		t.Fatal("native loopback callback port variation was rejected")
+	}
+	for _, candidate := range []string{
+		"http://127.0.0.1:52008/callback/other",
+		"http://localhost:52008/callback/native",
+		"https://127.0.0.1:52008/callback/native",
+		"https://client.example/callback",
+	} {
+		if oauthRedirectMatches("http://127.0.0.1:49411/callback/native", candidate) {
+			t.Fatalf("unsafe redirect variation accepted: %s", candidate)
+		}
+	}
+}
+
+func TestNativeLoopbackOAuthClientCompletesAcrossEphemeralCallbackPortsWithBasicClientAuth(t *testing.T) {
+	cfg := Config{AdminPassword: "test-password", OAuthClientSecret: "test-secret", PublicOrigin: "https://hub.example", MCPResource: "https://hub.example", OAuthPermissiveRedirects: true, OAuthPermissiveResources: true}
+	s := New(cfg)
+	verifier := "native-loopback-pkce-verifier"
+	issuedRedirect := "http://127.0.0.1:49411/callback/native"
+	authorize := url.Values{
+		"client_id": {"native-client"}, "redirect_uri": {issuedRedirect}, "resource": {cfg.MCPResource},
+		"password": {cfg.AdminPassword}, "code_challenge": {oauthInventoryPKCE(verifier)}, "code_challenge_method": {"S256"},
+	}
+	issued := oauthInventoryRequestBody(t, s, http.MethodPost, "/oauth/authorize", "", authorize.Encode(), "application/x-www-form-urlencoded")
+	if issued.Code != http.StatusFound {
+		t.Fatalf("authorize status=%d body=%s", issued.Code, issued.Body.String())
+	}
+	code := oauthInventoryRedirectCode(t, issued.Header().Get("Location"))
+	token := url.Values{
+		"grant_type": {"authorization_code"}, "code": {code},
+		"redirect_uri": {"http://127.0.0.1:52008/callback/native"}, "resource": {cfg.MCPResource}, "code_verifier": {verifier},
+	}
+	req := httptest.NewRequest(http.MethodPost, "/oauth/token", strings.NewReader(token.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.SetBasicAuth("native-client", "opaque-client-secret")
+	result := httptest.NewRecorder()
+	s.Handler().ServeHTTP(result, req)
+	if result.Code != http.StatusOK {
+		t.Fatalf("native loopback token status=%d body=%s", result.Code, result.Body.String())
+	}
+}
+
 func TestOAuthRefreshTokenSurvivesRestartForFiveYearsAndAuthenticatesMCPPaths(t *testing.T) {
 	cfg := Config{
 		AdminPassword:            "admin-password",

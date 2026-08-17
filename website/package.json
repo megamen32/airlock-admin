@@ -12,7 +12,7 @@
     "i18n:check:literals": "node scripts/check-translation-literals.mjs",
     "i18n:check:runtime": "python3 scripts/check-i18n-runtime.py",
     "dev": "next dev -p 3000 2>&1 | tee dev.log",
-    "build": "next build && rm -rf .next/standalone/.next/static .next/standalone/public && mkdir -p .next/standalone/.next && cp -r .next/static .next/standalone/.next/static && cp -r public .next/standalone/ && node scripts/check-standalone-output.mjs",
+    "build": "next build && rm -rf .next/standalone/.next/static .next/standalone/public && mkdir -p .next/standalone/.next && cp -r .next/static .next/standalone/.next/static && cp -r public .next/standalone/ && node scripts/check-standalone-output.mjs && node scripts/check-docs-build.mjs",
     "start": "NODE_ENV=production bun .next/standalone/server.js 2>&1 | tee server.log",
     "check:standalone": "node scripts/check-standalone-output.mjs",
     "lint": "eslint .",

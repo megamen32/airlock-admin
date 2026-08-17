@@ -1,124 +1,85 @@
-# Full cycle
+# Material-decision cycle
 
-## Language contract
+Use this view only when a material product, architecture, migration, or
+expensive-wrong-path choice remains after the real production path is known.
+Full is not a synonym for long, important, polished, or release-bound work.
 
-- Планы - только на русском
-- Execution updates - English only
-- Финальный ответ - только на русском
+## Business claim
 
-## Confirmed outcome and boundary
+Latest user outcome:
+Accepted MVP / Definition of Done:
+Exact real user/business canary:
+Cheapest sufficient proof:
+Actual production consumer path:
+Confirmed scope:
+Explicit exclusions:
+Current blocker:
+Initial minimum / maximum active minutes:
+Cycle estimates (each named route/canary/review/rollout):
+Time-guard state:
 
-Outcome (exact):
-Acceptance canary (exact):
-Confirmed scope (exact):
-Exclusions (exact):
-Constraints:
-Scope changes with verbatim human confirmation:
+## Least-cost route
+
+Smallest reversible change that moves the canary:
+Why direct Lead work or delegation is cheaper:
+Chosen model/agent and why it is sufficient:
+First 20-minute reporting checkpoint:
 Stop when:
-Abandon when:
-Forbidden without explicit user request:
+Redirect when:
 
-## Scope scenarios
+## Material options — only when a route choice matters
 
-- Failed canary + unrelated secondary work -> STOP_SCOPE_DRIFT
-- Green canary + direct regression -> review the direct regression
-- User-confirmed secondary objective -> in scope
+Record exactly two genuinely different approaches. For each, compress the
+ideal/full route to normal and then to the YAGNI/Pareto MVP. Present the two
+compressed variants; never invent a third option to fill a template. Skip this
+comparison when one route is already obvious and reversible.
 
-## Estimate history
+For each option:
 
-Initial estimate (UTC+3, range, assumptions):
-Revisions (UTC+3, previous -> new, evidence/reason, scope impact):
+- business result delivered now;
+- time/cost to first canary;
+- reuse and migration economics;
+- wrong-path and rollback cost;
+- consciously omitted quality dimensions;
+- exact proof and smallest execution route.
 
-## Eligible Overseer audit receipts
+Adviser/Critic value test:
+Decision under active-harness policy:
 
-Eligibility source and trigger:
-Business delta:
-Avoidable spend:
-Next minimal action:
-Direct user question:
-Decision: CONTINUE | ASK_USER | STOP_DRIFT
+## Delivery order
 
-## Mandatory Critic release decision
+1. Trace the actual consumer call chain.
+2. Implement the thinnest working vertical on that path.
+3. Run the real canary as early as safely possible.
+4. Fix only the first claim-blocking failure.
+5. Run proportional direct-regression checks.
+6. Add Reviewer, Tester, Overseer, Critic, hardening, or broader proof only when
+   its expected risk-reduction value exceeds its cost for this claim/action.
 
-Raw user context supplied (location):
-Current user P0 reconstructed by Critic:
-Business delta and P0 distance:
-Questions for L:
-Release verdict (evidence, independent decision):
+Every 20 active minutes is a reporting checkpoint, not a Worker lifetime limit.
+The Worker reports progress, business delta, blocker, and the shortest next
+action. Prefer continuing, redirecting, or resuming the same Worker. Cancellation
+is exceptional.
 
-L preserves the complete receipt in the task record. `CONTINUE` is silent;
-`ASK_USER` is shown only as its direct question; `STOP_DRIFT` stops the extra
-branch.
+Use the harness wait/join tool for required children. Do not complete the task
+while a required child is non-terminal.
 
-## Audit eligibility
+Workers ask L at each decision boundary through a non-blocking parent transport
+when available, include recommendation/proposed default, and continue safe
+independent work while waiting. L owns and promptly returns the decision.
 
-An attested harness or Fleet clock may make Overseer eligible no more often than
-once in 30 minutes after material progress, plateau, repeat failure, budget
-pressure, scope drift, or a consequential user question. No `uptime` ritual.
+At every crossed wall-clock hour while active, run `lhc_time_guard.py` and report
+real tasks closed, business delta, completed files, planned versus actual time,
+blockers, delaying gates/instructions, time-control evidence, and the shortest
+next route. Crossing a cycle maximum emits the full overrun diagnostic.
 
-## Research
+## Result
 
-Repository/request meaning:
-Evidence:
-Unknowns:
-Bounded subagents (scope, model class, reason, result):
-
-## Решение
-
-Полный desired outcome, business canary, scope, exclusions, constraints:
-Material human trade-off: yes | no
-
-Если `no`, один рекомендуемый полный путь, его preview и подтверждение:
-
-Если `yes`, покажи ровно три полных варианта с кратким preview:
-
-1. Максимально идеальный — объем, исключения, компромиссы, риски, оценка,
-   проверка, миграция:
-2. Нормальный — объем, исключения, компромиссы, риски, оценка, проверка,
-   миграция:
-3. YAGNI 80/20 — полный результат; исключения только низкоценной работы,
-   компромиссы, риски, оценка, проверка, миграция:
-
-Рекомендация и выбор человека (дословно):
-
-## Delivery-slice rule
-
-Delivery slices do not reduce or relabel the selected complete outcome. Sequence
-them by least cost to canary; do not start a later slice outside exact confirmed
-scope. Any skipped, reordered, or collapsed slice requires recorded exception
-evidence; run an eligible Overseer audit only when the time-and-trigger rule is
-met.
-
-## Selected-plan WSFF
-
-Call-stack tree:
-File-tree diff:
-Key types and method signatures:
-Pseudocode and migration:
-Consequential authorization boundaries:
-Second approval of full preview (verbatim):
-
-## Delivery
-
-Least-cost slice, canary, evidence:
-Later slices, canary, evidence:
-Slice exceptions (evidence, risk):
-Test evidence:
-Review evidence:
-Automatic normal/checkpoint commits:
-Tag decision (explicit user or release process only):
-
-## Final real-use test (Full only; after Reviewer and Critic)
-
-Mode: only-new (mandatory) | all (user-requested or explicitly approved):
-Tester task and fresh surface:
-User journey and observed evidence:
-Usability critique (website/app/CLI as applicable):
-Verdict: PASS | CHANGES_REQUIRED | STOP_MISSING_REAL_SURFACE
-Repair/retest loop, if needed:
-
-## Финальный ответ
-
-Финальный ответ - только на русском
-
-Мобильный обзор релиза:
+Business result:
+Claim strength actually proven:
+Source/test evidence:
+Deployment state:
+Real canary evidence:
+Optional deferred hardening/findings:
+Current workspace/branch:
+Commit, only if requested/created:

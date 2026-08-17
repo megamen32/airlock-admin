@@ -84,14 +84,18 @@ def test_public_release_reruns_fail_closed_on_identity_mismatch() -> None:
     assert script.count("exit 1") >= 2
 
 
-def test_public_release_includes_windows_zip_in_immutable_asset_set() -> None:
-    """Every archive recorded by the provenance manifest must be published."""
+def test_public_release_includes_only_the_named_user_matrix() -> None:
+    """The public GitHub release must not expose internal build archives."""
 
     workflow = yaml.safe_load(WORKFLOW.read_text(encoding="utf-8"))
     steps = workflow["jobs"]["build-and-release"]["steps"]
     publish_step = next(step for step in steps if step.get("name") == "Mirror source + tag + GitHub Release to public repo")
 
-    assert '"$SRC"/build/*.zip' in publish_step["run"]
+    script = publish_step["run"]
+    assert 'gptadmin-{windows,macos,ubuntu,android}-{x64,arm64}-{full,client}.{zip,tar.gz}' in script
+    assert 'gptadmin-checksums.txt' in script
+    assert 'gptadmin-release-matrix.json' in script
+    assert '"$SRC"/build/*.tar.gz' not in script
 
 
 def test_public_release_preflights_immutable_identity_before_mutating_remote_main() -> None:

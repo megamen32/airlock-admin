@@ -1,36 +1,67 @@
-# Shared worktree
+# Shared checkout safety
 
-I assume I am not working alone. A dirty worktree is evidence of concurrent
-human or agent work, not damage to clean up.
+Routine LHC work happens in the current primary project checkout, not in hidden
+branches or scattered harness worktrees. The project contains its own work.
 
-## Default safety
+## Workspace identity
 
-At the start, before changing a file, and immediately before staging or
-committing, inspect `git status --short`, staged and unstaged diffs, and
-untracked files. For a modified or untracked path that exists, inspect its
-mtime.
+At task start inspect:
 
-- A file changed within five minutes is probably currently being edited. Do not
-  edit, stage, rename, delete, format, or include it in a commit. Report the
-  collision and continue on independent paths.
-- A foreign change older than five minutes is an integration candidate, not
-  abandoned work. Leave it intact until final review.
-- Missing paths, renames, binary files, generated outputs, unknown ownership,
-  and any mtime uncertainty are hands-off until L can review or ask the human.
+- current repository root;
+- `git worktree list --porcelain`;
+- current branch or detached HEAD;
+- the default branch when identifiable.
+
+If the current root is an auxiliary worktree, the branch is detached, or the
+branch differs from the default branch, the first user-visible update must say:
+
+```text
+⚠️ Работа идёт не в основном checkout.
+Worktree: <absolute path>
+Branch: <branch or detached HEAD>
+Primary checkout: <absolute path>
+```
+
+Do not record this only inside the task file. If a harness selected the checkout
+before startup, do not create another worktree or move silently.
+
+Do not create, switch, merge, or delete a branch or worktree merely for
+isolation, cleanliness, review, or routine task work. Those are explicit human
+authorization boundaries.
+
+When the user explicitly requests a new worktree, create it only at:
+
+```text
+<primary-project-root>/.worktrees/<task-slug>
+```
+
+The project root must ignore `.worktrees/`. Never create project worktrees in
+`/tmp`, a home cache, a sibling directory, or harness-specific storage.
+
+## Concurrent-edit safety
+
+Assume the checkout may contain concurrent human or agent work. A dirty checkout
+is evidence to preserve, not damage to clean up.
+
+At start, before changing a path, and before staging or committing, inspect
+`git status --short`, staged/unstaged diffs, untracked files, and mtime where
+available.
+
+- A foreign path changed within five minutes is probably active. Do not edit,
+  stage, rename, delete, format, or include it. Report the collision and continue
+  only on independent paths.
+- Older foreign changes are still foreign. Do not assume they are abandoned or
+  fold them into the current task.
+- Missing paths, renames, binaries, generated output, unknown ownership, or mtime
+  uncertainty are hands-off until L can ask the user.
 
 Never use `git stash`, `git reset`, `git clean`, `git restore`, `git checkout
---`, `git revert`, force-push, or a rollback to remove work that I did not
-create. An explicit human request may authorize one named target only; inspect
-and state that exact target before acting.
+--`, `git revert`, force-push, or rollback to remove work not created by this
+task. An explicit human request may authorize one named target only.
 
-## L's final integration gate
+## Final integration
 
-For every older integration candidate, L performs final review: inspect its
-diff and ownership clues, recheck mtime, run the relevant validation, and check
-for secrets, generated noise, conflicts, or an unresolved failure. If review
-passes, include it in L's commit with the task's changes, and mention it in the
-Russian summary. Do not split it away merely to make the worktree look clean.
-
-If it became fresh, cannot be reviewed, contains a secret, or conflicts with
-the requested outcome, do not touch it or use cleanup commands. Report the
-exact blocker and ask the human when a decision is needed.
+Stage and commit only reviewed task-owned paths. Never stage or commit foreign
+edits merely because they are old, safe-looking, or already present in the
+checkout. Report them separately. Including one foreign change requires an
+explicit user instruction naming that change.

@@ -878,6 +878,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/mcp-relay/poll/", s.mcpRelayPoll)
 	mux.HandleFunc("/mcp-relay/result/", s.mcpRelayResult)
 	mux.HandleFunc("/mcp-relay/servers", s.requireCtl(s.mcpRelayServers))
+	mux.HandleFunc("/mcp-relay/grepmesh", s.requireCtl(s.mcpRelayGrepMeshTopology))
 	mux.HandleFunc("/mcp-relay/list_mcp_servers", s.requireCtl(s.mcpRelayServers))
 	// Legacy aliases kept for old clients only. Do not expose in OpenAPI.
 	mux.HandleFunc("/mcp-relay/agents", s.requireCtl(s.mcpRelayAgents))
@@ -5329,7 +5330,8 @@ func (s *Server) oauthToken(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid_grant", "error_description": "code not found, expired, or resource mismatch"})
 		return
 	}
-	if r.Form.Get("client_id") != data.ClientID || r.Form.Get("redirect_uri") != data.RedirectURI {
+	clientID, clientIDOK := oauthTokenClientID(r)
+	if !clientIDOK || clientID != data.ClientID || !oauthRedirectMatches(data.RedirectURI, r.Form.Get("redirect_uri")) {
 		s.authAudit("oauth_token_denied", r, map[string]any{"reason": "client or redirect mismatch", "client_id": data.ClientID, "form": s.formForAudit(r)})
 		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid_grant", "error_description": "client or redirect mismatch"})
 		return
@@ -5354,6 +5356,43 @@ func (s *Server) oauthToken(w http.ResponseWriter, r *http.Request) {
 	s.mu.Unlock()
 	s.authAudit("oauth_token_ok", r, map[string]any{"client_id": data.ClientID, "scope": data.Scope, "resource": resource, "access_token": s.secretForAudit(token), "jwt_claims": decodeJWTClaimsUnverified(token), "form": s.formForAudit(r)})
 	writeJSON(w, http.StatusOK, map[string]any{"access_token": token, "token_type": "Bearer", "expires_in": 43200, "refresh_token": refreshToken, "refresh_token_expires_in": refreshRecord.ExpiresAt - s.now().Unix()})
+}
+
+// oauthTokenClientID accepts the two OAuth token endpoint client-identification
+// forms advertised by discovery: client_id in the form, or HTTP Basic. If both
+// are supplied, they must name the same client.
+func oauthTokenClientID(r *http.Request) (string, bool) {
+	formClientID := strings.TrimSpace(r.Form.Get("client_id"))
+	basicClientID, _, hasBasic := r.BasicAuth()
+	if !hasBasic {
+		return formClientID, true
+	}
+	if formClientID != "" && formClientID != basicClientID {
+		return "", false
+	}
+	return basicClientID, true
+}
+
+// Native OAuth clients bind a loopback callback before opening the browser.
+// The operating system may choose a different ephemeral port for the token
+// exchange, while the callback path, client, authorization code, and PKCE
+// verifier remain bound. Keep exact matching for every non-loopback redirect.
+func oauthRedirectMatches(issued, requested string) bool {
+	if issued == requested {
+		return true
+	}
+	left, err := url.Parse(issued)
+	if err != nil {
+		return false
+	}
+	right, err := url.Parse(requested)
+	if err != nil {
+		return false
+	}
+	return left.Scheme == "http" && right.Scheme == "http" &&
+		left.Hostname() == "127.0.0.1" && right.Hostname() == "127.0.0.1" &&
+		left.EscapedPath() == right.EscapedPath() && left.RawQuery == right.RawQuery &&
+		left.User == nil && right.User == nil && left.Fragment == "" && right.Fragment == ""
 }
 
 // oauthRefreshToken rotates a durable OAuth refresh credential and returns a

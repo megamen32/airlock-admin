@@ -642,13 +642,33 @@ def _macos_unquarantine_and_codesign(path: Path):
         run(['/usr/bin/codesign', '--force', '--sign', '-', str(path)], check=False, timeout=20)
 
 
+def _install_runtime_binary(src: Path, dst: Path) -> None:
+    """Install a runtime binary by atomic replacement.
+
+    Replacing the directory entry is safe while the old executable is running;
+    copying directly to ``dst`` is not (Linux returns ETXTBSY/Text file busy).
+    """
+    dst.parent.mkdir(parents=True, exist_ok=True)
+    tmp_name = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            dir=dst.parent, prefix=f'.{dst.name}.', suffix='.new', delete=False
+        ) as tmp:
+            tmp_name = Path(tmp.name)
+        shutil.copy2(src, tmp_name)
+        os.chmod(tmp_name, 0o755)
+        os.replace(tmp_name, dst)
+    finally:
+        if tmp_name is not None:
+            tmp_name.unlink(missing_ok=True)
+
+
 def _install_hub_binary_from_pkg(tdp: Path):
     for c in _platform_hub_candidates(tdp):
         if c.exists() and _binary_looks_native(c):
             BIN_DIR.mkdir(parents=True, exist_ok=True)
             dst = BIN_DIR / 'gptadmin_hub'
-            shutil.copy2(c, dst)
-            os.chmod(dst, 0o755)
+            _install_runtime_binary(c, dst)
             _macos_unquarantine_and_codesign(dst)
             return
     if IS_MACOS:
@@ -689,8 +709,7 @@ def _install_shellmcp_binary_from_pkg(tdp: Path) -> None:
         if c.exists() and c.is_file():
             BIN_DIR.mkdir(parents=True, exist_ok=True)
             dst = BIN_DIR / 'shellmcp'
-            shutil.copy2(c, dst)
-            os.chmod(dst, 0o755)
+            _install_runtime_binary(c, dst)
             _macos_unquarantine_and_codesign(dst)
             return
     die('Go ShellMCP/rootd binary not found in package. Legacy Python/PyInstaller shellmcp has been removed; ensure the package contains go-shellmcp/<platform>/<arch>/shellmcp-go or rootd-go.')

@@ -41,16 +41,17 @@ type WebhookRoute struct {
 // Agent Herder, ShellMCP, or any other registered MCP target can be selected
 // by configuration without becoming a special dependency of the gateway.
 type WebhookAction struct {
-	Kind         string         `json:"kind"`
-	Target       string         `json:"target"`
-	ApprovalMode string         `json:"approval_mode,omitempty"`
-	Tool         string         `json:"tool,omitempty"`
-	Arguments    map[string]any `json:"arguments,omitempty"`
-	Prompt       string         `json:"prompt,omitempty"`
-	PromptArg    string         `json:"prompt_arg,omitempty"`
-	Command      string         `json:"command,omitempty"`
-	Cwd          string         `json:"cwd,omitempty"`
-	DelaySeconds float64        `json:"delay_seconds,omitempty"`
+	Kind           string         `json:"kind"`
+	Target         string         `json:"target"`
+	ApprovalMode   string         `json:"approval_mode,omitempty"`
+	TimeoutSeconds float64        `json:"timeout_seconds,omitempty"`
+	Tool           string         `json:"tool,omitempty"`
+	Arguments      map[string]any `json:"arguments,omitempty"`
+	Prompt         string         `json:"prompt,omitempty"`
+	PromptArg      string         `json:"prompt_arg,omitempty"`
+	Command        string         `json:"command,omitempty"`
+	Cwd            string         `json:"cwd,omitempty"`
+	DelaySeconds   float64        `json:"delay_seconds,omitempty"`
 }
 
 type WebhookCallback struct {
@@ -70,16 +71,50 @@ type webhookDelivery struct {
 }
 
 type webhookJob struct {
-	ID             string         `json:"job_id"`
-	RouteID        string         `json:"route_id"`
-	Status         string         `json:"status"`
-	CreatedAt      time.Time      `json:"created_at"`
-	StartedAt      time.Time      `json:"started_at,omitempty"`
-	CompletedAt    time.Time      `json:"completed_at,omitempty"`
-	Result         map[string]any `json:"result,omitempty"`
-	Error          string         `json:"error,omitempty"`
-	CallbackStatus string         `json:"callback_status,omitempty"`
+	ID                  string            `json:"job_id"`
+	RouteID             string            `json:"route_id"`
+	Status              string            `json:"status"`
+	CreatedAt           time.Time         `json:"created_at"`
+	StartedAt           time.Time         `json:"started_at,omitempty"`
+	CompletedAt         time.Time         `json:"completed_at,omitempty"`
+	Result              map[string]any    `json:"result,omitempty"`
+	Error               string            `json:"error,omitempty"`
+	CallbackStatus      string            `json:"callback_status,omitempty"`
+	CorrelationID       string            `json:"correlation_id,omitempty"`
+	TraceRefs           []string          `json:"trace_refs,omitempty"`
+	Progress            []webhookProgress `json:"progress,omitempty"`
+	LastProgressAt      time.Time         `json:"last_progress_at,omitempty"`
+	ProgressFingerprint string            `json:"progress_fingerprint,omitempty"`
+	UsefulProgress      bool              `json:"useful_progress,omitempty"`
 }
+
+type webhookProgress struct {
+	ReceivedAt     time.Time `json:"received_at"`
+	CorrelationID  string    `json:"correlation_id,omitempty"`
+	Step           string    `json:"step,omitempty"`
+	EvidenceRefs   []string  `json:"evidence_refs,omitempty"`
+	TraceRefs      []string  `json:"trace_refs,omitempty"`
+	Fingerprint    string    `json:"fingerprint,omitempty"`
+	UsefulProgress bool      `json:"useful_progress"`
+}
+
+type webhookProgressUpdate struct {
+	CorrelationID string   `json:"correlation_id,omitempty"`
+	Step          string   `json:"step"`
+	EvidenceRefs  []string `json:"evidence_refs"`
+	TraceRefs     []string `json:"trace_refs,omitempty"`
+	Fingerprint   string   `json:"fingerprint"`
+}
+
+const (
+	webhookProgressMaxStepLen        = 256
+	webhookProgressMaxRefLen         = 256
+	webhookProgressMaxEvidenceRefs   = 16
+	webhookProgressMaxTraceRefs      = 16
+	webhookProgressMaxEntries        = 64
+	webhookProgressMaxCorrelationLen = 128
+	webhookProgressMaxFingerprintLen = 128
+)
 
 func loadWebhookRoutes(path string) ([]WebhookRoute, error) {
 	if strings.TrimSpace(path) == "" {
@@ -260,11 +295,20 @@ func (s *Server) webhookEndpoint(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) webhookJobEndpoint(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
+	if r.Method != http.MethodGet && r.Method != http.MethodPost {
 		writeJSON(w, http.StatusMethodNotAllowed, map[string]any{"detail": "method not allowed"})
 		return
 	}
 	jobID := strings.TrimPrefix(r.URL.Path, "/webhook-jobs/")
+	isProgress := strings.HasSuffix(jobID, "/progress")
+	if isProgress {
+		jobID = strings.TrimSuffix(jobID, "/progress")
+		jobID = strings.TrimSuffix(jobID, "/")
+		if r.Method != http.MethodPost {
+			writeJSON(w, http.StatusMethodNotAllowed, map[string]any{"detail": "progress updates require POST"})
+			return
+		}
+	}
 	if jobID == "" || strings.Contains(jobID, "/") {
 		writeJSON(w, http.StatusBadRequest, map[string]any{"detail": "missing job_id"})
 		return
@@ -288,7 +332,141 @@ func (s *Server) webhookJobEndpoint(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusUnauthorized, map[string]any{"detail": err.Error()})
 		return
 	}
+	if isProgress {
+		s.handleWebhookJobProgress(w, r, jobID, route, body)
+		return
+	}
 	writeJSON(w, http.StatusOK, response)
+}
+
+func (s *Server) handleWebhookJobProgress(w http.ResponseWriter, r *http.Request, jobID string, route WebhookRoute, body []byte) {
+	var update webhookProgressUpdate
+	if err := json.Unmarshal(body, &update); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"detail": "webhook progress body must be valid JSON"})
+		return
+	}
+	if err := validateWebhookProgressUpdate(update); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"detail": err.Error()})
+		return
+	}
+	deliveryKey := strings.TrimSpace(firstNonEmpty(r.Header.Get("Idempotency-Key"), r.Header.Get("X-Event-ID"), r.Header.Get("X-GitHub-Delivery")))
+	if deliveryKey == "" {
+		deliveryKey = sha256Hex(body)
+	}
+	progressKey := jobID + "\x00progress\x00" + deliveryKey
+	fingerprint := sha256Hex(append([]byte(jobID+"\x00"), body...))
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	job := s.webhookJobs[jobID]
+	if job == nil {
+		writeJSON(w, http.StatusNotFound, map[string]any{"detail": "unknown webhook job"})
+		return
+	}
+	if job.Status == "completed" || job.Status == "failed" {
+		writeJSON(w, http.StatusConflict, map[string]any{"detail": "webhook job is terminal"})
+		return
+	}
+	if existing := s.webhookDeliveries[progressKey]; existing != nil {
+		if existing.Fingerprint != fingerprint {
+			writeJSON(w, http.StatusConflict, map[string]any{"detail": "idempotency key was already used for a different progress update"})
+			return
+		}
+		writeJSON(w, http.StatusAccepted, map[string]any{"job_id": jobID, "status": job.Status, "duplicate": true, "useful_progress": false})
+		return
+	}
+	progress := webhookProgress{
+		ReceivedAt:    s.now(),
+		CorrelationID: boundedString(update.CorrelationID, webhookProgressMaxCorrelationLen),
+		Step:          boundedString(update.Step, webhookProgressMaxStepLen),
+		EvidenceRefs:  boundedStrings(update.EvidenceRefs, webhookProgressMaxEvidenceRefs, webhookProgressMaxRefLen),
+		TraceRefs:     boundedStrings(update.TraceRefs, webhookProgressMaxTraceRefs, webhookProgressMaxRefLen),
+		Fingerprint:   boundedString(update.Fingerprint, webhookProgressMaxFingerprintLen),
+	}
+	useful := isUsefulWebhookProgress(job, progress)
+	progress.UsefulProgress = useful
+	job.Progress = append(job.Progress, progress)
+	if len(job.Progress) > webhookProgressMaxEntries {
+		job.Progress = job.Progress[len(job.Progress)-webhookProgressMaxEntries:]
+	}
+	job.LastProgressAt = progress.ReceivedAt
+	if progress.CorrelationID != "" {
+		job.CorrelationID = progress.CorrelationID
+	}
+	if len(progress.TraceRefs) > 0 {
+		job.TraceRefs = append([]string(nil), progress.TraceRefs...)
+	}
+	job.ProgressFingerprint = progress.Fingerprint
+	job.UsefulProgress = useful
+	s.webhookDeliveries[progressKey] = &webhookDelivery{Fingerprint: fingerprint, JobID: jobID, CreatedAt: progress.ReceivedAt}
+	if err := s.saveWebhookStateLocked(); err != nil {
+		log.Printf("webhook state save failed path=%s err=%v", s.webhookStatePath(), err)
+	}
+	writeJSON(w, http.StatusAccepted, map[string]any{"job_id": jobID, "status": job.Status, "useful_progress": useful})
+}
+
+func validateWebhookProgressUpdate(update webhookProgressUpdate) error {
+	if strings.TrimSpace(update.Step) == "" {
+		return errors.New("webhook progress step is required")
+	}
+	if len(update.Step) > webhookProgressMaxStepLen {
+		return fmt.Errorf("webhook progress step exceeds %d bytes", webhookProgressMaxStepLen)
+	}
+	if len(update.Fingerprint) == 0 {
+		return errors.New("webhook progress fingerprint is required")
+	}
+	if len(update.Fingerprint) > webhookProgressMaxFingerprintLen {
+		return fmt.Errorf("webhook progress fingerprint exceeds %d bytes", webhookProgressMaxFingerprintLen)
+	}
+	if len(update.CorrelationID) > webhookProgressMaxCorrelationLen {
+		return fmt.Errorf("webhook progress correlation_id exceeds %d bytes", webhookProgressMaxCorrelationLen)
+	}
+	if len(update.EvidenceRefs) > webhookProgressMaxEvidenceRefs {
+		return fmt.Errorf("webhook progress evidence_refs exceeds %d entries", webhookProgressMaxEvidenceRefs)
+	}
+	if len(update.TraceRefs) > webhookProgressMaxTraceRefs {
+		return fmt.Errorf("webhook progress trace_refs exceeds %d entries", webhookProgressMaxTraceRefs)
+	}
+	return nil
+}
+
+func boundedString(value string, maxLen int) string {
+	value = strings.TrimSpace(value)
+	if len(value) > maxLen {
+		return value[:maxLen]
+	}
+	return value
+}
+
+func boundedStrings(values []string, maxItems, maxLen int) []string {
+	if len(values) == 0 {
+		return nil
+	}
+	if len(values) > maxItems {
+		values = values[:maxItems]
+	}
+	result := make([]string, 0, len(values))
+	for _, value := range values {
+		value = boundedString(value, maxLen)
+		if value != "" {
+			result = append(result, value)
+		}
+	}
+	return result
+}
+
+func isUsefulWebhookProgress(job *webhookJob, progress webhookProgress) bool {
+	if job == nil {
+		return false
+	}
+	last := webhookProgress{}
+	if n := len(job.Progress); n > 0 {
+		last = job.Progress[n-1]
+	}
+	if last.Step == progress.Step && strings.Join(last.EvidenceRefs, ",") == strings.Join(progress.EvidenceRefs, ",") && last.Fingerprint == progress.Fingerprint {
+		return false
+	}
+	return progress.Step != "" && (len(progress.EvidenceRefs) > 0 || progress.Fingerprint != "")
 }
 
 func readWebhookBody(r *http.Request) ([]byte, error) {
@@ -321,6 +499,25 @@ func decodeWebhookEvent(body []byte) (any, error) {
 		return nil, fmt.Errorf("webhook body has trailing data: %w", err)
 	}
 	return event, nil
+}
+
+func extractWebhookHealthMetadata(event any) (string, []string) {
+	root := mapValue(event)
+	if root == nil {
+		return "", nil
+	}
+	correlationID := boundedString(firstString(root, "correlation_id"), webhookProgressMaxCorrelationLen)
+	traceRefs := boundedStrings(stringSlice(root["trace_refs"]), webhookProgressMaxTraceRefs, webhookProgressMaxRefLen)
+	if correlationID == "" || len(traceRefs) == 0 {
+		health := mapValue(root["health"])
+		if correlationID == "" {
+			correlationID = boundedString(firstString(health, "correlation_id"), webhookProgressMaxCorrelationLen)
+		}
+		if len(traceRefs) == 0 {
+			traceRefs = boundedStrings(stringSlice(health["trace_refs"]), webhookProgressMaxTraceRefs, webhookProgressMaxRefLen)
+		}
+	}
+	return correlationID, traceRefs
 }
 
 func verifyWebhookRequest(r *http.Request, route WebhookRoute, body []byte, now time.Time) error {
@@ -392,6 +589,10 @@ func (s *Server) runWebhookJob(jobID string, route WebhookRoute, event any) {
 	if job == nil {
 		s.mu.Unlock()
 		return
+	}
+	if correlationID, traceRefs := extractWebhookHealthMetadata(event); correlationID != "" || len(traceRefs) > 0 {
+		job.CorrelationID = correlationID
+		job.TraceRefs = append([]string(nil), traceRefs...)
 	}
 	job.Status = "running"
 	job.StartedAt = s.now()
@@ -474,6 +675,16 @@ func (s *Server) dispatchWebhookAction(action WebhookAction, event any) (map[str
 	if timeout <= 0 {
 		timeout = 30 * time.Second
 	}
+	if action.TimeoutSeconds > 0 {
+		bounded := action.TimeoutSeconds
+		if bounded < 1 {
+			bounded = 1
+		}
+		if bounded > 600 {
+			bounded = 600
+		}
+		timeout = time.Duration(bounded * float64(time.Second))
+	}
 	switch action.Kind {
 	case "shell":
 		command, commandEnv, err := renderWebhookShellCommand(action.Command, event)
@@ -485,7 +696,12 @@ func (s *Server) dispatchWebhookAction(action WebhookAction, event any) (map[str
 			return nil, err
 		}
 		policyRequest := requestWithAutomationProfile(nil, "webhook", action.Target, "shell_exec", action.ApprovalMode)
-		result, status := s.executeMCPTool(policyRequest, action.Target, "shell_exec", map[string]any{"cmd": command, "cwd": cwd, "env": commandEnv}, false, timeout, "")
+		result, status := s.executeMCPTool(policyRequest, action.Target, "shell_exec", map[string]any{
+			"cmd":     command,
+			"cwd":     cwd,
+			"env":     commandEnv,
+			"timeout": int(timeout / time.Second),
+		}, false, timeout, "")
 		if status >= http.StatusBadRequest {
 			return nil, fmt.Errorf("webhook shell action failed policy with status %d: %v", status, result)
 		}
@@ -748,5 +964,7 @@ func cloneWebhookJob(job *webhookJob) *webhookJob {
 	}
 	clone := *job
 	clone.Result = cloneMap(job.Result)
+	clone.TraceRefs = append([]string(nil), job.TraceRefs...)
+	clone.Progress = append([]webhookProgress(nil), job.Progress...)
 	return &clone
 }

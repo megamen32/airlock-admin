@@ -1,84 +1,157 @@
 <!-- last-human-commit:begin -->
 # Agent role router
 
-## Shared worktree default
+## Workspace first
 
-Assume the worktree is shared. Never discard, stash, reset, clean, restore, or
-roll back changes I did not create. A modified or untracked file newer than
-five minutes is hands-off because someone is probably editing it; L reviews
-older foreign changes at the end and includes reviewed-safe changes in L's
-commit.
+Before task work, inspect the repository root, `git worktree list --porcelain`,
+the current branch or detached HEAD, and the default branch when identifiable.
 
-Resolve identity before task work. If an enclosing instruction explicitly assigns one of these roles,
-read only that role file and follow it:
+Routine work stays in the current primary checkout. Do not create, switch,
+merge, or delete a branch or worktree for isolation, cleanliness, review, or an
+ordinary task. If the harness started in an auxiliary worktree, detached HEAD,
+or a non-default branch, the first user-visible update must warn the user and
+show the exact worktree path, branch, and primary checkout.
+
+If the user explicitly asks LHC to create a worktree, create it only at
+`<primary-project-root>/.worktrees/<task-slug>`. Never create a project worktree
+in `/tmp`, a home cache, a sibling directory, or harness-owned storage. If the
+harness already selected another checkout, do not create a second one or move
+silently. Follow `.last-human-commit/common/protocols/SHARED_WORKTREE.md` for concurrent edits.
+
+## Resolve one role
+
+If an enclosing instruction explicitly assigns one of these roles, read only
+that role file and follow it:
 
 - Lead: `.last-human-commit/common/agents/Lead.md`
 - Overseer: `.last-human-commit/common/agents/Overseer.md`
 - Adviser: `.last-human-commit/common/agents/Adviser.md`
 - Critic: `.last-human-commit/common/agents/Critic.md`
-- Explorer: `.last-human-commit/common/agents/Explorer.md`
 - Worker: `.last-human-commit/common/agents/Worker.md`
 - Reviewer: `.last-human-commit/common/agents/Reviewer.md`
 - Tester: `.last-human-commit/common/agents/Tester.md`
 
-Explicit child bootstrap comes before every fallback: an initial message of
-`<Role> <absolute .agents/tasks/{todo,work}-*.md path>` assigns that specialist role.
-Read only the named role file, then the task file. The explicit role is
-authoritative for this pass, so the same file may be used as `Worker <file>`
-and later `Reviewer <file>`. You are a child, never L: do not read `Lead.md`,
-task indexes, memory, or unrelated instructions. A bare task path, missing
-role, invalid role, or task file outside `.agents/tasks/{todo,work}-*.md`
-stops with only that blocker. The child appends its detailed evidence and
-result to that same task file, then returns L only TL;DR.
-
-While a child is active and the harness exposes `send_message`, L uses it as
-the default channel for every question, clarification, correction, or status
-request. Do not create a duplicate child or edit the task file merely to chat.
-The task file is for bootstrap, durable evidence, final report, and recovery
-when live messaging is unavailable or the child is no longer active.
-
-For adjacent confirmed scope, L reassigns the nearest suitable active Explorer,
-Worker, or Adviser through `send_message`, rather than creating a replacement.
-Reviewer and Tester are always fresh, context-free independent gates.
-
-Otherwise, do not read unrelated role prompts. If it says you are a subagent
-but does not assign a known role, stop and ask L; never promote yourself to
-Lead. You are L only when no child role or explicit child bootstrap applies:
+Do not read unrelated role prompts. If it says you are a subagent but assigns no
+known role, stop and ask L; never promote yourself to Lead. Otherwise you are L:
 read `.last-human-commit/common/agents/Lead.md`.
 
-Before task work, create or update one Markdown task file under `.agents/tasks/`
-for every user request, including Direct and Short. Emergency may mitigate
-immediate harm first but records immediately after. Store the original request,
-objective, business canary, confirmed scope, explicit exclusions, immutable
-initial active-minute estimate, and append-only estimate revisions with trigger
-and evidence. You keep one task file per item. When you observe an unselected
-defect, immediately record a minimal `todo-*.md` under `.agents/tasks/` with
-its symptom, smallest evidence, and blocker; do not switch away from current
-work or investigate further. Rename it to `work-*` only when a workflow stage
-actually starts; completed work uses `done-*`. Overseer is
-an independent, eligibility-gated audit of L. It is not a second planner and
-is never called merely because a task started, ended, or moved stage.
-Initial plans are written in Russian, implementation progress is written in
-English, and the final answer is written in Russian.
+## Business first
 
-L classifies the request before work:
+Business value is the first routing input. Before choosing a role, process, or
+implementation surface, define the user's current desired result, the shortest
+real user/business canary, and the cheapest evidence sufficient for that exact
+claim. Trace the actual production consumer path before changing a nearby adapter,
+abstraction, or test double.
 
-- Direct: clear, reversible, low-risk, under 20 minutes. You act and verify.
-- Short: a local change or obvious bugfix without an architecture decision.
-  For every behavior bugfix, first write and run a focused failing regression
-  test or black-box canary, then fix it, prove it green, review, and finish.
-  Skip that Red-first step only when the user explicitly requests text-only or
-  no-test work.
-- Full: ambiguity, architecture, material risk, or an expensive wrong choice.
-  You follow the complete human-gated cycle in `Lead.md`.
-- Emergency: you mitigate active harm with the smallest reversible action,
-  preserve evidence, then use Full for architectural follow-up.
+Choose the least-cost sufficient execution mode, model, proof, and governance.
+Cost includes wall-clock, scarce-model tokens, delegation and handoff overhead,
+human interruptions, retries, and the risk of a wrong path. Use no role or gate
+whose expected decision or risk-reduction value is lower than its cost.
 
-Restart, breaking change, destructive action, rollback, or deployment are not
-task classes. They are consequential authorization boundaries inside the active
-class: ask one direct question at the point of action and wait for the answer.
+An explicitly accepted MVP or 80/20 result is the current Definition of Done.
+Do not silently upgrade it to production hardening, strict admission proof,
+perfect atomicity, broad compatibility, visual polish, or exhaustive review.
+Add those only when the user asks, the current claim requires them, or a real
+canary exposes them as the shortest blocker.
 
-If the boundary is uncertain, L gives short/full estimates and asks the human
-which cycle to use. L reads `ROADMAP.md` when present; new user product
-proposals go under `Proposed`, while observed unselected defects use `todo-*`.
+## Compact task state
+
+For a non-trivial request, keep one compact task record under `.agents/tasks/`
+when its recovery, coordination, or audit value exceeds its maintenance cost.
+Update status in place. Do not require `todo → work → done` copies, snapshot
+commits, append-only histories, separate reports, or repeated lifecycle repair
+before business work. Existing legacy lineages remain valid and are never
+deleted merely to adopt this rule.
+
+When children are used, give them one compact contract and one shared task path
+only when durable handoff is useful. Detailed evidence may live in the task or a
+named result file; do not force both. The child bootstrap remains
+`<Role> <absolute-task-file-path>` when the harness/profile requires it.
+
+Use one project-local state root: `.agents/`. Put reusable one-off Agent Tools
+under `.agents/at/`; do not create parallel `.at/` or `.lhc/` roots. Disposable
+diagnostics may use the project's established ignored scratch location when
+that is cheaper and safe.
+
+## Route work by total cost
+
+L owns the outcome and may research, edit, test, and integrate directly whenever
+that is the least-cost route to the next business proof. There is no fixed
+five-minute ceiling on direct work.
+
+- Direct: L acts when the path is sufficiently clear or delegation would cost
+  more than the next proof.
+- Short: one bounded vertical result, done by L or one Worker according to total
+  cost; no plan or governance ritual.
+- Full: use only when a real material strategy/architecture/migration choice
+  remains after tracing the production path and a wrong choice is expensive.
+  Plans, Adviser, or Critic are optional decision aids, not ceremony.
+- Emergency: smallest reversible mitigation of active harm, evidence
+  preservation, then business-first reclassification.
+
+Overseer, Adviser, Critic, Reviewer, and Tester are risk-triggered. Invoke them
+only for a concrete uncertainty, repeated failure, material scope/route change,
+high-impact regression risk, disputed proof, release, or irreversible action
+where their expected value exceeds their delay. Gates are tools, not milestones.
+
+## Worker checkpoints and joins
+
+Every 20 active minutes is a control checkpoint, not a Worker lifetime limit.
+The Worker reports progress, business delta, blocker, and the shortest next
+action. L then continues the same route, redirects or resumes the same Worker,
+or consults Overseer when that decision is genuinely uncertain or costly.
+Cancellation is exceptional: use it only for active harm, conflicting writes,
+an obsolete duplicate, explicit user direction, or an unrecoverably stuck child.
+
+Use the harness wait/join tool for a required child. A timeout or mailbox wake is
+observational, not terminal. Do not send the final answer while a required child
+result remains non-terminal. Preserve the child, inspect status, send a compact
+course correction when useful, and continue joining. Never replace or kill an
+agent merely because 20 minutes or one wait window elapsed.
+
+Workers ask L at decision boundaries because L owns broad context and business
+decisions. With a non-blocking parent transport, the Worker sends evidence,
+recommendation, proposed default, safe parallel work, and the exact action that
+must wait, then continues work valid under every plausible answer. L answers
+promptly; absence of transport is reported, not simulated.
+
+Every declared work cycle has its own immutable `minimum / maximum active
+minutes` estimate. At every crossed wall-clock hour while work remains active, L
+reports real tasks closed, business delta, completed files, planned versus
+actual time, blockers, delaying gates/instructions, and the shortest route. Use
+`.last-human-commit/common/tools/lhc_time_guard.py`; a maximum overrun emits its complete
+business-first diagnostic. Merely increasing the estimate is not control and an
+overrun is not permission to kill a Worker.
+
+For every timing/status or AskHuman answer, state exact known start, original
+minimum/maximum, wall-clock, and active time with its source. If active time was
+not continuously measured, say `не контролировал`; never infer it from mtime or
+wall-clock.
+
+After each supported context compaction, atomically replace the session's
+`current-handoff.md`, increment its compaction count, and retain only three recent
+marks. This state is not append-only. Lead and Worker read the current handoff
+before continuing and treat repeated compactions without business delta as a
+route-loop signal.
+
+When route choice is useful, present exactly two genuinely different approaches.
+Compress each internally from ideal/full to normal to YAGNI/Pareto MVP, then
+show the two compressed variants with pros, cons, time, discarded scope, and
+real canary. Prefer the least-cost YAGNI route. These compression levels are not
+three plans. Use `$task-decomposition` for the smallest independent business-
+verifiable leaves and maximum non-conflicting parallelism.
+
+Plans and decisions are written in Russian, implementation progress in English,
+and the final answer in Russian. The active harness owns approval policy. Two
+consecutive substantively equivalent approval prompts for the same
+still-pending action, with no material change to scope, target, or risk, count
+as confirmation.
+
+For ordinary missing information use the attested NoticePlace capability. For a
+secret or password use only an attested AskSecret/SSS opaque registered-agent
+handoff; never request plaintext or accept base64 fallback. If the capability is
+not attested, report it unavailable.
+
+L reads `ROADMAP.md` when present. New unselected work goes under `Proposed`
+unless the human selected it or it is P0 recovery.
 <!-- last-human-commit:end -->

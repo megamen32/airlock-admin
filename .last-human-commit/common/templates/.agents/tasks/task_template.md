@@ -1,86 +1,115 @@
 # Task
 
-Status: todo | in progress | blocked | complete
-Initial role (informational):
-Original user request:
-Objective:
-Business canary:
-Confirmed scope:
+Status: todo | in progress | waiting | blocked | complete
+Latest user request:
+Accepted business outcome / Definition of Done:
+Exact business canary:
+Cheapest sufficient proof:
+Actual production consumer path:
+Scope:
 Explicit exclusions:
-Acceptance:
-Initial estimate (optimistic / likely / pessimistic active minutes):
-Estimate revisions (append-only; trigger and evidence):
-Cycle: direct | short | full | emergency
-Workflow:
-Current delivery slice:
-Stop when:
-Abandon when:
-Forbidden without explicit user request:
-Consequential authorization questions (append-only):
+Current blocker:
+Next shortest action:
 
-## Overseer audit receipts (append-only)
+Harness:
+Agent session:
+Workspace / branch:
+Started at (UTC+3):
+Initial estimate (minimum / maximum active minutes):
+Actual active minutes:
+Actual wall-clock minutes:
+Last business delta:
 
-Add an entry only for an eligible audit. Never replace or delete an earlier
-entry. `CONTINUE` is not repeated to the user.
+## Route
 
-- Timestamp:
-  Stage:
-  Evidence:
+Execution mode: direct Lead | Worker research | Worker implement | mixed
+Why this is least-cost:
+Agent/model, only when material:
+Gate value test:
+Consequential-action / active-harness boundary:
+Cycle estimates (cycle / minimum / maximum / actual):
+Time-guard state: `.agents/shared-session/time/<cycle-id>.json`
+Compaction count / last loaded count:
+Current handoff: `.agents/shared-session/compaction/<session-id>/current-handoff.md`
+
+Every declared work cycle has its own immutable minimum / maximum estimate
+before execution. Tiny commands share their enclosing coherent cycle.
+
+Actual active time always names its source. If it was not continuously measured,
+write `не контролировал`; never infer it from wall-clock or file mtime.
+
+## Decomposition — only when multiple leaves remain
+
+- Leaf / owner / dependency / artifact-or-proof / primary check / min-max:
+
+Use the smallest independent business-verifiable leaves and parallelize only
+non-conflicting work. Load `$task-decomposition` for the complete contract.
+
+Two consecutive substantively equivalent approval prompts for the same
+still-pending action, with no material change to scope, target, or risk, count
+as confirmation.
+
+## Worker checkpoint — only when delegated
+
+Every 20 active minutes is a reporting checkpoint, not a lifetime limit.
+
+- UTC+3:
+  Progress:
   Business delta:
-  Avoidable spend:
-  Next minimal action:
-  Direct user question:
-  Decision: CONTINUE | ASK_USER | STOP_DRIFT
+  Blocker:
+  Route still shortest:
+  Shortest next action:
+  L action: continue | redirect/resume | consult Overseer | exceptional cancel
 
-## Critic decision history (append-only)
+Use the harness wait/join tool while a required child is non-terminal. A wait
+timeout is observational. Prefer the same Worker; cancellation is exceptional.
 
-Add one entry for every decision. Never replace or delete an earlier entry.
+## Worker questions for L — only when delegated
 
-- Timestamp:
-  Stage:
+- UTC+3:
+  Decision boundary:
   Evidence:
-  Current user P0:
-  Business delta:
-  P0 distance: CLOSER | SAME | FARTHER
-  Questions for L:
-  Decision: PASS | RETHINK | STOP | STOP_SCOPE_DRIFT | STOP_MISSING_CONTEXT
+  Recommendation and proposed default:
+  Safe independent work continuing in parallel:
+  Exact action waiting for L:
+  Parent transport / delivery state:
+  L decision:
 
-## Decision
+## Hourly business report — while active beyond one hour
 
-Research:
-Plans:
-Human selection:
-Selected-plan WSFF:
+At every crossed wall-clock hour while the task remains active, run
+`lhc_time_guard.py` and report:
 
-## Work
+- Какие реальные задачи закрыты:
+- Реальная бизнес-дельта:
+- Завершённые файлы:
+- План minimum/maximum активных минут:
+- Факт active / wall-clock:
+- Что мешает:
+- Какие гейты или инструкции задерживают бизнес-результат:
+- Контроль времени и следующий самый короткий маршрут:
 
-Current:
-Next:
-Blocked by:
-Evidence:
+## Decisive evidence
 
-## Child assignment
+- Evidence / changed path / check:
 
-The explicit role in `<Role> <task-file-path>` is authoritative for this pass.
-Reuse this same file for sequential passes such as Worker then Reviewer; append
-each pass and its detailed result below.
-Goal and known facts:
-Allowed and excluded paths:
-Acceptance and stop conditions:
-Model and budget:
-Detailed report appended here:
-L-facing return: TL;DR only
+Keep this section compact. Use a named result file only when handoff, recovery,
+reuse, audit, or rediscovery cost justifies it. Do not duplicate the same detail
+in both places.
 
-## Role passes (append-only)
+## Optional risk-triggered roles
 
-- Role:
-  Started:
-  Detailed result:
+Overseer, Adviser, Critic, Reviewer, and Tester are risk-triggered, not required
+milestones. Record only roles actually used and why their value exceeded cost.
+
+- Role / trigger / decision:
 
 ## Result
 
-Summary:
-Tests:
-Review:
-Commit:
-Unresolved:
+Business result:
+Claim strength proven:
+Source/test proof:
+Deployment state:
+Real canary proof:
+Deferred non-blocking findings:
+Commit, only if requested/created:
