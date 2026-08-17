@@ -179,8 +179,13 @@ impl LocalBackend {
             .filter(|(_, paths)| !paths.is_empty())
             .collect::<BTreeMap<_, _>>();
         root_paths.insert("local".to_string(), vec![root.clone()]);
-        let mut excludes = default_exclude_globs();
-        excludes.extend(exclude_globs);
+        // A non-empty config is authoritative so the runtime UI can both add
+        // and remove exclusions. Empty legacy configs retain safe defaults.
+        let mut excludes = if exclude_globs.is_empty() {
+            default_exclude_globs()
+        } else {
+            exclude_globs
+        };
         excludes.sort();
         excludes.dedup();
         let index = match index_path {

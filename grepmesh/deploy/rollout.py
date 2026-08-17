@@ -183,12 +183,16 @@ def scp_to_target(target: dict[str, Any], source: Path, remote: str) -> None:
 
 def target_config(manifest: dict[str, Any], target: dict[str, Any]) -> dict[str, Any]:
     excludes = [
-        "**/.git/**", "**/node_modules/**", "**/.pnpm-store/**", "**/venv/**",
-        "**/.venv/**", "**/__pycache__/**", "**/target/**", "**/dist/**",
-        "**/build/**", "**/out/**", "**/.cache/**", "**/.ssh/**",
-        "**/rollback-*/**", "**/rollback-*",
-        "**/.gnupg/**", "**/.aws/credentials", "**/*.pem", "**/*.key",
-        "**/shadow", "**/gshadow",
+        "**/.git/**", "**/.svn/**", "**/.hg/**", "**/node_modules/**",
+        "**/.pnpm-store/**", "**/bower_components/**", "**/venv/**", "**/.venv/**",
+        "**/__pycache__/**", "**/.tox/**", "**/.nox/**", "**/.pytest_cache/**",
+        "**/.mypy_cache/**", "**/.ruff_cache/**", "**/target/**", "**/dist/**",
+        "**/build/**", "**/out/**", "**/.next/**", "**/.nuxt/**", "**/coverage/**",
+        "**/.cache/**", "**/.cargo/registry/**", "**/.cargo/git/**", "**/.rustup/**",
+        "**/go/pkg/mod/**", "**/.local/share/Trash/**", "**/diag-live/**",
+        "**/rollback-*/**", "**/rollback-*", "**/.ssh/**", "**/.gnupg/**",
+        "**/.aws/credentials", "**/.netrc", "**/id_rsa", "**/id_ed25519",
+        "**/*.pem", "**/*.key", "**/shadow", "**/gshadow",
     ]
     return {
         "host_id": target["host_id"],
