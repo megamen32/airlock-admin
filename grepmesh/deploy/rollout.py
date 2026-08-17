@@ -245,6 +245,11 @@ if ! id -u {shlex.quote(q['service_user'])} >/dev/null 2>&1; then sudo -n userad
 sudo -n test -s {shlex.quote(q['peer_env_path'])}
 sudo -n install -d -o {shlex.quote(q['service_user'])} -g {shlex.quote(q['service_group'])} -m 0750 {shlex.quote(q['state_dir'])}
 sudo -n install -d -o root -g root -m 0755 /etc/grepmesh-mcp
+for search_path in {' '.join(shlex.quote(path) for path in q.get('search_acl_paths', []))}; do
+  if test -e "$search_path"; then
+    sudo -n setfacl -R -m u:{shlex.quote(q['service_user'])}:rX "$search_path"
+  fi
+done
 sudo -n install -d -o root -g root -m 0750 {shlex.quote(backup_dir)}
 previous_binary=0
 previous_config=0

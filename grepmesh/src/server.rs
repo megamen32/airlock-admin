@@ -1,29 +1,58 @@
 use crate::{
-    backend::LocalBackend, config::AppConfig, gptadmin::GptAdminTopologyClient, mcp::MeshService,
-    topology::Topology, topology_cache::TopologySnapshot,
+    backend::LocalBackend,
+    config::{AppConfig, RuntimeSettings},
+    gptadmin::GptAdminTopologyClient,
+    mcp::MeshService,
+    topology::Topology,
+    topology_cache::TopologySnapshot,
 };
-use anyhow::{anyhow, Result};
+use anyhow::{anyhow, Context, Result};
 use axum::{
     extract::State,
     http::{header, HeaderMap, StatusCode, Uri},
-    response::{IntoResponse, Response},
+    response::{Html, IntoResponse, Response},
     routing::{get, post},
     Json, Router,
 };
 use serde_json::{json, Value};
-use std::{env, sync::Arc, time::Duration};
+use std::{
+    env, fs,
+    path::PathBuf,
+    sync::{Arc, RwLock},
+    time::Duration,
+};
 
 const DEFAULT_PROTOCOL_VERSION: &str = "2025-06-18";
 const CURRENT_PROTOCOL_VERSION: &str = "2026-07-28";
 
 #[derive(Clone)]
 struct AppState {
-    service: Arc<MeshService>,
+    service: Arc<RwLock<Arc<MeshService>>>,
+    runtime: Arc<RuntimeState>,
     peer_auth_token: Option<String>,
     require_peer_auth: bool,
 }
 
+struct RuntimeState {
+    host_id: String,
+    root: PathBuf,
+    index_path: Option<PathBuf>,
+    settings_path: PathBuf,
+    settings: tokio::sync::RwLock<RuntimeSettings>,
+}
+
 pub async fn run_server(config: AppConfig) -> Result<()> {
+    let settings_path = config
+        .topology_cache_path
+        .as_ref()
+        .map(|path| path.with_file_name("runtime-settings.json"))
+        .unwrap_or_else(|| PathBuf::from("/var/lib/grepmesh-mcp/runtime-settings.json"));
+    let mut settings = RuntimeSettings::from_config(&config);
+    if settings_path.exists() {
+        settings = serde_json::from_slice(&fs::read(&settings_path)?)
+            .context("parse persisted GrepMesh runtime settings")?;
+    }
+    settings.validate()?;
     let cached_snapshot =
         config
             .topology_cache_path
@@ -85,11 +114,12 @@ pub async fn run_server(config: AppConfig) -> Result<()> {
     let local = LocalBackend::from_config(
         config.host_id.clone(),
         config.root.clone(),
-        config.limits.clone(),
-        config.roots.clone(),
-        config.exclude_globs.clone(),
+        settings.limits.clone(),
+        settings.roots.clone(),
+        settings.exclude_globs.clone(),
         config.index_path.clone(),
-    );
+    )
+    .with_unrestricted_roots(settings.unrestricted_roots);
     let peer_auth_token = config
         .peer_auth_token_env
         .as_deref()
@@ -109,8 +139,16 @@ pub async fn run_server(config: AppConfig) -> Result<()> {
             "non-loopback bind requires a non-empty peer_auth_token_env"
         ));
     }
-    let service =
-        Arc::new(MeshService::new(local, topology).with_peer_auth_token(peer_auth_token.clone()));
+    let service = Arc::new(RwLock::new(Arc::new(
+        MeshService::new(local, topology).with_peer_auth_token(peer_auth_token.clone()),
+    )));
+    let runtime = Arc::new(RuntimeState {
+        host_id: config.host_id.clone(),
+        root: config.root.clone(),
+        index_path: config.index_path.clone(),
+        settings_path,
+        settings: tokio::sync::RwLock::new(settings),
+    });
     if let Some(client) = topology_client {
         let refresh_service = Arc::clone(&service);
         let cache_path = config.topology_cache_path.clone();
@@ -128,39 +166,48 @@ pub async fn run_server(config: AppConfig) -> Result<()> {
                     .unwrap_or_else(|| TopologySnapshot::empty(host_id.clone()));
                 match client.refresh_cache(&current, cache_path.as_deref()).await {
                     Ok(snapshot) => match Topology::from_snapshot(snapshot, now_ms()) {
-                        Ok(next) => refresh_service.replace_topology(next),
+                        Ok(next) => {
+                            if let Ok(service) = refresh_service.read() {
+                                service.replace_topology(next)
+                            }
+                        }
                         Err(err) => {
                             tracing::warn!(error = %err, "invalid refreshed GrepMesh topology")
                         }
                     },
                     Err(err) => {
                         tracing::warn!(error = %err, "periodic GPTAdmin topology refresh failed");
-                        if let Ok(current) = refresh_service
-                            .topology
-                            .read()
-                            .map(|topology| topology.clone())
-                        {
-                            refresh_service
-                                .replace_topology(current.with_cache_error(err.to_string()));
+                        if let Ok(current) = current_topology(&refresh_service) {
+                            if let Ok(service) = refresh_service.read() {
+                                service.replace_topology(current.with_cache_error(err.to_string()));
+                            }
                         }
                     }
                 }
             }
         });
     }
-    let remote_app = build_app(AppState {
-        service: Arc::clone(&service),
-        peer_auth_token: peer_auth_token.clone(),
-        require_peer_auth,
-    });
+    let remote_app = build_app(
+        AppState {
+            service: Arc::clone(&service),
+            runtime: Arc::clone(&runtime),
+            peer_auth_token: peer_auth_token.clone(),
+            require_peer_auth,
+        },
+        false,
+    );
     let listener = tokio::net::TcpListener::bind(remote_bind).await?;
     if let Some(local_bind) = local_bind.filter(|bind| *bind != remote_bind) {
         let local_listener = tokio::net::TcpListener::bind(local_bind).await?;
-        let local_app = build_app(AppState {
-            service,
-            peer_auth_token,
-            require_peer_auth: false,
-        });
+        let local_app = build_app(
+            AppState {
+                service,
+                runtime,
+                peer_auth_token,
+                require_peer_auth: false,
+            },
+            true,
+        );
         tokio::try_join!(
             axum::serve(listener, remote_app),
             axum::serve(local_listener, local_app)
@@ -171,11 +218,115 @@ pub async fn run_server(config: AppConfig) -> Result<()> {
     Ok(())
 }
 
-fn build_app(state: AppState) -> Router {
-    Router::new()
+fn build_app(state: AppState, admin_enabled: bool) -> Router {
+    let app = Router::new()
         .route("/", get(health).post(handle_rpc))
-        .route("/mcp", post(handle_rpc))
-        .with_state(state)
+        .route("/mcp", post(handle_rpc));
+    let app = if admin_enabled {
+        app.route("/admin", get(admin_page))
+            .route("/admin/settings", get(get_settings).put(put_settings))
+    } else {
+        app
+    };
+    app.with_state(state)
+}
+
+async fn get_settings(State(state): State<AppState>) -> Json<RuntimeSettings> {
+    Json(state.runtime.settings.read().await.clone())
+}
+
+async fn put_settings(
+    State(state): State<AppState>,
+    Json(next): Json<RuntimeSettings>,
+) -> Response {
+    if let Err(err) = next.validate() {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(json!({"ok": false, "error": err.to_string()})),
+        )
+            .into_response();
+    }
+    let bytes = match serde_json::to_vec_pretty(&next) {
+        Ok(bytes) => bytes,
+        Err(err) => {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(json!({"ok": false, "error": err.to_string()})),
+            )
+                .into_response()
+        }
+    };
+    let temp_path = state.runtime.settings_path.with_extension("json.tmp");
+    if let Err(err) = fs::write(&temp_path, bytes)
+        .and_then(|_| fs::rename(&temp_path, &state.runtime.settings_path))
+    {
+        let _ = fs::remove_file(&temp_path);
+        return (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({"ok": false, "error": format!("persist runtime settings: {err}")})),
+        )
+            .into_response();
+    }
+    let topology = match current_topology(&state.service) {
+        Ok(topology) => topology,
+        Err(_) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"ok": false, "error": "GrepMesh service lock poisoned"})),
+            )
+                .into_response()
+        }
+    };
+    let local = LocalBackend::from_config(
+        state.runtime.host_id.clone(),
+        state.runtime.root.clone(),
+        next.limits.clone(),
+        next.roots.clone(),
+        next.exclude_globs.clone(),
+        state.runtime.index_path.clone(),
+    )
+    .with_unrestricted_roots(next.unrestricted_roots);
+    let replacement = Arc::new(
+        MeshService::new(local, topology).with_peer_auth_token(state.peer_auth_token.clone()),
+    );
+    match state.service.write() {
+        Ok(mut service) => *service = replacement,
+        Err(_) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"ok": false, "error": "GrepMesh service lock poisoned"})),
+            )
+                .into_response()
+        }
+    }
+    *state.runtime.settings.write().await = next;
+    (
+        StatusCode::OK,
+        Json(json!({"ok": true, "restart_required": false})),
+    )
+        .into_response()
+}
+
+fn current_topology(service: &Arc<RwLock<Arc<MeshService>>>) -> Result<Topology> {
+    let service = service
+        .read()
+        .map_err(|_| anyhow!("GrepMesh service lock poisoned"))?;
+    service
+        .topology
+        .read()
+        .map(|topology| topology.clone())
+        .map_err(|_| anyhow!("GrepMesh topology lock poisoned"))
+}
+
+async fn admin_page() -> Html<&'static str> {
+    Html(
+        r#"<!doctype html><meta charset=utf-8><title>GrepMesh settings</title>
+<style>body{font:16px system-ui;max-width:820px;margin:3rem auto;padding:0 1rem}textarea{width:100%;height:28rem;font:13px ui-monospace}button{padding:.6rem 1rem}#status{margin-left:1rem}.warn{padding:1rem;background:#fff3cd}</style>
+<h1>GrepMesh runtime settings</h1><p class=warn><b>Warning:</b> “unrestricted roots” lets the service search any readable absolute path. It can expose secrets if you remove exclude globs or grant the service access to secret-bearing directories.</p>
+<p>Changes apply immediately, persist in the GrepMesh state directory, and survive restart. This page is intentionally available only on the loopback listener.</p>
+<textarea id=settings spellcheck=false></textarea><p><button id=save>Apply runtime settings</button><span id=status></span></p>
+<script>const box=document.querySelector('#settings'),status=document.querySelector('#status');fetch('/admin/settings').then(r=>r.json()).then(v=>box.value=JSON.stringify(v,null,2)).catch(e=>status.textContent=e);document.querySelector('#save').onclick=async()=>{let body;try{body=JSON.parse(box.value)}catch(e){status.textContent='Invalid JSON: '+e;return}const r=await fetch('/admin/settings',{method:'PUT',headers:{'content-type':'application/json'},body:JSON.stringify(body)}),v=await r.json();status.textContent=v.ok?'Applied immediately.':(v.error||'Failed')};</script>"#,
+    )
 }
 
 async fn health(State(state): State<AppState>, headers: HeaderMap) -> Response {
@@ -295,7 +446,14 @@ async fn handle_rpc_inner(state: AppState, payload: Value) -> Result<Value> {
                 tool_meta("search_status", "Report search/status metadata for one or more hosts."),
             ]
         }),
-        "tools/call" => call_tool(state.service.as_ref(), params).await?,
+        "tools/call" => {
+            let service = state
+                .service
+                .read()
+                .map_err(|_| anyhow!("GrepMesh service lock poisoned"))?
+                .clone();
+            call_tool(service.as_ref(), params).await?
+        }
         _ => {
             return Ok(
                 json!({"jsonrpc":"2.0","error":{"code":-32601,"message":"method not found"},"id":id}),
@@ -544,9 +702,24 @@ mod tests {
     async fn initialize_strongly_instructs_clients_to_use_grepmesh_for_search() {
         let temp = tempfile::tempdir().unwrap();
         let local = LocalBackend::new("local", temp.path(), Default::default());
-        let service = Arc::new(MeshService::new(local, Topology::new("local", vec![])));
+        let service = Arc::new(RwLock::new(Arc::new(MeshService::new(
+            local,
+            Topology::new("local", vec![]),
+        ))));
         let state = AppState {
             service,
+            runtime: Arc::new(RuntimeState {
+                host_id: "local".to_string(),
+                root: temp.path().to_path_buf(),
+                index_path: None,
+                settings_path: temp.path().join("runtime-settings.json"),
+                settings: tokio::sync::RwLock::new(RuntimeSettings {
+                    roots: Default::default(),
+                    exclude_globs: vec![],
+                    limits: Default::default(),
+                    unrestricted_roots: false,
+                }),
+            }),
             peer_auth_token: None,
             require_peer_auth: false,
         };

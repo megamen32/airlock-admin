@@ -103,6 +103,43 @@ impl Default for LimitsConfig {
     }
 }
 
+/// Search policy editable at runtime by the loopback-only GrepMesh admin UI.
+/// It deliberately excludes topology and all authentication settings.
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct RuntimeSettings {
+    pub roots: BTreeMap<String, Vec<PathBuf>>,
+    pub exclude_globs: Vec<String>,
+    pub limits: LimitsConfig,
+    #[serde(default)]
+    pub unrestricted_roots: bool,
+}
+
+impl RuntimeSettings {
+    pub fn from_config(config: &AppConfig) -> Self {
+        Self {
+            roots: config.roots.clone(),
+            exclude_globs: config.exclude_globs.clone(),
+            limits: config.limits.clone(),
+            unrestricted_roots: false,
+        }
+    }
+
+    pub fn validate(&self) -> Result<()> {
+        if self.limits.max_results == 0 || self.limits.max_file_bytes == 0 {
+            anyhow::bail!("limits.max_results and limits.max_file_bytes must be positive");
+        }
+        for (name, paths) in &self.roots {
+            if name.trim().is_empty()
+                || paths.is_empty()
+                || paths.iter().any(|path| !path.is_absolute())
+            {
+                anyhow::bail!("each root requires a name and absolute path(s)");
+            }
+        }
+        Ok(())
+    }
+}
+
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct AppConfig {
     pub host_id: String,

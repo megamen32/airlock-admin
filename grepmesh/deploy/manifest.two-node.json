@@ -20,6 +20,9 @@
     "service_user": "roomhacker-search",
     "service_group": "roomhacker-search",
     "supplementary_group": "roomhacker",
+    "search_acl_paths": [
+      "/home/roomhacker/gptadmin"
+    ],
     "peer_env_path": "/etc/grepmesh-mcp/peer.env",
     "peer_token_env": "GREPMESH_PEER_TOKEN"
   },

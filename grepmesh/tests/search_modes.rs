@@ -135,6 +135,28 @@ async fn named_roots_are_selectable_and_paths_remain_absolute() {
 }
 
 #[tokio::test]
+async fn unrestricted_roots_allow_an_explicit_absolute_directory() {
+    let configured = tempfile::tempdir().unwrap();
+    let outside = tempfile::tempdir().unwrap();
+    fs::write(outside.path().join("outside.txt"), "runtime-root\n").unwrap();
+    let backend =
+        LocalBackend::new("A", configured.path(), Default::default()).with_unrestricted_roots(true);
+
+    let hits = backend
+        .search_text(
+            "runtime-root",
+            10,
+            0,
+            SearchMode::Literal,
+            vec![],
+            vec![outside.path().display().to_string()],
+        )
+        .await
+        .unwrap();
+    assert_eq!(hits.len(), 1);
+}
+
+#[tokio::test]
 async fn rg_search_sees_files_created_after_backend_construction() {
     let home = tempfile::tempdir().unwrap();
     let opt = tempfile::tempdir().unwrap();

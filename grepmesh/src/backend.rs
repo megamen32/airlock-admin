@@ -138,6 +138,7 @@ pub struct LocalBackend {
     pub root_paths: BTreeMap<String, Vec<PathBuf>>,
     pub limits: LimitsConfig,
     pub exclude_globs: Vec<String>,
+    pub unrestricted_roots: bool,
     pub index: IndexManager,
 }
 
@@ -159,6 +160,7 @@ impl LocalBackend {
             root_paths,
             limits,
             exclude_globs: excludes,
+            unrestricted_roots: false,
             index,
         }
     }
@@ -196,8 +198,16 @@ impl LocalBackend {
             root_paths,
             limits,
             exclude_globs: excludes,
+            unrestricted_roots: false,
             index,
         }
+    }
+
+    /// Permit an existing absolute directory supplied by the caller. This is
+    /// opt-in because it expands the service's file visibility boundary.
+    pub fn with_unrestricted_roots(mut self, unrestricted_roots: bool) -> Self {
+        self.unrestricted_roots = unrestricted_roots;
+        self
     }
 
     pub fn with_excludes(mut self, excludes: Vec<String>) -> Self {
@@ -270,12 +280,13 @@ impl LocalBackend {
                     let requested = Path::new(name);
                     let requested = fs::canonicalize(requested)
                         .with_context(|| format!("resolve requested root {name}"))?;
-                    let allowed = self
-                        .root_paths
-                        .values()
-                        .flatten()
-                        .filter_map(|path| fs::canonicalize(path).ok())
-                        .any(|path| requested.starts_with(path));
+                    let allowed = self.unrestricted_roots
+                        || self
+                            .root_paths
+                            .values()
+                            .flatten()
+                            .filter_map(|path| fs::canonicalize(path).ok())
+                            .any(|path| requested.starts_with(path));
                     if !allowed {
                         return Err(anyhow!("unknown root {}", name));
                     }
