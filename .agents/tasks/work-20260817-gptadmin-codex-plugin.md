@@ -63,8 +63,13 @@ build и package inspection проходят. После этого измене
 
 ## Push boundary
 
-- Commit created: `99c1c00 feat(plugin): add GPTAdmin OAuth MCP marketplace plugin`.
-- `git push origin main` was attempted without force and rejected as
-  non-fast-forward because local `main` is `13 ahead / 86 behind` `origin/main`.
-- No rebase, merge, force-push, branch creation, or foreign-path cleanup was
-  performed. The next action requires the user's choice of integration target.
+- Initial commit: `4435ff3 feat(plugin): add GPTAdmin OAuth MCP marketplace plugin`.
+- The first non-force push was rejected because local `main` was `13 ahead / 86
+  behind` `origin/main`.
+- After the user's explicit request to merge all features, `origin/main` was
+  merged into local `main`. One conflict in `.agents/last-human-commit/self-improve.md`
+  was resolved by preserving both feature histories.
+- Focused post-merge suite: `27 passed`; plugin validator passed.
+- Merge commit `d65c520` was pushed successfully to `origin/main` without force.
+- Foreign untracked `.agents/shared-session/`, `grepmesh/`, and concurrent docs/task
+  paths were preserved and not staged by this task.
