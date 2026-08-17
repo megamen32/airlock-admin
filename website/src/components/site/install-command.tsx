@@ -1,7 +1,7 @@
 "use client";
 
 import { useSyncExternalStore, useState } from "react";
-import { Monitor, Terminal } from "lucide-react";
+import { Download, Monitor, Terminal } from "lucide-react";
 import { CopyCommand } from "./copy-command";
 import { cn } from "@/lib/utils";
 
@@ -107,7 +107,18 @@ export function InstallCommand({ variant = "compact", className, defaultOs }: Pr
 
       {/* Command + note */}
       {variant === "compact" ? (
-        <CopyCommand command={current.command} label="$" />
+        <>
+          <CopyCommand command={current.command} label="$" />
+          {active === "windows" && (
+            <a
+              href="/gptadmin-win.zip"
+              className="inline-flex w-fit items-center gap-1.5 text-sm font-medium text-primary underline-offset-4 hover:underline"
+            >
+              <Download className="h-4 w-4" />
+              Скачать готовую Windows-сборку (.zip)
+            </a>
+          )}
+        </>
       ) : (
         <div className="surface rounded-2xl p-6 sm:p-8">
           <div className="flex items-center gap-2 text-sm text-muted-foreground">
@@ -120,6 +131,23 @@ export function InstallCommand({ variant = "compact", className, defaultOs }: Pr
             <CopyCommand command={current.command} label="$" />
           </div>
           <p className="mt-4 text-sm leading-relaxed text-muted-foreground">{current.note}</p>
+          {active === "windows" && (
+            <p className="mt-4 flex flex-wrap items-center gap-x-3 gap-y-2 text-sm">
+              <a
+                href="/gptadmin-win.zip"
+                className="inline-flex items-center gap-1.5 font-medium text-primary underline-offset-4 hover:underline"
+              >
+                <Download className="h-4 w-4" />
+                Скачать готовую Windows-сборку (.zip)
+              </a>
+              <a
+                href="/gptadmin-win.zip.sha256"
+                className="text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
+              >
+                SHA-256
+              </a>
+            </p>
+          )}
         </div>
       )}
     </div>
