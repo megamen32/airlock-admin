@@ -15,6 +15,9 @@ from typing import Any
 SCHEMA = "gptadmin.release-manifest/v1"
 ARCHIVE_RE = re.compile(r"^(?:gptadmin\.tar\.gz|gptadmin-[^/]+(?:\.tar\.gz|\.zip))$")
 PLATFORM_RE = re.compile(r"^gptadmin-(?P<platform>linux|darwin|android)-(?P<arch>[^.]+)\.tar\.gz$")
+USER_BUNDLE_RE = re.compile(
+    r"^gptadmin-(?P<platform>windows|macos|ubuntu|android)-(?P<arch>x64|arm64)-(?P<edition>full|client)\.(?:zip|tar\.gz)$"
+)
 
 
 def sha256_file(path: Path) -> str:
@@ -30,6 +33,9 @@ def sha256_file(path: Path) -> str:
 def artifact_identity(path: Path) -> tuple[str, str, str]:
     """Derive platform, architecture and artifact kind from an archive name."""
 
+    match = USER_BUNDLE_RE.match(path.name)
+    if match:
+        return match.group("platform"), match.group("arch"), f"{match.group('edition')}-bundle"
     match = PLATFORM_RE.match(path.name)
     if match:
         return match.group("platform"), match.group("arch"), "platform-archive"
