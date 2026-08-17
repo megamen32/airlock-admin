@@ -186,7 +186,7 @@ def target_config(manifest: dict[str, Any], target: dict[str, Any]) -> dict[str,
         "**/.git/**", "**/node_modules/**", "**/.pnpm-store/**", "**/venv/**",
         "**/.venv/**", "**/__pycache__/**", "**/target/**", "**/dist/**",
         "**/build/**", "**/out/**", "**/.cache/**", "**/.ssh/**",
-        "**/rollback-*/**",
+        "**/rollback-*/**", "**/rollback-*",
         "**/.gnupg/**", "**/.aws/credentials", "**/*.pem", "**/*.key",
         "**/shadow", "**/gshadow",
     ]

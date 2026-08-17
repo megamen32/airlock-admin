@@ -40,6 +40,7 @@ pub fn default_exclude_globs() -> Vec<String> {
         "**/.local/share/Trash/**",
         "**/diag-live/**",
         "**/rollback-*/**",
+        "**/rollback-*",
         "**/.ssh/**",
         "**/.gnupg/**",
         "**/.aws/credentials",
