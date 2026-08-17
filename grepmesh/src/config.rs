@@ -39,6 +39,7 @@ pub fn default_exclude_globs() -> Vec<String> {
         "**/go/pkg/mod/**",
         "**/.local/share/Trash/**",
         "**/diag-live/**",
+        "**/rollback-*/**",
         "**/.ssh/**",
         "**/.gnupg/**",
         "**/.aws/credentials",
