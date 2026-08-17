@@ -2336,6 +2336,21 @@ func TestFromEnvReadsRelaxAuthChecksFlag(t *testing.T) {
 	}
 }
 
+func TestFromEnvReadsDebugVerifyWorkLowSecurityMode(t *testing.T) {
+	t.Setenv("DEBUG_VERIFY_WORK_LOW_SECURITY_MODE", "1")
+	t.Setenv("GPTADMIN_HUB_HOST", "0.0.0.0")
+	t.Setenv("PUBLIC_ORIGIN", "https://hub.example")
+	t.Setenv("MCP_RESOURCE", "https://hub.example")
+	if cfg := FromEnv(); !cfg.DebugLowSecurity || !cfg.RelaxAuthChecks || !cfg.OAuthPermissiveRedirects || !cfg.OAuthPermissiveResources {
+		t.Fatalf("debug mode was not fully enabled: %#v", cfg)
+	}
+
+	t.Setenv("DEBUG_VERIFY_WORK_LOW_SECURITY_MODE", "0")
+	if cfg := FromEnv(); cfg.DebugLowSecurity || cfg.RelaxAuthChecks || cfg.OAuthPermissiveRedirects || cfg.OAuthPermissiveResources {
+		t.Fatalf("debug mode remained enabled: %#v", cfg)
+	}
+}
+
 func TestJWTRequestRejectsWrongIssuerAndNormalizesConfiguredOrigin(t *testing.T) {
 	s := New(Config{OAuthClientSecret: "oauth-secret", PublicOrigin: " HTTPS://Hub.Example/// ", MCPResource: " HTTPS://Hub.Example/// "})
 	if got := s.origin(nil); got != "https://hub.example" {

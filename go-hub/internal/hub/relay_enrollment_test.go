@@ -74,6 +74,38 @@ func TestRelayEnrollmentRequiresIdentityApprovalAndIssuesAgentCredential(t *test
 	}
 }
 
+func TestDebugVerifyWorkLowSecurityModeAutoApprovesSignedRelayEnrollment(t *testing.T) {
+	s := New(Config{
+		Addr:             "0.0.0.0:9001",
+		AdminPassword:    "admin-password",
+		DebugLowSecurity: true,
+		DefaultTimeout:   time.Second,
+		PollMaxTimeout:   time.Second,
+	})
+	pub, priv, _ := ed25519.GenerateKey(rand.Reader)
+	der, _ := x509.MarshalPKIXPublicKey(pub)
+	digest := sha256.Sum256(der)
+	encoded := base64.RawURLEncoding.EncodeToString(der)
+	fingerprint := hex.EncodeToString(digest[:])
+	initial := relayRequest(t, s, http.MethodPost, "/mcp-relay/register", "admin-password", `{"agent_id":"debug","public_key":"`+encoded+`","fingerprint":"`+fingerprint+`"}`)
+	if initial.Code != http.StatusOK {
+		t.Fatalf("initial enrollment status=%d body=%s", initial.Code, initial.Body.String())
+	}
+	var pending map[string]any
+	if err := json.Unmarshal(initial.Body.Bytes(), &pending); err != nil {
+		t.Fatal(err)
+	}
+	challenge, _ := pending["challenge"].(string)
+	if challenge == "" {
+		t.Fatalf("missing enrollment challenge: %s", initial.Body.String())
+	}
+	signature := base64.RawURLEncoding.EncodeToString(ed25519.Sign(priv, relayEnrollmentMessage("debug", challenge)))
+	registered := relayRequest(t, s, http.MethodPost, "/mcp-relay/register", "", `{"agent_id":"debug","public_key":"`+encoded+`","fingerprint":"`+fingerprint+`","signature":"`+signature+`"}`)
+	if registered.Code != http.StatusOK || !bytes.Contains(registered.Body.Bytes(), []byte(`"status":"registered"`)) || !bytes.Contains(registered.Body.Bytes(), []byte(`"relay_token":"gptr_`)) {
+		t.Fatalf("debug enrollment status=%d body=%s", registered.Code, registered.Body.String())
+	}
+}
+
 func TestRelayEnrollmentCannotReplaceExistingIdentityAndPersistsDigestOnly(t *testing.T) {
 	state := t.TempDir() + "/registry.json"
 	cfg := Config{AdminPassword: "admin-password", RegistryStateFile: state, DefaultTimeout: time.Second, PollMaxTimeout: time.Second}

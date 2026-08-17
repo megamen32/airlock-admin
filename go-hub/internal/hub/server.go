@@ -68,7 +68,11 @@ type Config struct {
 	// RelaxAuthChecks is an emergency compatibility switch. It preserves
 	// cryptographic token verification and key lookup while temporarily
 	// skipping claim/expiry/PKCE checks during ingress auth-state recovery.
-	RelaxAuthChecks            bool
+	RelaxAuthChecks bool
+	// DebugLowSecurity is an explicitly enabled developer aid. It enables the
+	// existing compatibility auth mode and lets a signed ShellMCP enrollment
+	// complete without a click.
+	DebugLowSecurity           bool
 	AuthLogSecrets             bool
 	AuthRateLimit              int
 	BridgeKey                  string
@@ -113,7 +117,7 @@ func FromEnv() Config {
 	if secretTTL < 60 || secretTTL > 3600 {
 		secretTTL = 15 * 60
 	}
-	return Config{
+	cfg := Config{
 		Addr:                       host + ":" + port,
 		ConfigDir:                  cfgDir,
 		PublicDir:                  env("GPTADMIN_PUBLIC_DIR", filepath.Join(root, "public")),
@@ -161,6 +165,21 @@ func FromEnv() Config {
 		SecretIngressTTL:           time.Duration(secretTTL) * time.Second,
 		ExistingMCPBearers:         configuredMCPBearerEnv(),
 	}
+	cfg.DebugLowSecurity = truthyString(env("DEBUG_VERIFY_WORK_LOW_SECURITY_MODE", "0"))
+	normalizeDebugVerifyWorkLowSecurityMode(&cfg)
+	return cfg
+}
+
+func normalizeDebugVerifyWorkLowSecurityMode(cfg *Config) {
+	if !cfg.DebugLowSecurity {
+		return
+	}
+	// This is deliberately an alias for the tested compatibility path: unknown
+	// keys and invalid signatures remain rejected, while claims, expiry and PKCE
+	// checks are relaxed for the developer flow.
+	cfg.RelaxAuthChecks = true
+	cfg.OAuthPermissiveRedirects = true
+	cfg.OAuthPermissiveResources = true
 }
 
 func configuredMCPBearerEnv() map[string]string {
@@ -418,6 +437,7 @@ func New(cfg Config) *Server {
 	// contract as FromEnv and the CLI token issuer.
 	cfg.PublicOrigin = normalizePublicURL(cfg.PublicOrigin)
 	cfg.MCPResource = normalizePublicURL(cfg.MCPResource)
+	normalizeDebugVerifyWorkLowSecurityMode(&cfg)
 	if cfg.AuthRateLimit <= 0 {
 		cfg.AuthRateLimit = 60
 	}
@@ -2549,7 +2569,19 @@ func (s *Server) mcpRelayRegister(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusUnauthorized, map[string]any{"detail": "unauthorized"})
 		return
 	}
-	if existing == nil || existing.Meta["approved"] != true {
+	if existing == nil {
+		s.mu.Unlock()
+		writeJSON(w, http.StatusConflict, map[string]any{"detail": "pending enrollment agent is missing"})
+		return
+	}
+	if existing.Meta == nil {
+		existing.Meta = map[string]any{}
+	}
+	if existing.Meta["approved"] != true && s.cfg.DebugLowSecurity {
+		existing.Meta["approved"] = true
+		s.addAuditLocked("debug_autoapprove_signed_relay_enrollment", map[string]any{"agent_id": agentID, "fingerprint": fingerprint})
+	}
+	if existing.Meta["approved"] != true {
 		s.mu.Unlock()
 		writeJSON(w, http.StatusOK, map[string]any{"ok": true, "agent_id": agentID, "status": "awaiting_approval"})
 		return
