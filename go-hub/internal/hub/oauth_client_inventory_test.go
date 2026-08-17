@@ -203,6 +203,22 @@ func TestCanonicalOAuthEndpointsRequirePKCEAndBindClient(t *testing.T) {
 	}
 }
 
+func TestOAuthRedirectMatchesAllowsOnlyLoopbackPortVariation(t *testing.T) {
+	if !oauthRedirectMatches("http://127.0.0.1:49411/callback/native", "http://127.0.0.1:52008/callback/native") {
+		t.Fatal("native loopback callback port variation was rejected")
+	}
+	for _, candidate := range []string{
+		"http://127.0.0.1:52008/callback/other",
+		"http://localhost:52008/callback/native",
+		"https://127.0.0.1:52008/callback/native",
+		"https://client.example/callback",
+	} {
+		if oauthRedirectMatches("http://127.0.0.1:49411/callback/native", candidate) {
+			t.Fatalf("unsafe redirect variation accepted: %s", candidate)
+		}
+	}
+}
+
 func TestOAuthRefreshTokenSurvivesRestartForFiveYearsAndAuthenticatesMCPPaths(t *testing.T) {
 	cfg := Config{
 		AdminPassword:            "admin-password",

@@ -5330,7 +5330,7 @@ func (s *Server) oauthToken(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid_grant", "error_description": "code not found, expired, or resource mismatch"})
 		return
 	}
-	if r.Form.Get("client_id") != data.ClientID || r.Form.Get("redirect_uri") != data.RedirectURI {
+	if r.Form.Get("client_id") != data.ClientID || !oauthRedirectMatches(data.RedirectURI, r.Form.Get("redirect_uri")) {
 		s.authAudit("oauth_token_denied", r, map[string]any{"reason": "client or redirect mismatch", "client_id": data.ClientID, "form": s.formForAudit(r)})
 		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid_grant", "error_description": "client or redirect mismatch"})
 		return
@@ -5355,6 +5355,28 @@ func (s *Server) oauthToken(w http.ResponseWriter, r *http.Request) {
 	s.mu.Unlock()
 	s.authAudit("oauth_token_ok", r, map[string]any{"client_id": data.ClientID, "scope": data.Scope, "resource": resource, "access_token": s.secretForAudit(token), "jwt_claims": decodeJWTClaimsUnverified(token), "form": s.formForAudit(r)})
 	writeJSON(w, http.StatusOK, map[string]any{"access_token": token, "token_type": "Bearer", "expires_in": 43200, "refresh_token": refreshToken, "refresh_token_expires_in": refreshRecord.ExpiresAt - s.now().Unix()})
+}
+
+// Native OAuth clients bind a loopback callback before opening the browser.
+// The operating system may choose a different ephemeral port for the token
+// exchange, while the callback path, client, authorization code, and PKCE
+// verifier remain bound. Keep exact matching for every non-loopback redirect.
+func oauthRedirectMatches(issued, requested string) bool {
+	if issued == requested {
+		return true
+	}
+	left, err := url.Parse(issued)
+	if err != nil {
+		return false
+	}
+	right, err := url.Parse(requested)
+	if err != nil {
+		return false
+	}
+	return left.Scheme == "http" && right.Scheme == "http" &&
+		left.Hostname() == "127.0.0.1" && right.Hostname() == "127.0.0.1" &&
+		left.EscapedPath() == right.EscapedPath() && left.RawQuery == right.RawQuery &&
+		left.User == nil && right.User == nil && left.Fragment == "" && right.Fragment == ""
 }
 
 // oauthRefreshToken rotates a durable OAuth refresh credential and returns a
