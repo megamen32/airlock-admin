@@ -28,6 +28,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/megamen32/gptadmin/go-hub/internal/cloudos"
 )
 
 var BuildVersion = "go-dev"
@@ -396,6 +398,8 @@ type Server struct {
 	updateLockPath      string
 	updateLauncher      *UpdateLauncher
 	networkProxy        *NetworkProxyController
+	cloudOSRegistry     *cloudos.Registry
+	cloudOSTunnel       cloudos.TunnelManager
 	webhookRoutes       map[string]WebhookRoute
 	webhookJobs         map[string]*webhookJob
 	webhookDeliveries   map[string]*webhookDelivery
@@ -490,7 +494,16 @@ func New(cfg Config) *Server {
 		webhookDeliveries: map[string]*webhookDelivery{},
 		instructionSets:   map[string]InstructionSet{},
 		virtualMCP:        map[string]bool{},
+		cloudOSRegistry:   cloudos.NewRegistry(),
+		cloudOSTunnel:     &cloudos.NoopTunnelManager{},
 	}
+	s.cloudOSRegistry.Register(&cloudos.Computer{
+		ID:           "server-100",
+		Name:         "server-100",
+		OS:           "linux",
+		Capabilities: []string{"status"},
+		Status:       "online",
+	})
 	if cfg.ConfigDir != "" || cfg.SecretStoreDir != "" || cfg.SecretStoreKeyFile != "" || cfg.SecretIngressStateFile != "" {
 		if cfg.SecretStoreDir == "" {
 			cfg.SecretStoreDir = filepath.Join(cfg.ConfigDir, "secrets")
@@ -861,6 +874,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/version", s.version)
 	mux.HandleFunc("/healthz", s.healthz)
 	mux.HandleFunc("/metrics", s.hubMetrics)
+	cloudos.RegisterRoutes(mux, s.cloudOSRegistry, s.cloudOSTunnel)
 	mux.HandleFunc("/actions/openapi.yaml", s.actionsOpenAPI)
 	mux.HandleFunc("/artifacts/shellmcp.json", s.requireArtifact(s.shellmcpArtifactManifest))
 	mux.HandleFunc("/artifacts/shellmcp.tar.gz", s.requireArtifact(s.shellmcpArtifactDownload))

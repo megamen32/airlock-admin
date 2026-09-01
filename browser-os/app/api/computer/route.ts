@@ -49,7 +49,7 @@ export async function GET(request: NextRequest) {
   if (operation === 'computer.list') {
     const hubResult = await proxyToHub(`${HUB_URL}/computers`);
     if (hubResult) {
-      return NextResponse.json({ data: hubResult, mock: false });
+      return NextResponse.json({ data: Array.isArray(hubResult.computers) ? hubResult.computers : [], mock: false });
     }
     return NextResponse.json({ data: MOCK_COMPUTERS, mock: true });
   }

@@ -32,8 +32,16 @@ async function fetchFromHub<T>(endpoint: string, body?: unknown): Promise<ApiRes
 // ---- Computers ----
 
 export async function listComputers(): Promise<ApiResponse<Computer[]>> {
-  const res = await fetchFromHub<Computer[]>('/computers');
-  if (res.data) return res;
+  try {
+    const res = await fetch('/api/computer?operation=computer.list', {
+      signal: AbortSignal.timeout(3000),
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const payload = await res.json() as { data?: Computer[]; mock?: boolean };
+    if (Array.isArray(payload.data)) return { data: payload.data, mock: payload.mock === true };
+  } catch {
+    // Keep the desktop responsive while the Hub is restarting.
+  }
   return { data: MOCK_COMPUTERS, mock: true };
 }
 

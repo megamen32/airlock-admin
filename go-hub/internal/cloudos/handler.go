@@ -281,7 +281,7 @@ func HandleHeartbeat(registry *Registry) http.HandlerFunc {
 			return
 		}
 
-		comp, ok := registry.Get(id)
+		_, ok := registry.Get(id)
 		if !ok {
 			writeJSON(w, http.StatusNotFound, map[string]any{
 				"detail": "computer not found",
@@ -293,8 +293,8 @@ func HandleHeartbeat(registry *Registry) http.HandlerFunc {
 		updated, _ := registry.Get(id)
 
 		writeJSON(w, http.StatusOK, map[string]any{
-			"status":    "ok",
-			"computer":  updated,
+			"status":   "ok",
+			"computer": updated,
 		})
 	}
 }
@@ -437,12 +437,12 @@ func HandleProcessesKill(registry *Registry, tunnelMgr TunnelManager) http.Handl
 // For network streams, Cloud OS delegates to the existing
 // NetworkProxyController capability lifecycle:
 //
-//	1. If no active capability exists for this computer, one is
-//	   auto-created with permissive defaults (all CIDRs, all ports).
-//	2. IssueStreamGrants() creates client+agent gpr1 tickets.
-//	3. The client ticket is returned to the caller.
-//	4. The agent ticket is delivered to the native host via the
-//	   extension's ticket endpoint.
+//  1. If no active capability exists for this computer, one is
+//     auto-created with permissive defaults (all CIDRs, all ports).
+//  2. IssueStreamGrants() creates client+agent gpr1 tickets.
+//  3. The client ticket is returned to the caller.
+//  4. The agent ticket is delivered to the native host via the
+//     extension's ticket endpoint.
 //
 // POST /api/v1/cloud-os/network/connect
 func HandleNetworkConnect(registry *Registry, tunnelMgr TunnelManager) http.HandlerFunc {
