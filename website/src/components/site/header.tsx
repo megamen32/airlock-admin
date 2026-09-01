@@ -55,13 +55,13 @@ export function Header() {
   return (
     <header
       className={cn(
-        "fixed inset-x-0 top-0 z-50 transition-all duration-500",
+        "fixed inset-x-0 top-0 z-50 border-b border-border/60 bg-background transition-all duration-500",
         scrolled
-          ? "border-b border-border/60 bg-background/70 backdrop-blur-xl"
-          : "border-b border-transparent bg-transparent"
+          ? "backdrop-blur-xl"
+          : ""
       )}
     >
-      <div className="mx-auto flex h-16 max-w-7xl items-center justify-between gap-4 px-5 sm:px-8">
+      <div className="mx-auto grid h-16 max-w-7xl grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 px-5 sm:px-8">
         {/* Logo → home */}
         <a
           href={pageHref("home")}
@@ -81,7 +81,7 @@ export function Header() {
         </a>
 
         {/* Page tabs — desktop */}
-        <nav className="hidden items-center gap-1 lg:flex" aria-label={t("header.navLabel")}>
+        <nav className="hidden min-w-0 items-center justify-center gap-1 overflow-x-auto xl:flex" aria-label={t("header.navLabel")}>
           {tabs.map((tab) => {
             const active = page === tab.id;
             return (
@@ -111,7 +111,7 @@ export function Header() {
           <button
             type="button"
             onClick={() => setOpen((v) => !v)}
-            className="inline-flex h-10 w-10 items-center justify-center rounded-lg border border-border/70 text-foreground lg:hidden"
+            className="inline-flex h-10 w-10 items-center justify-center rounded-lg border border-border/70 text-foreground xl:hidden"
             aria-label={open ? t("header.closeMenu") : t("header.openMenu")}
             aria-expanded={open}
           >
@@ -128,7 +128,7 @@ export function Header() {
             animate={{ opacity: 1, height: "auto" }}
             exit={{ opacity: 0, height: 0 }}
             transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
-            className="overflow-hidden border-b border-border/60 bg-background/95 backdrop-blur-xl lg:hidden"
+            className="overflow-hidden border-b border-border/60 bg-background/95 backdrop-blur-xl xl:hidden"
             aria-label={t("header.mobileMenuLabel")}
           >
             <div className="mx-auto flex max-w-7xl flex-col gap-1 px-5 py-4">
