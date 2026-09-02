@@ -987,10 +987,39 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/admin/api/clients", s.requireCtl(s.adminClients))
 	mux.HandleFunc("/admin/login", s.adminLogin)
 	mux.HandleFunc("/admin/logout", s.adminLogout)
+	mux.HandleFunc("/cloudos", s.cloudOSUI)
+	mux.HandleFunc("/cloudos/", s.cloudOSUI)
 	mux.HandleFunc("/admin/legacy/", s.adminLegacyStatic)
 	mux.HandleFunc("/admin/", s.adminStatic)
 	mux.HandleFunc("/admin", s.adminIndex)
 	return withRequestTrace(withIngressAudit(withCORS(mux)))
+}
+
+// cloudOSUI exposes the locally installed CloudOS UI below the same Hub origin.
+// Personal FRP hostnames already route to this Hub, so this does not create a
+// second public hostname or authentication ceremony.
+func (s *Server) cloudOSUI(w http.ResponseWriter, r *http.Request) {
+	if r.URL.Path == "/cloudos" {
+		http.Redirect(w, r, "/cloudos/", http.StatusTemporaryRedirect)
+		return
+	}
+	target, _ := url.Parse("http://127.0.0.1:3030")
+	proxy := httputil.NewSingleHostReverseProxy(target)
+	originalDirector := proxy.Director
+	proxy.Director = func(req *http.Request) {
+		originalDirector(req)
+		req.URL.Path = strings.TrimPrefix(r.URL.Path, "/cloudos")
+		if req.URL.Path == "" {
+			req.URL.Path = "/"
+		}
+		req.Header.Set("X-Forwarded-Prefix", "/cloudos")
+		req.Header.Set("X-Forwarded-Proto", requestScheme(r))
+		req.Header.Set("X-Forwarded-Host", r.Host)
+	}
+	proxy.ErrorHandler = func(w http.ResponseWriter, _ *http.Request, _ error) {
+		writeJSON(w, http.StatusBadGateway, map[string]any{"detail": "CloudOS UI is unavailable"})
+	}
+	proxy.ServeHTTP(w, r)
 }
 
 func (s *Server) httpServiceEndpoint(w http.ResponseWriter, r *http.Request) {

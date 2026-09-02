@@ -33,7 +33,7 @@ async function fetchFromHub<T>(endpoint: string, body?: unknown): Promise<ApiRes
 
 export async function listComputers(): Promise<ApiResponse<Computer[]>> {
   try {
-    const res = await fetch('/api/computer?operation=computer.list', {
+    const res = await fetch('api/computer?operation=computer.list', {
       signal: AbortSignal.timeout(3000),
     });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
