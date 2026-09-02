@@ -601,7 +601,7 @@ import hashlib, json, pathlib, re, sys
 root = pathlib.Path(sys.argv[1])
 entries = []
 for path in sorted(root.glob("gptadmin-*-*-*.*")):
-    match = re.fullmatch(r"gptadmin-(windows|macos|ubuntu|android)-(x64|arm64)-(full|client)\\.(zip|tar\\.gz)", path.name)
+    match = re.fullmatch(r"gptadmin-(windows|macos|ubuntu|android)-(x64|arm64)-(full|client)\.(zip|tar\.gz)", path.name)
     if match:
         entries.append({"platform": match.group(1), "arch": match.group(2), "edition": match.group(3), "file": path.name, "sha256": hashlib.sha256(path.read_bytes()).hexdigest()})
 (root / "gptadmin-release-matrix.json").write_text(json.dumps({"schema": "gptadmin.release-matrix/v1", "artifacts": entries}, indent=2) + "\n")
