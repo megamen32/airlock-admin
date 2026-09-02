@@ -10,6 +10,7 @@ import { Window } from './window';
 import { FilesApp } from './apps/files-app';
 import { TerminalApp } from './apps/terminal-app';
 import { OpenCodeApp } from './apps/opencode-app';
+import { BrowserApp } from './apps/browser-app';
 import { ComputersApp } from './apps/computers-app';
 import { AppId } from '@/lib/types';
 
@@ -21,6 +22,8 @@ function renderAppContent(appId: AppId) {
       return <TerminalApp />;
     case 'opencode':
       return <OpenCodeApp />;
+    case 'browser':
+      return <BrowserApp />;
     case 'computers':
       return <ComputersApp />;
     case 'settings':

@@ -19,6 +19,7 @@ interface DesktopIcon {
 }
 
 const DESKTOP_ICONS: DesktopIcon[] = [
+  { id: 'browser', label: 'Browser', icon: <span className="text-4xl">🌐</span> },
   { id: 'files', label: 'Files', icon: <FilesIcon size={52} /> },
   { id: 'terminal', label: 'Terminal', icon: <TerminalIcon size={52} /> },
   { id: 'opencode', label: 'OpenCode', icon: <OpenCodeIcon size={52} /> },

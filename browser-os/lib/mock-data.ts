@@ -232,6 +232,7 @@ export const APP_DEFINITIONS: AppDefinition[] = [
     minWidth: 600,
     minHeight: 400,
   },
+  { id: 'browser', name: 'Browser', icon: 'browser', defaultWidth: 860, defaultHeight: 560, minWidth: 600, minHeight: 400 },
   {
     id: 'computers',
     name: 'Computers',

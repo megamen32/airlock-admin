@@ -62,3 +62,39 @@ func (s *Server) cloudOSShellInspect(w http.ResponseWriter, r *http.Request) {
 	resp, status := s.executeMCPTool(r, target, "system_inspect", map[string]any{"action": "list_directory", "path": path, "max_bytes": 1048576}, false, s.cfg.DefaultTimeout, "")
 	writeJSON(w, status, resp)
 }
+
+func (s *Server) cloudOSBrowserConnectors(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeJSON(w, http.StatusMethodNotAllowed, map[string]any{"detail": "method not allowed"})
+		return
+	}
+	s.mu.Lock()
+	connectors := []map[string]any{}
+	for id, agent := range s.agents {
+		if agent == nil || !strings.HasPrefix(id, "mcp:") || !strings.Contains(strings.ToLower(agent.Name), "browser") {
+			continue
+		}
+		connectors = append(connectors, map[string]any{"id": id, "name": agent.Name, "status": agent.Status, "parent": firstString(agent.Meta, "parent_server_id")})
+	}
+	s.mu.Unlock()
+	writeJSON(w, http.StatusOK, map[string]any{"connectors": connectors})
+}
+
+func (s *Server) cloudOSBrowserTabs(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeJSON(w, http.StatusMethodNotAllowed, map[string]any{"detail": "method not allowed"})
+		return
+	}
+	var req map[string]any
+	if err := readJSON(r, &req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"detail": err.Error()})
+		return
+	}
+	target := firstString(req, "connector")
+	if !strings.HasPrefix(target, "mcp:") {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"detail": "connector is required"})
+		return
+	}
+	resp, status := s.executeMCPTool(r, target, "tabs", map[string]any{"action": "list"}, false, s.cfg.DefaultTimeout, "")
+	writeJSON(w, status, resp)
+}

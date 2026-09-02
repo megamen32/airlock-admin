@@ -69,7 +69,7 @@ export interface WindowState {
   prevBounds?: { x: number; y: number; width: number; height: number };
 }
 
-export type AppId = 'files' | 'terminal' | 'opencode' | 'computers' | 'settings';
+export type AppId = 'files' | 'terminal' | 'browser' | 'opencode' | 'computers' | 'settings';
 
 export interface AppDefinition {
   id: AppId;
