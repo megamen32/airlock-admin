@@ -67,10 +67,9 @@ jobs:
             git add VERSION
             git commit -m "build: advance release version to ${next}"
             git push origin HEAD:main
-            echo "VERSION was advanced to ${next}; the follow-up push will create v${next}."
-            echo "created=false" >> "$GITHUB_OUTPUT"
-            echo "tag=v${next}" >> "$GITHUB_OUTPUT"
-            exit 0
+            echo "VERSION was advanced to ${next}; tagging that exact commit."
+            current_commit="$(git rev-parse HEAD)"
+            tag="v${next}"
           else
             remote_status=$?
             if [[ "$remote_status" -ne 2 ]]; then
@@ -89,6 +88,7 @@ jobs:
 
   release:
     needs: tag
+    if: needs.tag.outputs.created == 'true'
     runs-on: ubuntu-latest
     steps:
       - name: Dispatch Release workflow on the new tag
