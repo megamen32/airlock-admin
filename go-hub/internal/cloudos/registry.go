@@ -27,10 +27,11 @@ func (r *Registry) Register(c *Computer) {
 	defer r.mu.Unlock()
 
 	// Direct agents reconnect after a Hub restart or a local service restart.
-	// Keep one canonical record per machine instead of accumulating stale IDs.
+	// Keep one canonical record for the same agent session, while allowing
+	// different computers with the same OS or display name to coexist.
 	if c.Endpoint != "" {
 		for id, existing := range r.computers {
-			if existing.Endpoint != "" && existing.Name == c.Name && existing.OS == c.OS {
+			if existing.Endpoint != "" && c.SessionID != "" && existing.SessionID == c.SessionID {
 				delete(r.computers, id)
 			}
 		}

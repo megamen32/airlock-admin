@@ -60,7 +60,7 @@ class Agent:
                 self.pair(); return
             req = urllib.request.Request(self.hub + "/computers/" + self.computer_id + "/heartbeat", method="POST")
             with urllib.request.urlopen(req, timeout=10): pass
-        except (urllib.error.HTTPError, urllib.error.URLError, OSError):
+        except Exception:
             self.pair()
 
     def files(self, requested):
