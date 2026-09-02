@@ -322,7 +322,7 @@ jobs:
           while IFS= read -r asset_name; do
             asset="$SRC/build/$asset_name"
             [[ -f "$asset" ]] && release_assets+=("$asset")
-          done < <(python3 -c 'import json, sys; print(*[artifact["file"] for artifact in json.load(open(sys.argv[1]))["artifacts"]], sep="\\n")' "$SRC/build/gptadmin-release-matrix.json")
+          done < <(python3 -c 'import json, sys; print(*[artifact["file"] for artifact in json.load(open(sys.argv[1]))["artifacts"]], sep="\n")' "$SRC/build/gptadmin-release-matrix.json")
           release_assets+=(
             "$SRC"/build/gptadmin-checksums.txt"
             "$SRC"/build/gptadmin-release-matrix.json"
