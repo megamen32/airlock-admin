@@ -124,6 +124,9 @@ jobs:
           cache: npm
           cache-dependency-path: admin-ui/package-lock.json
 
+      - name: Setup Android SDK command-line tools
+        uses: android-actions/setup-android@v3
+
       - name: Install Android NDK for x64 release bundles
         run: |
           sdkmanager --install "ndk;27.0.12077973"
