@@ -10,7 +10,7 @@ export function ComputersApp() {
 
   useEffect(() => {
     void listComputers().then(result => {
-      setComputers(Array.isArray(result.data) ? result.data : []);
+      setComputers((Array.isArray(result.data) ? result.data : []).filter(item => item.capabilities.includes('files') && item.capabilities.includes('terminal')));
       setUsingMock(result.mock);
     });
   }, []);
