@@ -88,7 +88,6 @@ jobs:
 
   release:
     needs: tag
-    if: needs.tag.outputs.created == 'true'
     runs-on: ubuntu-latest
     steps:
       - name: Dispatch Release workflow on the new tag
