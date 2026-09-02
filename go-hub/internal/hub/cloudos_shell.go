@@ -70,11 +70,16 @@ func (s *Server) cloudOSBrowserConnectors(w http.ResponseWriter, r *http.Request
 	}
 	s.mu.Lock()
 	connectors := []map[string]any{}
-	for id, agent := range s.agents {
-		if agent == nil || !strings.HasPrefix(id, "mcp:") || !strings.Contains(strings.ToLower(agent.Name), "browser") {
+	for _, parent := range s.agents {
+		if parent == nil || !strings.HasPrefix(parent.AgentID, "shell:") {
 			continue
 		}
-		connectors = append(connectors, map[string]any{"id": id, "name": agent.Name, "status": agent.Status, "parent": firstString(agent.Meta, "parent_server_id")})
+		for _, agent := range childMCPAgents(*parent) {
+			if !strings.Contains(strings.ToLower(agent.Name), "browser") {
+				continue
+			}
+			connectors = append(connectors, map[string]any{"id": agent.AgentID, "name": agent.Name, "status": agent.Status, "parent": firstString(agent.Meta, "parent_server_id")})
+		}
 	}
 	s.mu.Unlock()
 	writeJSON(w, http.StatusOK, map[string]any{"connectors": connectors})
