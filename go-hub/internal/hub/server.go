@@ -877,6 +877,7 @@ func (s *Server) Handler() http.Handler {
 	cloudos.RegisterRoutes(mux, s.cloudOSRegistry, s.cloudOSTunnel)
 	mux.HandleFunc("/api/v1/cloud-os/shell/computers", s.cloudOSShellComputers)
 	mux.HandleFunc("/api/v1/cloud-os/shell/exec", s.cloudOSShellExec)
+	mux.HandleFunc("/api/v1/cloud-os/shell/inspect", s.cloudOSShellInspect)
 	mux.HandleFunc("/actions/openapi.yaml", s.actionsOpenAPI)
 	mux.HandleFunc("/artifacts/shellmcp.json", s.requireArtifact(s.shellmcpArtifactManifest))
 	mux.HandleFunc("/artifacts/shellmcp.tar.gz", s.requireArtifact(s.shellmcpArtifactDownload))

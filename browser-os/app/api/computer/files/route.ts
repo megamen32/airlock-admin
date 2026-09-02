@@ -120,11 +120,13 @@ export async function GET(request: NextRequest) {
   const computer = searchParams.get('computer') || 'macbook-home';
 
   if (operation === 'files.list') {
-    const hubResult = await proxyToHub(`${HUB_URL}/files/list`, {
-      computer, session: 'demo', operation: 'files.list', path,
-    });
+    const hubResult = await proxyToHub(`${HUB_URL}/shell/inspect`, { target: computer, path });
     if (hubResult) {
-      return NextResponse.json({ data: hubResult, mock: false });
+      const inspection = hubResult?.response?.structuredContent?.result?.structuredContent?.inspection;
+      if (Array.isArray(inspection?.entries)) {
+        return NextResponse.json({ data: { path, entries: inspection.entries.map((entry: { name: string; type: string; size?: number; modified_at?: string }) => ({ name: entry.name, type: entry.type, size: entry.size, modified: entry.modified_at, path: `${path.replace(/\/$/, '')}/${entry.name}` })) }, mock: false });
+      }
+      return NextResponse.json({ error: 'ShellMCP did not return a directory listing' }, { status: 502 });
     }
     return NextResponse.json({ error: 'Hub unavailable' }, { status: 502 });
   }

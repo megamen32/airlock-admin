@@ -43,3 +43,22 @@ func (s *Server) cloudOSShellExec(w http.ResponseWriter, r *http.Request) {
 	resp, status := s.executeMCPTool(r, target, "shell_exec", map[string]any{"cmd": cmd, "cwd": req["cwd"], "timeout": req["timeout"]}, false, timeoutFromReq(req, s.cfg.DefaultTimeout), "")
 	writeJSON(w, status, resp)
 }
+
+func (s *Server) cloudOSShellInspect(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeJSON(w, http.StatusMethodNotAllowed, map[string]any{"detail": "method not allowed"})
+		return
+	}
+	var req map[string]any
+	if err := readJSON(r, &req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"detail": err.Error()})
+		return
+	}
+	target, path := firstString(req, "target", "computer"), firstString(req, "path")
+	if !strings.HasPrefix(target, "shell:") || path == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"detail": "target must be a ShellMCP computer and path is required"})
+		return
+	}
+	resp, status := s.executeMCPTool(r, target, "system_inspect", map[string]any{"action": "list_directory", "path": path, "max_bytes": 1048576}, false, s.cfg.DefaultTimeout, "")
+	writeJSON(w, status, resp)
+}
