@@ -72,7 +72,8 @@ class Agent:
             entries.append({"name": child.name, "type": "directory" if child.is_dir() else "file",
                 "size": stat.st_size, "modified": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(stat.st_mtime)),
                 "path": "/" + str(child.relative_to(self.root))})
-        return {"path": "/" + str(path.relative_to(self.root)), "entries": entries}
+        relative = path.relative_to(self.root)
+        return {"path": "/" if relative == Path('.') else "/" + str(relative), "entries": entries}
 
     def execute(self, command):
         commands = {

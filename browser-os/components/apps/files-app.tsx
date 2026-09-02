@@ -6,7 +6,7 @@ import type { Computer, FileEntry } from '@/lib/types';
 
 export function FilesApp() {
   const [computers, setComputers] = useState<Computer[]>([]), [computer, setComputer] = useState(''), [path, setPath] = useState('/'), [entries, setEntries] = useState<FileEntry[]>([]), [message, setMessage] = useState('Select a computer to browse its CloudOS workspace.');
-  useEffect(() => { void listComputers().then(result => setComputers(result.data ?? [])); }, []);
+  useEffect(() => { void listComputers().then(result => setComputers((result.data ?? []).filter(c => c.capabilities.includes('files'))); }, []);
   async function browse(nextPath = path) {
     if (!computer) return; setMessage('Loading…');
     const response = await fetch(`/api/computer/files?operation=files.list&computer=${encodeURIComponent(computer)}&path=${encodeURIComponent(nextPath)}`), payload = await response.json();

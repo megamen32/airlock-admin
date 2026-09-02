@@ -2,7 +2,7 @@
 // GPTAdmin Browser OS — Type Definitions
 // ============================================================
 
-export type ComputerCapability = 'files' | 'processes' | 'network';
+export type ComputerCapability = 'files' | 'terminal' | 'processes' | 'network' | 'status';
 
 export type ComputerStatus = 'online' | 'offline' | 'connecting';
 
