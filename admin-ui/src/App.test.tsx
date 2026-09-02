@@ -129,6 +129,8 @@ describe("Profiles / Instructions", () => {
     expect(screen.getByRole("link", { name: "Авторизация" })).toHaveAttribute("href", "#auth");
     expect(screen.getByRole("link", { name: "Виртуальные MCP" })).toHaveAttribute("href", "#capabilities");
     expect(screen.getByRole("link", { name: "Операции и MCP" })).toHaveAttribute("href", "/admin/legacy/");
+    expect(screen.getByRole("link", { name: "Открыть CloudOS" })).toHaveAttribute("href", "https://cloudos.bezrabotnyi.com");
+    expect(screen.getByRole("link", { name: "Открыть CloudOS" })).toHaveAttribute("target", "_blank");
     expect(screen.getByRole("link", { name: "Выйти" })).toHaveAttribute("href", "/admin/logout");
 
     await userEvent.tab();
@@ -145,6 +147,8 @@ describe("Profiles / Instructions", () => {
     expect(screen.getByRole("link", { name: "Виртуальные MCP" })).toHaveFocus();
     await userEvent.tab();
     expect(screen.getByRole("link", { name: "Операции и MCP" })).toHaveFocus();
+    await userEvent.tab();
+    expect(screen.getByRole("link", { name: "Открыть CloudOS" })).toHaveFocus();
     await userEvent.tab();
     expect(screen.getByRole("link", { name: "Выйти" })).toHaveFocus();
   });
