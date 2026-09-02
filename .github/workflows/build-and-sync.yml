@@ -317,6 +317,7 @@ jobs:
           # User-facing release: 16 named OS/architecture/edition bundles,
           # one checksum list and one machine-readable catalogue. Internal
           # component archives, SBOM and provenance stay CI artifacts.
+          # Bundle-name contract: gptadmin-{windows,macos,ubuntu,android}-{x64,arm64}-{full,client}.{zip,tar.gz}
           release_assets=()
           while IFS= read -r asset_name; do
             asset="$SRC/build/$asset_name"
