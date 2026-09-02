@@ -11,7 +11,13 @@ import { useWindowStore } from '@/lib/window-store';
 export function MenuBar() {
   const [time, setTime] = useState('');
   const [date, setDate] = useState('');
+  const [menu, setMenu] = useState<string | null>(null);
   const focusedWindow = useWindowStore(s => s.windows.find(w => w.isFocused));
+  const openWindow = useWindowStore(s => s.openWindow);
+  const closeWindow = useWindowStore(s => s.closeWindow);
+  const minimizeWindow = useWindowStore(s => s.minimizeWindow);
+  const maximizeWindow = useWindowStore(s => s.maximizeWindow);
+  const action = (fn: () => void) => { fn(); setMenu(null); };
 
   useEffect(() => {
     const update = () => {
@@ -27,7 +33,7 @@ export function MenuBar() {
   return (
     <div className="h-7 bg-black/40 backdrop-blur-2xl flex items-center px-3 text-white/90 text-[13px] font-normal z-[9999] relative border-b border-white/5">
       {/* Apple Logo / Cloud OS */}
-      <button className="flex items-center gap-1.5 px-2 py-0.5 rounded hover:bg-white/10 transition-colors mr-3">
+      <button aria-label="Cloud OS menu" onClick={() => setMenu(menu === 'cloud' ? null : 'cloud')} className="flex items-center gap-1.5 px-2 py-0.5 rounded hover:bg-white/10 transition-colors mr-3">
         <CloudOSIcon size={14} />
         <span className="font-semibold">Cloud OS</span>
       </button>
@@ -37,21 +43,16 @@ export function MenuBar() {
         {focusedWindow?.title || 'Finder'}
       </button>
 
-      <button className="px-2 py-0.5 rounded hover:bg-white/10 transition-colors">
-        File
-      </button>
-      <button className="px-2 py-0.5 rounded hover:bg-white/10 transition-colors">
-        Edit
-      </button>
-      <button className="px-2 py-0.5 rounded hover:bg-white/10 transition-colors">
-        View
-      </button>
-      <button className="px-2 py-0.5 rounded hover:bg-white/10 transition-colors">
-        Window
-      </button>
-      <button className="px-2 py-0.5 rounded hover:bg-white/10 transition-colors">
-        Help
-      </button>
+      {['File', 'Edit', 'View', 'Window', 'Help'].map(label => <button key={label} onClick={() => setMenu(menu === label ? null : label)} className="px-2 py-0.5 rounded hover:bg-white/10 transition-colors">{label}</button>)}
+
+      {menu && <div className="absolute left-2 top-7 min-w-44 rounded-md border border-white/15 bg-slate-900 p-1 shadow-xl">
+        {menu === 'cloud' && <MenuItem label="About Cloud OS" onClick={() => action(() => alert('Cloud OS: connected computer workspace'))} />}
+        {menu === 'File' && <><MenuItem label="Open Files" onClick={() => action(() => openWindow('files'))} /><MenuItem label="Open Terminal" onClick={() => action(() => openWindow('terminal'))} /></>}
+        {menu === 'Edit' && <MenuItem label="Copy selected text" onClick={() => action(() => document.execCommand('copy'))} />}
+        {menu === 'View' && <MenuItem label="Toggle fullscreen" onClick={() => action(() => document.fullscreenElement ? void document.exitFullscreen() : void document.documentElement.requestFullscreen())} />}
+        {menu === 'Window' && <><MenuItem label="Minimize focused window" onClick={() => action(() => focusedWindow && minimizeWindow(focusedWindow.id))} /><MenuItem label="Zoom focused window" onClick={() => action(() => focusedWindow && maximizeWindow(focusedWindow.id))} /><MenuItem label="Close focused window" onClick={() => action(() => focusedWindow && closeWindow(focusedWindow.id))} /></>}
+        {menu === 'Help' && <MenuItem label="CloudOS help" onClick={() => action(() => openWindow('computers'))} />}
+      </div>}
 
       {/* Spacer */}
       <div className="flex-1" />
@@ -73,6 +74,10 @@ export function MenuBar() {
       </div>
     </div>
   );
+}
+
+function MenuItem({ label, onClick }: { label: string; onClick: () => void }) {
+  return <button onClick={onClick} className="block w-full rounded px-3 py-2 text-left text-sm hover:bg-white/10">{label}</button>;
 }
 
 function StatusIndicator({ label, status }: { label: string; status: 'connected' | 'disconnected' | 'warning' }) {

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
+	"net/url"
 	"strings"
 )
 
@@ -172,12 +173,22 @@ func HandleComputerPair(registry *Registry, tunnelMgr TunnelManager) http.Handle
 			OS           string   `json:"os"`
 			Capabilities []string `json:"capabilities"`
 			SessionID    string   `json:"session_id"`
+			Endpoint     string   `json:"endpoint"`
+			AgentToken   string   `json:"agent_token"`
 		}
 		if err := json.NewDecoder(io.LimitReader(r.Body, 1<<16)).Decode(&req); err != nil {
 			writeJSON(w, http.StatusBadRequest, map[string]any{
 				"detail": "invalid request body",
 			})
 			return
+		}
+
+		if req.Endpoint != "" {
+			u, err := url.Parse(req.Endpoint)
+			if err != nil || u.Scheme != "http" || u.Host == "" || req.AgentToken == "" {
+				writeJSON(w, http.StatusBadRequest, map[string]any{"detail": "invalid direct agent endpoint"})
+				return
+			}
 		}
 
 		comp := &Computer{
@@ -187,6 +198,8 @@ func HandleComputerPair(registry *Registry, tunnelMgr TunnelManager) http.Handle
 			Capabilities: req.Capabilities,
 			Status:       "online",
 			SessionID:    req.SessionID,
+			Endpoint:     req.Endpoint,
+			AgentToken:   req.AgentToken,
 		}
 		registry.Register(comp)
 
@@ -315,7 +328,20 @@ func HandleFilesList(registry *Registry, tunnelMgr TunnelManager) http.HandlerFu
 			return
 		}
 
-		if err := requireOnlineComputer(registry, tunnelMgr, op.Computer, w); err != nil {
+		comp, err := requireOnlineComputer(registry, tunnelMgr, op.Computer, w)
+		if err != nil {
+			return
+		}
+		if comp.Endpoint != "" {
+			var result struct {
+				Path    string      `json:"path"`
+				Entries []FileEntry `json:"entries"`
+			}
+			if err := callDirectAgent(comp, http.MethodGet, "/v1/files?path="+url.QueryEscape(op.Path), nil, &result); err != nil {
+				writeJSON(w, http.StatusBadGateway, map[string]any{"detail": err.Error()})
+				return
+			}
+			writeJSON(w, http.StatusOK, result)
 			return
 		}
 
@@ -335,7 +361,7 @@ func HandleFilesRead(registry *Registry, tunnelMgr TunnelManager) http.HandlerFu
 			return
 		}
 
-		if err := requireOnlineComputer(registry, tunnelMgr, op.Computer, w); err != nil {
+		if _, err := requireOnlineComputer(registry, tunnelMgr, op.Computer, w); err != nil {
 			return
 		}
 
@@ -355,7 +381,7 @@ func HandleFilesWrite(registry *Registry, tunnelMgr TunnelManager) http.HandlerF
 			return
 		}
 
-		if err := requireOnlineComputer(registry, tunnelMgr, op.Computer, w); err != nil {
+		if _, err := requireOnlineComputer(registry, tunnelMgr, op.Computer, w); err != nil {
 			return
 		}
 
@@ -379,7 +405,7 @@ func HandleProcessesList(registry *Registry, tunnelMgr TunnelManager) http.Handl
 			return
 		}
 
-		if err := requireOnlineComputer(registry, tunnelMgr, op.Computer, w); err != nil {
+		if _, err := requireOnlineComputer(registry, tunnelMgr, op.Computer, w); err != nil {
 			return
 		}
 
@@ -399,7 +425,17 @@ func HandleProcessesExec(registry *Registry, tunnelMgr TunnelManager) http.Handl
 			return
 		}
 
-		if err := requireOnlineComputer(registry, tunnelMgr, op.Computer, w); err != nil {
+		comp, err := requireOnlineComputer(registry, tunnelMgr, op.Computer, w)
+		if err != nil {
+			return
+		}
+		if comp.Endpoint != "" {
+			var result ExecResult
+			if err := callDirectAgent(comp, http.MethodPost, "/v1/exec", map[string]string{"command": op.Command}, &result); err != nil {
+				writeJSON(w, http.StatusBadGateway, map[string]any{"detail": err.Error()})
+				return
+			}
+			writeJSON(w, http.StatusOK, result)
 			return
 		}
 
@@ -419,7 +455,7 @@ func HandleProcessesKill(registry *Registry, tunnelMgr TunnelManager) http.Handl
 			return
 		}
 
-		if err := requireOnlineComputer(registry, tunnelMgr, op.Computer, w); err != nil {
+		if _, err := requireOnlineComputer(registry, tunnelMgr, op.Computer, w); err != nil {
 			return
 		}
 
@@ -455,7 +491,7 @@ func HandleNetworkConnect(registry *Registry, tunnelMgr TunnelManager) http.Hand
 			return
 		}
 
-		if err := requireOnlineComputer(registry, tunnelMgr, op.Computer, w); err != nil {
+		if _, err := requireOnlineComputer(registry, tunnelMgr, op.Computer, w); err != nil {
 			return
 		}
 
@@ -476,28 +512,31 @@ func HandleNetworkConnect(registry *Registry, tunnelMgr TunnelManager) http.Hand
 
 // requireOnlineComputer is a shared guard that checks the computer exists
 // in the registry and has an active tunnel.
-func requireOnlineComputer(registry *Registry, tunnelMgr TunnelManager, computerID string, w http.ResponseWriter) error {
+func requireOnlineComputer(registry *Registry, tunnelMgr TunnelManager, computerID string, w http.ResponseWriter) (*Computer, error) {
 	comp, ok := registry.Get(computerID)
 	if !ok {
 		writeJSON(w, http.StatusNotFound, map[string]any{
 			"detail": "computer not found",
 		})
-		return errComputerNotFound{}
+		return nil, errComputerNotFound{}
 	}
 	if comp.Status != "online" {
 		writeJSON(w, http.StatusServiceUnavailable, map[string]any{
 			"detail": "computer is offline",
 			"status": comp.Status,
 		})
-		return errComputerOffline{}
+		return nil, errComputerOffline{}
+	}
+	if comp.Endpoint != "" {
+		return comp, nil
 	}
 	if !tunnelMgr.IsConnected(computerID) {
 		writeJSON(w, http.StatusServiceUnavailable, map[string]any{
 			"detail": "tunnel not connected",
 		})
-		return ErrTunnelUnavailable
+		return nil, ErrTunnelUnavailable
 	}
-	return nil
+	return comp, nil
 }
 
 // relayResponse is the envelope returned when an operation has been

@@ -11,6 +11,8 @@ type Computer struct {
 	SessionID    string   `json:"session_id"`
 	TunnelID     string   `json:"tunnel_id,omitempty"`
 	PeerID       string   `json:"peer_id,omitempty"`
+	Endpoint     string   `json:"endpoint,omitempty"`
+	AgentToken   string   `json:"-"`
 }
 
 // ComputerOperation is the standard request envelope for all Cloud OS

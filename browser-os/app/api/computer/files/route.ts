@@ -126,8 +126,7 @@ export async function GET(request: NextRequest) {
     if (hubResult) {
       return NextResponse.json({ data: hubResult, mock: false });
     }
-    const files = MOCK_FILE_TREE[path] || [];
-    return NextResponse.json({ data: files, mock: true });
+    return NextResponse.json({ error: 'Hub unavailable' }, { status: 502 });
   }
 
   if (operation === 'files.read') {
@@ -137,11 +136,10 @@ export async function GET(request: NextRequest) {
     if (hubResult) {
       return NextResponse.json({ data: hubResult, mock: false });
     }
-    const content = MOCK_FILE_CONTENTS[path] || `[No content for ${path}]`;
-    return NextResponse.json({ data: { content }, mock: true });
+    return NextResponse.json({ error: 'Hub unavailable' }, { status: 502 });
   }
 
-  return NextResponse.json({ data: MOCK_FILE_TREE[path] || [], mock: true });
+  return NextResponse.json({ error: 'Unknown operation' }, { status: 400 });
 }
 
 export async function POST(request: NextRequest) {
@@ -153,7 +151,7 @@ export async function POST(request: NextRequest) {
     if (hubResult) {
       return NextResponse.json({ data: hubResult, mock: false });
     }
-    return NextResponse.json({ data: { success: true }, mock: true });
+    return NextResponse.json({ error: 'Hub unavailable' }, { status: 502 });
   }
 
   if (operation === 'files.list') {
@@ -161,8 +159,7 @@ export async function POST(request: NextRequest) {
     if (hubResult) {
       return NextResponse.json({ data: hubResult, mock: false });
     }
-    const files = MOCK_FILE_TREE[path || '/'] || [];
-    return NextResponse.json({ data: files, mock: true });
+    return NextResponse.json({ error: 'Hub unavailable' }, { status: 502 });
   }
 
   return NextResponse.json({ error: 'Unknown operation' }, { status: 400 });

@@ -61,8 +61,7 @@ export async function GET(request: NextRequest) {
     if (hubResult) {
       return NextResponse.json({ data: hubResult, mock: false });
     }
-    // Return mock: no stdout means the client will fall back to local execution
-    return NextResponse.json({ data: null, mock: true });
+    return NextResponse.json({ error: 'Hub unavailable' }, { status: 502 });
   }
 
   return NextResponse.json({ data: MOCK_PROCESSES, mock: true });
@@ -85,7 +84,7 @@ export async function POST(request: NextRequest) {
     if (hubResult) {
       return NextResponse.json({ data: hubResult, mock: false });
     }
-    return NextResponse.json({ data: null, mock: true });
+    return NextResponse.json({ error: 'Hub unavailable' }, { status: 502 });
   }
 
   return NextResponse.json({ data: MOCK_PROCESSES, mock: true });
