@@ -47,7 +47,7 @@ export async function GET(request: NextRequest) {
   const computerId = searchParams.get('computer');
 
   if (operation === 'computer.list') {
-    const hubResult = await proxyToHub(`${HUB_URL}/computers`);
+    const hubResult = await proxyToHub(`${HUB_URL}/shell/computers`);
     if (hubResult) {
       return NextResponse.json({ data: Array.isArray(hubResult.computers) ? hubResult.computers : [], mock: false });
     }

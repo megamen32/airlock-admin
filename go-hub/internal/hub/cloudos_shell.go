@@ -1,0 +1,45 @@
+package hub
+
+import (
+	"net/http"
+	"strings"
+)
+
+// cloudOSShellComputers is a narrow, UI-oriented projection of existing
+// ShellMCP targets. CloudOS is only a client of ShellMCP, never a second host
+// enrollment protocol.
+func (s *Server) cloudOSShellComputers(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeJSON(w, http.StatusMethodNotAllowed, map[string]any{"detail": "method not allowed"})
+		return
+	}
+	s.mu.Lock()
+	computers := make([]map[string]any, 0)
+	for _, agent := range s.agents {
+		if agent == nil || !strings.HasPrefix(agent.AgentID, "shell:") {
+			continue
+		}
+		computers = append(computers, map[string]any{"id": agent.AgentID, "name": strings.TrimPrefix(agent.AgentID, "shell:"), "os": firstString(agent.Meta, "os", "platform"), "capabilities": []string{"terminal", "files"}, "status": agent.Status, "last_seen": agent.LastSeen})
+	}
+	s.mu.Unlock()
+	writeJSON(w, http.StatusOK, map[string]any{"computers": computers})
+}
+
+func (s *Server) cloudOSShellExec(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeJSON(w, http.StatusMethodNotAllowed, map[string]any{"detail": "method not allowed"})
+		return
+	}
+	var req map[string]any
+	if err := readJSON(r, &req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"detail": err.Error()})
+		return
+	}
+	target, cmd := firstString(req, "target", "computer"), firstString(req, "cmd", "command")
+	if !strings.HasPrefix(target, "shell:") || cmd == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"detail": "target must be a ShellMCP computer and command is required"})
+		return
+	}
+	resp, status := s.executeMCPTool(r, target, "shell_exec", map[string]any{"cmd": cmd, "cwd": req["cwd"], "timeout": req["timeout"]}, false, timeoutFromReq(req, s.cfg.DefaultTimeout), "")
+	writeJSON(w, status, resp)
+}

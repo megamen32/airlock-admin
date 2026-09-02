@@ -80,7 +80,7 @@ export async function POST(request: NextRequest) {
   }
 
   if (operation === 'processes.exec') {
-    const hubResult = await proxyToHub(`${HUB_URL}/processes/exec`, body);
+    const hubResult = await proxyToHub(`${HUB_URL}/shell/exec`, { target: body.computer, command: body.command, cwd: body.cwd, timeout: body.timeout });
     if (hubResult) {
       return NextResponse.json({ data: hubResult, mock: false });
     }
