@@ -357,6 +357,13 @@ func (u *Updater) tick(ctx context.Context) error {
 		cmd.Stdout = os.Stderr
 		cmd.Stderr = os.Stderr
 		if err := cmd.Run(); err != nil {
+			// CommandContext reports "signal: killed" when its deadline wins
+			// the race with a just-started restart command. Preserve the context
+			// outcome so callers can reliably distinguish cancellation from a
+			// failed restart on slower hosts.
+			if ctxErr := ctx.Err(); ctxErr != nil {
+				return ctxErr
+			}
 			return fmt.Errorf("update: restart command failed: %w", err)
 		}
 		return nil
