@@ -239,7 +239,7 @@ jobs:
       - name: Publish GitHub Release on private repo
         if: startsWith(github.ref, 'refs/tags/v')
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ env.OPENSOURCE_PAT }}
           TAG: ${{ github.ref_name }}
         run: |
           set -euo pipefail
