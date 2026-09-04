@@ -207,12 +207,14 @@ else:
         str((USER_HOME / '.local' / 'state' / 'gptadmin' / 'logs') if IS_USER_INSTALL else Path('/var/log/gptadmin'))
     )).expanduser()
     SYSTEMD_HUB   = 'gptadmin-hub.service'
+    SYSTEMD_HUB_STANDBY = 'gptadmin-hub-standby.service'
     SYSTEMD_SHELLMCP = 'shellmcp.service'
     SYSTEMD_FRPC  = 'gptadmin-tunnel-frpc.service'
     SYSTEMD_CLOUDFLARED = 'gptadmin-cloudflared.service'
     SYSTEMD_AUTO_UPDATE = 'gptadmin-auto-update.service'
     SYSTEMD_AUTO_UPDATE_TIMER = 'gptadmin-auto-update.timer'
     UNIT_PATH_HUB   = SYSTEMD_DIR / SYSTEMD_HUB
+    UNIT_PATH_HUB_STANDBY = SYSTEMD_DIR / SYSTEMD_HUB_STANDBY
     UNIT_PATH_SHELLMCP = SYSTEMD_DIR / SYSTEMD_SHELLMCP
     UNIT_PATH_FRPC  = SYSTEMD_DIR / SYSTEMD_FRPC
     UNIT_PATH_CLOUDFLARED = SYSTEMD_DIR / SYSTEMD_CLOUDFLARED
@@ -1010,6 +1012,54 @@ if IS_MACOS:
             if log_file and log_file.exists():
                 run(['tail', '-n', '200', '-f', str(log_file)], check=False)
 
+    def _write_handover_helper():
+        helper = BIN_DIR / 'gptadmin-handover'
+        helper.write_text('''#!/bin/bash
+set -euo pipefail
+ACTION=${1:-restart-primary}
+STATE=${GPTADMIN_HANDOVER_STATE:-/run/gptadmin-handover.json}
+UPSTREAM=${GPTADMIN_HANDOVER_UPSTREAM_FILE:-/etc/nginx/conf.d/gptadmin-hub-upstream.conf}
+PRIMARY_PORT=${GPTADMIN_HUB_PORT:-${HUB_PORT:-9001}}
+STANDBY_PORT=${GPTADMIN_HANDOVER_STANDBY_PORT:-19001}
+DRAIN_SECONDS=${GPTADMIN_HANDOVER_DRAIN_SECONDS:-65}
+write_state(){ printf '{"status":"%s","action":"%s","ts":%s,"detail":"%s"}\n' "$1" "$ACTION" "$(date +%s)" "${2:-}" > "$STATE"; }
+health(){ curl -fsS --max-time 2 "$1/healthz" >/dev/null; }
+write_upstream(){
+  local primary=$1 backup=$2 tmp
+  test -d "$(dirname "$UPSTREAM")"
+  tmp=$(mktemp "$(dirname "$UPSTREAM")/.gptadmin-hub-upstream.XXXXXX")
+  cat >"$tmp" <<CFG
+upstream gptadmin_hub_active {
+    zone gptadmin_hub_active 64k;
+    server 127.0.0.1:${primary} max_fails=1 fail_timeout=1s;
+    server 127.0.0.1:${backup} backup;
+    keepalive 64;
+}
+CFG
+  chmod 0644 "$tmp"; mv "$tmp" "$UPSTREAM"; nginx -t; systemctl reload nginx
+}
+case "$ACTION" in
+restart-primary)
+  command -v nginx >/dev/null || { write_state failed 'nginx unavailable'; exit 1; }
+  test -f "$UPSTREAM" || { write_state failed 'managed nginx upstream missing'; exit 1; }
+  systemctl start gptadmin-hub-standby.service
+  write_state running 'waiting for standby'
+  health "http://127.0.0.1:${STANDBY_PORT}" || { write_state failed 'standby unhealthy'; exit 1; }
+  write_upstream "$STANDBY_PORT" "$PRIMARY_PORT"
+  sleep "$DRAIN_SECONDS"
+  write_state running 'standby active; restarting primary'
+  systemctl restart gptadmin-hub.service
+  for _ in $(seq 1 100); do health "http://127.0.0.1:${PRIMARY_PORT}" && break; sleep .1; done
+  health "http://127.0.0.1:${PRIMARY_PORT}" || { write_state failed 'primary unhealthy after restart'; exit 1; }
+  write_upstream "$PRIMARY_PORT" "$STANDBY_PORT"
+  write_state completed 'primary healthy and active'
+  ;;
+*) write_state failed 'unknown action'; exit 2;;
+esac
+''')
+        os.chmod(helper, 0o755)
+        return helper
+
     def write_hub_unit(install_hub: bool, _install_shellmcp: bool):
         if not install_hub:
             return
@@ -1231,6 +1281,27 @@ RestartSec=3
 WantedBy={LINUX_WANTED_BY}
 """
 
+    UNIT_HUB_STANDBY = f"""
+[Unit]
+Description=GPTAdmin Hub Standby for zero-downtime handover
+After=network-online.target {SYSTEMD_HUB}
+Wants=network-online.target
+
+[Service]
+Type=simple
+EnvironmentFile={ENV_FILE}
+Environment=GPTADMIN_HUB_HOST=127.0.0.1
+Environment=GPTADMIN_HUB_PORT=19001
+Environment=HUB_PORT=19001
+Environment=HUB_URL=http://127.0.0.1:19001
+ExecStart={BIN_DIR}/gptadmin_hub
+Restart=always
+RestartSec=2
+{LINUX_HARDENING}
+[Install]
+WantedBy={LINUX_WANTED_BY}
+"""
+
     UNIT_SHELLMCP = f"""
 [Unit]
 Description=GPTAdmin Shell MCP Agent
@@ -1370,6 +1441,9 @@ WantedBy=timers.target
         if install_hub:
             UNIT_PATH_HUB.parent.mkdir(parents=True, exist_ok=True)
             UNIT_PATH_HUB.write_text(render_unit_with_hardening(UNIT_HUB, process_hardening_for_env(env_read())))
+            if not IS_USER_INSTALL:
+                UNIT_PATH_HUB_STANDBY.write_text(render_unit_with_hardening(UNIT_HUB_STANDBY, process_hardening_for_env(env_read())))
+                _write_handover_helper()
 
     def write_shellmcp_unit(_install_hub: bool, install_shellmcp: bool):
         if install_shellmcp:
@@ -1400,6 +1474,7 @@ WantedBy=timers.target
             env_file=ENV_FILE, cli_path=CLI_PATH, install_scope=INSTALL_SCOPE))
 
     def svc_hub_name():   return SYSTEMD_HUB
+    def svc_hub_standby_name(): return SYSTEMD_HUB_STANDBY
     def svc_shellmcp_name(): return SYSTEMD_SHELLMCP
     def svc_frpc_name():  return SYSTEMD_FRPC
     def svc_cloudflared_name(): return SYSTEMD_CLOUDFLARED
@@ -2250,6 +2325,8 @@ def setup_interactive(args):
     if install_hub:
         svc_enable_start(svc_hub_name(), UNIT_PATH_HUB)
         _require_local_hub_health(env)
+        if not IS_USER_INSTALL and UNIT_PATH_HUB_STANDBY.exists():
+            svc_enable_start(svc_hub_standby_name(), UNIT_PATH_HUB_STANDBY)
     if env.get('FRP_ENABLE', 'false') == 'true':
         svc_frpc_enable_start_all(env)
     if env.get('TUNNEL_MODE') == 'cloudflare' or env.get('CLOUDFLARE_TUNNEL_ENABLE', 'false') == 'true':
@@ -4820,6 +4897,8 @@ def cmd_update(args):
         svc_enable_start(svc_hub_name(), UNIT_PATH_HUB)
         if not wait_local_hub_health(env, timeout_s=90):
             raise RuntimeError('local Hub health check failed after update')
+        if not IS_USER_INSTALL and UNIT_PATH_HUB_STANDBY.exists():
+            svc_enable_start(svc_hub_standby_name(), UNIT_PATH_HUB_STANDBY)
     if env.get('FRP_ENABLE', 'false') == 'true':
         svc_frpc_enable_start_all(env)
     if env.get('TUNNEL_MODE') == 'cloudflare' or env.get('CLOUDFLARE_TUNNEL_ENABLE', 'false') == 'true':

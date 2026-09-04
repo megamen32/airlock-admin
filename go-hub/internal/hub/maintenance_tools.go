@@ -6,6 +6,8 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"path/filepath"
+	"runtime"
 	"sort"
 	"strings"
 	"time"
@@ -44,12 +46,26 @@ func localHealth(url string) map[string]any {
 }
 
 func (s *Server) startHubHandover(actor string) (map[string]any, int) {
+	if runtime.GOOS != "linux" || os.Geteuid() != 0 {
+		return map[string]any{"error": "zero-downtime handover requires a system Linux Hub"}, http.StatusNotImplemented
+	}
+	home := strings.TrimSpace(os.Getenv("GPTADMIN_HOME"))
+	if home == "" {
+		home = "/opt/gptadmin"
+	}
+	helper := strings.TrimSpace(os.Getenv("GPTADMIN_HANDOVER_HELPER"))
+	if helper == "" {
+		helper = filepath.Join(home, "bin", "gptadmin-handover")
+	}
+	if _, err := os.Stat(helper); err != nil {
+		return map[string]any{"error": "handover helper is not installed", "helper": helper}, http.StatusPreconditionFailed
+	}
 	current := readHubHandoverState()
 	if current.Status == "running" {
 		return map[string]any{"error": "handover already running", "state": current}, http.StatusConflict
 	}
 	unit := fmt.Sprintf("gptadmin-handover-api-%d", time.Now().UnixNano())
-	cmd := exec.Command("systemd-run", "--unit="+unit, "--on-active=5s", "/usr/local/sbin/gptadmin-handover", "restart-primary")
+	cmd := exec.Command("systemd-run", "--unit="+unit, "--on-active=5s", helper, "restart-primary")
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		return map[string]any{"error": "failed to schedule handover", "detail": string(out)}, http.StatusInternalServerError

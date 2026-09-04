@@ -211,6 +211,9 @@ def hub_contract(
             "GPTADMIN_HUB_PORT": str(port),
             "HUB_PORT": str(port),
             "PORT": str(port),
+            # This suite validates the schema-binding contract itself, so run
+            # the Hub with the otherwise opt-in contract enabled explicitly.
+            "GPTADMIN_SCHEMA_CONTRACT_VALIDATION": "1",
             "GPTADMIN_ROOT": str(ROOT),
             "GPTADMIN_CONFIG_DIR": str(state_dir),
             "GPTADMIN_ARTIFACT_DIR": str(tmp_path / "artifacts"),
@@ -373,8 +376,9 @@ def test_hub_contract_relay_and_openapi(hub_contract: HubProcess) -> None:
             "schema_digest_sha256": "0" * 64,
         },
     )
-    assert status == 200, stale
-    assert stale.get("status") == "completed", stale
+    assert status == 409, stale
+    assert stale.get("status") == "failed", stale
+    assert stale.get("error", {}).get("code") == "schema_mismatch", stale
 
     for path, payload in (
         ("/mcp-relay/tools", {"target": "default"}),
@@ -393,7 +397,7 @@ def test_hub_contract_relay_and_openapi(hub_contract: HubProcess) -> None:
     assert "/webhooks/v1/{route}" not in schema
     assert "/webhook-jobs/{job_id}" not in schema
     assert "/webhook-routes/{route}" not in schema
-    assert "schema_digest_sha256" in schema
+    assert "schema_digest_sha256" not in schema
 
 
 def test_hub_contract_global_mcp(hub_contract: HubProcess) -> None:

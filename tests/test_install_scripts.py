@@ -138,3 +138,19 @@ def test_userscript_installable_url():
     """The userscript should be servable (file exists in public/)."""
     p = ROOT / "public" / "mcp-bridge.user.js"
     assert p.exists(), "public/mcp-bridge.user.js not found"
+
+
+def test_cli_installs_zero_downtime_handover_components_on_system_linux():
+    """System Linux installs must materialize the standby unit and handover helper."""
+    content = (ROOT / "cli.py").read_text(encoding="utf-8")
+    assert "gptadmin-hub-standby.service" in content
+    assert "gptadmin-handover" in content
+    assert "GPTADMIN_HANDOVER_DRAIN_SECONDS" in content
+    assert "UNIT_PATH_HUB_STANDBY.write_text" in content
+
+
+def test_handover_helper_requires_managed_nginx_upstream():
+    """Zero-downtime switching must fail closed when nginx is not managed by GPTAdmin."""
+    content = (ROOT / "cli.py").read_text(encoding="utf-8")
+    assert "managed nginx upstream missing" in content
+    assert "nginx -t; systemctl reload nginx" in content
