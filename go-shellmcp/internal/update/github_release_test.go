@@ -115,3 +115,15 @@ func TestChecksumForAssetRejectsMissingOrMalformed(t *testing.T) {
 		t.Fatal("expected missing checksum error")
 	}
 }
+
+func TestWindowsReplaceScriptRestartsCanonicalTaskBeforeDirectFallback(t *testing.T) {
+	script := windowsReplaceScript(123, "gptadmin-shellmcp", `C:\ProgramData\gptadmin\bin\shellmcp.exe`, `C:\Temp\shellmcp.new`, []string{"--flag", "value"})
+	for _, want := range []string{"Get-ScheduledTask -TaskName 'gptadmin-shellmcp'", "Start-ScheduledTask -TaskName 'gptadmin-shellmcp'", "Get-CimInstance Win32_Process", "if(-not $started){Start-Process"} {
+		if !strings.Contains(script, want) {
+			t.Fatalf("generated Windows replacement script missing %q: %s", want, script)
+		}
+	}
+	if strings.Index(script, "Start-ScheduledTask") > strings.Index(script, "if(-not $started){Start-Process") {
+		t.Fatalf("direct fallback appears before canonical task start: %s", script)
+	}
+}

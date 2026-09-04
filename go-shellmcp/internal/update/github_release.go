@@ -309,18 +309,25 @@ func replaceUnixExecutable(ctx context.Context, staged, current string) error {
 	return nil
 }
 
-func ScheduleWindowsReplace(currentExe, stagedPath string, args []string) error {
-	if runtime.GOOS != "windows" {
-		return fmt.Errorf("self-repair: windows replacement requested on %s", runtime.GOOS)
-	}
+func windowsReplaceScript(pid int, taskName, currentExe, stagedPath string, args []string) string {
 	q := func(s string) string { return "'" + strings.ReplaceAll(s, "'", "''") + "'" }
 	argList := make([]string, 0, len(args))
 	for _, a := range args {
 		argList = append(argList, q(a))
 	}
-	script := "$ErrorActionPreference='Stop'; Wait-Process -Id " + strconv.Itoa(os.Getpid()) + " -ErrorAction SilentlyContinue; " +
+	return "$ErrorActionPreference='Stop'; Wait-Process -Id " + strconv.Itoa(pid) + " -ErrorAction SilentlyContinue; " +
 		"$ok=$false; for($i=0;$i -lt 40;$i++){try{Move-Item -Force " + q(stagedPath) + " " + q(currentExe) + ";$ok=$true;break}catch{Start-Sleep -Milliseconds 250}}; " +
-		"if(-not $ok){exit 31}; Start-Process -FilePath " + q(currentExe) + " -ArgumentList @(" + strings.Join(argList, ",") + ") -WindowStyle Hidden"
+		"if(-not $ok){exit 31}; " +
+		"$started=$false; try{$task=Get-ScheduledTask -TaskName " + q(taskName) + " -ErrorAction Stop; Start-ScheduledTask -TaskName " + q(taskName) + "; " +
+		"for($i=0;$i -lt 40;$i++){Start-Sleep -Milliseconds 250; $p=Get-CimInstance Win32_Process -Filter \"Name='shellmcp.exe'\" -ErrorAction SilentlyContinue | Where-Object {$_.ExecutablePath -and $_.ExecutablePath.Equals(" + q(currentExe) + ",[StringComparison]::OrdinalIgnoreCase)}; if($p){$started=$true;break}}}catch{}; " +
+		"if(-not $started){Start-Process -FilePath " + q(currentExe) + " -ArgumentList @(" + strings.Join(argList, ",") + ") -WindowStyle Hidden}"
+}
+
+func ScheduleWindowsReplace(currentExe, stagedPath string, args []string) error {
+	if runtime.GOOS != "windows" {
+		return fmt.Errorf("self-repair: windows replacement requested on %s", runtime.GOOS)
+	}
+	script := windowsReplaceScript(os.Getpid(), "gptadmin-shellmcp", currentExe, stagedPath, args)
 	cmd := exec.Command("powershell.exe", "-NoProfile", "-NonInteractive", "-WindowStyle", "Hidden", "-Command", script)
 	if err := cmd.Start(); err != nil {
 		return fmt.Errorf("self-repair: start windows replacement helper: %w", err)
