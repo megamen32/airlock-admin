@@ -213,7 +213,9 @@ def hub_contract(
             "PORT": str(port),
             # This suite validates the schema-binding contract itself, so run
             # the Hub with the otherwise opt-in contract enabled explicitly.
-            "GPTADMIN_SCHEMA_CONTRACT_VALIDATION": "1",
+            # Black-box contract follows the production MCP2 default. Strict
+            # legacy schema admission is tested separately as explicit opt-in.
+            "GPTADMIN_SCHEMA_CONTRACT_VALIDATION": "0",
             "GPTADMIN_ROOT": str(ROOT),
             "GPTADMIN_CONFIG_DIR": str(state_dir),
             "GPTADMIN_ARTIFACT_DIR": str(tmp_path / "artifacts"),
@@ -348,10 +350,15 @@ def test_hub_contract_relay_and_openapi(hub_contract: HubProcess) -> None:
     assert tools_body.get("server_id") == "hub"
     tools = tools_body.get("response", {}).get("tools")
     assert isinstance(tools, list) and any(tool.get("name") == "discover" for tool in tools)
+    # MCP2 does not require a schema version/digest handshake. Compatibility
+    # metadata may still be emitted as a cache/debug hint, but clients must be
+    # able to execute without it and stale hints must not block execution.
     schema_version = tools_body["response"].get("schema_version")
     schema_digest = tools_body["response"].get("schema_digest_sha256")
-    assert schema_version == "gptadmin.mcp-schema/v1"
-    assert isinstance(schema_digest, str) and len(schema_digest) == 64
+    if schema_version:
+        assert schema_version == "gptadmin.mcp-schema/v1"
+    if schema_digest:
+        assert isinstance(schema_digest, str) and len(schema_digest) == 64
 
     status, executed, _ = hub_contract.request(
         "POST",
@@ -372,13 +379,15 @@ def test_hub_contract_relay_and_openapi(hub_contract: HubProcess) -> None:
             "target": "hub",
             "tool_name": "demo",
             "arguments": {},
-            "schema_version": schema_version,
+            "schema_version": "legacy",
             "schema_digest_sha256": "0" * 64,
         },
     )
-    assert status == 409, stale
-    assert stale.get("status") == "failed", stale
-    assert stale.get("error", {}).get("code") == "schema_mismatch", stale
+    assert status == 200, stale
+    assert stale.get("status") == "completed", stale
+    response_dump = json.dumps(stale.get("response", {}))
+    assert "schema_version" not in response_dump
+    assert "schema_digest_sha256" not in response_dump
 
     for path, payload in (
         ("/mcp-relay/tools", {"target": "default"}),
@@ -398,6 +407,7 @@ def test_hub_contract_relay_and_openapi(hub_contract: HubProcess) -> None:
     assert "/webhook-jobs/{job_id}" not in schema
     assert "/webhook-routes/{route}" not in schema
     assert "schema_digest_sha256" not in schema
+    assert "schema_version" not in schema
 
 
 def test_hub_contract_global_mcp(hub_contract: HubProcess) -> None:

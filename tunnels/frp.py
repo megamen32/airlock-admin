@@ -13,7 +13,7 @@ class FrpTunnel(TunnelBackend):
     """FRP tunnel (requires self-hosted frps server)."""
     
     def __init__(self, server_addr: str, server_port: int, token: str, 
-                 subdomain: str, domain: str, config_path: Path = None):
+                 subdomain: str, domain: str, config_path: Path = None, local_ip: str | None = None):
         """
         Initialize FRP tunnel.
         
@@ -31,6 +31,7 @@ class FrpTunnel(TunnelBackend):
         self.subdomain = subdomain
         self.domain = domain
         self.config_path = config_path
+        self.local_ip = local_ip or os.getenv("FRP_LOCAL_IP", "127.0.0.1")
         
     @property
     def name(self) -> str:
@@ -64,6 +65,7 @@ serverName = "{self.domain}"
 [[proxies]]
 name = "gptadmin-hub"
 type = "http"
+localIP = "{self.local_ip}"
 localPort = {local_port}
 subdomain = "{self.subdomain}"
 """

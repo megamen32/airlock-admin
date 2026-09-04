@@ -59,6 +59,9 @@ type Agent struct {
 	// environment variables using the ${NAME} form; resolution happens only
 	// at request time so persisted config does not need to contain secrets.
 	Headers map[string]string `json:"headers,omitempty"`
+	// ToolAllowlist optionally projects a large child MCP down to a bounded
+	// public surface. Empty means expose all child tools.
+	ToolAllowlist []string `json:"tool_allowlist,omitempty"`
 	// Enabled corresponds to spec.get("enabled", True) in Python; kept here
 	// so callers can introspect the registry verbatim.
 	Enabled bool `json:"enabled"`

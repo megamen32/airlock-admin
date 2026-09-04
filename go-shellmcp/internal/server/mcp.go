@@ -564,6 +564,32 @@ func (s *Server) ServeMCPStdio(ctx context.Context, in io.Reader, out io.Writer)
 	return scanner.Err()
 }
 
+func childToolAllowed(agent supervisor.Agent, name string) bool {
+	if len(agent.ToolAllowlist) == 0 {
+		return true
+	}
+	for _, allowed := range agent.ToolAllowlist {
+		if allowed == name {
+			return true
+		}
+	}
+	return false
+}
+
+func filterChildTools(agent supervisor.Agent, tools []map[string]any) []map[string]any {
+	if len(agent.ToolAllowlist) == 0 {
+		return tools
+	}
+	out := make([]map[string]any, 0, len(tools))
+	for _, tool := range tools {
+		name, _ := tool["name"].(string)
+		if childToolAllowed(agent, name) {
+			out = append(out, tool)
+		}
+	}
+	return out
+}
+
 func (s *Server) mcpChildTools(ctx context.Context, args map[string]any) (map[string]any, error) {
 	ref, _ := args["ref"].(string)
 	if strings.TrimSpace(ref) == "" {
@@ -577,6 +603,7 @@ func (s *Server) mcpChildTools(ctx context.Context, args map[string]any) (map[st
 	if err != nil {
 		return nil, err
 	}
+	tools = filterChildTools(agent, tools)
 	return mcpText("Child MCP tools", map[string]any{"ref": ref, "tools": tools}), nil
 }
 
@@ -590,6 +617,9 @@ func (s *Server) mcpChildCall(ctx context.Context, args map[string]any) (map[str
 	agent, err := s.supervisor.Agent(ref)
 	if err != nil {
 		return nil, err
+	}
+	if !childToolAllowed(agent, name) {
+		return nil, fmt.Errorf("mcp child %q tool %q is not allowed by tool_allowlist", ref, name)
 	}
 	result, err := s.childMCP.CallTool(ctx, agent, name, arguments)
 	if err != nil {

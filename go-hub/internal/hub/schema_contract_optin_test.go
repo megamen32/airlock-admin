@@ -10,7 +10,7 @@ import (
 	"time"
 )
 
-func TestSchemaContractValidationIsOptIn(t *testing.T) {
+func TestLegacySchemaContractValidationExplicitOptIn(t *testing.T) {
 	if (Config{}).SchemaContractValidation {
 		t.Fatal("schema contract validation must default to disabled")
 	}

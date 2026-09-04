@@ -1711,6 +1711,7 @@ done
 def write_frpc_conf(env: dict):
     FRPC_CONF.parent.mkdir(parents=True, exist_ok=True)
     local_port = env.get('HUB_PORT', '9001')
+    local_ip = env.get('FRP_LOCAL_IP', '127.0.0.1')
     for spec in frpc_endpoint_specs(env):
         proxy_name = f"gptadmin-web-{env['FRP_SUBDOMAIN']}"
         if not spec['primary']:
@@ -1728,7 +1729,7 @@ serverName = "{spec['domain']}"
 [[proxies]]
 name = "{proxy_name}"
 type = "http"
-localIP = "127.0.0.1"
+localIP = "{local_ip}"
 localPort = {local_port}
 subdomain = "{env['FRP_SUBDOMAIN']}"
 """

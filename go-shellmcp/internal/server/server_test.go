@@ -822,3 +822,40 @@ func TestSelfRepairEmergencyDisableAndLegacyOptIn(t *testing.T) {
 		t.Fatal("legacy updater opt-in not honored")
 	}
 }
+
+func TestChildToolAllowlistFiltersAndBlocksCalls(t *testing.T) {
+	script := filepath.Join(t.TempDir(), "child.sh")
+	body := `#!/bin/sh
+while IFS= read -r line; do
+ case "$line" in
+  *'"method":"initialize"'*) printf '%s\n' '{"jsonrpc":"2.0","id":1,"result":{"protocolVersion":"2025-03-26","capabilities":{}}}' ;;
+  *'"method":"notifications/initialized"'*) ;;
+  *'"method":"tools/list"'*) printf '%s\n' '{"jsonrpc":"2.0","id":3,"result":{"tools":[{"name":"allowed","inputSchema":{"type":"object"}},{"name":"hidden","inputSchema":{"type":"object"}}]}}' ;;
+  *'"method":"tools/call"'*) printf '%s\n' '{"jsonrpc":"2.0","id":5,"result":{"content":[{"type":"text","text":"ok"}]}}' ;;
+ esac
+done
+`
+	if err := os.WriteFile(script, []byte(body), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	s := New(Config{MCPConfig: filepath.Join(t.TempDir(), "mcp.json"), SpillDir: t.TempDir()})
+	agent := supervisor.Agent{Ref: "child", Name: "child", Transport: "stdio", Command: script, Enabled: true, ToolAllowlist: []string{"allowed"}}
+	if err := s.supervisor.Upsert(agent); err != nil {
+		t.Fatal(err)
+	}
+	got, err := s.mcpChildTools(context.Background(), map[string]any{"ref": "child"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	structured, ok := got["structuredContent"].(map[string]any)
+	if !ok {
+		t.Fatalf("structuredContent type=%T", got["structuredContent"])
+	}
+	tools, ok := structured["tools"].([]map[string]any)
+	if !ok || len(tools) != 1 || tools[0]["name"] != "allowed" {
+		t.Fatalf("tools=%#v", structured["tools"])
+	}
+	if _, err := s.mcpChildCall(context.Background(), map[string]any{"ref": "child", "name": "hidden", "arguments": map[string]any{}}); err == nil {
+		t.Fatal("hidden tool call was not blocked")
+	}
+}

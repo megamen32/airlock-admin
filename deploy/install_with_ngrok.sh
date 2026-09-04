@@ -42,7 +42,7 @@ WantedBy=multi-user.target
 EOR
 
 # gptadmin_hub service
-sudo tee /etc/systemd/system/gptadmin_hub.service >/dev/null <<EOH
+sudo tee /etc/systemd/system/gptadmin-hub.service >/dev/null <<EOH
 [Unit]
 Description=Hub Proxy for GPT Server Management (gptadmin_hub)
 After=network.target
@@ -80,8 +80,8 @@ ngrok config add-authtoken "$NGROK_TOKEN"
 
 # Enable and start services
 sudo systemctl daemon-reload
-sudo systemctl enable shellmcp gptadmin_hub ngrok-hub
-sudo systemctl restart shellmcp gptadmin_hub ngrok-hub
+sudo systemctl enable shellmcp gptadmin-hub ngrok-hub
+sudo systemctl restart shellmcp gptadmin-hub ngrok-hub
 
 # Obtain public URL
 sleep 5
@@ -91,4 +91,4 @@ echo "$PUBLIC_URL" | sudo tee "$INSTALL_DIR/ngrok_url.txt"
 
 # Verify services
 sudo systemctl status shellmcp --no-pager
-sudo systemctl status gptadmin_hub --no-pager
+sudo systemctl status gptadmin-hub --no-pager

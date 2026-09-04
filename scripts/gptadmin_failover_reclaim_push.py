@@ -43,13 +43,11 @@ def sign(secret: str, text: str) -> str:
     return base64.urlsafe_b64encode(digest).decode().rstrip("=")
 
 
-def post_json(url: str, payload: dict[str, Any], timeout: float, authorization: str = "") -> tuple[int, str]:
-    """POST a signed reclaim payload with the Hub control credential."""
-
+def post_json(url: str, payload: dict[str, Any], timeout: float, auth_token: str = "") -> tuple[int, str]:
     data = json.dumps(payload).encode()
-    headers = {"Content-Type": "application/json", "User-Agent": "gptadmin-primary-reclaim/1"}
-    if authorization:
-        headers["Authorization"] = "Bearer " + authorization
+    headers={"Content-Type": "application/json", "User-Agent": "gptadmin-primary-reclaim/1"}
+    if auth_token:
+        headers["Authorization"] = "Bearer " + auth_token
     req = urllib.request.Request(url, data=data, headers=headers, method="POST")
     try:
         with urllib.request.urlopen(req, timeout=timeout) as r:  # noqa: S310 - admin configured URL
@@ -73,6 +71,7 @@ def main() -> int:
         cfg = load_json(args.config)
         env = {**load_env(args.env), **os.environ}
         secret = env.get("MCP_BRIDGE_KEY") or env.get("CTL_TOKEN") or ""
+        auth_token = env.get("CTL_TOKEN") or env.get("GPTADMIN_CTL_TOKEN") or ""
         if not secret:
             print(json.dumps({"ok": False, "detail": "missing signing key"}, sort_keys=True))
             return 0 if args.best_effort else 2
@@ -108,7 +107,7 @@ def main() -> int:
                     "alg": "hmac-sha256",
                 }
                 payload["signature"] = sign(secret, sig_input("demote", node_id, nonce, issued_at, expires_at, primary_health_url))
-                status, body = post_json(url, payload, args.timeout, authorization=secret)
+                status, body = post_json(url, payload, args.timeout, auth_token)
                 results.append({"attempt": attempt, "node_id": node_id, "status": status, "body": body})
                 if 200 <= status < 300 and '"accepted":true' in body.replace(" ", ""):
                     print(json.dumps({"ok": True, "accepted": True, "url": url, "node_id": node_id, "attempt": attempt, "results": results}, sort_keys=True))

@@ -61,6 +61,37 @@ new contract, then implement and rerun it:
 - Use GPTADMIN's native `mcp add` plus `mcp install`; do not create a parallel
   standalone relay unit.
 
+
+## Device / Android UI testing policy
+
+When a task involves a real Android device, mobile UI, app navigation, system
+dialogs, screenshots, text input, or end-to-end mobile verification, prefer
+**Agent Device** over raw ADB automation.
+
+- `agent-device` must be installed globally and available on the target host
+  through the normal service `PATH`. On server-100 the canonical binary is
+  `/usr/local/bin/agent-device`.
+- Prefer the native child MCP ref `AgentDevice` (`agent-device mcp`) when it is
+  registered in ShellMCP. Use structured device tools such as `devices`,
+  `open`, `snapshot`, `find`, `click`, `press`, `fill`, `type`, `scroll`,
+  `swipe`, `back`, `home`, `alert`, `wait`, `appstate`, `apps`, `screenshot`,
+  `settings`, and `close`.
+- Take a fresh `snapshot` before UI interaction and use semantic refs/actions
+  from Agent Device instead of hard-coded screen coordinates whenever possible.
+- Use Agent Device for system permission dialogs and app state checks when the
+  tool supports them; preserve bounded screenshots/snapshots as test evidence.
+- Use raw `adb` only as a fallback for bootstrap, package installation,
+  low-level transport recovery, shell diagnostics, logcat, port forwarding,
+  or when Agent Device cannot expose the required operation.
+- Do not replace a working Agent Device flow with `uiautomator dump`, coordinate
+  tapping, or ad-hoc ADB scripts merely because ADB is available.
+- If Agent Device MCP exposes a very large tool catalog, project it through the
+  ShellMCP child `tool_allowlist` rather than disabling Agent Device or falling
+  back to raw ADB.
+- For a mobile acceptance test, success means the real physical device reached
+  the expected application/system state through the production route. ADB
+  connectivity alone is not acceptance evidence.
+
 ## Smoke canary
 
 Run in this order and preserve raw receipts without secrets:

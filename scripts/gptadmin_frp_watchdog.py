@@ -25,13 +25,18 @@ def active(unit: str) -> bool:
 
 
 def process_count(pattern: str) -> int:
-    result = run("pgrep", "-fc", pattern)
+    result = run("pgrep", "-af", pattern)
     if result.returncode not in (0, 1):
         return 0
-    try:
-        return int(result.stdout.strip() or "0")
-    except ValueError:
-        return 0
+    count = 0
+    for line in result.stdout.splitlines():
+        if not line.strip():
+            continue
+        if "gptadmin-frp-watchdog" in line or "pgrep -af" in line:
+            continue
+        if pattern in line:
+            count += 1
+    return count
 
 
 def load_state(path: Path) -> dict[str, object]:
@@ -78,8 +83,8 @@ def main(argv: list[str] | None = None) -> int:
     if now - last_restart < max(1, args.cooldown):
         state.update({"last_check": now, "last_result": "restart_suppressed", "reason": reason})
         save_state(state_path, state)
-        print(json.dumps({"ok": False, "result": "restart_suppressed", "unit": args.unit, "reason": reason}))
-        return 2
+        print(json.dumps({"ok": True, "result": "restart_suppressed", "unit": args.unit, "reason": reason}))
+        return 0
 
     restarted = run("systemctl", "restart", args.unit)
     state.update({"last_check": now, "last_restart": now, "last_result": "restart_requested", "reason": reason})

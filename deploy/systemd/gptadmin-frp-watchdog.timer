@@ -2,9 +2,9 @@
 Description=Run GPTAdmin FRP client watchdog
 
 [Timer]
-OnBootSec=45s
-OnUnitActiveSec=30s
-AccuracySec=5s
+OnCalendar=*-*-* *:*:00/15
+AccuracySec=1s
+RandomizedDelaySec=0
 Persistent=true
 Unit=gptadmin-frp-watchdog.service
 

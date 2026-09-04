@@ -141,7 +141,10 @@ class TestFrpTunnel:
         with patch("shutil.which", return_value=None):
             assert tunnel.is_available() is False
     
-    def test_write_config(self, tmp_path):
+    def test_write_config(self, tmp_path, monkeypatch):
+        # Keep the generic default deterministic even when production sets
+        # FRP_LOCAL_IP for the HA nginx frontend.
+        monkeypatch.delenv("FRP_LOCAL_IP", raising=False)
         config_path = tmp_path / "frpc.toml"
         tunnel = FrpTunnel(
             server_addr="frp.example.com",
@@ -160,8 +163,22 @@ class TestFrpTunnel:
         assert 'serverPort = 7000' in content
         assert 'token = "secret123"' in content
         assert 'subdomain = "myhub"' in content
+        assert 'localIP = "127.0.0.1"' in content
         assert 'localPort = 9001' in content
     
+
+    def test_write_config_with_local_ip_override(self, tmp_path):
+        config_path = tmp_path / "frpc.toml"
+        tunnel = FrpTunnel(
+            server_addr="frp.example.com", server_port=7000, token="secret",
+            subdomain="myhub", domain="example.com", config_path=config_path,
+            local_ip="192.168.2.100",
+        )
+        tunnel._write_config(9001)
+        content = config_path.read_text()
+        assert 'localIP = "192.168.2.100"' in content
+        assert 'localPort = 9001' in content
+
     def test_start_constructs_public_url(self, tmp_path):
         config_path = tmp_path / "frpc.toml"
         tunnel = FrpTunnel(
