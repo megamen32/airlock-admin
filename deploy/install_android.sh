@@ -6,7 +6,7 @@ set -euo pipefail
 #
 # Usage in Termux:
 #   pkg install -y curl tar
-#   curl -fsSL https://became.bezrabotnyi.com/install_android.sh | bash
+#   curl -fsSL https://raw.githubusercontent.com/megamen32/gptadmin_opensource/main/deploy/install_android.sh | bash
 #
 # Env overrides:
 #   PACKAGE_URL, GPTADMIN_DIR, HUB_URL, SHELLMCP_NAME, SHELLMCP_TOKEN,
@@ -14,7 +14,7 @@ set -euo pipefail
 #   SHELLMCP_ANDROID_PRIVILEGE=auto|none|shizuku|shizuku-all, SHELLMCP_SHIZUKU_RISH=/path/to/rish,
 #   SHELLMCP_UPDATE_INTERVAL_S
 
-PACKAGE_URL=${PACKAGE_URL:-https://github.com/megamen32/gptadmin_opensource/releases/latest/download/gptadmin-android-arm64.tar.gz}
+PACKAGE_URL=${PACKAGE_URL:-https://github.com/megamen32/gptadmin_opensource/releases/latest/download/gptadmin-android-arm64-client.tar.gz}
 GPTADMIN_DIR=${GPTADMIN_DIR:-$HOME/.local/share/gptadmin}
 CONFIG_DIR=${GPTADMIN_CONFIG_DIR:-$HOME/.config/gptadmin}
 BIN_DIR=${BIN_DIR:-$PREFIX/bin}
@@ -115,8 +115,8 @@ TMP_DIR=$(mktemp -d)
 trap 'rm -rf "$TMP_DIR"' EXIT
 
 echo "Downloading $PACKAGE_URL"
-curl -fsSL "$PACKAGE_URL" -o "$TMP_DIR/gptadmin-android-arm64.tar.gz"
-tar -xzf "$TMP_DIR/gptadmin-android-arm64.tar.gz" -C "$TMP_DIR"
+curl -fsSL "$PACKAGE_URL" -o "$TMP_DIR/gptadmin-android-arm64-client.tar.gz"
+tar -xzf "$TMP_DIR/gptadmin-android-arm64-client.tar.gz" -C "$TMP_DIR"
 if [[ ! -x "$TMP_DIR/bin/shellmcp" ]]; then
   echo "ERROR: package does not contain bin/shellmcp" >&2
   exit 1
@@ -140,7 +140,9 @@ QUEUE_LONG_POLL_TIMEOUT_S=$SHELLMCP_QUEUE_TIMEOUT_S
 SHELLMCP_IDENTITY_DIR=$IDENTITY_DIR
 SHELLMCP_SPOOL_DIR=$SPOOL_DIR
 SHELLMCP_OUTBOX_DIR=$SPOOL_DIR/outbox
-SHELLMCP_AUTO_UPDATE=1
+SHELLMCP_AUTO_UPDATE=0
+SHELLMCP_SELF_REPAIR_DISABLE=0
+SHELLMCP_LEGACY_MANIFEST_UPDATE=0
 SHELLMCP_UPDATE_INTERVAL_S=$SHELLMCP_UPDATE_INTERVAL_S
 SHELLMCP_UPDATE_MANIFEST_URL=$HUB_URL/artifacts/shellmcp-android-arm64.json
 SHELLMCP_UPDATE_TOKEN=$SHELLMCP_TOKEN

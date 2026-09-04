@@ -15,7 +15,7 @@ GigaChat.
 
 > 🌐 Website & live docs: **https://gptadmin.bezrabotnyi.com**
 > 📚 Full docs: **[docs/](./docs/Home.md)** — architecture, adapters, hub, install, config, API, security, FAQ
-> 📦 Install: `curl -s https://became.bezrabotnyi.com/install.sh | bash`
+> 📦 Install: `curl -s https://raw.githubusercontent.com/megamen32/gptadmin_opensource/main/deploy/install.sh | bash`
 
 ---
 
@@ -61,7 +61,7 @@ adapters. Capabilities (admin, code, logs, search, subagents) come from the hub
 
 ```bash
 # 1. Install (Linux / macOS — auto-detects user/system mode)
-curl -s https://became.bezrabotnyi.com/install.sh | bash
+curl -s https://raw.githubusercontent.com/megamen32/gptadmin_opensource/main/deploy/install.sh | bash
 
 # Windows (PowerShell, no Administrator needed)
 iwr -UseBasicParsing https://became.bezrabotnyi.com/install_win.ps1 | iex

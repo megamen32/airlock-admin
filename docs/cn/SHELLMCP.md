@@ -24,7 +24,7 @@ hub，在本地执行命令，并返回真实的输出。
 
 ```bash
 # Linux / macOS (installs the Go binary in user-mode by default)
-curl -s https://became.bezrabotnyi.com/install.sh | bash
+curl -s https://raw.githubusercontent.com/megamen32/gptadmin_opensource/main/deploy/install.sh | bash
 ```
 
 安装程序：

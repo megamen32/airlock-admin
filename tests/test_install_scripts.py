@@ -11,7 +11,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 DEPLOY = ROOT / "deploy"
-EXPECTED_URL_FRAGMENT = "became.bezrabotnyi.com"
+EXPECTED_URL_FRAGMENT = "github.com/megamen32/gptadmin_opensource"
 
 
 def test_install_sh_exists():
@@ -36,13 +36,14 @@ def test_install_sh_references_download_url():
         f"install.sh should reference {EXPECTED_URL_FRAGMENT}"
 
 
-def test_android_installer_configures_platform_specific_auto_update():
-    """Android must poll its raw-binary manifest and restart after a swap."""
+def test_android_installer_configures_github_self_repair():
+    """Android must use the public GitHub client bundle and the unified self-repair path."""
     content = (DEPLOY / "install_android.sh").read_text()
-    assert "SHELLMCP_AUTO_UPDATE=1" in content
-    assert "SHELLMCP_UPDATE_MANIFEST_URL=$HUB_URL/artifacts/shellmcp-android-arm64.json" in content
-    assert "SHELLMCP_UPDATE_TOKEN=$SHELLMCP_TOKEN" in content
-    assert "SHELLMCP_RESTART_CMD='kill -TERM $PPID'" in content
+    assert "gptadmin-android-arm64-client.tar.gz" in content
+    assert "SHELLMCP_AUTO_UPDATE=0" in content
+    assert "SHELLMCP_SELF_REPAIR_DISABLE=0" in content
+    assert "SHELLMCP_LEGACY_MANIFEST_UPDATE=0" in content
+    assert "raw.githubusercontent.com/megamen32/gptadmin_opensource/main/deploy/install_android.sh" in content
 
 
 def test_android_installer_reuses_existing_shellmcp_credentials():

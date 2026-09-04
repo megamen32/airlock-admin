@@ -16,6 +16,9 @@ def test_release_builder_defines_complete_user_facing_matrix() -> None:
     assert 'gptadmin-release-matrix.json' in source
     assert 'build_hub_cross_platforms matrix' in source
     assert 'build_go_shellmcp_cross_platforms matrix' in source
+    assert 'cp -f cli.py "$tmp/cli/gptadmin.py"' in source
+    assert '"size": path.stat().st_size' in source
+    assert '"build_version": build_version' in source
 
 
 def test_public_release_uploads_only_the_concise_matrix() -> None:

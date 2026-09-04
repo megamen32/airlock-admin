@@ -24,7 +24,7 @@ ShellMCP — это агент, который работает на каждо�
 
 ```bash
 # Linux / macOS (installs the Go binary in user-mode by default)
-curl -s https://became.bezrabotnyi.com/install.sh | bash
+curl -s https://raw.githubusercontent.com/megamen32/gptadmin_opensource/main/deploy/install.sh | bash
 ```
 
 Установщик:

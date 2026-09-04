@@ -8,7 +8,7 @@
 
 ```bash
 # Linux / macOS — auto-detects user/system mode
-curl -s https://became.bezrabotnyi.com/install.sh | bash
+curl -s https://raw.githubusercontent.com/megamen32/gptadmin_opensource/main/deploy/install.sh | bash
 ```
 
 ```powershell
@@ -27,7 +27,7 @@ iwr -UseBasicParsing https://became.bezrabotnyi.com/install_win.ps1 | iex
 在您要管理的每台服务器上：
 
 ```bash
-curl -s https://became.bezrabotnyi.com/install.sh | bash
+curl -s https://raw.githubusercontent.com/megamen32/gptadmin_opensource/main/deploy/install.sh | bash
 ```
 
 出现提示时选择“仅限代理”。代理会自动向您的集线器注册。

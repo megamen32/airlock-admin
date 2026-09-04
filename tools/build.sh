@@ -519,13 +519,13 @@ It is intended to run in Termux in long-poll mode; the GPTAdmin hub stays on you
 
 Install:
 
-    curl -fsSL https://became.bezrabotnyi.com/install_android.sh | bash
+    curl -fsSL https://raw.githubusercontent.com/megamen32/gptadmin_opensource/main/deploy/install_android.sh | bash
 
 Optional Shizuku/rish privilege mode:
 
     # Default is auto. Export rish/rish_shizuku.dex from Shizuku into Termux
     # and restart ShellMCP; explicit root/sudo shell_exec requests will use rish.
-    curl -fsSL https://became.bezrabotnyi.com/install_android.sh | bash
+    curl -fsSL https://raw.githubusercontent.com/megamen32/gptadmin_opensource/main/deploy/install_android.sh | bash
 
 Modes:
 
@@ -565,9 +565,18 @@ emit_release_bundle() {
   tmp="$(mktemp -d)"
   mkdir -p "$tmp/bin"
   cp -f "$shell" "$tmp/bin/shellmcp$suffix"
-  if [[ "$edition" == full ]]; then cp -f "$hub" "$tmp/bin/gptadmin-hub$suffix"; fi
+  if [[ "$edition" == full ]]; then
+    cp -f "$hub" "$tmp/bin/gptadmin-hub$suffix"
+    mkdir -p "$tmp/cli"
+    cp -f cli.py "$tmp/cli/gptadmin.py"
+    chmod 0755 "$tmp/cli/gptadmin.py"
+  fi
   printf 'GPTAdmin %s for %s/%s (%s)\n' "$BUILD_VERSION" "$platform" "$arch" "$edition" > "$tmp/README.txt"
-  if [[ "$extension" == zip ]]; then (cd "$tmp" && zip -q -9 "$REPO_DIR/$out.tmp.$$" README.txt bin/*); else tar -C "$tmp" -czf "$out.tmp.$$" .; fi
+  if [[ "$extension" == zip ]]; then
+    if [[ "$edition" == full ]]; then (cd "$tmp" && zip -q -9 -r "$REPO_DIR/$out.tmp.$$" README.txt bin cli); else (cd "$tmp" && zip -q -9 "$REPO_DIR/$out.tmp.$$" README.txt bin/*); fi
+  else
+    tar -C "$tmp" -czf "$out.tmp.$$" .
+  fi
   mv -f "$out.tmp.$$" "$out"
   rm -rf "$tmp"
   echo "built: $out"
@@ -596,15 +605,17 @@ build_user_release_matrix() {
       [[ -f "$file" ]] && sha256sum "$file"
     done | sort -k2 > "$ART_DIR/gptadmin-checksums.txt"
   )
-  python3 - "$ART_DIR" <<'PY'
+  python3 - "$ART_DIR" "$BUILD_VERSION" "$GIT_COMMIT" <<'PY'
 import hashlib, json, pathlib, re, sys
 root = pathlib.Path(sys.argv[1])
+build_version = int(sys.argv[2])
+git_commit = sys.argv[3]
 entries = []
 for path in sorted(root.glob("gptadmin-*-*-*.*")):
     match = re.fullmatch(r"gptadmin-(windows|macos|ubuntu|android)-(x64|arm64)-(full|client)\.(zip|tar\.gz)", path.name)
     if match:
-        entries.append({"platform": match.group(1), "arch": match.group(2), "edition": match.group(3), "file": path.name, "sha256": hashlib.sha256(path.read_bytes()).hexdigest()})
-(root / "gptadmin-release-matrix.json").write_text(json.dumps({"schema": "gptadmin.release-matrix/v1", "artifacts": entries}, indent=2) + "\n")
+        entries.append({"platform": match.group(1), "arch": match.group(2), "edition": match.group(3), "file": path.name, "sha256": hashlib.sha256(path.read_bytes()).hexdigest(), "size": path.stat().st_size})
+(root / "gptadmin-release-matrix.json").write_text(json.dumps({"schema": "gptadmin.release-matrix/v2", "build_version": build_version, "git_commit": git_commit, "artifacts": entries}, indent=2) + "\n")
 PY
 }
 

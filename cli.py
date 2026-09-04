@@ -605,9 +605,26 @@ def _arch_tag() -> str:
     return machine or 'unknown'
 
 
-def platform_pkg_url_default() -> str:
-    platform = 'darwin' if IS_MACOS else 'linux'
-    return os.environ.get('PKG_PLATFORM_URL', f'{PKG_BASE_URL_DEFAULT}/gptadmin-{platform}-{_arch_tag()}.tar.gz')
+def _release_platform_tag() -> str:
+    return 'macos' if IS_MACOS else 'ubuntu'
+
+
+def _release_arch_tag() -> str:
+    arch = _arch_tag()
+    if arch == 'amd64':
+        return 'x64'
+    if arch == 'arm64':
+        return 'arm64'
+    return arch
+
+
+def platform_pkg_url_default(edition: str = 'full') -> str:
+    if edition not in {'full', 'client'}:
+        raise ValueError(f'unsupported release edition: {edition}')
+    return os.environ.get(
+        'PKG_PLATFORM_URL',
+        f'{PKG_BASE_URL_DEFAULT}/gptadmin-{_release_platform_tag()}-{_release_arch_tag()}-{edition}.tar.gz',
+    )
 
 
 def _platform_hub_candidates(tdp: Path) -> list[Path]:
@@ -620,7 +637,7 @@ def _platform_hub_candidates(tdp: Path) -> list[Path]:
         arch = _arch_tag()
         tags = [f'linux_{arch}']
         legacy = [tdp / 'gptadmin_hub' / 'dist' / 'gptadmin_hub', tdp / 'build' / 'gptadmin_hub' / 'dist' / 'gptadmin_hub']
-    return [tdp / 'gptadmin_hub' / tag / 'gptadmin_hub' for tag in tags] + legacy
+    return [tdp / 'bin' / 'gptadmin-hub'] + [tdp / 'gptadmin_hub' / tag / 'gptadmin_hub' for tag in tags] + legacy
 
 
 def _binary_looks_native(path: Path) -> bool:
@@ -694,7 +711,7 @@ def _shellmcp_go_binary_candidates(tdp: Path) -> list[Path]:
         tdp / 'build' / 'shellmcp-go',
         tdp / 'build' / 'rootd-go',
     )
-    out: list[Path] = []
+    out: list[Path] = [tdp / 'bin' / 'shellmcp']
     for root in roots:
         for tag in tags:
             for name in names:
@@ -2277,8 +2294,8 @@ def setup_interactive(args):
     BIN_DIR.mkdir(parents=True, exist_ok=True)
     CLI_PATH.parent.mkdir(parents=True, exist_ok=True)
     pkg_all   = args.pkg_all   or platform_pkg_url_default()
-    pkg_hub   = args.pkg_hub   or PKG_HUB_URL_DEFAULT
-    pkg_shellmcp = args.pkg_shellmcp or PKG_SHELLMCP_URL_DEFAULT
+    pkg_hub   = args.pkg_hub   or platform_pkg_url_default('full')
+    pkg_shellmcp = args.pkg_shellmcp or platform_pkg_url_default('client')
 
     with tempfile.TemporaryDirectory() as td:
         tdp = Path(td)
@@ -4435,31 +4452,36 @@ def _remote_artifact_build_info(pkg_url: str) -> dict:
     if _release_manifest_bypass_enabled():
         return {}
     base = pkg_url.rsplit('/', 1)[0]
-    manifest_url = os.environ.get('GPTADMIN_MANIFEST_URL') or (base.rstrip('/') + '/manifest.json')
+    matrix_url = os.environ.get('GPTADMIN_RELEASE_MATRIX_URL') or (base.rstrip('/') + '/gptadmin-release-matrix.json')
     name = _artifact_name_from_url(pkg_url)
     try:
-        with urllib.request.urlopen(manifest_url, timeout=5) as r:
-            manifest = json.loads(r.read().decode('utf-8', 'replace'))
+        with urllib.request.urlopen(matrix_url, timeout=8) as r:
+            matrix = json.loads(r.read().decode('utf-8', 'replace'))
+            final_url = getattr(r, 'url', matrix_url)
     except Exception as exc:
-        print(f'WARNING: update manifest unavailable, continuing with download: {exc}', file=sys.stderr)
+        print(f'WARNING: release matrix unavailable: {exc}', file=sys.stderr)
         return {}
-    artifacts = manifest.get('artifacts') or {}
-    if isinstance(artifacts, dict):
-        artifact = artifacts.get(name) or {}
-    elif isinstance(artifacts, list):
-        artifact = next(
-            (
-                item for item in artifacts
-                if isinstance(item, dict) and Path(str(item.get('path', ''))).name == name
-            ),
-            {},
-        )
-    else:
-        artifact = {}
+    artifact = next(
+        (item for item in (matrix.get('artifacts') or []) if isinstance(item, dict) and item.get('file') == name),
+        {},
+    )
+    if not artifact:
+        return {}
+    build_version = matrix.get('build_version')
+    if not build_version:
+        match = re.search(r'/download/v(\d+)/', str(final_url))
+        if match:
+            build_version = int(match.group(1))
     return {
-        key: artifact.get(key, manifest.get(key))
-        for key in ('build_version', 'build_ts', 'git_commit', 'sha256', 'size')
-        if artifact.get(key, manifest.get(key)) is not None
+        key: value
+        for key, value in {
+            'build_version': artifact.get('build_version', build_version),
+            'build_ts': matrix.get('build_ts'),
+            'git_commit': artifact.get('git_commit', matrix.get('git_commit')),
+            'sha256': artifact.get('sha256'),
+            'size': artifact.get('size'),
+        }.items()
+        if value is not None
     }
 
 
@@ -4808,8 +4830,8 @@ def cmd_update(args):
     env_set_many(env)
 
     pkg_all = args.pkg_all or platform_pkg_url_default()
-    pkg_hub = args.pkg_hub or PKG_HUB_URL_DEFAULT
-    pkg_shellmcp = args.pkg_shellmcp or PKG_SHELLMCP_URL_DEFAULT
+    pkg_hub = args.pkg_hub or platform_pkg_url_default('full')
+    pkg_shellmcp = args.pkg_shellmcp or platform_pkg_url_default('client')
 
     target_pkg = pkg_all if (install_hub and install_shellmcp) else (pkg_hub if install_hub else pkg_shellmcp)
     remote_info = _remote_artifact_build_info(target_pkg)

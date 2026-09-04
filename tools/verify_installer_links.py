@@ -9,7 +9,7 @@ module is imported, so this validates the same boundary used by a new user.
 Examples:
   python3 tools/verify_installer_links.py --target linux/amd64 --target darwin/arm64 --android
   python3 tools/verify_installer_links.py \
-    --installer-url https://became.bezrabotnyi.com/install.sh --target linux/amd64
+    --installer-url https://raw.githubusercontent.com/megamen32/gptadmin_opensource/main/deploy/install.sh --target linux/amd64
 """
 
 from __future__ import annotations
@@ -71,8 +71,16 @@ class Target:
 
     @property
     def package_name(self) -> str:
-        """Return the all-in-one release asset expected by install.sh."""
-        return f"gptadmin-{self.platform}-{self.arch}.tar.gz"
+        """Return the public full release asset expected by install.sh."""
+        platform_name = "macos" if self.platform == "darwin" else "ubuntu"
+        arch_name = "arm64" if self.arch == "arm64" else "x64"
+        return f"gptadmin-{platform_name}-{arch_name}-full.tar.gz"
+
+    @property
+    def client_package_name(self) -> str:
+        platform_name = "macos" if self.platform == "darwin" else "ubuntu"
+        arch_name = "arm64" if self.arch == "arm64" else "x64"
+        return f"gptadmin-{platform_name}-{arch_name}-client.tar.gz"
 
     @property
     def uname_system(self) -> str:
@@ -135,7 +143,7 @@ class Mirror:
                     self._send(200, "text/x-python", PROBE_CLI.encode("utf-8"))
                     return
                 if self.path.startswith("/releases/gptadmin-") and self.path.endswith(".tar.gz"):
-                    package = mirror.android_package if self.path == "/releases/gptadmin-android-arm64.tar.gz" else b"installer-link-verifier-artifact\n"
+                    package = mirror.android_package if self.path == "/releases/gptadmin-android-arm64-client.tar.gz" else b"installer-link-verifier-artifact\n"
                     self._send(200, "application/gzip", package)
                     return
                 self._send(404, "text/plain", b"not found\n")
@@ -238,6 +246,7 @@ def command_environment(root: Path, target: Target, mirror_url: str, probe_log: 
             "PATH": f"{fakebin}{os.pathsep}{env['PATH']}",
             "BASE_URL": mirror_url,
             "RELEASES_URL": f"{mirror_url}/releases",
+            "CLI_URL": f"{mirror_url}/gptadmin.py",
             "GPTADMIN_INSTALL_MODE": "user",
             "GPTADMIN_INSTALL_ACTION": "update",
             "GPTADMIN_HOME": str(root / "install"),
@@ -286,8 +295,8 @@ def verify_target(installer_url: str, mirror: Mirror, target: Target) -> RunRepo
 
         expected_urls = [
             f"{mirror.base_url}/releases/{target.package_name}",
-            f"{mirror.base_url}/releases/gptadmin-hub.tar.gz",
-            f"{mirror.base_url}/releases/gptadmin-shellmcp.tar.gz",
+            f"{mirror.base_url}/releases/{target.package_name}",
+            f"{mirror.base_url}/releases/{target.client_package_name}",
         ]
         if package_urls != expected_urls:
             raise RuntimeError(f"wrong package URLs for {target.name}: got {package_urls!r}, want {expected_urls!r}")
@@ -311,7 +320,7 @@ def verify_android(installer_url: str, mirror: Mirror) -> RunReport:
         prefix = temp / "termux-prefix"
         (prefix / "bin").mkdir(parents=True)
         (prefix / "var" / "service").mkdir(parents=True)
-        package_url = f"{mirror.base_url}/releases/gptadmin-android-arm64.tar.gz"
+        package_url = f"{mirror.base_url}/releases/gptadmin-android-arm64-client.tar.gz"
         env.update(
             {
                 "PREFIX": str(prefix),

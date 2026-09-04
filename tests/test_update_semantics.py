@@ -35,13 +35,14 @@ def test_update_reads_canonical_release_manifest_artifact_list(monkeypatch):
         def read(self):
             return json.dumps(
                 {
-                    "schema": "gptadmin.release-manifest/v1",
+                    "schema": "gptadmin.release-matrix/v2",
+                    "build_version": 9,
+                    "git_commit": "b" * 40,
                     "artifacts": [
                         {
-                            "path": "build/gptadmin-linux-amd64.tar.gz",
+                            "file": "gptadmin-ubuntu-x64-full.tar.gz",
                             "sha256": "a" * 64,
                             "size": 42,
-                            "build_version": 9,
                         }
                     ],
                 }
@@ -49,10 +50,12 @@ def test_update_reads_canonical_release_manifest_artifact_list(monkeypatch):
 
     monkeypatch.setattr(cli.urllib.request, "urlopen", lambda *_args, **_kwargs: Response())
 
-    info = cli._remote_artifact_build_info("https://mirror.example/gptadmin-linux-amd64.tar.gz")
+    info = cli._remote_artifact_build_info("https://mirror.example/gptadmin-ubuntu-x64-full.tar.gz")
 
     assert info["sha256"] == "a" * 64
     assert info["size"] == 42
+    assert info["build_version"] == 9
+    assert info["git_commit"] == "b" * 40
 
 
 def test_update_rejects_download_that_does_not_match_manifest(tmp_path: Path):
@@ -132,6 +135,7 @@ def test_update_restores_auth_material_if_package_install_rewrites_env(monkeypat
     monkeypatch.setattr(cli, "wait_local_hub_health", lambda *_args, **_kwargs: True)
     monkeypatch.setattr(cli, "svc_autoupdate_enable_start", lambda *_args: None)
     monkeypatch.setattr(cli, "auto_configure_ai_mcp_clients", lambda *_args: None)
+    monkeypatch.setattr(cli, "_update_runtime_paths", lambda: [])
 
     cli.cmd_update(SimpleNamespace(
         hub=False,
@@ -314,3 +318,23 @@ def test_macos_launchd_bootout_is_not_duplicated_before_bootstrap():
     timer_enable_end = text.index("\n    def timer_disable", timer_enable_start)
     enable_block_timer = text[timer_enable_start:timer_enable_end]
     assert "svc_enable_start(SVC_AUTO_UPDATE_LABEL" in enable_block_timer
+
+
+def test_install_component_accepts_user_facing_full_bundle_layout(monkeypatch, tmp_path: Path):
+    import io, tarfile
+    package = tmp_path / "bundle.tar.gz"
+    hub = b"hub-binary"
+    shell = b"shell-binary"
+    cli_src = b"#!/usr/bin/env python3\nprint('cli')\n"
+    with tarfile.open(package, "w:gz") as tf:
+        for name, data, mode in (("bin/gptadmin-hub", hub, 0o755), ("bin/shellmcp", shell, 0o755), ("cli/gptadmin.py", cli_src, 0o755)):
+            info = tarfile.TarInfo(name); info.size = len(data); info.mode = mode; tf.addfile(info, io.BytesIO(data))
+    monkeypatch.setattr(cli, "BIN_DIR", tmp_path / "bin")
+    monkeypatch.setattr(cli, "INSTALL_DIR", tmp_path / "install")
+    monkeypatch.setattr(cli, "CLI_PATH", tmp_path / "local" / "gptadmin")
+    monkeypatch.setattr(cli, "IS_MACOS", False)
+    cli.install_component_from_pkg(package, "hub")
+    cli.install_component_from_pkg(package, "shellmcp")
+    assert (tmp_path / "bin" / "gptadmin_hub").read_bytes() == hub
+    assert (tmp_path / "bin" / "shellmcp").read_bytes() == shell
+    assert (tmp_path / "local" / "gptadmin").read_bytes() == cli_src

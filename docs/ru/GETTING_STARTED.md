@@ -8,7 +8,7 @@
 
 ```bash
 # Linux / macOS — auto-detects user/system mode
-curl -s https://became.bezrabotnyi.com/install.sh | bash
+curl -s https://raw.githubusercontent.com/megamen32/gptadmin_opensource/main/deploy/install.sh | bash
 ```
 
 ```powershell
@@ -27,7 +27,7 @@ iwr -UseBasicParsing https://became.bezrabotnyi.com/install_win.ps1 | iex
 На каждом сервере, которым вы хотите управлять:
 
 ```bash
-curl -s https://became.bezrabotnyi.com/install.sh | bash
+curl -s https://raw.githubusercontent.com/megamen32/gptadmin_opensource/main/deploy/install.sh | bash
 ```
 
 При появлении запроса выберите «Только агент». Агент автоматически регистрируется в вашем хабе.

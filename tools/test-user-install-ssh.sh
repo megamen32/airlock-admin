@@ -3,7 +3,7 @@ set -Eeuo pipefail
 
 SSH_TARGET="${SSH_TARGET:-user@127.0.0.1}"
 SSH_PORT="${SSH_PORT:-2222}"
-INSTALL_URL="${INSTALL_URL:-https://became.bezrabotnyi.com/install.sh}"
+INSTALL_URL="${INSTALL_URL:-https://raw.githubusercontent.com/megamen32/gptadmin_opensource/main/deploy/install.sh}"
 REMOTE_TIMEOUT="${REMOTE_TIMEOUT:-420}"
 USER_CHOICES="${USER_CHOICES:-$'\n\n\n\nn\n\n\n'}"
 SSH_OPTS=(-p "$SSH_PORT" -o PreferredAuthentications=password -o PubkeyAuthentication=no -o StrictHostKeyChecking=no -o UserKnownHostsFile="${SSH_KNOWN_HOSTS:-$HOME/.ssh/known_hosts_gptadmin_install_test}" -o ConnectTimeout="${SSH_CONNECT_TIMEOUT:-10}")
