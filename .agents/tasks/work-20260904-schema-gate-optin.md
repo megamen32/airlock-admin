@@ -32,4 +32,7 @@ Estimate: minimum 20 / maximum 45 active minutes.
 - Slice: make metadata emission, Action properties, and admission validation one opt-in feature; retain the enabled contract unchanged.
 - Discarded: unrelated relay redesign, auth changes, tool argument changes, or WhatsApp work.
 
-Status: in progress.
+Status: complete — public Action schema has no schema version/digest fields and
+is served with `Cache-Control: no-store`. After deployment, public discovery
+omitted metadata, a deliberately stale pair completed without `schema_mismatch`,
+and public `shell_exec hostname` completed on `shell:roomhacker-server-100`.
