@@ -177,4 +177,6 @@ def test_linux_cli_materializes_handover_helper_and_standby(tmp_path):
     helper = g["BIN_DIR"] / "gptadmin-handover"
     assert helper.exists() and helper.stat().st_mode & 0o111
     assert g["UNIT_PATH_HUB_STANDBY"].exists()
+    standby = g["UNIT_PATH_HUB_STANDBY"].read_text()
+    assert "ExecStart=/usr/bin/env GPTADMIN_HUB_HOST=127.0.0.1 GPTADMIN_HUB_PORT=19001 HUB_PORT=19001" in standby
     assert "DRAIN_SECONDS=${GPTADMIN_HANDOVER_DRAIN_SECONDS:-65}" in helper.read_text()

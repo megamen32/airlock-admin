@@ -1246,7 +1246,7 @@ Environment=GPTADMIN_HUB_HOST=127.0.0.1
 Environment=GPTADMIN_HUB_PORT=19001
 Environment=HUB_PORT=19001
 Environment=HUB_URL=http://127.0.0.1:19001
-ExecStart={BIN_DIR}/gptadmin_hub
+ExecStart=/usr/bin/env GPTADMIN_HUB_HOST=127.0.0.1 GPTADMIN_HUB_PORT=19001 HUB_PORT=19001 HUB_URL=http://127.0.0.1:19001 {BIN_DIR}/gptadmin_hub
 Restart=always
 RestartSec=2
 {LINUX_HARDENING}
