@@ -20,6 +20,7 @@ func main() {
 	offerFile := flag.String("offer-file", "", "JSON file containing one signed Network Tunnel offer")
 	mode := flag.String("mode", "file", "offer source: file, pull, or webhook")
 	offersURL := flag.String("offers-url", "", "Hub /proxy-agent/offers URL for pull mode")
+	offerTokenFile := flag.String("offer-token-file", "", "file containing the bearer credential for pull-mode offers")
 	webhookListen := flag.String("webhook-listen", "127.0.0.1:8790", "listen address for signed offer webhook mode")
 	hubPublicKeyFile := flag.String("hub-public-key-file", "", "file containing the Hub Ed25519 public key")
 	agentID := flag.String("agent-id", "", "registered proxy agent ID for signed offers")
@@ -46,7 +47,7 @@ func main() {
 			log.Fatalf("run network tunnel offer: %v", err)
 		}
 	case "pull", "webhook":
-		if err := runDeliveredOffers(ctx, *mode, *offersURL, *webhookListen, *hubPublicKeyFile, *agentID, *maxSkew, *nonceTTL, *dnsServer); err != nil && ctx.Err() == nil {
+		if err := runDeliveredOffers(ctx, *mode, *offersURL, *offerTokenFile, *webhookListen, *hubPublicKeyFile, *agentID, *maxSkew, *nonceTTL, *dnsServer); err != nil && ctx.Err() == nil {
 			log.Fatalf("run network tunnel offers: %v", err)
 		}
 	default:
@@ -54,7 +55,7 @@ func main() {
 	}
 }
 
-func runDeliveredOffers(ctx context.Context, mode, offersURL, webhookListen, publicKeyFile, agentID string, maxSkew, nonceTTL time.Duration, dnsServer string) error {
+func runDeliveredOffers(ctx context.Context, mode, offersURL, offerTokenFile, webhookListen, publicKeyFile, agentID string, maxSkew, nonceTTL time.Duration, dnsServer string) error {
 	if offersURL == "" && mode == "pull" || publicKeyFile == "" || agentID == "" || maxSkew <= 0 || nonceTTL <= 0 {
 		return networkproxy.ErrOfferInvalid
 	}
@@ -71,7 +72,14 @@ func runDeliveredOffers(ctx context.Context, mode, offersURL, webhookListen, pub
 	var source networkproxy.OfferSource
 	var server *http.Server
 	if mode == "pull" {
-		source, err = networkproxy.NewPullOfferSource(&http.Client{}, offersURL, verifier, 1<<20)
+		if offerTokenFile == "" {
+			return networkproxy.ErrOfferInvalid
+		}
+		token, readErr := os.ReadFile(offerTokenFile)
+		if readErr != nil {
+			return readErr
+		}
+		source, err = networkproxy.NewAuthorizedPullOfferSource(&http.Client{}, offersURL, verifier, strings.TrimSpace(string(token)), 1<<20)
 		if err != nil {
 			return err
 		}

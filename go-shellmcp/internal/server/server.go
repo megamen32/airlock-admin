@@ -65,6 +65,10 @@ type Config struct {
 	PreserveMetadataMaxFiles int
 	MCPConfig                string
 	PollInterval             time.Duration
+	QueueRetry               time.Duration
+	SpoolRetention           time.Duration
+	OutboxBackoffBase        time.Duration
+	OutboxBackoffCap         time.Duration
 	SSHHost                  string
 	SSHPort                  int
 	SSHUser                  string
@@ -80,7 +84,7 @@ func FromEnv() Config {
 	spill := env("SHELL_SPOOL_DIR", env("SHELLMCP_SPOOL_DIR", env("SHELL_SPILL_DIR", env("SHELLMCP_SPILL_DIR", filepath.Join(os.TempDir(), "shellmcp-go-spool")))))
 	name := env("SHELL_NAME", env("SHELLMCP_NAME", ""))
 	baseURL := env("SHELL_URL", env("SHELLMCP_URL", "http://127.0.0.1:"+port))
-	hbInt, _ := strconv.Atoi(env("HB_INTERVAL_S", "3600"))
+	hbInt, _ := strconv.Atoi(env("HB_INTERVAL_S", "30"))
 	qTimeout, _ := strconv.Atoi(env("QUEUE_LONG_POLL_TIMEOUT_S", "55"))
 	mode := env("SHELL_MODE", env("SHELLMCP_MODE", ""))
 	queueDefault := "1"
@@ -99,13 +103,17 @@ func FromEnv() Config {
 	defaultUser := env("SHELL_DEFAULT_USER", env("SHELLMCP_DEFAULT_USER", ""))
 	defaultHome := env("SHELL_DEFAULT_HOME", env("SHELLMCP_DEFAULT_HOME", ""))
 	defaultCwd := env("SHELL_DEFAULT_CWD", env("SHELLMCP_DEFAULT_CWD", defaultHome))
-	inspectRoots := splitPathList(env("SHELLMCP_INSPECT_ROOTS", defaultCwd))
+	inspectRoots := appendUniquePath(splitPathList(env("SHELLMCP_INSPECT_ROOTS", defaultCwd)), spill)
 	auditLogPath := env("SHELLMCP_AUDIT_LOG", "")
 	nonceTTL := parseSecondsEnvWithDefault("SHELLMCP_NONCE_TTL_S", 300)
 	preserve := truthy(env("SHELLMCP_PRESERVE_FILE_METADATA", ""))
 	preserveMax := parseIntEnv("SHELLMCP_PRESERVE_METADATA_MAX_FILES", 1000)
 	mcpConfig := env("SHELLMCP_MCP_CONFIG", env("GPTADMIN_MCP_CONFIG", env("GPTADMIN_MCP_AGENTS_DIR", "")))
 	pollInterval := parseSecondsEnvWithDefault("POLL_INTERVAL_S", 5)
+	queueRetry := parseSecondsEnvWithDefault("SHELLMCP_QUEUE_RETRY_S", 5)
+	spoolRetention := parseSecondsEnvWithDefault("SHELLMCP_SPOOL_RETENTION_S", 72*3600)
+	outboxBase := parseSecondsEnvWithDefault("SHELLMCP_OUTBOX_BACKOFF_BASE_S", 5)
+	outboxCap := parseSecondsEnvWithDefault("SHELLMCP_OUTBOX_BACKOFF_CAP_S", 600)
 	sshHost := env("SSH_HOST", "")
 	sshPort := 22
 	if raw := strings.TrimSpace(os.Getenv("SSH_PORT")); raw != "" {
@@ -119,7 +127,21 @@ func FromEnv() Config {
 	if sshKeyPath == "" {
 		sshKeyPath = os.Getenv("SSH_KEY")
 	}
-	return Config{Addr: host + ":" + port, Token: env("SHELL_TOKEN", env("SHELLMCP_TOKEN", "srv_secret")), LogLimit: limit, ExecTimeout: timeout, SpillDir: spill, Name: name, BaseURL: baseURL, HubURL: strings.TrimRight(env("HUB_URL", ""), "/"), HubDNSServer: env("SHELLMCP_HUB_DNS_SERVER", ""), HubResolveTo: env("SHELLMCP_HUB_RESOLVE_TO", ""), IdentityDir: env("SHELL_IDENTITY_DIR", env("SHELLMCP_IDENTITY_DIR", "/etc/gptadmin")), HeartbeatEnabled: truthy(env("SHELL_HEARTBEAT", env("SHELLMCP_HEARTBEAT", "0"))), HeartbeatInterval: normalizeHeartbeatInterval(hbInt), QueueEnabled: queueEnabled, QueueTimeout: qTimeout, Mode: mode, OutboxDir: outbox, DefaultUser: defaultUser, DefaultHome: defaultHome, DefaultCwd: defaultCwd, InspectRoots: inspectRoots, HubPublicKeyFile: env("HUB_PUBLIC_KEY_FILE", filepath.Join(env("SHELL_IDENTITY_DIR", env("SHELLMCP_IDENTITY_DIR", "/etc/gptadmin")), "hub_ed25519.pub")), HubPublicKey: env("HUB_PUBLIC_KEY", ""), AuditLog: auditLogPath, NonceTTL: nonceTTL, PreserveFileMetadata: preserve, PreserveMetadataMaxFiles: preserveMax, MCPConfig: mcpConfig, PollInterval: pollInterval, SSHHost: sshHost, SSHPort: sshPort, SSHUser: sshUser, SSHPassword: sshPassword, SSHKeyPath: sshKeyPath}
+	return Config{Addr: host + ":" + port, Token: env("SHELL_TOKEN", env("SHELLMCP_TOKEN", "srv_secret")), LogLimit: limit, ExecTimeout: timeout, SpillDir: spill, Name: name, BaseURL: baseURL, HubURL: strings.TrimRight(env("HUB_URL", ""), "/"), HubDNSServer: env("SHELLMCP_HUB_DNS_SERVER", ""), HubResolveTo: env("SHELLMCP_HUB_RESOLVE_TO", ""), IdentityDir: env("SHELL_IDENTITY_DIR", env("SHELLMCP_IDENTITY_DIR", "/etc/gptadmin")), HeartbeatEnabled: truthy(env("SHELL_HEARTBEAT", env("SHELLMCP_HEARTBEAT", "0"))), HeartbeatInterval: normalizeHeartbeatInterval(hbInt), QueueEnabled: queueEnabled, QueueTimeout: qTimeout, Mode: mode, OutboxDir: outbox, DefaultUser: defaultUser, DefaultHome: defaultHome, DefaultCwd: defaultCwd, InspectRoots: inspectRoots, HubPublicKeyFile: env("HUB_PUBLIC_KEY_FILE", filepath.Join(env("SHELL_IDENTITY_DIR", env("SHELLMCP_IDENTITY_DIR", "/etc/gptadmin")), "hub_ed25519.pub")), HubPublicKey: env("HUB_PUBLIC_KEY", ""), AuditLog: auditLogPath, NonceTTL: nonceTTL, PreserveFileMetadata: preserve, PreserveMetadataMaxFiles: preserveMax, MCPConfig: mcpConfig, PollInterval: pollInterval, QueueRetry: queueRetry, SpoolRetention: spoolRetention, OutboxBackoffBase: outboxBase, OutboxBackoffCap: outboxCap, SSHHost: sshHost, SSHPort: sshPort, SSHUser: sshUser, SSHPassword: sshPassword, SSHKeyPath: sshKeyPath}
+}
+
+func appendUniquePath(paths []string, value string) []string {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return paths
+	}
+	clean := filepath.Clean(value)
+	for _, existing := range paths {
+		if filepath.Clean(strings.TrimSpace(existing)) == clean {
+			return paths
+		}
+	}
+	return append(paths, value)
 }
 
 func splitPathList(value string) []string {
@@ -214,24 +236,32 @@ func normalizeTraceID(value string) string {
 }
 
 type Server struct {
-	cfg          Config
-	jobs         *job.Manager
-	identity     *security.Identity
-	hub          *hub.Client
-	auditLog     *audit.Logger
-	nonces       *security.NonceCache
-	supervisor   *supervisor.Manager
-	preserveMeta bool
-	preserveMax  int
-	sshClient    *sshexec.Client
-	childMCP     *mcpclient.Client
-	storageLimit int64
-	mcpHealth    atomic.Value // map[string]map[string]any
-	healthBusy   atomic.Bool
-	healthMu     sync.Mutex
-	healthCancel context.CancelFunc
-	healthWG     sync.WaitGroup
-	healthClosed bool
+	cfg                 Config
+	jobs                *job.Manager
+	identity            *security.Identity
+	hub                 *hub.Client
+	auditLog            *audit.Logger
+	nonces              *security.NonceCache
+	supervisor          *supervisor.Manager
+	preserveMeta        bool
+	preserveMax         int
+	sshClient           *sshexec.Client
+	childMCP            *mcpclient.Client
+	storageLimit        int64
+	mcpHealth           atomic.Value // map[string]map[string]any
+	healthBusy          atomic.Bool
+	healthMu            sync.Mutex
+	healthCancel        context.CancelFunc
+	healthWG            sync.WaitGroup
+	healthClosed        bool
+	callbackMu          sync.Mutex
+	callbackCancels     map[string]context.CancelFunc
+	callbackCancelled   map[string]bool
+	queuePollCount      atomic.Int64
+	queuePollErrors     atomic.Int64
+	queuePollLatencyMS  atomic.Int64
+	outboxRetryFailures atomic.Int64
+	outboxDelivered     atomic.Int64
 }
 
 func New(cfg Config) *Server {
@@ -312,18 +342,20 @@ func New(cfg Config) *Server {
 	})
 
 	server := &Server{
-		cfg:          cfg,
-		jobs:         job.New(cfg.LogLimit),
-		identity:     ident,
-		hub:          hc,
-		auditLog:     auditLog,
-		nonces:       nonces,
-		supervisor:   mgr,
-		preserveMeta: cfg.PreserveFileMetadata,
-		preserveMax:  maxFiles,
-		sshClient:    sshClient,
-		childMCP:     childMCP,
-		storageLimit: cfg.StorageLimitBytes,
+		cfg:               cfg,
+		jobs:              job.New(cfg.LogLimit),
+		identity:          ident,
+		hub:               hc,
+		auditLog:          auditLog,
+		nonces:            nonces,
+		supervisor:        mgr,
+		preserveMeta:      cfg.PreserveFileMetadata,
+		preserveMax:       maxFiles,
+		sshClient:         sshClient,
+		childMCP:          childMCP,
+		storageLimit:      cfg.StorageLimitBytes,
+		callbackCancels:   map[string]context.CancelFunc{},
+		callbackCancelled: map[string]bool{},
 	}
 	server.mcpHealth.Store(map[string]map[string]any{})
 	if auditLog != nil {
@@ -509,16 +541,71 @@ func (s *Server) systemInfo(w http.ResponseWriter, _ *http.Request) { writeJSON(
 func (s *Server) health(w http.ResponseWriter, _ *http.Request) {
 	writeJSON(w, 200, map[string]any{"ok": true, "time": time.Now().Unix(), "jobs": len(s.jobs.List()), "name": s.cfg.Name, "heartbeat": s.cfg.HeartbeatEnabled, "queue": s.cfg.QueueEnabled, "mode": s.cfg.Mode, "default_user": s.cfg.DefaultUser, "default_home": s.cfg.DefaultHome, "default_cwd": s.cfg.DefaultCwd})
 }
+
+type shellStorageStats struct {
+	StorageBytes        int64
+	SpoolBytes          int64
+	OutboxDepth         int
+	OutboxRetryAttempts int
+}
+
+func (s *Server) storageStats() shellStorageStats {
+	stats := shellStorageStats{}
+	spillAbs, _ := filepath.Abs(s.cfg.SpillDir)
+	outboxAbs, _ := filepath.Abs(s.cfg.OutboxDir)
+	seen := map[string]bool{}
+	for _, root := range s.storageRoots() {
+		if strings.TrimSpace(root) == "" {
+			continue
+		}
+		base := root
+		if info, err := os.Stat(root); err == nil && !info.IsDir() {
+			base = filepath.Dir(root)
+		}
+		_ = filepath.WalkDir(base, func(path string, d os.DirEntry, err error) error {
+			if err != nil || d.IsDir() {
+				return nil
+			}
+			abs, e := filepath.Abs(path)
+			if e != nil || seen[abs] {
+				return nil
+			}
+			seen[abs] = true
+			info, e := d.Info()
+			if e != nil {
+				return nil
+			}
+			stats.StorageBytes += info.Size()
+			if spillAbs != "" && (abs == spillAbs || strings.HasPrefix(abs, spillAbs+string(os.PathSeparator))) {
+				stats.SpoolBytes += info.Size()
+			}
+			if outboxAbs != "" && strings.HasPrefix(abs, outboxAbs+string(os.PathSeparator)) && strings.HasSuffix(abs, ".json") {
+				stats.OutboxDepth++
+				b, e := os.ReadFile(abs)
+				if e == nil {
+					var v struct {
+						Attempts int `json:"attempts"`
+					}
+					if json.Unmarshal(b, &v) == nil {
+						stats.OutboxRetryAttempts += v.Attempts
+					}
+				}
+			}
+			return nil
+		})
+	}
+	return stats
+}
+
 func (s *Server) metrics(w http.ResponseWriter, _ *http.Request) {
+	stats := s.storageStats()
 	writeJSON(w, 200, map[string]any{
-		"component":       "shellmcp-go",
-		"build_version":   parseBuildVersion(BuildVersion),
-		"jobs":            len(s.jobs.List()),
-		"queue_enabled":   s.cfg.QueueEnabled,
-		"mode":            s.cfg.Mode,
-		"heartbeat":       s.cfg.HeartbeatEnabled,
-		"audit_enabled":   s.cfg.AuditLog != "",
-		"storage_limited": s.storageLimit > 0,
+		"component": "shellmcp-go", "build_version": parseBuildVersion(BuildVersion), "jobs": len(s.jobs.List()),
+		"queue_enabled": s.cfg.QueueEnabled, "mode": s.cfg.Mode, "heartbeat": s.cfg.HeartbeatEnabled, "audit_enabled": s.cfg.AuditLog != "",
+		"storage_limited": s.storageLimit > 0, "storage_limit_bytes": s.storageLimit, "storage_bytes": stats.StorageBytes, "spool_bytes": stats.SpoolBytes,
+		"outbox_depth": stats.OutboxDepth, "outbox_retry_attempts": stats.OutboxRetryAttempts,
+		"queue_poll_count": s.queuePollCount.Load(), "queue_poll_errors": s.queuePollErrors.Load(), "queue_poll_latency_ms": s.queuePollLatencyMS.Load(),
+		"outbox_retry_failures": s.outboxRetryFailures.Load(), "outbox_delivered": s.outboxDelivered.Load(),
 	})
 }
 func (s *Server) capabilities(w http.ResponseWriter, _ *http.Request) {
@@ -1047,6 +1134,16 @@ func (s *Server) newBeat() hub.Beat {
 	beat.DefaultHome = s.cfg.DefaultHome
 	beat.DefaultCwd = s.cfg.DefaultCwd
 	beat.MCPAgents = s.mcpAgentsForCapabilities()
+	stats := s.storageStats()
+	beat.SpoolBytes = stats.SpoolBytes
+	beat.StorageBytes = stats.StorageBytes
+	beat.OutboxDepth = stats.OutboxDepth
+	beat.OutboxRetryAttempts = stats.OutboxRetryAttempts
+	beat.QueuePollCount = s.queuePollCount.Load()
+	beat.QueuePollErrors = s.queuePollErrors.Load()
+	beat.QueuePollLatencyMS = s.queuePollLatencyMS.Load()
+	beat.OutboxRetryFailures = s.outboxRetryFailures.Load()
+	beat.OutboxDelivered = s.outboxDelivered.Load()
 	return beat
 }
 
@@ -1056,13 +1153,23 @@ func (s *Server) queueLoop(ctx context.Context) {
 	}
 	for {
 		s.flushOutbox(ctx)
+		pollStarted := time.Now()
 		q, ok, err := s.hub.PollQueue(ctx, s.newBeat(), s.cfg.QueueTimeout)
+		s.queuePollCount.Add(1)
+		s.queuePollLatencyMS.Store(time.Since(pollStarted).Milliseconds())
+		if err != nil {
+			s.queuePollErrors.Add(1)
+		}
+		if err == nil {
+			s.applyHubRuntimeSettings(q.RuntimeSettings)
+			s.cleanupSpoolByAge()
+		}
 		if err != nil {
 			if ctx.Err() != nil {
 				return
 			}
 			log.Printf("queue poll failed: %v", err)
-			retry := time.NewTimer(5 * time.Second)
+			retry := time.NewTimer(s.queueRetry())
 			select {
 			case <-ctx.Done():
 				retry.Stop()
@@ -1072,6 +1179,11 @@ func (s *Server) queueLoop(ctx context.Context) {
 			continue
 		}
 		if ok {
+			if q.ToolName == "__gptadmin_cancel_task" {
+				taskID, _ := q.Arguments["task_id"].(string)
+				s.cancelCallbackJob(taskID)
+				continue
+			}
 			if q.ToolName != "" && q.ToolName != "shell_exec" {
 				go s.runCallbackTool(q.ID, q.TraceID, q.TraceParent, q.ToolName, q.Arguments)
 			} else {
@@ -1112,10 +1224,42 @@ func (s *Server) runCallbackTool(jobID, traceID, traceParent, name string, args 
 	}
 }
 
+func (s *Server) cancelCallbackJob(jobID string) {
+	jobID = strings.TrimSpace(jobID)
+	if jobID == "" {
+		return
+	}
+	s.callbackMu.Lock()
+	cancel := s.callbackCancels[jobID]
+	if cancel == nil {
+		s.callbackCancelled[jobID] = true
+	}
+	s.callbackMu.Unlock()
+	if cancel != nil {
+		cancel()
+	}
+	s.auditLog.Event(audit.PollJob, map[string]any{"job_id": jobID, "status": "cancel_requested"})
+}
+
 func (s *Server) runCallbackJob(jobID string, req shell.Request) {
 	req.TraceID = normalizeTraceID(req.TraceID)
+	runCtx, cancel := context.WithCancel(context.Background())
+	s.callbackMu.Lock()
+	s.callbackCancels[jobID] = cancel
+	wasCancelled := s.callbackCancelled[jobID]
+	delete(s.callbackCancelled, jobID)
+	s.callbackMu.Unlock()
+	if wasCancelled {
+		cancel()
+	}
+	defer func() {
+		cancel()
+		s.callbackMu.Lock()
+		delete(s.callbackCancels, jobID)
+		s.callbackMu.Unlock()
+	}()
 	s.auditLog.Event(audit.ExecStart, map[string]any{"job_id": jobID, "trace_id": req.TraceID, "traceparent": req.TraceParent, "background": true})
-	res := s.runShell(context.Background(), req)
+	res := s.runShell(runCtx, req)
 	s.auditLog.Event(audit.ExecEnd, map[string]any{"job_id": jobID, "trace_id": req.TraceID, "traceparent": req.TraceParent, "return_code": res.ReturnCode, "elapsed_ms": res.DurationMS})
 	if s.hub == nil {
 		return
@@ -1129,10 +1273,87 @@ func (s *Server) runCallbackJob(jobID string, req shell.Request) {
 
 // Outbox retry tuning. Mirrors the Python shellmcp exponential-backoff
 // hint so a flapping hub cannot cause a tight retry loop.
-const (
-	outboxBackoffBase = 5 * time.Second
-	outboxBackoffCap  = 10 * time.Minute
-)
+
+func (s *Server) queueRetry() time.Duration {
+	if s.cfg.QueueRetry > 0 {
+		return s.cfg.QueueRetry
+	}
+	return 5 * time.Second
+}
+func (s *Server) computeOutboxBackoff(attempts int) time.Duration {
+	base, cap := s.cfg.OutboxBackoffBase, s.cfg.OutboxBackoffCap
+	if base <= 0 {
+		base = 5 * time.Second
+	}
+	if cap < base {
+		cap = 10 * time.Minute
+	}
+	return computeOutboxBackoffWith(base, cap, attempts)
+}
+func (s *Server) applyHubRuntimeSettings(v map[string]any) {
+	if len(v) == 0 {
+		return
+	}
+	if n := intAny(v["queue_long_poll_seconds"]); n >= 5 && n <= 120 {
+		s.cfg.QueueTimeout = n
+	}
+	if n := intAny(v["queue_retry_seconds"]); n >= 1 && n <= 300 {
+		s.cfg.QueueRetry = time.Duration(n) * time.Second
+	}
+	if n := intAny(v["spool_retention_hours"]); n >= 1 && n <= 2160 {
+		s.cfg.SpoolRetention = time.Duration(n) * time.Hour
+	}
+	if n := intAny(v["storage_max_mb"]); n >= 0 && n <= 10240 {
+		if n == 0 {
+			s.storageLimit = 0
+			s.cfg.StorageLimitBytes = 0
+		} else {
+			s.storageLimit = int64(n) << 20
+			s.cfg.StorageLimitBytes = s.storageLimit
+		}
+		_ = s.enforceStorage(nil)
+	}
+	if n := intAny(v["outbox_backoff_base_seconds"]); n >= 1 && n <= 600 {
+		s.cfg.OutboxBackoffBase = time.Duration(n) * time.Second
+	}
+	if n := intAny(v["outbox_backoff_cap_seconds"]); n >= 1 && n <= 3600 {
+		s.cfg.OutboxBackoffCap = time.Duration(n) * time.Second
+	}
+	if s.cfg.OutboxBackoffCap < s.cfg.OutboxBackoffBase {
+		s.cfg.OutboxBackoffCap = s.cfg.OutboxBackoffBase
+	}
+}
+func intAny(v any) int {
+	switch x := v.(type) {
+	case float64:
+		return int(x)
+	case int:
+		return x
+	case json.Number:
+		n, _ := strconv.Atoi(string(x))
+		return n
+	}
+	return 0
+}
+func (s *Server) cleanupSpoolByAge() {
+	if s.cfg.SpillDir == "" || s.cfg.SpoolRetention <= 0 {
+		return
+	}
+	cutoff := time.Now().Add(-s.cfg.SpoolRetention)
+	entries, err := os.ReadDir(s.cfg.SpillDir)
+	if err != nil {
+		return
+	}
+	for _, entry := range entries {
+		if entry.IsDir() || entry.Name() == "outbox" {
+			continue
+		}
+		info, err := entry.Info()
+		if err == nil && info.ModTime().Before(cutoff) {
+			_ = os.Remove(filepath.Join(s.cfg.SpillDir, entry.Name()))
+		}
+	}
+}
 
 func (s *Server) spoolOutbox(jobID string, payload hub.TaskResult, cause error) {
 	if s.cfg.OutboxDir == "" {
@@ -1157,7 +1378,16 @@ func (s *Server) spoolOutbox(jobID string, payload hub.TaskResult, cause error) 
 // computeOutboxBackoff returns the wait time for the given attempt number
 // using a 5s base doubling each retry, capped at 10m, for parity with the
 // Python shellmcp outbox behavior.
+const (
+	outboxBackoffBase = 5 * time.Second
+	outboxBackoffCap  = 10 * time.Minute
+)
+
 func computeOutboxBackoff(attempts int) time.Duration {
+	return computeOutboxBackoffWith(outboxBackoffBase, outboxBackoffCap, attempts)
+}
+
+func computeOutboxBackoffWith(base, cap time.Duration, attempts int) time.Duration {
 	if attempts < 0 {
 		attempts = 0
 	}
@@ -1166,9 +1396,9 @@ func computeOutboxBackoff(attempts int) time.Duration {
 	if attempts > maxAttempts {
 		attempts = maxAttempts
 	}
-	wait := outboxBackoffBase * (1 << attempts)
-	if wait > outboxBackoffCap || wait < 0 {
-		wait = outboxBackoffCap
+	wait := base * (1 << attempts)
+	if wait > cap || wait < 0 {
+		wait = cap
 	}
 	return wait
 }
@@ -1209,6 +1439,7 @@ func (s *Server) flushOutbox(ctx context.Context) {
 		}
 		postErr := s.hub.PostResult(ctx, s.cfg.Name, entry.Payload)
 		if postErr == nil {
+			s.outboxDelivered.Add(1)
 			_ = os.Remove(path)
 			continue
 		}
@@ -1219,8 +1450,9 @@ func (s *Server) flushOutbox(ctx context.Context) {
 			continue
 		}
 		// Bump attempt counter and set next_attempt_at to the backoff window.
+		s.outboxRetryFailures.Add(1)
 		newAttempts := entry.Attempts + 1
-		nextAt := now.Add(computeOutboxBackoff(newAttempts)).Unix()
+		nextAt := now.Add(s.computeOutboxBackoff(newAttempts)).Unix()
 		updated := map[string]any{
 			"job_id":          entry.JobID,
 			"payload":         entry.Payload,
@@ -1238,7 +1470,7 @@ func (s *Server) flushOutbox(ctx context.Context) {
 			log.Printf("outbox retry persist failed file=%s err=%v", path, wErr)
 			continue
 		}
-		log.Printf("outbox retry failed file=%s err=%v attempts=%d next_attempt_in=%s", path, err, newAttempts, computeOutboxBackoff(newAttempts))
+		log.Printf("outbox retry failed file=%s err=%v attempts=%d next_attempt_in=%s", path, err, newAttempts, s.computeOutboxBackoff(newAttempts))
 	}
 }
 

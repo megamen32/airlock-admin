@@ -2,8 +2,10 @@ use grepmesh::{
     backend::{LocalBackend, SearchMode},
     config::AppConfig,
     mcp::{normalize_request, HostsInput, MeshService, SearchArgs},
+    server::call_tool,
     topology::{PeerConfig, Topology},
 };
+use serde_json::{json, Value};
 use std::{
     fs,
     io::{Read, Write},
@@ -161,7 +163,8 @@ async fn permission_denied_search_is_partial_and_keeps_readable_match() {
         .as_array()
         .unwrap()
         .iter()
-        .any(|hit| hit["text"]
+        .flat_map(|range| range["lines"].as_array().unwrap())
+        .any(|line| line["text"]
             .as_str()
             .is_some_and(|text| text.contains("Name"))));
     let status = result
@@ -216,6 +219,259 @@ async fn rpc(url: &str, method: &str, params: serde_json::Value) -> serde_json::
     resp.json::<serde_json::Value>().await.unwrap()
 }
 
+/// A deterministic, dependency-free estimate used only for this output-size
+/// regression test: ceil(serialized UTF-8 bytes / 4).
+fn estimated_tokens(bytes: usize) -> usize {
+    bytes.div_ceil(4)
+}
+
+fn ranges_include_host(results: &[Value], host_id: &str) -> bool {
+    results.iter().any(|range| range["host_id"] == host_id)
+}
+
+fn rg_fixture_output(
+    root: &std::path::Path,
+    query: &str,
+) -> (Vec<(usize, String)>, Vec<(usize, String, usize)>, Vec<u8>) {
+    let json_output = Command::new("rg")
+        .args(["--json", "--context=1", "--color=never", query])
+        .arg(root.join("realistic.txt"))
+        .output()
+        .expect("run rg JSON fixture");
+    assert!(
+        json_output.status.success(),
+        "rg JSON fixture failed: {}",
+        String::from_utf8_lossy(&json_output.stderr)
+    );
+
+    let mut visible_lines = Vec::new();
+    let mut matches = Vec::new();
+    for raw in String::from_utf8(json_output.stdout)
+        .expect("rg JSON is UTF-8 for the fixture")
+        .lines()
+    {
+        let record: Value = serde_json::from_str(raw).expect("rg JSON record");
+        let kind = record["type"].as_str().unwrap_or_default();
+        if kind != "match" && kind != "context" {
+            continue;
+        }
+        let data = &record["data"];
+        let line_number = data["line_number"].as_u64().unwrap() as usize;
+        let text = data["lines"]["text"]
+            .as_str()
+            .unwrap()
+            .trim_end_matches(['\n', '\r'])
+            .to_string();
+        visible_lines.push((line_number, text.clone()));
+        if kind == "match" {
+            let column = data["submatches"][0]["start"].as_u64().unwrap() as usize + 1;
+            matches.push((line_number, text, column));
+        }
+    }
+    visible_lines.sort_by_key(|(line_number, _)| *line_number);
+    visible_lines.dedup_by_key(|(line_number, _)| *line_number);
+
+    let text_output = Command::new("rg")
+        .args([
+            "--with-filename",
+            "--line-number",
+            "--column",
+            "--context=1",
+            "--no-heading",
+            "--color=never",
+            query,
+        ])
+        .arg(root.join("realistic.txt"))
+        .output()
+        .expect("run rg text fixture");
+    assert!(
+        text_output.status.success(),
+        "rg text fixture failed: {}",
+        String::from_utf8_lossy(&text_output.stderr)
+    );
+    (visible_lines, matches, text_output.stdout)
+}
+
+fn legacy_per_line_results(compact: &Value) -> Vec<Value> {
+    compact["results"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .flat_map(|range| {
+            range["matches"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(move |matched| {
+                    let line_number = matched["line_number"].as_u64().unwrap() as usize;
+                    let text = range["lines"]
+                        .as_array()
+                        .unwrap()
+                        .iter()
+                        .find(|line| line["line_number"].as_u64() == Some(line_number as u64))
+                        .unwrap()["text"]
+                        .clone();
+                    let context = range["lines"]
+                        .as_array()
+                        .unwrap()
+                        .iter()
+                        .filter(|line| {
+                            let number = line["line_number"].as_u64().unwrap() as usize;
+                            number >= line_number.saturating_sub(1).max(1)
+                                && number <= line_number.saturating_add(1)
+                        })
+                        .cloned()
+                        .collect::<Vec<_>>();
+                    json!({
+                        "host_id": range["host_id"],
+                        "path": range["path"],
+                        "line_number": line_number,
+                        "context": context,
+                        "text": text,
+                        "column": matched["column"],
+                    })
+                })
+        })
+        .collect()
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn compact_search_tool_response_matches_rg_per_line_and_reports_efficiency_gap() {
+    let temp = TempDir::new().unwrap();
+    fs::write(
+        temp.path().join("realistic.txt"),
+        concat!(
+            "2026-08-26T01:00:00Z boot complete\n",
+            "2026-08-26T01:00:01Z adjacent SEARCH_CANARY first hit\n",
+            "2026-08-26T01:00:02Z adjacent SEARCH_CANARY second hit\n",
+            "2026-08-26T01:00:03Z adjacent range tail context\n",
+            "2026-08-26T01:00:04Z unrelated heartbeat\n",
+            "2026-08-26T01:00:05Z isolated range head context\n",
+            "2026-08-26T01:00:06Z isolated SEARCH_CANARY third hit\n",
+            "2026-08-26T01:00:07Z shutdown complete\n",
+        ),
+    )
+    .unwrap();
+    let service = MeshService::new(
+        LocalBackend::from_config(
+            "A",
+            temp.path(),
+            Default::default(),
+            std::collections::BTreeMap::new(),
+            vec![],
+            None,
+        ),
+        Topology::new("A", vec![]),
+    );
+    let tool_result = call_tool(
+        &service,
+        json!({
+            "name": "search_text",
+            "arguments": {
+                "query": "SEARCH_CANARY",
+                "hosts": "local",
+                "request_id": "compactness-fixture",
+                "context_lines": 1,
+                "limit": 10
+            }
+        }),
+    )
+    .await
+    .unwrap();
+    let tool_text = tool_result["content"][0]["text"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    let compact: Value = serde_json::from_str(&tool_text).unwrap();
+    let ranges = compact["results"].as_array().unwrap();
+    assert_eq!(
+        ranges.len(),
+        2,
+        "adjacent matches must share one range; response={compact}"
+    );
+    assert_eq!(ranges[0]["start_line"], 2);
+    assert_eq!(ranges[0]["end_line"], 3);
+    assert_eq!(ranges[0]["matches"].as_array().unwrap().len(), 2);
+
+    let actual_lines = ranges
+        .iter()
+        .flat_map(|range| range["lines"].as_array().unwrap())
+        .map(|line| {
+            (
+                line["line_number"].as_u64().unwrap() as usize,
+                line["text"].as_str().unwrap().to_string(),
+            )
+        })
+        .collect::<Vec<_>>();
+    let actual_matches = ranges
+        .iter()
+        .flat_map(|range| {
+            range["matches"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(move |matched| {
+                    let line_number = matched["line_number"].as_u64().unwrap() as usize;
+                    let text = range["lines"]
+                        .as_array()
+                        .unwrap()
+                        .iter()
+                        .find(|line| line["line_number"].as_u64() == Some(line_number as u64))
+                        .unwrap()["text"]
+                        .as_str()
+                        .unwrap()
+                        .to_string();
+                    (
+                        line_number,
+                        text,
+                        matched["column"].as_u64().unwrap() as usize,
+                    )
+                })
+        })
+        .collect::<Vec<_>>();
+    let (rg_lines, rg_matches, rg_text) = rg_fixture_output(temp.path(), "SEARCH_CANARY");
+    assert_eq!(
+        actual_lines, rg_lines,
+        "per-line output regression: compact GrepMesh range lines diverged from rg"
+    );
+    assert_eq!(
+        actual_matches, rg_matches,
+        "per-line output regression: compact GrepMesh match metadata diverged from rg"
+    );
+
+    let legacy_results = legacy_per_line_results(&compact);
+    let mut legacy = compact.clone();
+    legacy["results"] = Value::Array(legacy_results.clone());
+    legacy["matches"] = Value::Array(legacy_results);
+    let legacy_text = serde_json::to_string(&legacy).unwrap();
+    assert!(
+        tool_text.len() < legacy_text.len(),
+        "adjacent-range compaction regressed: compact={} bytes, legacy={} bytes",
+        tool_text.len(),
+        legacy_text.len()
+    );
+
+    let grepmesh_bytes = tool_text.len();
+    let rg_bytes = rg_text.len();
+    let grepmesh_tokens = estimated_tokens(grepmesh_bytes);
+    let rg_tokens = estimated_tokens(rg_bytes);
+    eprintln!(
+        "compactness fixture (content[0].text; token estimate=ceil(UTF-8 bytes/4)): \
+         grepmesh={grepmesh_bytes}B/{grepmesh_tokens}tok, \
+         legacy={}/{}tok, rg={rg_bytes}B/{rg_tokens}tok, \
+         grepmesh-vs-rg={:+}B/{:+}tok",
+        legacy_text.len(),
+        estimated_tokens(legacy_text.len()),
+        grepmesh_bytes as isize - rg_bytes as isize,
+        grepmesh_tokens as isize - rg_tokens as isize,
+    );
+    assert!(
+        grepmesh_bytes > rg_bytes && grepmesh_tokens > rg_tokens,
+        "fixture must retain an honest less-efficient-than-rg case; \
+         grepmesh={grepmesh_bytes}B/{grepmesh_tokens}tok, rg={rg_bytes}B/{rg_tokens}tok"
+    );
+}
+
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn black_box_two_process_peer_fanout_and_partial_results() {
     let temp_a = TempDir::new().unwrap();
@@ -237,7 +493,9 @@ async fn black_box_two_process_peer_fanout_and_partial_results() {
         peers: vec![],
         limits: Default::default(),
         exclude_globs: vec![],
-        topology_cache_path: None,
+        // Keep the runtime-settings sidecar isolated from the host-level
+        // default so this black-box process cannot inherit live search roots.
+        topology_cache_path: Some(temp_b.path().join("topology-cache.json")),
         index_path: Some(root_b.join("index.sqlite")),
         gptadmin_topology_url: None,
         gptadmin_token_env: None,
@@ -257,7 +515,9 @@ async fn black_box_two_process_peer_fanout_and_partial_results() {
         }],
         limits: Default::default(),
         exclude_globs: vec![],
-        topology_cache_path: None,
+        // Keep the runtime-settings sidecar isolated from the host-level
+        // default so this black-box process cannot inherit live search roots.
+        topology_cache_path: Some(temp_a.path().join("topology-cache.json")),
         index_path: Some(root_a.join("index.sqlite")),
         gptadmin_topology_url: None,
         gptadmin_token_env: None,
@@ -312,8 +572,14 @@ async fn black_box_two_process_peer_fanout_and_partial_results() {
     let value: serde_json::Value = serde_json::from_str(result_text).unwrap();
     assert_eq!(value["host_id"], "A");
     let results = value["results"].as_array().unwrap();
-    assert!(results.iter().any(|r| r["host_id"] == "A"));
-    assert!(results.iter().any(|r| r["host_id"] == "B"));
+    assert!(
+        ranges_include_host(results, "A"),
+        "local compact range missing from response: {value}"
+    );
+    assert!(
+        ranges_include_host(results, "B"),
+        "remote compact range missing from response: {value}"
+    );
 
     let paths = rpc(
         &url_a,
@@ -371,8 +637,8 @@ async fn black_box_two_process_peer_fanout_and_partial_results() {
     .unwrap();
     assert_eq!(partial_value["partial"], true);
     let partial_results = partial_value["results"].as_array().unwrap();
-    assert!(partial_results.iter().any(|r| r["host_id"] == "A"));
-    assert!(!partial_results.iter().any(|r| r["host_id"] == "B"));
+    assert!(ranges_include_host(partial_results, "A"));
+    assert!(!ranges_include_host(partial_results, "B"));
 
     let _ = child_a.kill();
     let _ = child_a.wait();
@@ -455,7 +721,9 @@ async fn remote_partial_status_and_local_results_survive_fanout() {
             ..Default::default()
         },
         exclude_globs: vec![],
-        topology_cache_path: None,
+        // Keep the runtime-settings sidecar isolated from the host-level
+        // default so the local search cannot consume the peer test deadline.
+        topology_cache_path: Some(temp.path().join("topology-cache.json")),
         index_path: Some(root.join("index.sqlite")),
         gptadmin_topology_url: None,
         gptadmin_token_env: None,
@@ -479,11 +747,10 @@ async fn remote_partial_status_and_local_results_survive_fanout() {
     let search_value: serde_json::Value =
         serde_json::from_str(search["result"]["content"][0]["text"].as_str().unwrap()).unwrap();
     assert_eq!(search_value["partial"], true);
-    assert!(search_value["results"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .any(|result| result["host_id"] == "B"));
+    assert!(ranges_include_host(
+        search_value["results"].as_array().unwrap(),
+        "B"
+    ));
     assert!(search_value["host_status"]
         .as_array()
         .unwrap()
@@ -583,11 +850,10 @@ async fn stalled_peer_body_keeps_completed_local_results() {
     let value: serde_json::Value =
         serde_json::from_str(search["result"]["content"][0]["text"].as_str().unwrap()).unwrap();
     assert_eq!(value["partial"], true);
-    assert!(value["results"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .any(|result| result["host_id"] == "A"));
+    assert!(ranges_include_host(
+        value["results"].as_array().unwrap(),
+        "A"
+    ));
     assert!(value["host_status"]
         .as_array()
         .unwrap()

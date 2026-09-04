@@ -445,6 +445,75 @@ export async function setVirtualMCP(id: VirtualMCP["id"], enabled: boolean): Pro
   return { id, name: id, enabled, mcp_path: `/server/${id}/mcp`, actions_path: `/server/${id}/actions/openapi.yaml` };
 }
 
+export type HubSettings = Record<string, unknown> & { stale_mcp_retention_days: number };
+export type HubSettingDefinition = { key: string; type: string; category: string; title: string; description: string; default: unknown; minimum?: number; maximum?: number; unit?: string; options?: string[]; restart_required: boolean; secret: boolean; advanced: boolean; dangerous: boolean; read_only: boolean; order: number; visible_when?: unknown };
+export type HubSettingsSchema = { version: number; settings: HubSettingDefinition[] };
+
+export async function getHubSettings(): Promise<{ settings: HubSettings; schema: HubSettingsSchema }> {
+  const response = await request("/admin/api/settings");
+  const value = asRecord(await responseJSON(response), "Сервер вернул некорректные настройки Hub.");
+  const settings = asRecord(value.settings, "Сервер вернул неполные настройки Hub.");
+  if (typeof settings.stale_mcp_retention_days !== "number") throw new ApiError(502, "Нет stale_mcp_retention_days.");
+  const schema = asRecord(value.schema, "Сервер не вернул schema Hub settings.") as HubSettingsSchema;
+  return { settings: settings as HubSettings, schema };
+}
+
+export async function setHubSettings(settingsPatch: Record<string, unknown>): Promise<HubSettings> {
+  const response = await request("/admin/api/settings", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(settingsPatch) });
+  const value = asRecord(await responseJSON(response), "Сервер не подтвердил настройки Hub.");
+  const settings = asRecord(value.settings, "Сервер вернул неполные настройки Hub.");
+  return settings as HubSettings;
+}
+
+export type SettingsRevision = { revision: number; time: string; actor: string; source: string; changes: Record<string, unknown>; values: Record<string, unknown> };
+export type CleanupPolicy = { protected: boolean; never_delete: boolean; retention_days?: number };
+export type CleanupCandidate = { agent_id: string; name: string; kind: string; status: string; last_seen: number; age_days: number; retention_days: number; eligible: boolean; reason: string; policy: CleanupPolicy };
+export type AgentTombstone = { agent_id: string; name: string; kind: string; last_seen: number; deleted_at: number; delete_reason: string; policy: CleanupPolicy };
+
+export async function getSettingsHistory(): Promise<{ revision: number; history: SettingsRevision[] }> {
+  const response = await request("/admin/api/settings/history");
+  const value = asRecord(await responseJSON(response), "Сервер вернул некорректную историю Hub settings.");
+  return { revision: Number(value.revision || 0), history: Array.isArray(value.history) ? value.history as SettingsRevision[] : [] };
+}
+export async function rollbackHubSettings(revision: number): Promise<HubSettings> {
+  const response = await request("/admin/api/settings/rollback", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ revision }) });
+  const value = asRecord(await responseJSON(response), "Сервер не подтвердил rollback Hub settings.");
+  return asRecord(value.settings, "Сервер вернул неполные настройки после rollback.") as HubSettings;
+}
+export async function getRegistryMaintenance(): Promise<{ candidates: CleanupCandidate[]; eligible_count: number; total_stale: number }> {
+  const response = await request("/admin/api/registry-maintenance");
+  const value = asRecord(await responseJSON(response), "Сервер вернул некорректный cleanup preview.");
+  return { candidates: Array.isArray(value.candidates) ? value.candidates as CleanupCandidate[] : [], eligible_count: Number(value.eligible_count || 0), total_stale: Number(value.total_stale || 0) };
+}
+export async function runRegistryCleanup(): Promise<string[]> {
+  const response = await request("/admin/api/registry-maintenance", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "cleanup" }) });
+  const value = asRecord(await responseJSON(response), "Сервер не подтвердил cleanup.");
+  return Array.isArray(value.removed) ? value.removed as string[] : [];
+}
+export async function setAgentCleanupPolicy(agentId: string, policy: Partial<CleanupPolicy>): Promise<CleanupPolicy> {
+  const response = await request("/admin/api/registry-maintenance", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "policy_set", agent_id: agentId, ...policy }) });
+  const value = asRecord(await responseJSON(response), "Сервер не подтвердил policy.");
+  return asRecord(value.policy, "Сервер вернул некорректную policy.") as CleanupPolicy;
+}
+export async function getAgentTombstones(): Promise<AgentTombstone[]> {
+  const response = await request("/admin/api/registry-maintenance", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "tombstones" }) });
+  const value = asRecord(await responseJSON(response), "Сервер вернул некорректные tombstones.");
+  return Array.isArray(value.tombstones) ? value.tombstones as AgentTombstone[] : [];
+}
+
+export async function getHubDiagnose(): Promise<Record<string, unknown>> {
+  const response = await request("/admin/api/diagnose");
+  return asRecord(await responseJSON(response), "Сервер вернул некорректную диагностику Hub.");
+}
+export async function getHandoverStatus(): Promise<Record<string, unknown>> {
+  const response = await request("/admin/api/handover");
+  return asRecord(await responseJSON(response), "Сервер вернул некорректный handover status.");
+}
+export async function startHubHandover(): Promise<Record<string, unknown>> {
+  const response = await request("/admin/api/handover", { method: "POST" });
+  return asRecord(await responseJSON(response), "Сервер не подтвердил handover.");
+}
+
 export function byteLength(value: string): number {
   return new TextEncoder().encode(value).byteLength;
 }

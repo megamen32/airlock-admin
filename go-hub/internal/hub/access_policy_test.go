@@ -23,3 +23,31 @@ func TestRequestAccessModeDoesNotTreatReadOnlyScopeAsFull(t *testing.T) {
 		t.Fatalf("read-only scope: access mode = %q, want %q", got, accessModeReadonly)
 	}
 }
+
+func TestGranularHubScopesDoNotGrantShellExec(t *testing.T) {
+	tests := []struct{ scope, tool string }{
+		{"gptadmin.settings.write", "settings_set"},
+		{"gptadmin.registry.manage", "agent_policy_set"},
+		{"gptadmin.update", "handover_start"},
+	}
+	for _, tt := range tests {
+		r, _ := http.NewRequest(http.MethodPost, "https://hub.example/mcp", nil)
+		r = requestWithAuthClaims(r, map[string]any{"scope": tt.scope})
+		if err := authorizeToolCall(r, "hub", tt.tool); err != nil {
+			t.Fatalf("scope %s tool %s denied: %v", tt.scope, tt.tool, err)
+		}
+		if err := authorizeToolCall(r, "shell:roomhacker-server-100", "shell_exec"); err == nil {
+			t.Fatalf("scope %s unexpectedly grants shell_exec", tt.scope)
+		}
+	}
+}
+
+func TestGranularReadScopes(t *testing.T) {
+	for _, tc := range []struct{ scope, tool string }{{"gptadmin.settings.read", "settings_get"}, {"gptadmin.registry.read", "stale_cleanup_preview"}, {"gptadmin.update", "handover_status"}} {
+		r, _ := http.NewRequest(http.MethodPost, "https://hub.example/mcp", nil)
+		r = requestWithAuthClaims(r, map[string]any{"scope": tc.scope})
+		if err := authorizeToolCall(r, "hub", tc.tool); err != nil {
+			t.Fatalf("scope %s denied %s: %v", tc.scope, tc.tool, err)
+		}
+	}
+}

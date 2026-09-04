@@ -36,6 +36,13 @@ bounded `rg` over the selected roots. Binary files, excluded trees, oversized
 files, symlink traversal, and sensitive credential paths are excluded by
 default.
 
+`search_text.results` contains compact ranges rather than repeated per-line
+hits. A range groups only adjacent matching lines from one host and path:
+`{host_id, path, start_line, end_line, matches:[{line_number,column}],
+lines:[{line_number,text}]}`. `lines` contains each visible matching or context
+line once, in line-number order, so the path, text, line number, and match
+column metadata remain available without repeating overlapping context.
+
 GPTAdmin is used only for the read-only topology projection at
 `/mcp-relay/grepmesh`. Search and reads do not traverse GPTAdmin. If discovery
 fails, the cached topology is retained and peers are marked stale/partial.

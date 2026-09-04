@@ -797,3 +797,13 @@ func TestPollingListenAndServeStopsOnContextCancellation(t *testing.T) {
 		t.Fatal("polling server did not stop after context cancellation")
 	}
 }
+
+func TestCallbackCancelRememberedBeforeJobRegisters(t *testing.T) {
+	s := New(Config{SpillDir: t.TempDir(), AuditLog: filepath.Join(t.TempDir(), "audit.jsonl")})
+	s.cancelCallbackJob("job-before-register")
+	s.callbackMu.Lock()
+	defer s.callbackMu.Unlock()
+	if !s.callbackCancelled["job-before-register"] {
+		t.Fatal("pending callback cancellation not remembered")
+	}
+}

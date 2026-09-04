@@ -84,6 +84,34 @@ func containsString(values []string, want string) bool {
 	return false
 }
 
+func requestScopes(r *http.Request) []string {
+	if r == nil {
+		return nil
+	}
+	claims, _ := r.Context().Value(authClaimsContextKey{}).(map[string]any)
+	return strings.Fields(firstString(claims, "scope"))
+}
+
+func hubGranularScopeAllows(r *http.Request, toolName string) bool {
+	scopes := requestScopes(r)
+	has := func(scope string) bool { return containsString(scopes, scope) }
+	switch toolName {
+	case "settings_schema", "settings_get", "settings_history":
+		return has("gptadmin.settings.read") || has("gptadmin.settings.write")
+	case "settings_set", "settings_rollback":
+		return has("gptadmin.settings.write")
+	case "stale_cleanup_preview", "agent_policy_get", "agent_tombstones":
+		return has("gptadmin.registry.read") || has("gptadmin.registry.manage")
+	case "stale_cleanup_run", "agent_policy_set", "approve_pending_server":
+		return has("gptadmin.registry.manage")
+	case "handover_status":
+		return has("gptadmin.update")
+	case "handover_start":
+		return has("gptadmin.update")
+	}
+	return false
+}
+
 func profileAllowsTarget(r *http.Request, target string) bool {
 	profile, bound := AccessProfileFromRequest(r)
 	if !bound {
@@ -104,12 +132,15 @@ func authorizeToolCall(r *http.Request, target, toolName string) error {
 	if !profileAllowsTarget(r, target) || !profileAllowsTool(r, toolName) {
 		return errors.New("access profile denies this target or tool")
 	}
+	if target == "hub" && hubGranularScopeAllows(r, toolName) {
+		return nil
+	}
 	if requestAccessMode(r) != accessModeReadonly {
 		return nil
 	}
 	if target == "hub" {
 		switch toolName {
-		case "listMcpServers", "list_mcp_servers", "listMcpAgents", "list_mcp_agents", "list_pending_servers", "pending", "hub_status", "status", "demo", "resource_receipt", webhookRoutesListTool, webhookJobGetTool:
+		case "listMcpServers", "list_mcp_servers", "listMcpAgents", "list_mcp_agents", "list_pending_servers", "pending", "hub_status", "status", "demo", "resource_receipt", "settings_schema", "settings_get", "settings_history", "stale_cleanup_preview", "agent_policy_get", "agent_tombstones", "handover_status", "diagnose", webhookRoutesListTool, webhookJobGetTool:
 			return nil
 		}
 	}
@@ -139,6 +170,9 @@ func authorizeFacadeCall(r *http.Request, name string, args map[string]any) erro
 			return nil
 		case "execute", "call_mcp_tool", "callMcpTool":
 			return authorizeToolCall(r, firstString(args, "target", "server_id", "agent_id"), firstString(args, "tool", "tool_name", "name"))
+		case "fleetExec", "fleet_exec":
+			// Child target/tool authorization is applied independently by fleetExecForRequest.
+			return nil
 		default:
 			return nil
 		}

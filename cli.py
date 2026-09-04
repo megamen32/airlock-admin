@@ -4423,6 +4423,10 @@ def _should_skip_update(installed: dict, remote: dict) -> bool:
 # ===== Update / in-place upgrade =====
 
 def _service_pairs_for_update(install_hub: bool, install_shellmcp: bool, env: dict):
+    # Keep ShellMCP alive while the Hub binary is replaced. ShellMCP is the
+    # management/recovery plane and already reconnects to a restarted Hub.
+    # Stopping it together with Hub makes every remote admin call disappear
+    # exactly when rollback/recovery may be needed.
     pairs = []
     if install_hub:
         pairs.append((svc_hub_name(), UNIT_PATH_HUB))
@@ -4430,8 +4434,6 @@ def _service_pairs_for_update(install_hub: bool, install_shellmcp: bool, env: di
         pairs.append((svc_frpc_name(), UNIT_PATH_FRPC))
     if env.get('TUNNEL_MODE') == 'cloudflare' or env.get('CLOUDFLARE_TUNNEL_ENABLE', 'false') == 'true':
         pairs.append((svc_cloudflared_name(), UNIT_PATH_CLOUDFLARED))
-    if install_shellmcp:
-        pairs.append((svc_shellmcp_name(), UNIT_PATH_SHELLMCP))
     return pairs
 
 
@@ -4823,7 +4825,10 @@ def cmd_update(args):
     if env.get('TUNNEL_MODE') == 'cloudflare' or env.get('CLOUDFLARE_TUNNEL_ENABLE', 'false') == 'true':
         svc_enable_start(svc_cloudflared_name(), UNIT_PATH_CLOUDFLARED)
     if install_shellmcp:
-        svc_enable_start(svc_shellmcp_name(), UNIT_PATH_SHELLMCP)
+        if UNIT_PATH_SHELLMCP.exists():
+            svc_restart(svc_shellmcp_name(), UNIT_PATH_SHELLMCP)
+        else:
+            svc_enable_start(svc_shellmcp_name(), UNIT_PATH_SHELLMCP)
     if not getattr(args, 'auto', False):
         svc_autoupdate_enable_start(env_read())
     # A new desktop client should work after an ordinary update, without making

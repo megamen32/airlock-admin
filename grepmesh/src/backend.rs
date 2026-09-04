@@ -16,7 +16,7 @@ use tokio::{
     time::{timeout, Instant},
 };
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct MatchLine {
     pub line_number: usize,
     pub text: String,
@@ -32,6 +32,29 @@ pub struct SearchHit {
     pub text: String,
     #[serde(default)]
     pub column: usize,
+}
+
+/// One matching line inside a compact search range.
+///
+/// Its text is stored once in [`SearchMatchRange::lines`], alongside the
+/// context lines. Keeping the column here preserves the match metadata without
+/// repeating the matching text for every hit.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct SearchRangeMatch {
+    pub line_number: usize,
+    pub column: usize,
+}
+
+/// Adjacent matches from one file, with their visible match and context lines
+/// stored once in line-number order.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct SearchMatchRange {
+    pub host_id: String,
+    pub path: String,
+    pub start_line: usize,
+    pub end_line: usize,
+    pub matches: Vec<SearchRangeMatch>,
+    pub lines: Vec<MatchLine>,
 }
 
 #[derive(Debug)]

@@ -927,6 +927,11 @@ func (s *Server) issueNetworkProxyGrants(callerProfileID, capabilityID, target s
 	if err != nil {
 		return ProxyStreamGrant{}, ProxyStreamGrant{}, err
 	}
+	if s.networkProxyOffers != nil {
+		if err := s.networkProxyOffers.enqueue(capability, agentGrant); err != nil {
+			return ProxyStreamGrant{}, ProxyStreamGrant{}, err
+		}
+	}
 	s.addNetworkProxyAudit("network_proxy_issue", map[string]any{
 		"capability_id": capability.CapabilityID,
 		"stream_id":     clientGrant.StreamID,

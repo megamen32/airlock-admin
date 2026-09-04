@@ -7,6 +7,15 @@ import {
   getAccessProfile,
   getDefaultInstructionSet,
 	getVirtualMCPs,
+  getHubSettings,
+  getSettingsHistory,
+  rollbackHubSettings,
+  getRegistryMaintenance,
+  runRegistryCleanup,
+  setAgentCleanupPolicy,
+  getAgentTombstones,
+  getHubDiagnose,
+  startHubHandover,
   INSTRUCTION_LIMIT,
   issueMcpToken,
   putClientBinding,
@@ -15,6 +24,7 @@ import {
   revokeMcpToken,
   rotateOAuth,
 	setVirtualMCP,
+  setHubSettings,
   rotateMcpToken,
   deleteClientBinding,
   type ClientInventoryItem,
@@ -24,6 +34,10 @@ import {
   type ExternalWorkspaceRef,
   type InstructionSet,
 	type VirtualMCP,
+  type HubSettingDefinition,
+  type SettingsRevision,
+  type CleanupCandidate,
+  type AgentTombstone,
 } from "./api";
 import "./styles.css";
 
@@ -928,36 +942,157 @@ function CapabilitiesScreen() {
   const [loadState, setLoadState] = useState<LoadState>("loading");
   const [message, setMessage] = useState<string | null>(null);
   const [changing, setChanging] = useState<string | null>(null);
+  const [settingsSchema, setSettingsSchema] = useState<HubSettingDefinition[]>([]);
+  const [settingsValues, setSettingsValues] = useState<Record<string, unknown>>({});
+  const [settingsDraft, setSettingsDraft] = useState<Record<string, unknown>>({});
+  const [savingSettings, setSavingSettings] = useState(false);
+  const [showAdvanced, setShowAdvanced] = useState(false);
+  const [settingsHistory, setSettingsHistory] = useState<SettingsRevision[]>([]);
+  const [cleanupCandidates, setCleanupCandidates] = useState<CleanupCandidate[]>([]);
+  const [tombstones, setTombstones] = useState<AgentTombstone[]>([]);
+  const [maintenanceBusy, setMaintenanceBusy] = useState(false);
+  const [diagnoseSnapshot, setDiagnoseSnapshot] = useState<Record<string, unknown> | null>(null);
 
   async function load(): Promise<void> {
     setLoadState("loading");
     setMessage(null);
     try {
-      setItems(await getVirtualMCPs());
+      const [virtualMCPs, hubSettings, history, maintenance, deleted] = await Promise.all([getVirtualMCPs(), getHubSettings(), getSettingsHistory(), getRegistryMaintenance(), getAgentTombstones()]);
+      setItems(virtualMCPs);
+      const ordered = [...(hubSettings.schema.settings || [])].sort((a, b) => (a.order || 0) - (b.order || 0) || a.key.localeCompare(b.key));
+      setSettingsSchema(ordered);
+      setSettingsValues(hubSettings.settings);
+      setSettingsDraft(hubSettings.settings);
+      setSettingsHistory(history.history.slice().reverse());
+      setCleanupCandidates(maintenance.candidates);
+      setTombstones(deleted.slice().reverse());
       setLoadState("ready");
     } catch (error) {
       setLoadState("error");
-      setMessage(error instanceof Error ? error.message : "Не удалось загрузить виртуальные MCP.");
+      setMessage(error instanceof Error ? error.message : "Не удалось загрузить Hub settings.");
     }
   }
 
   useEffect(() => { void load(); }, []);
 
+  function normalizeSetting(def: HubSettingDefinition, value: unknown): unknown {
+    if (def.type === "integer") {
+      const number = Number(value);
+      if (!Number.isInteger(number)) throw new Error(`${def.title}: требуется целое число.`);
+      if (def.minimum !== undefined && number < def.minimum) throw new Error(`${def.title}: минимум ${def.minimum}.`);
+      if (def.maximum !== undefined && number > def.maximum) throw new Error(`${def.title}: максимум ${def.maximum}.`);
+      return number;
+    }
+    if (def.type === "boolean") return Boolean(value);
+    if (def.type === "enum") {
+      const text = String(value);
+      if (def.options?.length && !def.options.includes(text)) throw new Error(`${def.title}: недопустимое значение.`);
+      return text;
+    }
+    return String(value ?? "");
+  }
+
+  async function saveSettings(): Promise<void> {
+    const patch: Record<string, unknown> = {};
+    try {
+      for (const def of settingsSchema) {
+        if (def.read_only) continue;
+        const next = normalizeSetting(def, settingsDraft[def.key] ?? def.default);
+        if (JSON.stringify(next) !== JSON.stringify(settingsValues[def.key] ?? def.default)) patch[def.key] = next;
+      }
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Некорректное значение настройки.");
+      return;
+    }
+    if (Object.keys(patch).length === 0) { setMessage("Изменений нет."); return; }
+    const dangerous = settingsSchema.filter((def) => def.dangerous && def.key in patch);
+    if (dangerous.length && !window.confirm(`Изменяются потенциально опасные настройки: ${dangerous.map((item) => item.title).join(", ")}. Продолжить?`)) return;
+    setSavingSettings(true); setMessage(null);
+    try {
+      const settings = await setHubSettings(patch);
+      setSettingsValues(settings);
+      setSettingsDraft(settings);
+      const restartRequired = settingsSchema.filter((def) => def.restart_required && def.key in patch);
+      setMessage(restartRequired.length ? `Сохранено. Требуется restart: ${restartRequired.map((item) => item.title).join(", ")}.` : "Настройки сохранены в Hub.");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Не удалось сохранить настройки Hub.");
+    } finally { setSavingSettings(false); }
+  }
+
+  function settingControl(def: HubSettingDefinition) {
+    const value = settingsDraft[def.key] ?? def.default;
+    const disabled = savingSettings || def.read_only;
+    if (def.type === "boolean") return <input type="checkbox" checked={Boolean(value)} disabled={disabled} onChange={(event) => setSettingsDraft((current) => ({ ...current, [def.key]: event.target.checked }))} />;
+    if (def.type === "enum") return <select value={String(value ?? "")} disabled={disabled} onChange={(event) => setSettingsDraft((current) => ({ ...current, [def.key]: event.target.value }))}>{(def.options || []).map((option) => <option key={option} value={option}>{option}</option>)}</select>;
+    if (def.type === "integer") return <input type="number" min={def.minimum} max={def.maximum} value={Number(value ?? def.default)} disabled={disabled} onChange={(event) => setSettingsDraft((current) => ({ ...current, [def.key]: event.target.valueAsNumber }))} />;
+    return <input type={def.secret ? "password" : "text"} value={String(value ?? "")} disabled={disabled} onChange={(event) => setSettingsDraft((current) => ({ ...current, [def.key]: event.target.value }))} />;
+  }
+
+  const categories = Array.from(new Set(settingsSchema.filter((item) => showAdvanced || !item.advanced).map((item) => item.category)));
+
+  async function refreshDiagnose(): Promise<void> {
+    setMaintenanceBusy(true); setMessage(null);
+    try { setDiagnoseSnapshot(await getHubDiagnose()); }
+    catch (error) { setMessage(error instanceof Error ? error.message : "Diagnose failed."); }
+    finally { setMaintenanceBusy(false); }
+  }
+  async function scheduleHandover(): Promise<void> {
+    if (!window.confirm("Запустить zero-downtime handover primary Hub?")) return;
+    setMaintenanceBusy(true); setMessage(null);
+    try { const result = await startHubHandover(); setMessage(`Handover запланирован: ${String(result.unit || "accepted")}`); }
+    catch (error) { setMessage(error instanceof Error ? error.message : "Handover failed."); }
+    finally { setMaintenanceBusy(false); }
+  }
+
+  async function rollbackRevision(revision: number): Promise<void> {
+    if (!window.confirm(`Откатить Hub settings к revision ${revision}?`)) return;
+    setMaintenanceBusy(true); setMessage(null);
+    try { const settings = await rollbackHubSettings(revision); setSettingsValues(settings); setSettingsDraft(settings); await load(); setMessage(`Settings откатаны к revision ${revision}.`); }
+    catch (error) { setMessage(error instanceof Error ? error.message : "Rollback failed."); }
+    finally { setMaintenanceBusy(false); }
+  }
+
+  async function cleanupNow(): Promise<void> {
+    const eligible = cleanupCandidates.filter((item) => item.eligible);
+    if (!eligible.length) { setMessage("Нет MCP, подходящих под cleanup policy."); return; }
+    if (!window.confirm(`Удалить ${eligible.length} stale MCP? Будут созданы tombstones.`)) return;
+    setMaintenanceBusy(true); setMessage(null);
+    try { const removed = await runRegistryCleanup(); await load(); setMessage(`Удалено stale MCP: ${removed.length}.`); }
+    catch (error) { setMessage(error instanceof Error ? error.message : "Cleanup failed."); }
+    finally { setMaintenanceBusy(false); }
+  }
+
+  async function updateCleanupPolicy(item: CleanupCandidate, patch: Partial<CleanupCandidate["policy"]>): Promise<void> {
+    setMaintenanceBusy(true); setMessage(null);
+    try { await setAgentCleanupPolicy(item.agent_id, patch); await load(); setMessage(`Policy сохранена для ${item.agent_id}.`); }
+    catch (error) { setMessage(error instanceof Error ? error.message : "Policy update failed."); }
+    finally { setMaintenanceBusy(false); }
+  }
+
   async function toggle(item: VirtualMCP): Promise<void> {
     if (changing) return;
-    setChanging(item.id);
-    setMessage(null);
+    setChanging(item.id); setMessage(null);
     try {
       await setVirtualMCP(item.id, !item.enabled);
       setItems((current) => current.map((entry) => entry.id === item.id ? { ...entry, enabled: !entry.enabled } : entry));
-    } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Не удалось изменить виртуальный MCP.");
-    } finally {
-      setChanging(null);
-    }
+    } catch (error) { setMessage(error instanceof Error ? error.message : "Не удалось изменить виртуальный MCP."); }
+    finally { setChanging(null); }
   }
 
-  return <><header className="topbar"><div><span className="eyebrow">OPTIONAL CAPABILITIES / 05</span><h1>Виртуальные MCP</h1></div><button className="button secondary topbar-action" type="button" onClick={() => void load()}>Обновить</button></header><div className="content-wrap"><section className="intro"><div><p className="section-kicker">DEFAULT-OFF</p><h2>Изолированные capability servers</h2><p className="lede">Включённый capability появляется в discover как отдельный MCP и получает собственные /server/&lt;slug&gt;/mcp и Action schema. Default Custom GPT schema их не импортирует.</p></div><div className={`data-badge state-${loadState}`} role="status"><span className="state-dot" aria-hidden="true" />{stateLabel(loadState)}</div></section>{message && <div className="state-panel state-error card standalone-state" role="alert">{message}</div>}{loadState === "loading" ? <div className="state-panel card standalone-state" role="status"><span className="loader" aria-hidden="true" />Загрузка capabilities</div> : <section className="clients-grid"><div className="card client-inventory"><div className="card-heading"><div><p className="section-kicker">HUB REGISTRY</p><h3>Доступные MCP</h3></div></div><div className="client-list">{items.map((item) => <article className="client-row" key={item.id}><div><strong>{item.name}</strong><span>{item.enabled ? "Включён и виден клиентам" : "Выключен по умолчанию"}</span></div><dl><div><dt>MCP</dt><dd><code>{item.mcp_path}</code></dd></div><div><dt>Actions</dt><dd><code>{item.actions_path}</code></dd></div></dl><button className={item.enabled ? "button danger" : "button primary"} type="button" onClick={() => void toggle(item)} disabled={changing !== null}>{changing === item.id ? "Сохраняем…" : item.enabled ? "Выключить" : "Включить"}</button></article>)}</div></div><aside className="card client-controls"><p className="section-kicker">ACCESS POLICY</p><h3>Перед выдачей клиенту</h3><p className="muted">Создайте access profile с нужным target и точным набором tools. Отключение MCP убирает его из discovery, но не удаляет его state.</p></aside></section>}</div></>;
+  return <><header className="topbar"><div><span className="eyebrow">OPTIONAL CAPABILITIES / 05</span><h1>Виртуальные MCP</h1></div><button className="button secondary topbar-action" type="button" onClick={() => void load()}>Обновить</button></header><div className="content-wrap"><section className="intro"><div><p className="section-kicker">HUB-DRIVEN SETTINGS</p><h2>Настройки из Hub schema</h2><p className="lede">Форма строится автоматически из settings_schema. Новая настройка в Hub появляется здесь без отдельной правки React.</p></div><div className={`data-badge state-${loadState}`} role="status"><span className="state-dot" aria-hidden="true" />{stateLabel(loadState)}</div></section>
+  <section className="card auth-card"><div className="card-heading"><div><p className="section-kicker">UNIFIED SETTINGS REGISTRY</p><h3>Hub settings</h3></div><label className="muted"><input type="checkbox" checked={showAdvanced} onChange={(event) => setShowAdvanced(event.target.checked)} /> Расширенные</label></div>
+    {categories.map((category) => <div key={category} style={{marginTop:18}}><h4>{category.replaceAll("_", " ")}</h4>{settingsSchema.filter((def) => def.category === category && (showAdvanced || !def.advanced)).map((def) => <div key={def.key} className="client-row" style={{alignItems:"center"}}><div style={{minWidth:0}}><strong>{def.title || def.key}</strong><span>{def.description}</span><span className="muted">{def.key}{def.unit ? ` · ${def.unit}` : ""}{def.restart_required ? " · restart required" : ""}{def.dangerous ? " · dangerous" : ""}{def.read_only ? " · read only" : ""}</span></div><div style={{minWidth:180}}>{settingControl(def)}</div></div>)}</div>)}
+    <button className="button primary" type="button" onClick={() => void saveSettings()} disabled={savingSettings}>{savingSettings ? "Сохраняем…" : "Сохранить настройки"}</button>
+  </section>
+  <section className="card auth-card"><div className="card-heading"><div><p className="section-kicker">REGISTRY MAINTENANCE</p><h3>Cleanup preview и protection</h3></div><button className="button danger" type="button" disabled={maintenanceBusy || !cleanupCandidates.some((item) => item.eligible)} onClick={() => void cleanupNow()}>Удалить eligible</button></div>
+    {cleanupCandidates.length === 0 ? <p className="muted">Stale MCP кандидатов нет.</p> : cleanupCandidates.map((item) => <div className="client-row" key={item.agent_id}><div><strong>{item.name || item.agent_id}</strong><span>{item.agent_id} · age {item.age_days}d / retention {item.retention_days}d · {item.reason}</span></div><div><label><input type="checkbox" checked={Boolean(item.policy?.protected)} disabled={maintenanceBusy} onChange={(event) => void updateCleanupPolicy(item, { protected: event.target.checked })} /> protected</label><label><input type="checkbox" checked={Boolean(item.policy?.never_delete)} disabled={maintenanceBusy} onChange={(event) => void updateCleanupPolicy(item, { never_delete: event.target.checked })} /> never delete</label></div></div>)}
+  </section>
+  <section className="card auth-card"><div className="card-heading"><div><p className="section-kicker">SETTINGS HISTORY</p><h3>Revisions и rollback</h3></div></div>
+    {settingsHistory.length === 0 ? <p className="muted">История появится после первого изменения settings.</p> : settingsHistory.slice(0, 20).map((revision) => <div className="client-row" key={revision.revision}><div><strong>Revision {revision.revision}</strong><span>{revision.time} · {revision.actor} · {revision.source}</span></div><button className="button secondary" type="button" disabled={maintenanceBusy} onClick={() => void rollbackRevision(revision.revision)}>Rollback</button></div>)}
+  </section>
+  <section className="card auth-card"><div className="card-heading"><div><p className="section-kicker">TOMBSTONES</p><h3>История удалённых MCP</h3></div></div>{tombstones.length === 0 ? <p className="muted">Удалённых MCP пока нет.</p> : tombstones.slice(0,20).map((item) => <div className="client-row" key={`${item.agent_id}-${item.deleted_at}`}><div><strong>{item.name || item.agent_id}</strong><span>{item.agent_id} · {item.delete_reason} · deleted {new Date(item.deleted_at * 1000).toLocaleString()}</span></div></div>)}</section>
+  <section className="card auth-card"><div className="card-heading"><div><p className="section-kicker">CONTROL PLANE</p><h3>Diagnose и zero-downtime handover</h3></div><div><button className="button secondary" type="button" disabled={maintenanceBusy} onClick={() => void refreshDiagnose()}>Diagnose</button> <button className="button primary" type="button" disabled={maintenanceBusy} onClick={() => void scheduleHandover()}>Handover</button></div></div>{diagnoseSnapshot ? <pre style={{maxHeight:360,overflow:"auto"}}>{JSON.stringify(diagnoseSnapshot,null,2)}</pre> : <p className="muted">Diagnose собирает Hub/standby health, agents, jobs, settings revision и cleanup state.</p>}</section>
+  {message && <div className="state-panel state-error card standalone-state" role="alert">{message}</div>}{loadState === "loading" ? <div className="state-panel card standalone-state" role="status"><span className="loader" aria-hidden="true" />Загрузка capabilities</div> : <section className="clients-grid"><div className="card client-inventory"><div className="card-heading"><div><p className="section-kicker">HUB REGISTRY</p><h3>Доступные MCP</h3></div></div><div className="client-list">{items.map((item) => <article className="client-row" key={item.id}><div><strong>{item.name}</strong><span>{item.enabled ? "Включён и виден клиентам" : "Выключен по умолчанию"}</span></div><dl><div><dt>MCP</dt><dd><code>{item.mcp_path}</code></dd></div><div><dt>Actions</dt><dd><code>{item.actions_path}</code></dd></div></dl><button className={item.enabled ? "button danger" : "button primary"} type="button" onClick={() => void toggle(item)} disabled={changing !== null}>{changing === item.id ? "Сохраняем…" : item.enabled ? "Выключить" : "Включить"}</button></article>)}</div></div><aside className="card client-controls"><p className="section-kicker">ACCESS POLICY</p><h3>Перед выдачей клиенту</h3><p className="muted">Создайте access profile с нужным target и точным набором tools. Отключение MCP убирает его из discovery, но не удаляет его state.</p></aside></section>}</div></>;
 }
 
 export default function App() {

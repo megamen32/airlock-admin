@@ -21,6 +21,28 @@ func (s *Server) hubMetrics(w http.ResponseWriter, r *http.Request) {
 	for _, queue := range s.shellQueues {
 		shellQueueJobs += len(queue)
 	}
+	taskStatuses := map[string]int{"working": 0, "input_required": 0, "completed": 0, "failed": 0, "cancelled": 0}
+	for _, job := range s.relayJobs {
+		if job != nil {
+			taskStatuses[mcpTaskStatus(job.Status)]++
+		}
+	}
+	for _, job := range s.shellJobs {
+		if job != nil {
+			taskStatuses[mcpTaskStatus(job.Status)]++
+		}
+	}
+	agentStatuses := map[string]int{}
+	for _, agent := range s.agents {
+		if agent == nil {
+			continue
+		}
+		status := agent.Status
+		if status == "" {
+			status = "unknown"
+		}
+		agentStatuses[status]++
+	}
 	payload := map[string]any{
 		"build_version":      BuildVersion,
 		"agents":             len(s.agents),
@@ -28,6 +50,8 @@ func (s *Server) hubMetrics(w http.ResponseWriter, r *http.Request) {
 		"relay_queue_jobs":   relayQueueJobs,
 		"shell_jobs":         len(s.shellJobs),
 		"shell_queue_jobs":   shellQueueJobs,
+		"task_statuses":      taskStatuses,
+		"agent_statuses":     agentStatuses,
 		"audit_events":       len(s.audit),
 		"telemetry_enabled":  telemetry.Enabled,
 		"telemetry_counters": telemetry.Counters,

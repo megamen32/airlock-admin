@@ -30,10 +30,12 @@ func schemaContractFields(args map[string]any) (version, digest string, provided
 	return version, digest, version != "" || digest != ""
 }
 
-// validateSchemaContract rejects an execute call that was built from a stale
-// or incomplete schema. The metadata is optional for migration compatibility,
-// but when supplied both fields must match the selected target's current view.
+// validateSchemaContract is deliberately opt-in. Schema metadata remains a
+// discovery aid; it must not become a prerequisite for ordinary relay calls.
 func (s *Server) validateSchemaContract(r *http.Request, target string, args map[string]any) (map[string]any, bool) {
+	if !s.cfg.SchemaContractValidation {
+		return nil, false
+	}
 	version, digest, provided := schemaContractFields(args)
 	if !provided {
 		return nil, false

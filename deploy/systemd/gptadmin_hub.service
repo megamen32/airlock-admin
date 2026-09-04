@@ -1,16 +1,14 @@
 [Unit]
-Description=Hub Proxy for GPT Server Management (gptadmin_hub)
-After=network.target
-Requires=gptadmin_hub.socket
+Description=GPTAdmin Hub
+After=network-online.target
+Wants=network-online.target
 
 [Service]
-Type=notify
-WorkingDirectory=/home/roomhacker/gptadmin
+Type=simple
+EnvironmentFile=/etc/gptadmin/gptadmin.env
 ExecStart=/opt/gptadmin/bin/gptadmin_hub
-Environment=CTL_TOKEN=chatgpt_secret
 Restart=always
-RestartSec=5
-User=roomhacker
+RestartSec=3
 
 [Install]
 WantedBy=multi-user.target

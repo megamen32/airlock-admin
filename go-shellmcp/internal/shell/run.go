@@ -39,18 +39,20 @@ type Request struct {
 }
 
 type Result struct {
-	ReturnCode int      `json:"returncode"`
-	Stdout     string   `json:"stdout"`
-	Stderr     string   `json:"stderr"`
-	Error      string   `json:"error,omitempty"`
-	TimedOut   bool     `json:"timed_out,omitempty"`
-	DurationMS int64    `json:"duration_ms"`
-	Cwd        string   `json:"cwd_effective,omitempty"`
-	RunAsUser  string   `json:"run_as_user,omitempty"`
-	Spilled    bool     `json:"_spilled,omitempty"`
-	StdoutPath string   `json:"stdout_path,omitempty"`
-	StderrPath string   `json:"stderr_path,omitempty"`
-	Files      []string `json:"files,omitempty"`
+	ReturnCode  int      `json:"returncode"`
+	Stdout      string   `json:"stdout"`
+	Stderr      string   `json:"stderr"`
+	Error       string   `json:"error,omitempty"`
+	TimedOut    bool     `json:"timed_out,omitempty"`
+	DurationMS  int64    `json:"duration_ms"`
+	Cwd         string   `json:"cwd_effective,omitempty"`
+	RunAsUser   string   `json:"run_as_user,omitempty"`
+	Spilled     bool     `json:"_spilled,omitempty"`
+	StdoutPath  string   `json:"stdout_path,omitempty"`
+	StderrPath  string   `json:"stderr_path,omitempty"`
+	StdoutBytes int64    `json:"stdout_bytes,omitempty"`
+	StderrBytes int64    `json:"stderr_bytes,omitempty"`
+	Files       []string `json:"files,omitempty"`
 }
 
 type Event struct {
@@ -139,8 +141,20 @@ func runInternal(ctx context.Context, req Request, limitBytes int64, emit func(E
 		return res, err
 	}
 
+	// exec.CommandContext terminates only the immediate process. Watch the
+	// context separately and kill the whole process group immediately so a
+	// child holding stdout/stderr cannot keep Wait blocked or survive cancel.
+	processDone := make(chan struct{})
+	go func() {
+		select {
+		case <-ctx.Done():
+			killProcessGroup(cmd)
+		case <-processDone:
+		}
+	}()
 	waitErr := cmd.Wait()
-	if ctx.Err() == context.DeadlineExceeded {
+	close(processDone)
+	if ctx.Err() != nil {
 		killProcessGroup(cmd)
 	}
 
@@ -159,7 +173,7 @@ func runInternal(ctx context.Context, req Request, limitBytes int64, emit func(E
 	} else if abs, err := filepath.Abs(cwd); err == nil {
 		cwd = abs
 	}
-	res := Result{ReturnCode: rc, Stdout: stdout.Tail(), Stderr: stderr.Tail(), DurationMS: time.Since(started).Milliseconds(), Cwd: cwd, RunAsUser: runAsUser}
+	res := Result{ReturnCode: rc, Stdout: stdout.Tail(), Stderr: stderr.Tail(), StdoutBytes: stdout.Total(), StderrBytes: stderr.Total(), DurationMS: time.Since(started).Milliseconds(), Cwd: cwd, RunAsUser: runAsUser}
 	stdoutSpilled := stdout.Spilled()
 	stderrSpilled := stderr.Spilled()
 	_ = stdout.Close()
@@ -190,6 +204,11 @@ func runInternal(ctx context.Context, req Request, limitBytes int64, emit func(E
 	if ctx.Err() == context.DeadlineExceeded {
 		res.Error = "timeout"
 		res.TimedOut = true
+		if res.ReturnCode == 0 {
+			res.ReturnCode = -1
+		}
+	} else if ctx.Err() == context.Canceled {
+		res.Error = "cancelled"
 		if res.ReturnCode == 0 {
 			res.ReturnCode = -1
 		}
@@ -259,8 +278,17 @@ func (c *capture) Tail() string {
 	defer c.mu.Unlock()
 	return c.buf.String()
 }
-func (c *capture) Path() string  { return c.path }
-func (c *capture) Spilled() bool { return c.total > c.limit }
+func (c *capture) Path() string { return c.path }
+func (c *capture) Total() int64 {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.total
+}
+func (c *capture) Spilled() bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.total > c.limit
+}
 func (c *capture) Close() error {
 	if c.file != nil {
 		return c.file.Close()

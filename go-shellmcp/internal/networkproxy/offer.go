@@ -170,14 +170,22 @@ type OfferSource interface {
 
 // PullOfferSource fetches offers only from its explicit proxy-agent offers endpoint.
 type PullOfferSource struct {
-	client       *http.Client
-	offersURL    *url.URL
-	verifier     *SignedOfferVerifier
-	maxBodyBytes int64
+	client        *http.Client
+	offersURL     *url.URL
+	verifier      *SignedOfferVerifier
+	authorization string
+	maxBodyBytes  int64
 }
 
 // NewPullOfferSource creates a long-poll source with no queue or heartbeat dependency.
 func NewPullOfferSource(client *http.Client, offersURL string, verifier *SignedOfferVerifier, maxBodyBytes int64) (*PullOfferSource, error) {
+	return NewAuthorizedPullOfferSource(client, offersURL, verifier, "", maxBodyBytes)
+}
+
+// NewAuthorizedPullOfferSource creates a pull source that sends the supplied
+// bearer credential only to its exact dedicated offer endpoint. The offer body
+// still requires its independent Hub signature before it is accepted.
+func NewAuthorizedPullOfferSource(client *http.Client, offersURL string, verifier *SignedOfferVerifier, authorization string, maxBodyBytes int64) (*PullOfferSource, error) {
 	if client == nil || verifier == nil || maxBodyBytes <= 0 {
 		return nil, ErrOfferInvalid
 	}
@@ -185,7 +193,7 @@ func NewPullOfferSource(client *http.Client, offersURL string, verifier *SignedO
 	if err != nil || endpoint.Scheme == "" || endpoint.Host == "" || endpoint.Path != offerPath {
 		return nil, fmt.Errorf("%w: offers URL", ErrOfferInvalid)
 	}
-	return &PullOfferSource{client: client, offersURL: endpoint, verifier: verifier, maxBodyBytes: maxBodyBytes}, nil
+	return &PullOfferSource{client: client, offersURL: endpoint, verifier: verifier, authorization: strings.TrimSpace(authorization), maxBodyBytes: maxBodyBytes}, nil
 }
 
 // Next performs one cancellable long-poll GET and verifies exactly the returned body.
@@ -196,6 +204,9 @@ func (s *PullOfferSource) Next(ctx context.Context) (Offer, error) {
 	request, err := http.NewRequestWithContext(ctx, http.MethodGet, s.offersURL.String(), nil)
 	if err != nil {
 		return Offer{}, err
+	}
+	if s.authorization != "" {
+		request.Header.Set("Authorization", "Bearer "+s.authorization)
 	}
 	response, err := s.client.Do(request)
 	if err != nil {

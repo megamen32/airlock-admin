@@ -116,6 +116,7 @@
 
       <!-- MCP manager -->
       <section id="view-mcpmanage" class="view"><div class="grid">
+        <section class="card span12"><h2>Очистка stale MCP</h2><p class="muted small">Hub автоматически удаляет stale MCP из registry после заданного срока. Shell-серверы не затрагиваются.</p><div class="row"><input id="staleMcpRetentionDays" type="number" min="1" max="3650" value="30" style="width:110px"><span class="muted small">дней</span><button onclick="saveHubSettings()">Сохранить</button></div><pre id="hubSettingsResult" style="min-height:35px">—</pre></section>
         <section class="card span8"><h2>MCP менеджер</h2><div class="row"><select id="mcpHost"></select><button onclick="listManagedMcp()">список</button><button onclick="statusManagedMcp()">статус всех</button><label class="small"><input type="checkbox" id="mcpKeepService"> keep service</label></div><div id="managedMcp" style="margin-top:10px"></div></section>
         <section class="card span4"><h2>Добавить MCP</h2>
           <label class="muted">Имя</label><input id="mcpName" placeholder="my-mcp" style="width:100%">

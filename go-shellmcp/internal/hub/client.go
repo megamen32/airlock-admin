@@ -122,36 +122,46 @@ func configuredRootCAs() *x509.CertPool {
 }
 
 type Beat struct {
-	Name          string           `json:"name"`
-	ServerID      string           `json:"server_id"`
-	PublicKey     string           `json:"public_key"`
-	Fingerprint   string           `json:"fingerprint"`
-	BaseURL       string           `json:"base_url"`
-	Cores         int              `json:"cores"`
-	MemMB         int64            `json:"mem_mb"`
-	Time          int64            `json:"time"`
-	Mode          string           `json:"mode"`
-	TransportRole string           `json:"transport_role"`
-	Backend       string           `json:"backend"`
-	OS            string           `json:"os"`
-	BuildVersion  int              `json:"build_version"`
-	GitCommit     string           `json:"git_commit"`
-	DefaultUser   string           `json:"default_user,omitempty"`
-	DefaultHome   string           `json:"default_home,omitempty"`
-	DefaultCwd    string           `json:"default_cwd,omitempty"`
-	MCPAgents     []map[string]any `json:"mcp_agents,omitempty"`
+	Name                string           `json:"name"`
+	ServerID            string           `json:"server_id"`
+	PublicKey           string           `json:"public_key"`
+	Fingerprint         string           `json:"fingerprint"`
+	BaseURL             string           `json:"base_url"`
+	Cores               int              `json:"cores"`
+	MemMB               int64            `json:"mem_mb"`
+	Time                int64            `json:"time"`
+	Mode                string           `json:"mode"`
+	TransportRole       string           `json:"transport_role"`
+	Backend             string           `json:"backend"`
+	OS                  string           `json:"os"`
+	BuildVersion        int              `json:"build_version"`
+	GitCommit           string           `json:"git_commit"`
+	DefaultUser         string           `json:"default_user,omitempty"`
+	DefaultHome         string           `json:"default_home,omitempty"`
+	DefaultCwd          string           `json:"default_cwd,omitempty"`
+	MCPAgents           []map[string]any `json:"mcp_agents,omitempty"`
+	SpoolBytes          int64            `json:"spool_bytes,omitempty"`
+	StorageBytes        int64            `json:"storage_bytes,omitempty"`
+	OutboxDepth         int              `json:"outbox_depth,omitempty"`
+	OutboxRetryAttempts int              `json:"outbox_retry_attempts,omitempty"`
+	QueuePollCount      int64            `json:"queue_poll_count,omitempty"`
+	QueuePollErrors     int64            `json:"queue_poll_errors,omitempty"`
+	QueuePollLatencyMS  int64            `json:"queue_poll_latency_ms,omitempty"`
+	OutboxRetryFailures int64            `json:"outbox_retry_failures,omitempty"`
+	OutboxDelivered     int64            `json:"outbox_delivered,omitempty"`
 }
 
 type QueueJob struct {
-	ID          string            `json:"id"`
-	TraceID     string            `json:"trace_id,omitempty"`
-	TraceParent string            `json:"traceparent,omitempty"`
-	ToolName    string            `json:"tool_name,omitempty"`
-	Arguments   map[string]any    `json:"arguments,omitempty"`
-	Cmd         string            `json:"cmd,omitempty"`
-	Cwd         string            `json:"cwd,omitempty"`
-	Timeout     int               `json:"timeout,omitempty"`
-	Env         map[string]string `json:"env,omitempty"`
+	ID              string            `json:"id"`
+	TraceID         string            `json:"trace_id,omitempty"`
+	TraceParent     string            `json:"traceparent,omitempty"`
+	ToolName        string            `json:"tool_name,omitempty"`
+	Arguments       map[string]any    `json:"arguments,omitempty"`
+	Cmd             string            `json:"cmd,omitempty"`
+	Cwd             string            `json:"cwd,omitempty"`
+	Timeout         int               `json:"timeout,omitempty"`
+	Env             map[string]string `json:"env,omitempty"`
+	RuntimeSettings map[string]any    `json:"runtime_settings,omitempty"`
 }
 
 type TaskResult struct {
@@ -215,6 +225,33 @@ func (c *Client) PollQueue(ctx context.Context, beat Beat, timeout int) (QueueJo
 	}
 	if beat.DefaultCwd != "" {
 		q.Set("default_cwd", beat.DefaultCwd)
+	}
+	if beat.SpoolBytes > 0 {
+		q.Set("spool_bytes", fmt.Sprintf("%d", beat.SpoolBytes))
+	}
+	if beat.StorageBytes > 0 {
+		q.Set("storage_bytes", fmt.Sprintf("%d", beat.StorageBytes))
+	}
+	if beat.OutboxDepth > 0 {
+		q.Set("outbox_depth", fmt.Sprintf("%d", beat.OutboxDepth))
+	}
+	if beat.OutboxRetryAttempts > 0 {
+		q.Set("outbox_retry_attempts", fmt.Sprintf("%d", beat.OutboxRetryAttempts))
+	}
+	if beat.QueuePollCount > 0 {
+		q.Set("queue_poll_count", fmt.Sprintf("%d", beat.QueuePollCount))
+	}
+	if beat.QueuePollErrors > 0 {
+		q.Set("queue_poll_errors", fmt.Sprintf("%d", beat.QueuePollErrors))
+	}
+	if beat.QueuePollLatencyMS > 0 {
+		q.Set("queue_poll_latency_ms", fmt.Sprintf("%d", beat.QueuePollLatencyMS))
+	}
+	if beat.OutboxRetryFailures > 0 {
+		q.Set("outbox_retry_failures", fmt.Sprintf("%d", beat.OutboxRetryFailures))
+	}
+	if beat.OutboxDelivered > 0 {
+		q.Set("outbox_delivered", fmt.Sprintf("%d", beat.OutboxDelivered))
 	}
 	if enc := q.Encode(); enc != "" {
 		p += "?" + enc

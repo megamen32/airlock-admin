@@ -1,7 +1,7 @@
 use crate::{
     backend::{
-        dedup_hits, LocalBackend, PerHostStatus, ReadResponse, SearchHit, SearchMode,
-        SearchResponse, StatusResponse,
+        dedup_hits, LocalBackend, MatchLine, PerHostStatus, ReadResponse, SearchHit,
+        SearchMatchRange, SearchMode, SearchRangeMatch, SearchResponse, StatusResponse,
     },
     topology::Topology,
 };
@@ -187,12 +187,108 @@ pub struct ToolResult {
     pub host_status: Vec<PerHostStatus>,
 }
 
-fn with_search_matches_alias<T: Serialize>(response: SearchResponse<T>) -> Result<Value> {
-    let mut value = serde_json::to_value(response)?;
-    if let Some(results) = value.get("results").cloned() {
-        value["matches"] = results;
+/// The search result wire format used during a rolling mesh upgrade.
+///
+/// New peers send compact ranges. Accepting legacy hits here prevents an
+/// upgraded fan-out node from dropping a result returned by an older peer.
+#[derive(Debug, Deserialize)]
+#[serde(untagged)]
+enum RemoteSearchResult {
+    Range(SearchMatchRange),
+    LegacyHit(SearchHit),
+}
+
+fn compact_search_hits(hits: Vec<SearchHit>) -> Vec<SearchMatchRange> {
+    let mut ranges = Vec::<SearchMatchRange>::new();
+    for hit in hits {
+        let continues_previous = ranges.last().is_some_and(|range| {
+            range.host_id == hit.host_id
+                && range.path == hit.path
+                && hit.line_number == range.end_line.saturating_add(1)
+        });
+        if !continues_previous {
+            ranges.push(SearchMatchRange {
+                host_id: hit.host_id.clone(),
+                path: hit.path.clone(),
+                start_line: hit.line_number,
+                end_line: hit.line_number,
+                matches: Vec::new(),
+                lines: Vec::new(),
+            });
+        }
+
+        let range = ranges.last_mut().expect("a range was just inserted");
+        range.end_line = hit.line_number;
+        range.matches.push(SearchRangeMatch {
+            line_number: hit.line_number,
+            column: hit.column,
+        });
+        for line in hit.context {
+            if !range
+                .lines
+                .iter()
+                .any(|known| known.line_number == line.line_number)
+            {
+                range.lines.push(line);
+            }
+        }
+        if !range
+            .lines
+            .iter()
+            .any(|line| line.line_number == hit.line_number)
+        {
+            range.lines.push(MatchLine {
+                line_number: hit.line_number,
+                text: hit.text,
+            });
+        }
+        range.lines.sort_by_key(|line| line.line_number);
     }
-    Ok(value)
+    ranges
+}
+
+fn expand_search_ranges(
+    ranges: Vec<SearchMatchRange>,
+    context_lines: usize,
+) -> Result<Vec<SearchHit>> {
+    let mut hits = Vec::new();
+    for range in ranges {
+        for matched in &range.matches {
+            if matched.line_number < range.start_line || matched.line_number > range.end_line {
+                return Err(anyhow!(
+                    "compact match line {} is outside range {}-{}",
+                    matched.line_number,
+                    range.start_line,
+                    range.end_line
+                ));
+            }
+            let text = range
+                .lines
+                .iter()
+                .find(|line| line.line_number == matched.line_number)
+                .map(|line| line.text.clone())
+                .ok_or_else(|| anyhow!("compact range omits match line {}", matched.line_number))?;
+            let first_context_line = matched.line_number.saturating_sub(context_lines).max(1);
+            let last_context_line = matched.line_number.saturating_add(context_lines);
+            let context = range
+                .lines
+                .iter()
+                .filter(|line| {
+                    line.line_number >= first_context_line && line.line_number <= last_context_line
+                })
+                .cloned()
+                .collect();
+            hits.push(SearchHit {
+                host_id: range.host_id.clone(),
+                path: range.path.clone(),
+                line_number: matched.line_number,
+                context,
+                text,
+                column: matched.column,
+            });
+        }
+    }
+    Ok(hits)
 }
 
 fn with_search_paths_alias<T: Serialize>(
@@ -323,14 +419,14 @@ impl MeshService {
         let request_id = normalized.request_id.clone();
         let origin_host = normalized.origin_host.clone();
         let hop_count = normalized.hop_count;
-        let data = with_search_matches_alias(SearchResponse {
+        let data = serde_json::to_value(SearchResponse {
             request_id: request_id.clone(),
             origin_host: origin_host.clone(),
             hop_count,
             host_id: self.local.host_id.clone(),
             partial,
             truncated,
-            results,
+            results: compact_search_hits(results),
             host_status: host_status.clone(),
         })?;
         Ok(self.wrap_result(
@@ -605,72 +701,85 @@ impl MeshService {
             let roots = roots.clone();
             let hop_count = hop_count_for(&service.local.host_id, &target, normalized.hop_count)?;
             futures.push((target.clone(), async move {
-                let result: Result<(Vec<SearchHit>, Vec<PerHostStatus>, bool, bool)> =
-                    if target == service.local.host_id {
-                        let outcome = service
-                            .local
-                            .search_text_bounded(
-                                &query,
-                                limit,
-                                context_lines,
-                                mode.clone(),
-                                path_globs.clone(),
-                                roots.clone(),
-                            )
-                            .await?;
-                        let truncated = outcome.truncated;
-                        let partial = outcome.partial;
-                        Ok((
-                            outcome.hits,
-                            vec![PerHostStatus {
-                                host_id: target.clone(),
-                                ok: !partial,
-                                error: outcome.partial_error,
-                            }],
-                            partial,
-                            truncated,
-                        ))
+                let result: Result<(Vec<SearchHit>, Vec<PerHostStatus>, bool, bool)> = if target
+                    == service.local.host_id
+                {
+                    let outcome = service
+                        .local
+                        .search_text_bounded(
+                            &query,
+                            limit,
+                            context_lines,
+                            mode.clone(),
+                            path_globs.clone(),
+                            roots.clone(),
+                        )
+                        .await?;
+                    let truncated = outcome.truncated;
+                    let partial = outcome.partial;
+                    Ok((
+                        outcome.hits,
+                        vec![PerHostStatus {
+                            host_id: target.clone(),
+                            ok: !partial,
+                            error: outcome.partial_error,
+                        }],
+                        partial,
+                        truncated,
+                    ))
+                } else {
+                    let peer = service
+                        .peer_config(&target)
+                        .ok_or_else(|| anyhow!("unknown peer {}", target))?;
+                    let value = service
+                        .call_remote(
+                            &peer.routable_url,
+                            "search_text",
+                            json!({
+                                "query": query,
+                                "hosts": ["local"],
+                                "request_id": request_id,
+                                "origin_host": origin_host,
+                                "hop_count": hop_count,
+                                "limit": limit,
+                                "context_lines": context_lines,
+                                "mode": mode,
+                                "path_globs": path_globs,
+                                "roots": roots,
+                            }),
+                        )
+                        .await?;
+                    let response = decode_tool_result::<SearchResponse<RemoteSearchResult>>(value)?;
+                    let remote_status = if response.host_status.is_empty() {
+                        vec![PerHostStatus {
+                            host_id: target.clone(),
+                            ok: !response.partial,
+                            error: response
+                                .partial
+                                .then(|| "remote response was partial".to_string()),
+                        }]
                     } else {
-                        let peer = service
-                            .peer_config(&target)
-                            .ok_or_else(|| anyhow!("unknown peer {}", target))?;
-                        let value = service
-                            .call_remote(
-                                &peer.routable_url,
-                                "search_text",
-                                json!({
-                                    "query": query,
-                                    "hosts": ["local"],
-                                    "request_id": request_id,
-                                    "origin_host": origin_host,
-                                    "hop_count": hop_count,
-                                    "limit": limit,
-                                    "context_lines": context_lines,
-                                    "mode": mode,
-                                    "path_globs": path_globs,
-                                    "roots": roots,
-                                }),
-                            )
-                            .await?;
-                        let response = decode_tool_result::<SearchResponse<SearchHit>>(value)?;
-                        let remote_status = if response.host_status.is_empty() {
-                            vec![PerHostStatus {
-                                host_id: target.clone(),
-                                ok: !response.partial,
-                                error: response
-                                    .partial
-                                    .then(|| "remote response was partial".to_string()),
-                            }]
-                        } else {
-                            response.host_status.clone()
-                        };
-                        Ok((
-                            response.results,
-                            remote_status,
-                            response.partial,
-                            response.truncated,
-                        ))
+                        response.host_status.clone()
                     };
+                    Ok((
+                        response
+                            .results
+                            .into_iter()
+                            .map(|result| match result {
+                                RemoteSearchResult::Range(range) => {
+                                    expand_search_ranges(vec![range], context_lines)
+                                }
+                                RemoteSearchResult::LegacyHit(hit) => Ok(vec![hit]),
+                            })
+                            .collect::<Result<Vec<_>>>()?
+                            .into_iter()
+                            .flatten()
+                            .collect(),
+                        remote_status,
+                        response.partial,
+                        response.truncated,
+                    ))
+                };
                 match result {
                     Ok(value) => Ok(value),
                     Err(err) => Ok((

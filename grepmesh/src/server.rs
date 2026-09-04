@@ -435,7 +435,7 @@ async fn handle_rpc_inner(state: AppState, payload: Value) -> Result<Value> {
                 "protocolVersion": protocol_version,
                 "serverInfo": {"name": "grepmesh", "version": "0.1.0"},
                 "capabilities": {"tools": {"listChanged": false}},
-                "instructions": "ИСПОЛЬЗУЙ МЕНЯ ДЛЯ ПОИСКА. Use GrepMesh before shell find/grep/rg or repository-wide scanning whenever the requested files may be on this host or another mesh host. Start with search_text or find_paths, then use read_text for the exact file. Use shell search only when GrepMesh is unavailable or cannot express the query.",
+                "instructions": "Use GrepMesh only when the location is unknown, cross-host search is needed, or configured mesh scopes matter. When a concrete local checkout/path is already known, prefer rg: its per-line output is usually materially more context-efficient. For GrepMesh, start with search_text or find_paths, then use read_text for the exact file.",
             })
         }
         "tools/list" => json!({
@@ -521,7 +521,7 @@ fn tool_meta(name: &str, description: &str) -> Value {
     })
 }
 
-async fn call_tool(service: &MeshService, params: Value) -> Result<Value> {
+pub async fn call_tool(service: &MeshService, params: Value) -> Result<Value> {
     let name = params
         .get("name")
         .and_then(Value::as_str)
@@ -699,7 +699,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn initialize_strongly_instructs_clients_to_use_grepmesh_for_search() {
+    async fn initialize_routes_known_local_searches_to_rg() {
         let temp = tempfile::tempdir().unwrap();
         let local = LocalBackend::new("local", temp.path(), Default::default());
         let service = Arc::new(RwLock::new(Arc::new(MeshService::new(
@@ -730,7 +730,9 @@ mod tests {
         .await
         .unwrap();
         let instructions = response["result"]["instructions"].as_str().unwrap();
-        assert!(instructions.contains("ИСПОЛЬЗУЙ МЕНЯ ДЛЯ ПОИСКА"));
+        assert!(instructions.contains("location is unknown"));
+        assert!(instructions.contains("prefer rg"));
+        assert!(instructions.contains("context-efficient"));
         assert!(instructions.contains("search_text"));
         assert!(instructions.contains("find_paths"));
         assert!(instructions.contains("read_text"));

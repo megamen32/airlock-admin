@@ -374,7 +374,7 @@ func TestMCPToolsExposeCompactCanonicalNames(t *testing.T) {
 		name, _ := tool["name"].(string)
 		got[name] = tool
 	}
-	for _, name := range []string{"discover", "schema", "execute", "job", "inspect", "ui"} {
+	for _, name := range []string{"discover", "schema", "execute", "fleetExec", "job", "inspect", "ui"} {
 		if _, ok := got[name]; !ok {
 			t.Fatalf("missing canonical tool %q; tools=%v", name, got)
 		}
@@ -419,7 +419,7 @@ func TestMCPIntegrationDiscoverSchemaExecuteConformance(t *testing.T) {
 		t.Fatalf("schema omitted stable version/digest: %v", response)
 	}
 
-	execute := call(3, "execute", fmt.Sprintf(`{"target":"hub","tool":"demo","arguments":{"probe":"conformance"},"schema_version":%q,"schema_digest_sha256":%q,"idempotency_key":"conformance-demo-1"}`, schemaVersion, schemaDigest))
+	execute := call(3, "execute", `{"target":"hub","tool":"demo","arguments":{"probe":"conformance"},"idempotency_key":"conformance-demo-1"}`)
 	executeJSON, err := json.Marshal(execute)
 	if err != nil {
 		t.Fatal(err)
@@ -427,13 +427,13 @@ func TestMCPIntegrationDiscoverSchemaExecuteConformance(t *testing.T) {
 	if !strings.Contains(string(executeJSON), `"status":"ok"`) {
 		t.Fatalf("execute did not return the safe demo result: %s", executeJSON)
 	}
-	mismatch := call(4, "execute", fmt.Sprintf(`{"target":"hub","tool":"demo","arguments":{},"schema_version":%q,"schema_digest_sha256":"%064d"}`, schemaVersion, 0))
-	mismatchJSON, err := json.Marshal(mismatch)
+	staleMetadata := call(4, "execute", fmt.Sprintf(`{"target":"hub","tool":"demo","arguments":{"probe":"stale-metadata"},"schema_version":%q,"schema_digest_sha256":"%064d"}`, schemaVersion, 0))
+	staleMetadataJSON, err := json.Marshal(staleMetadata)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(string(mismatchJSON), `"schema_mismatch"`) {
-		t.Fatalf("execute accepted a stale schema digest: %s", mismatchJSON)
+	if !strings.Contains(string(staleMetadataJSON), `"status":"ok"`) {
+		t.Fatalf("execute blocked a call with stale schema metadata: %s", staleMetadataJSON)
 	}
 	metadataLeak := call(5, "execute", fmt.Sprintf(`{"target":"hub","tool":"unsupported-schema-probe","schema_version":%q,"schema_digest_sha256":%q}`, schemaVersion, schemaDigest))
 	metadataLeakJSON, err := json.Marshal(metadataLeak)
@@ -1471,8 +1471,8 @@ func TestRegistryStatePersistsAgentsAcrossRestart(t *testing.T) {
 	}
 	for _, a := range body.Agents {
 		if a.AgentID == "demo-agent" {
-			if a.Status != "stale" {
-				t.Fatalf("restored agent status=%q, want stale", a.Status)
+			if a.Status != "online" {
+				t.Fatalf("restored fresh agent status=%q, want online", a.Status)
 			}
 			if a.Meta["restored_from_state"] != true {
 				t.Fatalf("restored agent meta missing marker: %#v", a.Meta)
@@ -2022,8 +2022,8 @@ func TestAppsSDKMetadataAndWidget(t *testing.T) {
 	result := body["result"].(map[string]any)
 	tools := result["tools"].([]any)
 	expectedToolNames := map[string]bool{
-		"ui": true, "resource_receipt": true, "discover": true, "demo": true, "approve_pending_server": true,
-		"schema": true, "inspect": true, "execute": true, "job": true,
+		"ui": true, "resource_receipt": true, "discover": true, "demo": true, "approve_pending_server": true, "settings_schema": true, "settings_get": true, "settings_set": true,
+		"schema": true, "inspect": true, "execute": true, "fleetExec": true, "job": true,
 		"secret_request": true, "secret_status": true,
 	}
 	renderTools := 0
@@ -2081,7 +2081,7 @@ func TestAppsSDKMetadataAndWidget(t *testing.T) {
 			}
 		}
 	}
-	if len(tools) != 11 || len(expectedToolNames) != 0 {
+	if len(tools) != 15 || len(expectedToolNames) != 0 {
 		t.Fatalf("got Apps SDK tools=%d missing=%v, want exact capability set", len(tools), expectedToolNames)
 	}
 	if renderTools != 1 {
@@ -2337,6 +2337,12 @@ func TestFromEnvReadsRelaxAuthChecksFlag(t *testing.T) {
 }
 
 func TestFromEnvReadsDebugVerifyWorkLowSecurityMode(t *testing.T) {
+	// Isolate this test from deployment-level compatibility flags. FromEnv reads
+	// the real process environment, so a host running with permissive auth flags
+	// would otherwise make the "debug=0" assertion depend on external state.
+	t.Setenv("GPTADMIN_RELAX_AUTH_CHECKS", "0")
+	t.Setenv("OAUTH_PERMISSIVE_REDIRECTS", "0")
+	t.Setenv("OAUTH_PERMISSIVE_RESOURCES", "0")
 	t.Setenv("DEBUG_VERIFY_WORK_LOW_SECURITY_MODE", "1")
 	t.Setenv("GPTADMIN_HUB_HOST", "0.0.0.0")
 	t.Setenv("PUBLIC_ORIGIN", "https://hub.example")
@@ -3409,5 +3415,97 @@ func TestStartupInstructionsMCPDelivery(t *testing.T) {
 		if content["mimeType"] != "text/markdown" || content["text"] != instructions {
 			t.Fatalf("resources/read %s content=%v", endpoint, content)
 		}
+	}
+}
+
+func TestRegistryRestoreAppliesLifecycleThresholds(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "registry_state.json")
+	now := time.Now()
+	s1 := New(Config{ConfigDir: dir, RegistryStateFile: path})
+	s1.mu.Lock()
+	s1.agents["shell:offline-host"] = &Agent{AgentID: "shell:offline-host", Name: "Shell: offline-host", Kind: "virtual_shell", Transport: "long_poll", Status: "online", LastSeen: float64(now.Add(-2 * time.Minute).Unix())}
+	s1.agents["shell:stale-host"] = &Agent{AgentID: "shell:stale-host", Name: "Shell: stale-host", Kind: "virtual_shell", Transport: "long_poll", Status: "online", LastSeen: float64(now.Add(-2 * time.Hour).Unix())}
+	if err := s1.saveRegistryStateLocked(); err != nil {
+		s1.mu.Unlock()
+		t.Fatal(err)
+	}
+	s1.mu.Unlock()
+
+	s2 := New(Config{ConfigDir: dir, RegistryStateFile: path})
+	s2.mu.Lock()
+	s2.agents = map[string]*Agent{}
+	s2.mu.Unlock()
+	if err := s2.loadRegistryState(); err != nil {
+		t.Fatal(err)
+	}
+	if a := s2.agents["shell:offline-host"]; a == nil || a.Status != "offline" {
+		t.Fatalf("offline restored agent=%#v, want offline", a)
+	}
+	if a := s2.agents["shell:stale-host"]; a == nil || a.Status != "stale" {
+		t.Fatalf("stale restored agent=%#v, want stale", a)
+	}
+}
+
+func TestHubSettingsHistoryAndRollback(t *testing.T) {
+	s := New(Config{ConfigDir: t.TempDir()})
+	resp, status := s.callHubTool("settings_set", map[string]any{"settings": map[string]any{"stale_mcp_retention_days": 45}})
+	if status != http.StatusOK {
+		t.Fatalf("settings_set status=%d resp=%v", status, resp)
+	}
+	resp, status = s.callHubTool("settings_history", map[string]any{})
+	if status != http.StatusOK {
+		t.Fatalf("history status=%d resp=%v", status, resp)
+	}
+	history, ok := resp["history"].([]settingsRevision)
+	if !ok || len(history) != 2 {
+		t.Fatalf("history=%#v", resp["history"])
+	}
+	first := history[1].Revision
+	_, status = s.callHubTool("settings_set", map[string]any{"settings": map[string]any{"stale_mcp_retention_days": 60}})
+	if status != http.StatusOK {
+		t.Fatalf("second set status=%d", status)
+	}
+	resp, status = s.callHubTool("settings_rollback", map[string]any{"revision": first})
+	if status != http.StatusOK {
+		t.Fatalf("rollback status=%d resp=%v", status, resp)
+	}
+	settings := resp["settings"].(map[string]any)
+	if got := intFromAny(settings["stale_mcp_retention_days"]); got != 45 {
+		t.Fatalf("retention=%d want 45", got)
+	}
+}
+
+func TestStaleCleanupHonorsProtectionAndCreatesTombstone(t *testing.T) {
+	s := New(Config{ConfigDir: t.TempDir()})
+	old := float64(time.Now().Add(-90 * 24 * time.Hour).Unix())
+	s.mu.Lock()
+	s.agents["protected-mcp"] = &Agent{AgentID: "protected-mcp", Name: "Protected", Kind: "real_mcp", Status: "stale", LastSeen: old}
+	s.agents["delete-mcp"] = &Agent{AgentID: "delete-mcp", Name: "Delete", Kind: "real_mcp", Status: "stale", LastSeen: old}
+	s.mu.Unlock()
+	if _, status := s.callHubTool("agent_policy_set", map[string]any{"agent_id": "protected-mcp", "protected": true}); status != http.StatusOK {
+		t.Fatalf("policy status=%d", status)
+	}
+	preview, status := s.callHubTool("stale_cleanup_preview", map[string]any{})
+	if status != http.StatusOK {
+		t.Fatalf("preview status=%d", status)
+	}
+	if intFromAny(preview["eligible_count"]) != 1 {
+		t.Fatalf("preview=%v", preview)
+	}
+	resp, status := s.callHubTool("stale_cleanup_run", map[string]any{})
+	if status != http.StatusOK || intFromAny(resp["count"]) != 1 {
+		t.Fatalf("cleanup status=%d resp=%v", status, resp)
+	}
+	s.mu.Lock()
+	_, protectedExists := s.agents["protected-mcp"]
+	_, deletedExists := s.agents["delete-mcp"]
+	tombs := append([]agentTombstone(nil), s.tombstones...)
+	s.mu.Unlock()
+	if !protectedExists || deletedExists {
+		t.Fatalf("protected=%v deleted=%v", protectedExists, deletedExists)
+	}
+	if len(tombs) != 1 || tombs[0].AgentID != "delete-mcp" {
+		t.Fatalf("tombstones=%v", tombs)
 	}
 }

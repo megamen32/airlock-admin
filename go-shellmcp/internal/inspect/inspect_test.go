@@ -143,3 +143,28 @@ func TestListDirectoryRejectsSymlinkEscapeAndCredentialDirectories(t *testing.T)
 		t.Fatal("directory inspection entered a credential directory")
 	}
 }
+
+func TestReadFileOffsetAndSize(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "chunk.txt")
+	if err := os.WriteFile(path, []byte("abcdefghij"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	first, err := Run(Request{Action: "read_file", Path: path, MaxBytes: 4, Offset: 3, AllowedRoots: []string{dir}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if first.Content != "defg" || first.Offset != 3 || first.BytesRead != 4 || first.Size != 10 || !first.Truncated {
+		t.Fatalf("first=%+v", first)
+	}
+	second, err := Run(Request{Action: "read_file", Path: path, MaxBytes: 4, Offset: 8, AllowedRoots: []string{dir}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if second.Content != "ij" || second.Offset != 8 || second.BytesRead != 2 || second.Size != 10 || second.Truncated {
+		t.Fatalf("second=%+v", second)
+	}
+	if _, err := Run(Request{Action: "read_file", Path: path, Offset: -1, AllowedRoots: []string{dir}}); err == nil {
+		t.Fatal("negative offset accepted")
+	}
+}

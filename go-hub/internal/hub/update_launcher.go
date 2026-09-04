@@ -107,15 +107,18 @@ func (l *UpdateLauncher) LaunchUpdate() error {
 }
 
 func (l *UpdateLauncher) launchSystemd() error {
-	args := []string{"start", l.ServiceUnit}
+	// --no-block is essential: the update service may restart this Hub. Waiting
+	// for the oneshot to finish would keep the initiating HTTP/MCP request open
+	// until its own server process is terminated, producing a guaranteed 502.
+	args := []string{"start", "--no-block", l.ServiceUnit}
 	if l.IsUserInstall {
-		args = []string{"--user", "start", l.ServiceUnit}
+		args = []string{"--user", "start", "--no-block", l.ServiceUnit}
 	}
 	cmd := exec.Command("systemctl", args...)
 	setDetachedProcess(cmd)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
-		return fmt.Errorf("systemctl start %s: %w (output: %s)", l.ServiceUnit, err, string(out))
+		return fmt.Errorf("systemctl start --no-block %s: %w (output: %s)", l.ServiceUnit, err, string(out))
 	}
 	return nil
 }

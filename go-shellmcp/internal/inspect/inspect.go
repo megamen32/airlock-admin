@@ -26,6 +26,7 @@ type Request struct {
 	Action       string   `json:"action"`
 	Path         string   `json:"path,omitempty"`
 	MaxBytes     int64    `json:"max_bytes,omitempty"`
+	Offset       int64    `json:"offset,omitempty"`
 	AllowedRoots []string `json:"-"`
 }
 
@@ -45,6 +46,9 @@ type Result struct {
 	Content   string  `json:"content,omitempty"`
 	Entries   []Entry `json:"entries,omitempty"`
 	Truncated bool    `json:"truncated,omitempty"`
+	Offset    int64   `json:"offset,omitempty"`
+	BytesRead int64   `json:"bytes_read,omitempty"`
+	Size      int64   `json:"size,omitempty"`
 }
 
 // Run executes a supported inspection operation. Unsupported operations fail
@@ -71,6 +75,9 @@ func readFile(req Request) (Result, error) {
 	if limit > maximumMaxBytes {
 		limit = maximumMaxBytes
 	}
+	if req.Offset < 0 {
+		return Result{}, errors.New("read_file offset must be >= 0")
+	}
 	resolved, err := resolveAllowedPath(req.Path, req.AllowedRoots)
 	if err != nil {
 		return Result{}, err
@@ -87,6 +94,11 @@ func readFile(req Request) (Result, error) {
 	if !info.Mode().IsRegular() {
 		return Result{}, fmt.Errorf("read_file requires a regular file, got %s", info.Mode().Type())
 	}
+	if req.Offset > 0 {
+		if _, err := f.Seek(req.Offset, io.SeekStart); err != nil {
+			return Result{}, err
+		}
+	}
 	content, err := io.ReadAll(io.LimitReader(f, limit+1))
 	if err != nil {
 		return Result{}, err
@@ -95,7 +107,7 @@ func readFile(req Request) (Result, error) {
 	if truncated {
 		content = content[:limit]
 	}
-	return Result{Action: req.Action, Path: redact.Secrets(filepath.Clean(req.Path)), Content: redact.Secrets(string(content)), Truncated: truncated}, nil
+	return Result{Action: req.Action, Path: redact.Secrets(filepath.Clean(req.Path)), Content: redact.Secrets(string(content)), Truncated: truncated, Offset: req.Offset, BytesRead: int64(len(content)), Size: info.Size()}, nil
 }
 
 func listDirectory(req Request) (Result, error) {

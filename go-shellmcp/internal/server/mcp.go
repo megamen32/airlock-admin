@@ -19,7 +19,7 @@ import (
 	"github.com/megamen32/gptadmin/go-shellmcp/internal/system"
 )
 
-const mcpProtocolVersion = "2025-03-26"
+const mcpProtocolVersion = "2026-07-28"
 
 // MCPTransportRequested reports whether the process should run the real MCP
 // protocol over stdio instead of the legacy HTTP shellmcp transport.  HTTP mode
@@ -65,7 +65,7 @@ func (s *Server) mcpHTTP(w http.ResponseWriter, r *http.Request) {
 	case http.MethodOptions:
 		w.Header().Set("Access-Control-Allow-Origin", "*")
 		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, MCP-Protocol-Version, Mcp-Session-Id")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, MCP-Protocol-Version, Mcp-Method, Mcp-Name")
 		w.WriteHeader(http.StatusNoContent)
 	default:
 		writeJSON(w, http.StatusMethodNotAllowed, map[string]any{"error": "method not allowed"})
@@ -140,7 +140,18 @@ func (s *Server) handleMCPRequest(ctx context.Context, req mcpRequest) (any, boo
 	}
 	isNotification := req.ID == nil
 	switch req.Method {
+	case "server/discover":
+		return mcpResponse(id, mcpCacheable(map[string]any{
+			"supportedVersions": []string{mcpProtocolVersion},
+			"capabilities": map[string]any{
+				"tools":     map[string]any{"listChanged": false},
+				"resources": map[string]any{"subscribe": false, "listChanged": false},
+			},
+			"serverInfo": map[string]any{"name": "shellmcp-go", "version": fmt.Sprintf("build-%d", parseBuildVersion(BuildVersion))},
+		}, 30000, "public")), !isNotification
 	case "initialize":
+		// Legacy compatibility shim. MCP 2026-07-28 is stateless and no longer
+		// requires initialize/initialized, but older clients can still connect.
 		return mcpResponse(id, map[string]any{
 			"protocolVersion": mcpProtocolVersion,
 			"capabilities": map[string]any{
@@ -152,7 +163,7 @@ func (s *Server) handleMCPRequest(ctx context.Context, req mcpRequest) (any, boo
 	case "notifications/initialized", "notifications/cancelled":
 		return nil, false
 	case "tools/list":
-		return mcpResponse(id, map[string]any{"tools": s.mcpTools()}), !isNotification
+		return mcpResponse(id, mcpCacheable(map[string]any{"tools": s.mcpTools()}, 30000, "private")), !isNotification
 	case "tools/call":
 		var params toolCallParams
 		if err := json.Unmarshal(req.Params, &params); err != nil {
@@ -164,7 +175,7 @@ func (s *Server) handleMCPRequest(ctx context.Context, req mcpRequest) (any, boo
 		}
 		return mcpResponse(id, result), !isNotification
 	case "resources/list":
-		return mcpResponse(id, map[string]any{"resources": s.mcpResources()}), !isNotification
+		return mcpResponse(id, mcpCacheable(map[string]any{"resources": s.mcpResources()}, 30000, "private")), !isNotification
 	case "resources/read":
 		var params resourceReadParams
 		if err := json.Unmarshal(req.Params, &params); err != nil {
@@ -174,7 +185,7 @@ func (s *Server) handleMCPRequest(ctx context.Context, req mcpRequest) (any, boo
 		if err != nil {
 			return mcpError(id, -32004, err.Error()), !isNotification
 		}
-		return mcpResponse(id, map[string]any{"contents": contents}), !isNotification
+		return mcpResponse(id, mcpCacheable(map[string]any{"contents": contents}, 5000, "private")), !isNotification
 	default:
 		return mcpError(id, -32601, "method not found: "+req.Method), !isNotification
 	}
@@ -190,9 +201,21 @@ func mcpError(id any, code int, message string) map[string]any {
 
 func mcpText(text string, structured any) map[string]any {
 	return map[string]any{
+		"resultType":        "complete",
 		"content":           []map[string]any{{"type": "text", "text": text}},
 		"structuredContent": structured,
 	}
+}
+
+func mcpCacheable(payload map[string]any, ttlMs int, scope string) map[string]any {
+	out := make(map[string]any, len(payload)+3)
+	for key, value := range payload {
+		out[key] = value
+	}
+	out["resultType"] = "complete"
+	out["ttlMs"] = ttlMs
+	out["cacheScope"] = scope
+	return out
 }
 
 func (s *Server) mcpTools() []map[string]any {
@@ -242,6 +265,7 @@ func (s *Server) mcpTools() []map[string]any {
 					"action":    map[string]any{"type": "string", "enum": []string{"read_file", "list_directory"}},
 					"path":      map[string]any{"type": "string"},
 					"max_bytes": map[string]any{"type": []string{"integer", "null"}, "minimum": 1, "maximum": 1048576},
+					"offset":    map[string]any{"type": []string{"integer", "null"}, "minimum": 0},
 				},
 				"required": []string{"action", "path"}, "additionalProperties": false,
 			},

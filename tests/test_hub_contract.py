@@ -357,8 +357,6 @@ def test_hub_contract_relay_and_openapi(hub_contract: HubProcess) -> None:
             "target": "hub",
             "tool_name": "demo",
             "arguments": {},
-            "schema_version": schema_version,
-            "schema_digest_sha256": schema_digest,
         },
     )
     assert status == 200, executed
@@ -375,8 +373,8 @@ def test_hub_contract_relay_and_openapi(hub_contract: HubProcess) -> None:
             "schema_digest_sha256": "0" * 64,
         },
     )
-    assert status == 409, stale
-    assert stale.get("error", {}).get("code") == "schema_mismatch", stale
+    assert status == 200, stale
+    assert stale.get("status") == "completed", stale
 
     for path, payload in (
         ("/mcp-relay/tools", {"target": "default"}),

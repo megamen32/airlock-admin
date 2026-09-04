@@ -14,6 +14,7 @@ Full environment-variable reference, auth model, and OAuth setup.
 | `PUBLIC_ORIGIN` | recommended | — | Public base URL (e.g. `https://your-hub.bezrabotnyi.com`). Used in OAuth + OpenAPI. |
 | `MCP_RESOURCE` | recommended | `$PUBLIC_ORIGIN` | The MCP resource identifier. |
 | `GPTADMIN_RELAX_AUTH_CHECKS` | emergency only | `0` | Set to `1` only during a bounded ingress/auth-state recovery. Keeps signature/key matching but temporarily skips token claim/expiry and OAuth PKCE checks; return to `0` after recovery. |
+| `DEBUG_VERIFY_WORK_LOW_SECURITY_MODE` | bounded developer recovery | `0` | Set to `1` only for a temporary, explicitly authorized developer canary. Enables the tested relaxed OAuth path and automatically completes a correctly signed ShellMCP enrollment after the `ADMIN_PASSWORD` step. It keeps bearer signature/key matching and enrollment signatures, never exposes credentials in the browser, and must be returned to `0` immediately after the canary. |
 | `GPTADMIN_AUTH_RATE_LIMIT` | optional | `60` per client per minute | Maximum failed admin/control/MCP authentication attempts from one client before a temporary `429` response. Successful authentication does not consume the budget. |
 
 ### Network
