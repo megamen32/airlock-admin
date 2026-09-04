@@ -1967,6 +1967,7 @@ func tokenMatches(r *http.Request, expected string) bool {
 
 func (s *Server) actionsOpenAPI(w http.ResponseWriter, r *http.Request) {
 	body := defaultCustomGPTActionsOpenAPI(s.origin(r))
+	w.Header().Set("Cache-Control", "no-store")
 	w.Header().Set("Content-Type", "application/yaml; charset=utf-8")
 	w.Header().Set("Content-Length", strconv.Itoa(len(body)))
 	w.WriteHeader(http.StatusOK)
@@ -2594,8 +2595,6 @@ paths:
                 query: {type: string}
                 cwd: {type: string}
                 idempotency_key: {type: string}
-                schema_version: {type: string, deprecated: true, description: "Optional compatibility/cache hint; not required for execution."}
-                schema_digest_sha256: {type: string, deprecated: true, description: "Optional compatibility/cache hint; stale values do not block execution."}
               additionalProperties: true
       responses:
         "200": {description: Tool result or background job}
@@ -3899,15 +3898,15 @@ func (s *Server) mcpRelayTools(w http.ResponseWriter, r *http.Request) {
 	}
 	target = selectedTarget
 	if target == "hub" {
-		writeJSON(w, http.StatusOK, withActionToolHints(withSchemaContractMetadata(map[string]any{"server_id": target, "status": "completed", "response": map[string]any{"tools": toolsForRequest(r, target, hubTools())}}), target))
+		writeJSON(w, http.StatusOK, withActionToolHints(s.withSchemaContractMetadata(map[string]any{"server_id": target, "status": "completed", "response": map[string]any{"tools": toolsForRequest(r, target, hubTools())}}), target))
 		return
 	}
 	if virtual, ok := virtualMCPDefinitions[target]; ok {
-		writeJSON(w, http.StatusOK, withActionToolHints(withSchemaContractMetadata(map[string]any{"server_id": target, "status": "completed", "response": map[string]any{"tools": s.virtualMCPToolsForRequest(r, virtual)}}), target))
+		writeJSON(w, http.StatusOK, withActionToolHints(s.withSchemaContractMetadata(map[string]any{"server_id": target, "status": "completed", "response": map[string]any{"tools": s.virtualMCPToolsForRequest(r, virtual)}}), target))
 		return
 	}
 	if strings.HasPrefix(target, "shell:") {
-		writeJSON(w, http.StatusOK, withActionToolHints(withSchemaContractMetadata(map[string]any{"server_id": target, "status": "completed", "response": map[string]any{"tools": toolsForRequest(r, target, shellTools())}}), target))
+		writeJSON(w, http.StatusOK, withActionToolHints(s.withSchemaContractMetadata(map[string]any{"server_id": target, "status": "completed", "response": map[string]any{"tools": toolsForRequest(r, target, shellTools())}}), target))
 		return
 	}
 	s.mu.Lock()
@@ -3919,7 +3918,7 @@ func (s *Server) mcpRelayTools(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, http.StatusBadGateway, map[string]any{"server_id": target, "status": "failed", "error": err})
 			return
 		}
-		writeJSON(w, http.StatusOK, withActionToolHints(withSchemaContractMetadata(map[string]any{"server_id": target, "status": "completed", "response": result}), target))
+		writeJSON(w, http.StatusOK, withActionToolHints(s.withSchemaContractMetadata(map[string]any{"server_id": target, "status": "completed", "response": result}), target))
 		return
 	}
 	if requestAccessMode(r) == accessModeReadonly {
@@ -3931,7 +3930,7 @@ func (s *Server) mcpRelayTools(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]any{"server_id": target, "status": "running", "background": true, "job_id": jobID})
 		return
 	}
-	resp := withSchemaContractMetadata(s.waitRelay(jobID, timeoutFromReq(req, s.cfg.DefaultTimeout)))
+	resp := s.withSchemaContractMetadata(s.waitRelay(jobID, timeoutFromReq(req, s.cfg.DefaultTimeout)))
 	resp = withActionToolHints(resp, target)
 	writeJSON(w, http.StatusOK, resp)
 }
@@ -8566,13 +8565,13 @@ func (s *Server) appsSDKCall(name string, args map[string]any) any {
 		}
 		target = selectedTarget
 		if target == "hub" {
-			return withSchemaContractMetadata(map[string]any{"server_id": target, "status": "completed", "response": map[string]any{"tools": hubTools()}})
+			return s.withSchemaContractMetadata(map[string]any{"server_id": target, "status": "completed", "response": map[string]any{"tools": hubTools()}})
 		}
 		if strings.HasPrefix(target, "shell:") {
-			return withSchemaContractMetadata(map[string]any{"server_id": target, "status": "completed", "response": map[string]any{"tools": shellTools()}})
+			return s.withSchemaContractMetadata(map[string]any{"server_id": target, "status": "completed", "response": map[string]any{"tools": shellTools()}})
 		}
 		jobID := s.enqueueRelay(target, "tools/list", map[string]any{})
-		return withSchemaContractMetadata(s.waitRelay(jobID, s.cfg.DefaultTimeout))
+		return s.withSchemaContractMetadata(s.waitRelay(jobID, s.cfg.DefaultTimeout))
 	case "inspect", "inspect_system", "inspectSystem":
 		target := firstString(args, "target", "server_id", "agent_id")
 		selectedTarget, status, detail := s.selectMCPRelayTarget(target)
@@ -8702,7 +8701,7 @@ func (s *Server) appsSDKSchemaForRequest(r *http.Request, args map[string]any) a
 			response["tools"] = toolsForRequest(r, target, raw)
 		}
 	}
-	return withSchemaContractMetadata(result)
+	return s.withSchemaContractMetadata(result)
 }
 
 func (s *Server) appsSDKCallMCP(r *http.Request, name string, args map[string]any) any {

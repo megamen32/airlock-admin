@@ -14,6 +14,19 @@ func TestSchemaContractValidationIsOptIn(t *testing.T) {
 	if (Config{}).SchemaContractValidation {
 		t.Fatal("schema contract validation must default to disabled")
 	}
+	disabled := New(Config{CtlToken: "ctl", DefaultTimeout: time.Second, PollMaxTimeout: time.Second})
+	disabledSchema := postMCPRPC(t, disabled, `{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"schema","arguments":{"target":"hub"}}}`)
+	disabledResponse := mapValue(mapValue(mapValue(disabledSchema["result"])["structuredContent"])["response"])
+	if firstString(disabledResponse, "schema_version") != "" || firstString(disabledResponse, "schema_digest_sha256") != "" {
+		t.Fatalf("disabled schema contract leaked metadata: %v", disabledResponse)
+	}
+	actionReq := httptest.NewRequest(http.MethodGet, "/actions/openapi.yaml", nil)
+	actionRec := httptest.NewRecorder()
+	disabled.Handler().ServeHTTP(actionRec, actionReq)
+	if actionRec.Header().Get("Cache-Control") != "no-store" || strings.Contains(actionRec.Body.String(), "schema_version") || strings.Contains(actionRec.Body.String(), "schema_digest_sha256") {
+		t.Fatalf("disabled Action contract exposed schema binding: cache=%q body=%s", actionRec.Header().Get("Cache-Control"), actionRec.Body.String())
+	}
+
 	s := New(Config{CtlToken: "ctl", SchemaContractValidation: true, DefaultTimeout: time.Second, PollMaxTimeout: time.Second})
 
 	call := func(id int, name, arguments string) map[string]any {

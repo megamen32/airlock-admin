@@ -40,13 +40,15 @@ decision is applied before schema lookup and execution, and the same target
 identity is carried through queued calls and results.
 In short, the implemented contract is `discover -> schema -> execute`.
 
-Every schema response now includes schema version/digest metadata: a
-`schema_version` and a deterministic
-`schema_digest_sha256` for the effective, policy-filtered tool list. An
-`execute` call may carry both values; the Hub rejects an incomplete or stale
-pair with `409 schema_mismatch` before invoking the selected tool. Transport
-shortcut hints are added after digest calculation and therefore cannot make a
-fresh schema appear stale.
+By default, schema responses and the public Action contract contain no schema
+version/digest binding. Schema version/digest is an explicit opt-in: set
+`GPTADMIN_SCHEMA_CONTRACT_VALIDATION=true` only for
+clients that explicitly need schema admission: then schema responses include
+`schema_version` and deterministic `schema_digest_sha256`, and an `execute`
+call with an incomplete or stale pair receives `409 schema_mismatch` before the
+selected tool is invoked. The public Action document is served with
+`Cache-Control: no-store` so a disabled contract cannot be retained as a
+client-side prerequisite.
 
 ## Remaining Gaps
 

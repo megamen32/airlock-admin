@@ -413,10 +413,8 @@ func TestMCPIntegrationDiscoverSchemaExecuteConformance(t *testing.T) {
 	if len(tools) == 0 {
 		t.Fatalf("schema returned no tools: %v", schemaContent)
 	}
-	schemaVersion := firstString(response, "schema_version")
-	schemaDigest := firstString(response, "schema_digest_sha256")
-	if schemaVersion == "" || len(schemaDigest) != 64 {
-		t.Fatalf("schema omitted stable version/digest: %v", response)
+	if firstString(response, "schema_version") != "" || firstString(response, "schema_digest_sha256") != "" {
+		t.Fatalf("default schema exposed opt-in metadata: %v", response)
 	}
 
 	execute := call(3, "execute", `{"target":"hub","tool":"demo","arguments":{"probe":"conformance"},"idempotency_key":"conformance-demo-1"}`)
@@ -427,7 +425,7 @@ func TestMCPIntegrationDiscoverSchemaExecuteConformance(t *testing.T) {
 	if !strings.Contains(string(executeJSON), `"status":"ok"`) {
 		t.Fatalf("execute did not return the safe demo result: %s", executeJSON)
 	}
-	staleMetadata := call(4, "execute", fmt.Sprintf(`{"target":"hub","tool":"demo","arguments":{"probe":"stale-metadata"},"schema_version":%q,"schema_digest_sha256":"%064d"}`, schemaVersion, 0))
+	staleMetadata := call(4, "execute", `{"target":"hub","tool":"demo","arguments":{"probe":"stale-metadata"},"schema_version":"legacy","schema_digest_sha256":"stale"}`)
 	staleMetadataJSON, err := json.Marshal(staleMetadata)
 	if err != nil {
 		t.Fatal(err)
@@ -435,7 +433,7 @@ func TestMCPIntegrationDiscoverSchemaExecuteConformance(t *testing.T) {
 	if !strings.Contains(string(staleMetadataJSON), `"status":"ok"`) {
 		t.Fatalf("execute blocked a call with stale schema metadata: %s", staleMetadataJSON)
 	}
-	metadataLeak := call(5, "execute", fmt.Sprintf(`{"target":"hub","tool":"unsupported-schema-probe","schema_version":%q,"schema_digest_sha256":%q}`, schemaVersion, schemaDigest))
+	metadataLeak := call(5, "execute", `{"target":"hub","tool":"unsupported-schema-probe","schema_version":"legacy","schema_digest_sha256":"stale"}`)
 	metadataLeakJSON, err := json.Marshal(metadataLeak)
 	if err != nil {
 		t.Fatal(err)

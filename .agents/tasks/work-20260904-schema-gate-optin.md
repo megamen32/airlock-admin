@@ -21,3 +21,15 @@ Discarded: removing schema discovery metadata, relay redesign, authentication ch
 - Full checks now pass: Hub and ShellMCP Go suites; Admin UI tests/lint/build; root docs and Hub-process contracts; website production build; and GrepMesh Rust tests. The docs public mirror was regenerated from its canonical sources. A GrepMesh black-box test was isolated from host runtime settings, which made the full suite deterministic.
 - Unified history: `3d820f5` is rebased on current `origin/main` and pushed. Deployment rebuilt the Hub from that SHA, backed up the prior binary as `/opt/gptadmin/backups/gptadmin_hub.before-3d820f5-20260904`, atomically replaced `/opt/gptadmin/bin/gptadmin_hub`, and restarted `gptadmin-hub.service`.
 - Final public canary: schema discovery still returned `gptadmin.mcp-schema/v1`; relay `hub_status` completed both with no schema metadata and with a deliberately stale digest; metadata-free `shell_exec hostname` on `shell:roomhacker-server-100` completed. `GPTADMIN_SCHEMA_CONTRACT_VALIDATION` is absent, so validation is disabled by default.
+
+## Session-binding follow-up
+
+Started at 2026-09-04T16:26:17+03:00 (manual clock)
+Estimate: minimum 20 / maximum 45 active minutes.
+
+- Result: the default ChatGPT Action flow has no schema binding to cache or resend.
+- Canary: public `actions/openapi.yaml` contains neither schema field and has `Cache-Control: no-store`; a default live relay call succeeds without schema metadata, while the same metadata is issued and checked only when `GPTADMIN_SCHEMA_CONTRACT_VALIDATION=true`.
+- Slice: make metadata emission, Action properties, and admission validation one opt-in feature; retain the enabled contract unchanged.
+- Discarded: unrelated relay redesign, auth changes, tool argument changes, or WhatsApp work.
+
+Status: in progress.

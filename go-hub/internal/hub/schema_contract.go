@@ -9,9 +9,13 @@ import (
 
 const schemaContractVersion = "gptadmin.mcp-schema/v1"
 
-// withSchemaContractMetadata attaches a deterministic identity to a relay
-// schema after policy filtering and action hints have been applied.
-func withSchemaContractMetadata(result map[string]any) map[string]any {
+// withSchemaContractMetadata attaches a deterministic identity only when the
+// schema contract is explicitly enabled. Ordinary relay discovery must not
+// create a client-side execute prerequisite.
+func (s *Server) withSchemaContractMetadata(result map[string]any) map[string]any {
+	if !s.cfg.SchemaContractValidation {
+		return result
+	}
 	response := mapValue(result["response"])
 	tools := mcpToolsFromResult(response)
 	encoded, err := json.Marshal(tools)
@@ -56,7 +60,7 @@ func (s *Server) validateSchemaContract(r *http.Request, target string, args map
 			"error":     map[string]any{"code": "schema_mismatch", "message": "selected target returned no usable schema"},
 		}, true
 	}
-	current = withSchemaContractMetadata(current)
+	current = s.withSchemaContractMetadata(current)
 	response := mapValue(current["response"])
 	if firstString(response, "schema_version") != version || firstString(response, "schema_digest_sha256") != digest {
 		return map[string]any{
