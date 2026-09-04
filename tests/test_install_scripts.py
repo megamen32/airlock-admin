@@ -154,3 +154,27 @@ def test_handover_helper_requires_managed_nginx_upstream():
     content = (ROOT / "cli.py").read_text(encoding="utf-8")
     assert "managed nginx upstream missing" in content
     assert "nginx -t; systemctl reload nginx" in content
+
+
+def test_linux_cli_materializes_handover_helper_and_standby(tmp_path):
+    """Linux branch must define and actually write both handover components."""
+    if not sys.platform.startswith("linux"):
+        return
+    import runpy
+    ns = runpy.run_path(str(ROOT / "cli.py"), run_name="gptadmin_install_contract")
+    assert callable(ns.get("_write_handover_helper"))
+    write_hub = ns["write_hub_unit"]
+    g = write_hub.__globals__
+    g["BIN_DIR"] = tmp_path / "bin"
+    g["UNIT_PATH_HUB"] = tmp_path / "gptadmin-hub.service"
+    g["UNIT_PATH_HUB_STANDBY"] = tmp_path / "gptadmin-hub-standby.service"
+    g["IS_USER_INSTALL"] = False
+    g["env_read"] = lambda: {}
+    g["process_hardening_for_env"] = lambda _env: ""
+    g["render_unit_with_hardening"] = lambda text, _hardening: text
+    g["BIN_DIR"].mkdir(parents=True)
+    write_hub(True, False)
+    helper = g["BIN_DIR"] / "gptadmin-handover"
+    assert helper.exists() and helper.stat().st_mode & 0o111
+    assert g["UNIT_PATH_HUB_STANDBY"].exists()
+    assert "DRAIN_SECONDS=${GPTADMIN_HANDOVER_DRAIN_SECONDS:-65}" in helper.read_text()

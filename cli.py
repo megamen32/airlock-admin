@@ -1012,54 +1012,6 @@ if IS_MACOS:
             if log_file and log_file.exists():
                 run(['tail', '-n', '200', '-f', str(log_file)], check=False)
 
-    def _write_handover_helper():
-        helper = BIN_DIR / 'gptadmin-handover'
-        helper.write_text('''#!/bin/bash
-set -euo pipefail
-ACTION=${1:-restart-primary}
-STATE=${GPTADMIN_HANDOVER_STATE:-/run/gptadmin-handover.json}
-UPSTREAM=${GPTADMIN_HANDOVER_UPSTREAM_FILE:-/etc/nginx/conf.d/gptadmin-hub-upstream.conf}
-PRIMARY_PORT=${GPTADMIN_HUB_PORT:-${HUB_PORT:-9001}}
-STANDBY_PORT=${GPTADMIN_HANDOVER_STANDBY_PORT:-19001}
-DRAIN_SECONDS=${GPTADMIN_HANDOVER_DRAIN_SECONDS:-65}
-write_state(){ printf '{"status":"%s","action":"%s","ts":%s,"detail":"%s"}\n' "$1" "$ACTION" "$(date +%s)" "${2:-}" > "$STATE"; }
-health(){ curl -fsS --max-time 2 "$1/healthz" >/dev/null; }
-write_upstream(){
-  local primary=$1 backup=$2 tmp
-  test -d "$(dirname "$UPSTREAM")"
-  tmp=$(mktemp "$(dirname "$UPSTREAM")/.gptadmin-hub-upstream.XXXXXX")
-  cat >"$tmp" <<CFG
-upstream gptadmin_hub_active {
-    zone gptadmin_hub_active 64k;
-    server 127.0.0.1:${primary} max_fails=1 fail_timeout=1s;
-    server 127.0.0.1:${backup} backup;
-    keepalive 64;
-}
-CFG
-  chmod 0644 "$tmp"; mv "$tmp" "$UPSTREAM"; nginx -t; systemctl reload nginx
-}
-case "$ACTION" in
-restart-primary)
-  command -v nginx >/dev/null || { write_state failed 'nginx unavailable'; exit 1; }
-  test -f "$UPSTREAM" || { write_state failed 'managed nginx upstream missing'; exit 1; }
-  systemctl start gptadmin-hub-standby.service
-  write_state running 'waiting for standby'
-  health "http://127.0.0.1:${STANDBY_PORT}" || { write_state failed 'standby unhealthy'; exit 1; }
-  write_upstream "$STANDBY_PORT" "$PRIMARY_PORT"
-  sleep "$DRAIN_SECONDS"
-  write_state running 'standby active; restarting primary'
-  systemctl restart gptadmin-hub.service
-  for _ in $(seq 1 100); do health "http://127.0.0.1:${PRIMARY_PORT}" && break; sleep .1; done
-  health "http://127.0.0.1:${PRIMARY_PORT}" || { write_state failed 'primary unhealthy after restart'; exit 1; }
-  write_upstream "$PRIMARY_PORT" "$STANDBY_PORT"
-  write_state completed 'primary healthy and active'
-  ;;
-*) write_state failed 'unknown action'; exit 2;;
-esac
-''')
-        os.chmod(helper, 0o755)
-        return helper
-
     def write_hub_unit(install_hub: bool, _install_shellmcp: bool):
         if not install_hub:
             return
@@ -1436,6 +1388,54 @@ WantedBy=timers.target
             run(_journalctl_cmd(*sum([['-u', u] for u in names], []), '-e', '-n', '200', '-f'), check=False)
         else:
             print('Журналы пусты: сервисы не установлены.')
+
+    def _write_handover_helper():
+        helper = BIN_DIR / 'gptadmin-handover'
+        helper.write_text('''#!/bin/bash
+set -euo pipefail
+ACTION=${1:-restart-primary}
+STATE=${GPTADMIN_HANDOVER_STATE:-/run/gptadmin-handover.json}
+UPSTREAM=${GPTADMIN_HANDOVER_UPSTREAM_FILE:-/etc/nginx/conf.d/gptadmin-hub-upstream.conf}
+PRIMARY_PORT=${GPTADMIN_HUB_PORT:-${HUB_PORT:-9001}}
+STANDBY_PORT=${GPTADMIN_HANDOVER_STANDBY_PORT:-19001}
+DRAIN_SECONDS=${GPTADMIN_HANDOVER_DRAIN_SECONDS:-65}
+write_state(){ printf '{"status":"%s","action":"%s","ts":%s,"detail":"%s"}\n' "$1" "$ACTION" "$(date +%s)" "${2:-}" > "$STATE"; }
+health(){ curl -fsS --max-time 2 "$1/healthz" >/dev/null; }
+write_upstream(){
+  local primary=$1 backup=$2 tmp
+  test -d "$(dirname "$UPSTREAM")"
+  tmp=$(mktemp "$(dirname "$UPSTREAM")/.gptadmin-hub-upstream.XXXXXX")
+  cat >"$tmp" <<CFG
+upstream gptadmin_hub_active {
+    zone gptadmin_hub_active 64k;
+    server 127.0.0.1:${primary} max_fails=1 fail_timeout=1s;
+    server 127.0.0.1:${backup} backup;
+    keepalive 64;
+}
+CFG
+  chmod 0644 "$tmp"; mv "$tmp" "$UPSTREAM"; nginx -t; systemctl reload nginx
+}
+case "$ACTION" in
+restart-primary)
+  command -v nginx >/dev/null || { write_state failed 'nginx unavailable'; exit 1; }
+  test -f "$UPSTREAM" || { write_state failed 'managed nginx upstream missing'; exit 1; }
+  systemctl start gptadmin-hub-standby.service
+  write_state running 'waiting for standby'
+  health "http://127.0.0.1:${STANDBY_PORT}" || { write_state failed 'standby unhealthy'; exit 1; }
+  write_upstream "$STANDBY_PORT" "$PRIMARY_PORT"
+  sleep "$DRAIN_SECONDS"
+  write_state running 'standby active; restarting primary'
+  systemctl restart gptadmin-hub.service
+  for _ in $(seq 1 100); do health "http://127.0.0.1:${PRIMARY_PORT}" && break; sleep .1; done
+  health "http://127.0.0.1:${PRIMARY_PORT}" || { write_state failed 'primary unhealthy after restart'; exit 1; }
+  write_upstream "$PRIMARY_PORT" "$STANDBY_PORT"
+  write_state completed 'primary healthy and active'
+  ;;
+*) write_state failed 'unknown action'; exit 2;;
+esac
+''')
+        os.chmod(helper, 0o755)
+        return helper
 
     def write_hub_unit(install_hub: bool, _install_shellmcp: bool):
         if install_hub:
