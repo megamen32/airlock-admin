@@ -132,14 +132,20 @@ func (s *Server) triggerGitHubSelfRepair(desired int, repo string) {
 		if !result.Updated {
 			return
 		}
-		s.selfRepairState.Store("applied")
-		log.Printf("self-repair: applied GitHub release v%d asset=%s sha256=%s", desired, result.Asset, result.ArchiveSHA)
 		if result.NeedsHelper {
+			s.selfRepairState.Store("staged")
 			if err := update.ScheduleWindowsReplace(exe, result.StagedPath, os.Args[1:]); err != nil {
+				s.selfRepairState.Store("failed")
 				log.Printf("self-repair: windows helper failed: %v", err)
 				return
 			}
+			s.selfRepairState.Store("restart_scheduled")
+			log.Printf("self-repair: staged GitHub release v%d asset=%s sha256=%s; Windows restart task scheduled", desired, result.Asset, result.ArchiveSHA)
+			time.Sleep(250 * time.Millisecond)
+			os.Exit(update.WindowsSelfRepairExitCode)
 		}
+		s.selfRepairState.Store("applied")
+		log.Printf("self-repair: applied GitHub release v%d asset=%s sha256=%s", desired, result.Asset, result.ArchiveSHA)
 		time.Sleep(250 * time.Millisecond)
 		os.Exit(0)
 	}()

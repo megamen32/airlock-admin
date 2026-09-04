@@ -117,7 +117,7 @@ func TestChecksumForAssetRejectsMissingOrMalformed(t *testing.T) {
 }
 
 func TestWindowsReplaceScriptRestartsCanonicalTaskBeforeDirectFallback(t *testing.T) {
-	script := windowsReplaceScript(123, "gptadmin-shellmcp", `C:\ProgramData\gptadmin\bin\shellmcp.exe`, `C:\Temp\shellmcp.new`, []string{"--flag", "value"})
+	script := windowsReplaceScript(123, "gptadmin-shellmcp", "gptadmin-shellmcp-self-repair", `C:\ProgramData\gptadmin\bin\shellmcp.exe`, `C:\Temp\shellmcp.new`, `C:\Windows\Temp\gptadmin-shellmcp-self-repair.ps1`, []string{"--flag", "value"})
 	for _, want := range []string{"Get-ScheduledTask -TaskName 'gptadmin-shellmcp'", "Start-ScheduledTask -TaskName 'gptadmin-shellmcp'", "Get-CimInstance Win32_Process", "if(-not $started){Start-Process"} {
 		if !strings.Contains(script, want) {
 			t.Fatalf("generated Windows replacement script missing %q: %s", want, script)
@@ -125,5 +125,24 @@ func TestWindowsReplaceScriptRestartsCanonicalTaskBeforeDirectFallback(t *testin
 	}
 	if strings.Index(script, "Start-ScheduledTask") > strings.Index(script, "if(-not $started){Start-Process") {
 		t.Fatalf("direct fallback appears before canonical task start: %s", script)
+	}
+}
+
+func TestWindowsRepairUsesIndependentSystemTaskAndCanonicalRestart(t *testing.T) {
+	scriptPath := `C:\Windows\Temp\gptadmin-shellmcp-self-repair.ps1`
+	script := windowsReplaceScript(123, "gptadmin-shellmcp", "gptadmin-shellmcp-self-repair", `C:\ProgramData\gptadmin\bin\shellmcp.exe`, `C:\Windows\Temp\shellmcp.new`, scriptPath, []string{"--flag", "value"})
+	for _, want := range []string{"Wait-Process -Id 123", "Get-ScheduledTask -TaskName 'gptadmin-shellmcp'", "Start-ScheduledTask -TaskName 'gptadmin-shellmcp'", "Unregister-ScheduledTask -TaskName 'gptadmin-shellmcp-self-repair'", "if(-not $started){Start-Process"} {
+		if !strings.Contains(script, want) {
+			t.Fatalf("helper script missing %q: %s", want, script)
+		}
+	}
+	register := windowsRegisterHelperScript("gptadmin-shellmcp-self-repair", scriptPath)
+	for _, want := range []string{"Register-ScheduledTask", "New-ScheduledTaskPrincipal -UserId 'SYSTEM'", "Start-ScheduledTask -TaskName 'gptadmin-shellmcp-self-repair'"} {
+		if !strings.Contains(register, want) {
+			t.Fatalf("registration script missing %q: %s", want, register)
+		}
+	}
+	if WindowsSelfRepairExitCode == 0 {
+		t.Fatal("Windows self-repair exit code must be non-zero so Task Scheduler restart policy is a fallback")
 	}
 }

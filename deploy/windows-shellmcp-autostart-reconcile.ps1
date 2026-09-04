@@ -316,10 +316,10 @@ try {
         "HUB_PUBLIC_KEY_FILE=$HubPublicKeyFile",
         'SHELLMCP_SERVICE_NAME=gptadmin-shellmcp',
         'SHELLMCP_SERVICE_SCOPE=system',
-        'SHELLMCP_AUTO_UPDATE=1',
-        'SHELLMCP_UPDATE_INTERVAL_S=3600',
-        "SHELLMCP_UPDATE_MANIFEST_URL=$effectiveHubUrl/artifacts/shellmcp.json",
-        "SHELLMCP_UPDATE_TOKEN=$runtimeToken"
+        'SHELLMCP_AUTO_UPDATE=0',
+        'SHELLMCP_SELF_REPAIR_DISABLE=0',
+        'SHELLMCP_LEGACY_MANIFEST_UPDATE=0',
+        'SHELLMCP_UPDATE_INTERVAL_S=3600'
     ) | Set-Content -LiteralPath $EnvFile -Encoding ASCII
     Set-SecretFileAcl -Path $EnvFile
     $persisted = Read-EnvMap -Path $EnvFile

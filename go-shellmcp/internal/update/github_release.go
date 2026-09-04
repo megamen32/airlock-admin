@@ -309,30 +309,56 @@ func replaceUnixExecutable(ctx context.Context, staged, current string) error {
 	return nil
 }
 
-func windowsReplaceScript(pid int, taskName, currentExe, stagedPath string, args []string) string {
+const WindowsSelfRepairExitCode = 42
+
+func windowsReplaceScript(pid int, canonicalTask, helperTask, currentExe, stagedPath, scriptPath string, args []string) string {
 	q := func(s string) string { return "'" + strings.ReplaceAll(s, "'", "''") + "'" }
 	argList := make([]string, 0, len(args))
 	for _, a := range args {
 		argList = append(argList, q(a))
 	}
-	return "$ErrorActionPreference='Stop'; Wait-Process -Id " + strconv.Itoa(pid) + " -ErrorAction SilentlyContinue; " +
-		"$ok=$false; for($i=0;$i -lt 40;$i++){try{Move-Item -Force " + q(stagedPath) + " " + q(currentExe) + ";$ok=$true;break}catch{Start-Sleep -Milliseconds 250}}; " +
+	return "$ErrorActionPreference='Stop'; " +
+		"Wait-Process -Id " + strconv.Itoa(pid) + " -ErrorAction SilentlyContinue; " +
+		"for($i=0;$i -lt 80;$i++){try{$t=Get-ScheduledTask -TaskName " + q(canonicalTask) + " -ErrorAction SilentlyContinue;if($null -eq $t -or $t.State -ne 'Running'){break}}catch{break};Start-Sleep -Milliseconds 250}; " +
+		"$ok=$false; for($i=0;$i -lt 80;$i++){try{Move-Item -Force " + q(stagedPath) + " " + q(currentExe) + ";$ok=$true;break}catch{Start-Sleep -Milliseconds 250}}; " +
 		"if(-not $ok){exit 31}; " +
-		"$started=$false; try{$task=Get-ScheduledTask -TaskName " + q(taskName) + " -ErrorAction Stop; Start-ScheduledTask -TaskName " + q(taskName) + "; " +
-		"for($i=0;$i -lt 40;$i++){Start-Sleep -Milliseconds 250; $p=Get-CimInstance Win32_Process -Filter \"Name='shellmcp.exe'\" -ErrorAction SilentlyContinue | Where-Object {$_.ExecutablePath -and $_.ExecutablePath.Equals(" + q(currentExe) + ",[StringComparison]::OrdinalIgnoreCase)}; if($p){$started=$true;break}}}catch{}; " +
-		"if(-not $started){Start-Process -FilePath " + q(currentExe) + " -ArgumentList @(" + strings.Join(argList, ",") + ") -WindowStyle Hidden}"
+		"$started=$false; try{$task=Get-ScheduledTask -TaskName " + q(canonicalTask) + " -ErrorAction Stop; Start-ScheduledTask -TaskName " + q(canonicalTask) + "; " +
+		"for($i=0;$i -lt 80;$i++){Start-Sleep -Milliseconds 250; $p=Get-CimInstance Win32_Process -Filter \"Name='shellmcp.exe'\" -ErrorAction SilentlyContinue | Where-Object {$_.ExecutablePath -and $_.ExecutablePath.Equals(" + q(currentExe) + ",[StringComparison]::OrdinalIgnoreCase)}; if($p){$started=$true;break}}}catch{}; " +
+		"if(-not $started){Start-Process -FilePath " + q(currentExe) + " -ArgumentList @(" + strings.Join(argList, ",") + ") -WindowStyle Hidden}; " +
+		"try{Unregister-ScheduledTask -TaskName " + q(helperTask) + " -Confirm:$false -ErrorAction SilentlyContinue}catch{}; " +
+		"try{Remove-Item -LiteralPath " + q(scriptPath) + " -Force -ErrorAction SilentlyContinue}catch{}"
+}
+
+func windowsRegisterHelperScript(helperTask, scriptPath string) string {
+	q := func(s string) string { return "'" + strings.ReplaceAll(s, "'", "''") + "'" }
+	arg := "-NoProfile -NonInteractive -ExecutionPolicy Bypass -File `\"" + scriptPath + "`\""
+	return "$ErrorActionPreference='Stop'; " +
+		"$action=New-ScheduledTaskAction -Execute 'powershell.exe' -Argument " + q(arg) + "; " +
+		"$trigger=New-ScheduledTaskTrigger -Once -At (Get-Date).AddSeconds(2); " +
+		"$principal=New-ScheduledTaskPrincipal -UserId 'SYSTEM' -LogonType ServiceAccount -RunLevel Highest; " +
+		"$settings=New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -ExecutionTimeLimit ([TimeSpan]::FromMinutes(5)) -StartWhenAvailable; " +
+		"Register-ScheduledTask -TaskName " + q(helperTask) + " -Action $action -Trigger $trigger -Principal $principal -Settings $settings -Force | Out-Null; " +
+		"Start-ScheduledTask -TaskName " + q(helperTask)
 }
 
 func ScheduleWindowsReplace(currentExe, stagedPath string, args []string) error {
 	if runtime.GOOS != "windows" {
 		return fmt.Errorf("self-repair: windows replacement requested on %s", runtime.GOOS)
 	}
-	script := windowsReplaceScript(os.Getpid(), "gptadmin-shellmcp", currentExe, stagedPath, args)
-	cmd := exec.Command("powershell.exe", "-NoProfile", "-NonInteractive", "-WindowStyle", "Hidden", "-Command", script)
-	if err := cmd.Start(); err != nil {
-		return fmt.Errorf("self-repair: start windows replacement helper: %w", err)
+	const canonicalTask = "gptadmin-shellmcp"
+	const helperTask = "gptadmin-shellmcp-self-repair"
+	scriptPath := filepath.Join(os.TempDir(), helperTask+".ps1")
+	script := windowsReplaceScript(os.Getpid(), canonicalTask, helperTask, currentExe, stagedPath, scriptPath, args)
+	if err := os.WriteFile(scriptPath, []byte(script), 0o600); err != nil {
+		return fmt.Errorf("self-repair: write Windows helper script: %w", err)
 	}
-	return cmd.Process.Release()
+	register := windowsRegisterHelperScript(helperTask, scriptPath)
+	cmd := exec.Command("powershell.exe", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", register)
+	if out, err := cmd.CombinedOutput(); err != nil {
+		_ = os.Remove(scriptPath)
+		return fmt.Errorf("self-repair: register Windows helper task: %w: %s", err, strings.TrimSpace(string(out)))
+	}
+	return nil
 }
 
 func GitHubDesiredTag(build int) string { return "v" + strconv.Itoa(build) }

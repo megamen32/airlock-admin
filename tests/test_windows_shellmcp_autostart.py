@@ -51,7 +51,11 @@ def test_windows_reconciler_accepts_explicit_current_hub_url() -> None:
     assert "[string]$HubUrl" in script
     assert "$effectiveHubUrl" in script
     assert "HUB_URL=$effectiveHubUrl" in script
-    assert "SHELLMCP_UPDATE_MANIFEST_URL=$effectiveHubUrl/artifacts/shellmcp.json" in script
+    assert "SHELLMCP_AUTO_UPDATE=0" in script
+    assert "SHELLMCP_SELF_REPAIR_DISABLE=0" in script
+    assert "SHELLMCP_LEGACY_MANIFEST_UPDATE=0" in script
+    assert "SHELLMCP_UPDATE_MANIFEST_URL=" not in script
+    assert "SHELLMCP_UPDATE_TOKEN=" not in script
 
 
 def test_windows_launcher_records_secret_safe_bootstrap_failures() -> None:
