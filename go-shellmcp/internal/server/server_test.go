@@ -807,3 +807,18 @@ func TestCallbackCancelRememberedBeforeJobRegisters(t *testing.T) {
 		t.Fatal("pending callback cancellation not remembered")
 	}
 }
+
+func TestSelfRepairEmergencyDisableAndLegacyOptIn(t *testing.T) {
+	t.Setenv("SHELLMCP_SELF_REPAIR_DISABLE", "1")
+	if !selfRepairDisabled() {
+		t.Fatal("self repair disable not honored")
+	}
+	t.Setenv("SHELLMCP_SELF_REPAIR_DISABLE", "0")
+	if selfRepairDisabled() {
+		t.Fatal("self repair unexpectedly disabled")
+	}
+	t.Setenv("SHELLMCP_LEGACY_MANIFEST_UPDATE", "1")
+	if !legacyManifestUpdateEnabled() {
+		t.Fatal("legacy updater opt-in not honored")
+	}
+}

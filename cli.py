@@ -2134,6 +2134,8 @@ def setup_interactive(args):
     env.setdefault('OAUTH_CLIENT_SECRET', gen_hex(32))
     if install_shellmcp:
         env.setdefault('SHELLMCP_AUTO_UPDATE', '1')
+        env.setdefault('SHELLMCP_SELF_REPAIR_DISABLE', '0')
+        env.setdefault('SHELLMCP_LEGACY_MANIFEST_UPDATE', '0')
         ensure_shellmcp_default_user(env)
         ensure_shellmcp_identity_env(env)
         env.setdefault('SHELLMCP_UPDATE_INTERVAL_S', '3600')
@@ -4794,6 +4796,8 @@ def cmd_update(args):
         ensure_shellmcp_default_user(env)
         ensure_shellmcp_identity_env(env)
         env.setdefault('SHELLMCP_AUTO_UPDATE', '1')
+        env.setdefault('SHELLMCP_SELF_REPAIR_DISABLE', '0')
+        env.setdefault('SHELLMCP_LEGACY_MANIFEST_UPDATE', '0')
         hub_for_update = (env.get('HUB_PUBLIC_URL') or env.get('HUB_URL') or 'https://gptadmin.bezrabotnyi.com').rstrip('/')
         env['SHELLMCP_UPDATE_MANIFEST_URL'] = hub_for_update + '/artifacts/shellmcp.json'
         env['SHELLMCP_UPDATE_TOKEN'] = env.get('SHELLMCP_UPDATE_TOKEN') or env.get('SHELLMCP_TOKEN', '')

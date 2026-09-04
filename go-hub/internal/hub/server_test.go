@@ -3507,3 +3507,19 @@ func TestStaleCleanupHonorsProtectionAndCreatesTombstone(t *testing.T) {
 		t.Fatalf("tombstones=%v", tombs)
 	}
 }
+
+func TestShellRuntimeSettingsAdvertiseGitHubSelfRepair(t *testing.T) {
+	s := New(Config{ConfigDir: t.TempDir()})
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	settings := s.shellRuntimeSettingsLocked()
+	if settings["self_repair_enabled"] != true {
+		t.Fatalf("self_repair_enabled=%v", settings["self_repair_enabled"])
+	}
+	if got := firstString(settings, "release_repo"); got != "megamen32/gptadmin_opensource" {
+		t.Fatalf("release_repo=%q", got)
+	}
+	if _, ok := settings["desired_build_version"]; !ok {
+		t.Fatal("desired_build_version missing")
+	}
+}

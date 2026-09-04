@@ -149,6 +149,8 @@ type Beat struct {
 	QueuePollLatencyMS  int64            `json:"queue_poll_latency_ms,omitempty"`
 	OutboxRetryFailures int64            `json:"outbox_retry_failures,omitempty"`
 	OutboxDelivered     int64            `json:"outbox_delivered,omitempty"`
+	SelfRepairDesired   int              `json:"self_repair_desired,omitempty"`
+	SelfRepairState     string           `json:"self_repair_state,omitempty"`
 }
 
 type QueueJob struct {
@@ -252,6 +254,12 @@ func (c *Client) PollQueue(ctx context.Context, beat Beat, timeout int) (QueueJo
 	}
 	if beat.OutboxDelivered > 0 {
 		q.Set("outbox_delivered", fmt.Sprintf("%d", beat.OutboxDelivered))
+	}
+	if beat.SelfRepairDesired > 0 {
+		q.Set("self_repair_desired", fmt.Sprintf("%d", beat.SelfRepairDesired))
+	}
+	if beat.SelfRepairState != "" {
+		q.Set("self_repair_state", beat.SelfRepairState)
 	}
 	if enc := q.Encode(); enc != "" {
 		p += "?" + enc

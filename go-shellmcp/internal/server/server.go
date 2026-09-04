@@ -236,32 +236,37 @@ func normalizeTraceID(value string) string {
 }
 
 type Server struct {
-	cfg                 Config
-	jobs                *job.Manager
-	identity            *security.Identity
-	hub                 *hub.Client
-	auditLog            *audit.Logger
-	nonces              *security.NonceCache
-	supervisor          *supervisor.Manager
-	preserveMeta        bool
-	preserveMax         int
-	sshClient           *sshexec.Client
-	childMCP            *mcpclient.Client
-	storageLimit        int64
-	mcpHealth           atomic.Value // map[string]map[string]any
-	healthBusy          atomic.Bool
-	healthMu            sync.Mutex
-	healthCancel        context.CancelFunc
-	healthWG            sync.WaitGroup
-	healthClosed        bool
-	callbackMu          sync.Mutex
-	callbackCancels     map[string]context.CancelFunc
-	callbackCancelled   map[string]bool
-	queuePollCount      atomic.Int64
-	queuePollErrors     atomic.Int64
-	queuePollLatencyMS  atomic.Int64
-	outboxRetryFailures atomic.Int64
-	outboxDelivered     atomic.Int64
+	cfg                   Config
+	jobs                  *job.Manager
+	identity              *security.Identity
+	hub                   *hub.Client
+	auditLog              *audit.Logger
+	nonces                *security.NonceCache
+	supervisor            *supervisor.Manager
+	preserveMeta          bool
+	preserveMax           int
+	sshClient             *sshexec.Client
+	childMCP              *mcpclient.Client
+	storageLimit          int64
+	mcpHealth             atomic.Value // map[string]map[string]any
+	healthBusy            atomic.Bool
+	healthMu              sync.Mutex
+	healthCancel          context.CancelFunc
+	healthWG              sync.WaitGroup
+	healthClosed          bool
+	callbackMu            sync.Mutex
+	callbackCancels       map[string]context.CancelFunc
+	callbackCancelled     map[string]bool
+	queuePollCount        atomic.Int64
+	queuePollErrors       atomic.Int64
+	queuePollLatencyMS    atomic.Int64
+	outboxRetryFailures   atomic.Int64
+	outboxDelivered       atomic.Int64
+	selfRepairBusy        atomic.Bool
+	selfRepairPolicySeen  atomic.Bool
+	selfRepairDesired     atomic.Int64
+	selfRepairLastAttempt atomic.Int64
+	selfRepairState       atomic.Value // string
 }
 
 func New(cfg Config) *Server {
@@ -1124,6 +1129,13 @@ func (s *Server) sendHeartbeat(ctx context.Context) {
 	resp.Body.Close()
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		log.Printf("heartbeat best-effort HTTP %d: %s", resp.StatusCode, string(body))
+		return
+	}
+	var payload struct {
+		RuntimeSettings map[string]any `json:"runtime_settings"`
+	}
+	if json.Unmarshal(body, &payload) == nil {
+		s.applyHubRuntimeSettings(payload.RuntimeSettings)
 	}
 }
 
@@ -1144,6 +1156,10 @@ func (s *Server) newBeat() hub.Beat {
 	beat.QueuePollLatencyMS = s.queuePollLatencyMS.Load()
 	beat.OutboxRetryFailures = s.outboxRetryFailures.Load()
 	beat.OutboxDelivered = s.outboxDelivered.Load()
+	beat.SelfRepairDesired = int(s.selfRepairDesired.Load())
+	if v := s.selfRepairState.Load(); v != nil {
+		beat.SelfRepairState, _ = v.(string)
+	}
 	return beat
 }
 
@@ -1321,6 +1337,14 @@ func (s *Server) applyHubRuntimeSettings(v map[string]any) {
 	}
 	if s.cfg.OutboxBackoffCap < s.cfg.OutboxBackoffBase {
 		s.cfg.OutboxBackoffCap = s.cfg.OutboxBackoffBase
+	}
+	if enabled, ok := v["self_repair_enabled"].(bool); ok {
+		s.selfRepairPolicySeen.Store(true)
+		if enabled {
+			desired := intAny(v["desired_build_version"])
+			repo, _ := v["release_repo"].(string)
+			s.triggerGitHubSelfRepair(desired, repo)
+		}
 	}
 }
 func intAny(v any) int {

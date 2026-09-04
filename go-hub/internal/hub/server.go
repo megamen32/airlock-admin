@@ -330,6 +330,8 @@ var hubSettingRegistry = []hubSettingDefinition{
 	{Key: "shell_storage_max_mb", Type: "integer", Category: "storage", Title: "Максимум ShellMCP storage", Description: "Общий лимит spool/outbox/audit/backups. 0 = автоматически min(5% filesystem, 500 MB).", Default: 0, Minimum: intPtr(0), Maximum: intPtr(10240), Unit: "MB", RestartRequired: false, Advanced: true, Order: 20},
 	{Key: "shell_outbox_backoff_base_seconds", Type: "integer", Category: "transport", Title: "Outbox backoff base", Description: "Базовая задержка экспоненциального retry отправки результатов ShellMCP.", Default: 5, Minimum: intPtr(1), Maximum: intPtr(600), Unit: "seconds", RestartRequired: false, Advanced: true, Order: 30},
 	{Key: "shell_outbox_backoff_cap_seconds", Type: "integer", Category: "transport", Title: "Outbox backoff cap", Description: "Максимальная задержка retry outbox ShellMCP.", Default: 600, Minimum: intPtr(1), Maximum: intPtr(3600), Unit: "seconds", RestartRequired: false, Advanced: true, Order: 40},
+	{Key: "fleet_auto_update_enabled", Type: "boolean", Category: "self_repair", Title: "Fleet self-repair", Description: "Разрешить ShellMCP автоматически выравниваться до desired GitHub release через Hub policy.", Default: true, RestartRequired: false, Order: 10},
+	{Key: "fleet_desired_build_version", Type: "integer", Category: "self_repair", Title: "Desired fleet build", Description: "Желаемый build_version ShellMCP. 0 = текущая release-версия Hub.", Default: 0, Minimum: intPtr(0), Maximum: intPtr(1000000000), Unit: "build", RestartRequired: false, Advanced: true, Order: 20},
 }
 
 func defaultHubSettings() hubSettings {
@@ -3049,12 +3051,13 @@ func (s *Server) heartbeat(w http.ResponseWriter, r *http.Request) {
 	if err := s.saveFailoverStateBundleLocked(); err != nil {
 		log.Printf("failover state save failed: %v", err)
 	}
+	runtimeSettings := s.shellRuntimeSettingsLocked()
 	s.mu.Unlock()
 	responseStatus := "registered"
 	if !approved {
 		responseStatus = "awaiting_approval"
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "agent_id": agentID, "status": responseStatus})
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "agent_id": agentID, "status": responseStatus, "runtime_settings": runtimeSettings})
 }
 
 func (s *Server) queue(w http.ResponseWriter, r *http.Request) {
@@ -3086,6 +3089,10 @@ func (s *Server) shellQueuePollMaxLocked() time.Duration {
 }
 
 func (s *Server) shellRuntimeSettingsLocked() map[string]any {
+	desired := s.hubSettingIntLocked("fleet_desired_build_version")
+	if desired <= 0 {
+		desired = intFromAny(BuildVersion)
+	}
 	return map[string]any{
 		"queue_long_poll_seconds":     s.hubSettingIntLocked("shell_queue_long_poll_seconds"),
 		"queue_retry_seconds":         s.hubSettingIntLocked("shell_queue_retry_seconds"),
@@ -3093,6 +3100,9 @@ func (s *Server) shellRuntimeSettingsLocked() map[string]any {
 		"storage_max_mb":              s.hubSettingIntLocked("shell_storage_max_mb"),
 		"outbox_backoff_base_seconds": s.hubSettingIntLocked("shell_outbox_backoff_base_seconds"),
 		"outbox_backoff_cap_seconds":  s.hubSettingIntLocked("shell_outbox_backoff_cap_seconds"),
+		"self_repair_enabled":         s.hubSettingBoolLocked("fleet_auto_update_enabled"),
+		"desired_build_version":       desired,
+		"release_repo":                "megamen32/gptadmin_opensource",
 	}
 }
 
@@ -3163,12 +3173,12 @@ func (s *Server) touchShellPollLocked(name string, r *http.Request) bool {
 		"poll_heartbeat":        true,
 		"heartbeat_best_effort": true,
 	}
-	for _, key := range []string{"server_id", "public_key", "fingerprint", "base_url", "os", "git_commit", "default_user", "default_home", "default_cwd"} {
+	for _, key := range []string{"server_id", "public_key", "fingerprint", "base_url", "os", "git_commit", "default_user", "default_home", "default_cwd", "self_repair_state"} {
 		if v := strings.TrimSpace(r.URL.Query().Get(key)); v != "" {
 			meta[key] = v
 		}
 	}
-	for _, key := range []string{"cores", "mem_mb", "build_version", "spool_bytes", "storage_bytes", "outbox_depth", "outbox_retry_attempts", "queue_poll_count", "queue_poll_errors", "queue_poll_latency_ms", "outbox_retry_failures", "outbox_delivered"} {
+	for _, key := range []string{"cores", "mem_mb", "build_version", "spool_bytes", "storage_bytes", "outbox_depth", "outbox_retry_attempts", "queue_poll_count", "queue_poll_errors", "queue_poll_latency_ms", "outbox_retry_failures", "outbox_delivered", "self_repair_desired"} {
 		if v := intFromString(r.URL.Query().Get(key)); v > 0 {
 			meta[key] = v
 		}

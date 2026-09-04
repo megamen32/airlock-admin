@@ -124,6 +124,13 @@ func (s *Server) diagnoseHub() map[string]any {
 	tombstoneCount := len(s.tombstones)
 	candidates := s.cleanupCandidatesLocked()
 	shellObs := map[string]map[string]any{}
+	desiredBuild := s.hubSettingIntLocked("fleet_desired_build_version")
+	if desiredBuild <= 0 {
+		desiredBuild = intFromAny(BuildVersion)
+	}
+	selfRepairEnabled := s.hubSettingBoolLocked("fleet_auto_update_enabled")
+	outdatedAgents := []string{}
+	failedRepairAgents := []string{}
 	totals := map[string]int64{"storage_bytes": 0, "spool_bytes": 0, "outbox_depth": 0, "outbox_retry_attempts": 0, "queue_poll_errors": 0, "outbox_retry_failures": 0, "outbox_delivered": 0}
 	for id, a := range s.agents {
 		if a == nil || a.Kind != "virtual_shell" || a.Meta == nil {
@@ -140,6 +147,13 @@ func (s *Server) diagnoseHub() map[string]any {
 		}
 		if len(item) > 0 {
 			shellObs[id] = item
+		}
+		build := intFromAny(a.Meta["build_version"])
+		if desiredBuild > 0 && build > 0 && build < desiredBuild {
+			outdatedAgents = append(outdatedAgents, id)
+		}
+		if firstString(a.Meta, "self_repair_state") == "failed" {
+			failedRepairAgents = append(failedRepairAgents, id)
 		}
 	}
 	candidateEligible := 0
@@ -159,6 +173,12 @@ func (s *Server) diagnoseHub() map[string]any {
 	if candidateEligible > 0 {
 		warnings = append(warnings, fmt.Sprintf("%d stale MCP eligible for cleanup", candidateEligible))
 	}
+	if len(outdatedAgents) > 0 {
+		warnings = append(warnings, fmt.Sprintf("%d ShellMCP agents below desired build %d", len(outdatedAgents), desiredBuild))
+	}
+	if len(failedRepairAgents) > 0 {
+		warnings = append(warnings, fmt.Sprintf("%d ShellMCP self-repair failures", len(failedRepairAgents)))
+	}
 	sort.Strings(warnings)
 	return map[string]any{
 		"ok":                  true,
@@ -170,6 +190,7 @@ func (s *Server) diagnoseHub() map[string]any {
 		"settings":            map[string]any{"revision": revision, "history_count": historyCount, "values": settings},
 		"registry":            map[string]any{"cleanup_candidates": len(candidates), "cleanup_eligible": candidateEligible, "tombstones": tombstoneCount},
 		"shell_observability": map[string]any{"totals": totals, "by_agent": shellObs},
+		"self_repair":         map[string]any{"enabled": selfRepairEnabled, "desired_build": desiredBuild, "release_repo": "megamen32/gptadmin_opensource", "outdated_agents": outdatedAgents, "failed_agents": failedRepairAgents},
 		"warnings":            warnings,
 		"checked_at":          s.now().Format(time.RFC3339),
 	}
