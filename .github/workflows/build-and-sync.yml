@@ -324,8 +324,8 @@ jobs:
             [[ -f "$asset" ]] && release_assets+=("$asset")
           done < <(python3 -c 'import json, sys; print(*[artifact["file"] for artifact in json.load(open(sys.argv[1]))["artifacts"]], sep="\n")' "$SRC/build/gptadmin-release-matrix.json")
           release_assets+=(
-            "$SRC"/build/gptadmin-checksums.txt"
-            "$SRC"/build/gptadmin-release-matrix.json"
+            "$SRC"/build/gptadmin-checksums.txt
+            "$SRC"/build/gptadmin-release-matrix.json
           )
           [[ ${#release_assets[@]} -eq 18 ]] || {
             echo "ERROR: expected 16 bundles plus checksums and matrix, got ${#release_assets[@]}" >&2
