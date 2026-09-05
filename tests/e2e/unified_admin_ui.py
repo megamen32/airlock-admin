@@ -90,6 +90,7 @@ def main() -> None:
             assert page.get_by_label('Режим выполнения', exact=True).input_value() == 'unrestricted'
             page.get_by_role('link', name='Клиенты', exact=True).click()
             page.get_by_label('Профиль нового подключения', exact=True).select_option('browser-ops')
+            page.get_by_label('Роль нового подключения', exact=True).select_option('admin')
             page.get_by_role('button', name='Выдать managed token', exact=True).click()
             page.locator('.token-callout code').wait_for()
             issued = page.locator('.token-callout code').inner_text()
@@ -107,6 +108,11 @@ def main() -> None:
                     break
                 except Exception:
                     time.sleep(0.1)
+            page.goto(url + '/admin/#clients')
+            page.get_by_role('button', name='Показать сохранённый токен', exact=True).click()
+            page.locator('.token-callout code').wait_for()
+            assert page.locator('.token-callout code').inner_text() == issued
+            assert page.get_by_label('Роль выбранного подключения', exact=True).input_value() == 'admin'
             profile = page.request.get(url + '/admin/api/access-profiles/browser-ops').json()
             assert profile['workspace_refs'][0]['workspace_path'] == '/work'
             operations = page.request.get(url + '/admin/api/operations').json()
@@ -124,7 +130,7 @@ def main() -> None:
             assert dimensions['content'] <= dimensions['width'] + 2, dimensions
             assert not errors, errors
             browser.close()
-        print(json.dumps({'result': 'PASS', 'routes': len(routes), 'real_go_hub': True, 'profile_edit_and_restart': True, 'operations': operations['total'], 'token_retained_on_navigation': True, 'legacy_redirect': True, 'mobile': dimensions, 'page_errors': errors}, ensure_ascii=False))
+        print(json.dumps({'result': 'PASS', 'routes': len(routes), 'real_go_hub': True, 'profile_edit_and_restart': True, 'operations': operations['total'], 'token_retained_on_navigation': True, 'saved_token_after_restart': True, 'admin_role_visible': True, 'legacy_redirect': True, 'mobile': dimensions, 'page_errors': errors}, ensure_ascii=False))
     finally:
         server.terminate()
         try:

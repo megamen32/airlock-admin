@@ -43,15 +43,14 @@ concerns: hiding a feature is not an acceptable substitute for an explicit
 opt-in policy. Future UI migrations must preserve a feature inventory before
 removing the previous implementation.
 
-### Token limitation — not finished
+### Token and administrator follow-up
 
-Only the most recently issued token is retained in the current page's memory.
-Navigation preserves it; page reload still clears it. Historical managed token
-records contain a digest, not the original value, so this change cannot restore
-those old values. No token was silently rotated, revoked or replaced. A durable
-owner-facing credential inventory, with an explicit storage/display contract,
-remains separate work; this change does not claim to have restored all token
-values from configuration or old token records.
+Shared-access changes now preserve independent token/OAuth-client writes and
+reload authoritative state on validation. Explicit stored `admin`/`owner` roles
+allow native MCP administration without equating all execution tokens to owners.
+New token values survive reload/restart and have an admin-only retrieval action;
+old hash-only values still need explicit rotation. See ACCESS_OPERATIONS.md.
+The remaining coarse-lock/UI/queued-execution work is not implied complete.
 
 ## Task-runtime follow-up — 2026-09-05
 

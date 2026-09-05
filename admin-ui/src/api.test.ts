@@ -5,6 +5,8 @@ import {
   getAccessProfile,
   getAccessProfiles,
   getClients,
+  getStoredMcpToken,
+  setClientRole,
   issueMcpToken,
   putAccessProfile,
   putClientBinding,
@@ -184,4 +186,14 @@ it("preserves the real Go profile fields and does not invent required empty work
   expect(saved).not.toHaveProperty("external_workspace_refs");
   expect(saved.approval_mode).toBe("ask_before_write");
   expect(saved.instruction_set_id).toBe("special");
+});
+
+it("uses the explicit saved-token and role endpoints", async () => {
+  const fetchMock = vi.spyOn(globalThis, "fetch")
+    .mockResolvedValueOnce(jsonResponse({token_id: "saved", client_id: "operator", access_token: "fixture-value", mcp_url: "https://hub.example/mcp"}))
+    .mockResolvedValueOnce(jsonResponse({ok:true}));
+  await expect(getStoredMcpToken("saved")).resolves.toMatchObject({token_id:"saved",access_token:"fixture-value"});
+  await setClientRole("saved", "admin");
+  expect(fetchMock).toHaveBeenNthCalledWith(1, "/admin/api/mcp/tokens/saved/value", expect.objectContaining({credentials:"same-origin"}));
+  expect(fetchMock).toHaveBeenNthCalledWith(2, "/admin/api/client-roles/saved", expect.objectContaining({method:"PUT",body:JSON.stringify({role:"admin"})}));
 });

@@ -16,7 +16,7 @@ Status: incremental implementation; see docs/ACCESS_OPERATIONS.md
 - [x] Owner API tools for profiles, named connections and durable access history.
 - [x] Preserve profile fields in the UI; effective read-only permission; retire the unserved duplicate dashboard.
 - [ ] Paired production upgrade with a compatible rollback and real-connector acceptance.
-- [ ] Explicit delegated admin roles and owner retrieval of stored token values.
+- [x] Explicit delegated admin roles, shared token/OAuth state and owner retrieval of stored token values (source and isolated-process/browser proof).
 - [ ] Persist queued execution inputs and define executor delivery acknowledgements.
 - [ ] Measure and narrow remaining coarse locks and other snapshot stores.
 

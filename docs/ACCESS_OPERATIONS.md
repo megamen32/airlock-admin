@@ -74,14 +74,45 @@ tests target the actual operational component. Historical work logs retain
 historical references. No active token or runtime service was removed by this
 source cleanup.
 
-## Remaining owner credential work
+## Shared token state and explicit administrators
 
-Original values of older managed tokens remain hash-only. This change does not
-add persistent token-value storage/retrieval or revoke old connections. The most
-recent issued value is still page-memory-only. Owner/admin viewing is a required
-product capability, not a reason to rotate credentials silently. Actual usage
-and exact IDs must be reviewed before removing old connections, especially the
-connection used for management and revocation metadata needed by validators.
+Managed-token and OAuth-client files are shared between the local Hubs. Writers
+hold an OS file lock, reread the current file, and merge only changed records
+against their original snapshot. A stale change to the same record conflicts;
+independent issuers are preserved. Unique temporary files, file sync, atomic
+replacement and directory sync replace the old common `.tmp` writer. The small
+configuration files remain JSON; no new credential service was introduced.
+Authentication reloads authoritative token, registration and profile state.
+New issuance, profile edits, role changes and revocation are visible to an
+already-running standby without restarting it. Explicit revocation and token
+kind always apply; optional expiry/issuer hardening remains configurable.
+
+`access_clients` adds `whoami`, `set_role` and `token`. A connection role is
+`client`, `admin` or `owner`. Both administrative roles can manage access and
+view saved credential values. Full execution permission alone, or a JWT subject
+named `admin`, does not grant that role. The role comes from persisted connection
+metadata. OAuth connections can also receive a role on their existing client ID;
+no separate OS-user or human-login directory is created. An explicit read-only
+mode/profile and target/tool restrictions still apply to a delegated admin.
+
+Example: `access_clients(action="set_role", id="<exact connection id>", role="admin")`
+requires an already-authorized administrator or owner browser session. Changing
+one's own role is possible only while already authorized; `whoami` reports the
+current identity without promoting it or revealing credentials.
+
+New managed bearers and refresh-token values are retained in the existing
+private state file (0600). Normal inventory and diagnostic serialization excludes
+the values. Admin/owner retrieval is `access_clients(action="token", id="...")`
+or `GET /admin/api/mcp/tokens/{id}/value` with no-store caching. Configured
+migration credentials can be viewed from existing configuration when their
+current digest matches. Old hash-only values remain unavailable; viewing never
+silently rotates, revokes or replaces them. Explicit rotation writes revocation
+and replacement together, retaining role, binding and non-expiring lifetime.
+Old binaries that do not preserve these new fields are not compatible writers.
+
+The UI exposes role selection, role editing and "Показать сохранённый токен".
+Reloading the page or restarting Hub no longer loses a newly stored value.
+Bulk revocation of historical production connections was not part of this change.
 
 ## Proof
 
@@ -91,3 +122,9 @@ clients. `access_effective_mode_test.go` proves the read-only profile rule.
 Frontend contract tests use actual Go fields. `tests/e2e/unified_admin_ui.py`
 creates/edits a profile in a real browser, issues a bound connection, restarts
 its isolated real Hub, and verifies restored fields and visible history.
+
+Shared-access regressions are `access_shared_state_test.go` and
+`access_shared_http_test.go`: concurrent issuance, same-record conflicts,
+immediate revocation/binding/role edits, atomic rotation failure, stored values,
+ordinary-client denial, and independent HTTP Hub processes. The real browser
+script also reads the same stored token and role after restarting its fixture.

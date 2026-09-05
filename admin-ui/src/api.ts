@@ -34,6 +34,7 @@ export type AccessProfile = {
 };
 
 export type ClientInventoryItem = {
+  role?: string;
   id: string;
   client_id: string;
   token_kind: string;
@@ -79,6 +80,7 @@ export type VirtualMCP = {
 };
 
 export type IssueTokenRequest = {
+  role?: string;
   profile_id?: string;
   client_id: string;
   ttl_days: number;
@@ -233,6 +235,7 @@ function parseClient(body: unknown): ClientInventoryItem {
     : value.status;
   if (typeof status !== "string") throw new ApiError(502, "Сервер вернул некорректный статус клиента.");
   return {
+    ...(typeof value.role === "string" ? { role: value.role } : {}),
     id: value.id,
     client_id: value.client_id,
     token_kind: tokenKind,
@@ -523,4 +526,14 @@ export async function startHubHandover(): Promise<Record<string, unknown>> {
 
 export function byteLength(value: string): number {
   return new TextEncoder().encode(value).byteLength;
+}
+
+export async function getStoredMcpToken(id: string): Promise<TokenResponse> {
+  const response = await request(`/admin/api/mcp/tokens/${encodeURIComponent(id)}/value`);
+  const value = asRecord(await responseJSON(response), "Не удалось получить токен.");
+  if (typeof value.token_id !== "string" || typeof value.access_token !== "string") throw new ApiError(502, "Сервер вернул неполный токен.");
+  return { token_id: value.token_id, access_token: value.access_token, client_id: typeof value.client_id === "string" ? value.client_id : undefined, mcp_url: typeof value.mcp_url === "string" ? value.mcp_url : undefined };
+}
+export async function setClientRole(id: string, role: string): Promise<void> {
+  await request(`/admin/api/client-roles/${encodeURIComponent(id)}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({role}) });
 }
