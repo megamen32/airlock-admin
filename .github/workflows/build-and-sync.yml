@@ -22,7 +22,7 @@ env:
 jobs:
   admin-ui-build:
     # The React UI is build-tested independently. The release package puts it
-    # at /admin/ and keeps the complete operational shell at /admin/legacy/.
+    # at /admin/ with native operations; /admin/legacy/ redirects there.
     runs-on: ubuntu-latest
     steps:
       - name: Checkout

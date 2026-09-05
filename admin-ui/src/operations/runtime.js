@@ -1,10 +1,14 @@
+/* global AbortController, fetch, localStorage, CSS, alert, confirm, prompt, atob, btoa, window, navigator, setInterval, clearInterval */
+// Shared operations component. The React app owns navigation and lifecycle.
+export function mountOperations(root, initialView, onNavigate) {
 /* ═══════════════════════════════════════════════════════════════
    GPTAdmin Dashboard — app.js
    ═══════════════════════════════════════════════════════════════ */
 
-const $=(id)=>document.getElementById(id);let state=null,currentView=localStorage.getItem('gptadmin_view')||'overview',updateStartedFromBuild=null;
+const $=(id)=>root.querySelector('[id="'+id+'"]');let state=null,currentView=initialView,updateStartedFromBuild=null;
+const requests=new AbortController(); let disposed=false, failoverLoaded=false, failoverDirty=false;
 function hdr(){return {'Content-Type':'application/json'}}function esc(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}function cls(s){return String(s||'').replace(/[^a-zA-Z0-9_-]/g,'_')}function displayKind(kind){return kind==='virtual_hub'?'hub':kind}function toggleSidebar(){ $('sidebar').classList.toggle('open') }
-async function api(path,opts={}){const r=await fetch(path,{...opts,headers:{...hdr(),...(opts.headers||{})}});const t=await r.text();let j;try{j=JSON.parse(t)}catch{j={text:t}}if(!r.ok)throw new Error((j&&j.detail)||j.error||t||r.status);return j}
+async function api(path,opts={}){const r=await fetch(path,{...opts,signal:requests.signal,headers:{...hdr(),...(opts.headers||{})}});const t=await r.text();let j;try{j=JSON.parse(t)}catch{j={text:t}}if(!r.ok)throw new Error((j&&j.detail)||j.error||t||r.status);return j}
 function asTable(rows,cols){if(!rows||!rows.length)return '<p class="muted">пусто</p>';return '<table><thead><tr>'+cols.map(c=>'<th>'+esc(c[0])+'</th>').join('')+'</tr></thead><tbody>'+rows.map(r=>'<tr>'+cols.map(c=>'<td>'+c[1](r)+'</td>').join('')+'</tr>').join('')+'</tbody></table>'}
 function compactTime(ts){if(!ts)return '—';const numeric=typeof ts==='number'?ts:Number(ts);const value=Number.isFinite(numeric)&&String(ts).trim()!==''?(numeric<1e12?numeric*1000:numeric):ts;const d=new Date(value);if(Number.isNaN(d.getTime()))return ts;return d.toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit',second:'2-digit'})}
 function metaTitle(lines){return esc(lines.filter(Boolean).join('\n'))}
@@ -16,16 +20,16 @@ function syntaxHighlightJson(obj){
   try{
     let json=typeof obj==='string'?obj:JSON.stringify(obj,null,2);
     // Try to parse if string, re-stringify for consistent formatting
-    if(typeof obj==='string'){try{json=JSON.stringify(JSON.parse(obj),null,2)}catch(e){}}
+    if(typeof obj==='string'){try{json=JSON.stringify(JSON.parse(obj),null,2)}catch{/* Display non-JSON text unchanged. */}}
     json=json.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-    return json.replace(/("(\\u[a-zA-Z0-9]{4}|\\[^u]|[^\\"])*"(\s*:)?|(true|false|null)|-?\d+(?:\.\d*)?(?:[eE][+\-]?\d+)?)/g,function(match){
+    return json.replace(/("(\\u[a-zA-Z0-9]{4}|\\[^u]|[^\\"])*"(\s*:)?|\b(true|false|null)\b|-?\d+(?:\.\d*)?(?:[eE][+-]?\d+)?)/g,function(match){
       let cls='json-num';
       if(/^"/.test(match)){if(/:$/.test(match))cls='json-key';else cls='json-str'}
       else if(/true|false/.test(match))cls='json-bool';
       else if(/null/.test(match))cls='json-null';
       return '<span class="'+cls+'">'+match+'</span>'
     })
-  }catch(e){return String(obj)}
+  }catch{return String(obj)}
 }
 function prettyJsonHtml(value){if(value===null||value===undefined)return '<span class="muted">—</span>';if(typeof value==='string'){const trimmed=value.trim();if(!trimmed)return '<span class="muted">—</span>';try{return syntaxHighlightJson(JSON.parse(trimmed))}catch{return '<span>'+esc(value)+'</span>'}}try{return syntaxHighlightJson(value)}catch{return '<span>'+esc(String(value))+'</span>'}}
 function cancelJob(jobId,server){
@@ -40,7 +44,7 @@ function responseToggleLabel(row){if(row.error)return '▼ ошибка';return 
 function jobMetaLines(row){const ctx=row.request_context||{};return ['token: '+(ctx.token_id||'—'),'ip: '+(ctx.client_ip||'—'),'ua: '+(ctx.user_agent||'—'),row.server_id?'server: '+row.server_id:'',row.server?'server: '+row.server:'',row.job_id?'job: '+row.job_id:'',row.task_id?'task: '+row.task_id:''].filter(Boolean)}
 function auditMetaLines(row){return ['event: '+(row.event||'—'),'token: '+(row.token_id||'—'),'ip: '+(row.client_ip||'—'),'ua: '+(row.user_agent||'—'),row.target?'target: '+row.target:'',row.job_id?'job: '+row.job_id:'',row.path?'path: '+row.path:''].filter(Boolean)}
 function renderRecentMini(rows){if(!rows.length)return '<p class="muted">пусто</p>';return '<div class="recentMini">'+rows.map(r=>`<div class="recentMiniItem"><div class="recentMiniTop"><span class="${cls(r.status)}">${esc(r.status||'—')}</span><span class="entryCompactTime muted">${esc(compactTime(r.created_fmt||r.created_at||''))}</span></div><div><b>${esc(entrySummaryLabel(r))}</b></div><div class="recentMiniCmd mono">${esc(String(entryCommand(r)).substring(0,160))}</div></div>`).join('')+'</div>'}
-function renderResponseBlock(row, metaLabel){
+function renderResponseBlock(row){
   if(!canLoadResponse(row)&&!hasInlineResponse(row))return '';
   const preview=responsePreviewText(row);
   const PREVIEW_MAX=300;
@@ -69,7 +73,7 @@ function renderJobCard(row){
           ${timingStr?`<span class="muted small mono">${esc(timingStr)}</span>`:''}
           <span class="entryMetaInfo" title="${metaTitle(jobMetaLines(row))}">i</span>
         </div>
-        <div class="entryCommand mono" style="max-height:60px;overflow:hidden;cursor:pointer" onclick="toggleCmdExpand(this)">${cmdHtml}</div>
+        <div class="entryCommand mono" style="max-height:60px;overflow:hidden;cursor:pointer" onclick="toggleCmdExpand(this,event)">${cmdHtml}</div>
         <div class="entryMeta">
           ${row.kind?`<span class="pill">${esc(displayKind(row.kind))}</span>`:''}
           ${row.server?`<span class="muted small">${esc(row.server)}</span>`:''}
@@ -94,7 +98,7 @@ function renderAuditCard(row){
           <span class="entryCompactTime muted">${esc(compactTime(row.ts||''))}</span>
           <span class="entryMetaInfo" title="${metaTitle(auditMetaLines(row))}">i</span>
         </div>
-        <div class="entryCommand mono" style="max-height:60px;overflow:hidden;cursor:pointer" onclick="toggleCmdExpand(this)">${cmdHtml}</div>
+        <div class="entryCommand mono" style="max-height:60px;overflow:hidden;cursor:pointer" onclick="toggleCmdExpand(this,event)">${cmdHtml}</div>
         <div class="entryMeta">
           ${row.status?`<span class="pill">${esc(row.status)}</span>`:''}
           ${row.target?`<span class="muted small">${esc(row.target)}</span>`:''}
@@ -106,7 +110,7 @@ function renderAuditCard(row){
   </article>`;
 }
 async function handleResponseToggle(details){if(!details.open||details.dataset.loaded||details.dataset.loading||!details.dataset.jobId)return;details.dataset.loading='1';const pre=details.querySelector('pre');const empty=details.querySelector('.responseEmpty');if(pre)pre.textContent='loading…';if(empty)empty.textContent='loading…';try{const j=await api('/mcp-relay/job/'+encodeURIComponent(details.dataset.jobId)+'?verbose=true&include_raw=true');const payload=('response' in j)?j.response:('result' in j?j.result:j);const textHtml=prettyJsonHtml(payload);const next=`<pre class="responseBody mono">${textHtml||'—'}</pre>`;if(pre)pre.outerHTML=next;else if(empty)empty.outerHTML=next;else details.insertAdjacentHTML('beforeend',next);details.dataset.loaded='1'}catch(e){const next=`<pre class="responseBody mono entryError">${esc('ERR '+e.message)}</pre>`;if(pre)pre.outerHTML=next;else if(empty)empty.outerHTML=next;else details.insertAdjacentHTML('beforeend',next)}finally{delete details.dataset.loading}}
-function showView(v){currentView=v;localStorage.setItem('gptadmin_view',v);document.querySelectorAll('.view').forEach(x=>x.classList.remove('active'));document.querySelectorAll('.navbtn').forEach(x=>x.classList.toggle('active',x.dataset.view===v));$('view-'+v)?.classList.add('active');$('viewTitle').textContent=({overview:'Обзор',agents:'Серверы','agent-detail':'Детали сервера',clients:'Клиенты и Auth',jobs:'Jobs и очереди','job-detail':'Детали job',tools:'Tools тестер',resources:'Ресурсы',mcpmanage:'MCP менеджер',security:'Токены и Auth',failover:'Failover',audit:'Журнал аудита',raw:'Сырой JSON'}[v]||v);$('sidebar').classList.remove('open');renderAll()}
+function showView(v){if(disposed)return;currentView=v;localStorage.setItem('gptadmin_view',v);root.querySelectorAll('.view').forEach(x=>x.classList.remove('active'));root.querySelectorAll('.navbtn').forEach(x=>x.classList.toggle('active',x.dataset.view===v));$('view-'+v)?.classList.add('active');$('viewTitle').textContent=({overview:'Обзор',agents:'Серверы','agent-detail':'Детали сервера',clients:'Клиенты и Auth',jobs:'Jobs и очереди','job-detail':'Детали job',tools:'Tools тестер',resources:'Ресурсы',mcpmanage:'MCP менеджер',security:'Токены и Auth',failover:'Failover',audit:'Журнал аудита',raw:'Сырой JSON'}[v]||v);$('sidebar').classList.remove('open');renderAll();onNavigate(v);if(v==='failover'&&!failoverLoaded){failoverLoaded=true;void loadFailover()}if(v==='security'){void loadSecurityControls();void loadVirtualMcps()}}
 function includesText(row,q){return !q||JSON.stringify(row).toLowerCase().includes(q.toLowerCase())}
 // getMaxActiveIps / onMaxActiveIpsChange — client-side tolerance for token IP count.
 // These helpers are used by renderClientCard(), inline onchange handlers and page bootstrap,
@@ -135,8 +139,22 @@ const SERVER_CARD_CAPS_SHOWN = 5;
 const SERVER_CARD_META_KEYS_SHOWN = 5;
 const MANAGEDMCP_CARD_ARGS_SHOWN = 4;
 const MANAGEDMCP_CARD_ENV_KEYS_SHOWN = 5;
+function topN(arr, n) {
+  const out = [];
+  if (!Array.isArray(arr)) return out;
+  const lim = (typeof n === 'number' && n > 0) ? n : 0;
+  for (let i = 0; i < arr.length && i < lim; i++) out.push(arr[i]);
+  return out;
+}
+function metaValueForList(v) {
+  if (v === null || v === undefined) return '—';
+  if (typeof v === 'object') {
+    try { return JSON.stringify(v); } catch { return String(v); }
+  }
+  return String(v);
+}
 function renderAll(){if(!state)return;const data=state;const ac=data.server_counts||{};$('agentCounts').innerHTML=`<span class="ok">${ac.online||0}</span><span class="muted"> / </span><span class="bad">${ac.offline||0}</span><span class="muted"> / </span><span class="warn">${ac.stale||0}</span>`;$('agentSub').innerHTML=`<span class="ok">●</span> online · <span class="bad">●</span> offline · <span class="warn">●</span> stale`;$('clientCount').textContent=data.client_count||0;$('queuedCount').textContent=(data.jobs?.queued||[]).length;$('bgCount').textContent=(data.jobs?.background||[]).length;$('bOverview').textContent='live';$('bServers').textContent=(data.servers||[]).length;$('bClients').textContent=data.client_count||0;$('bJobs').textContent=data.jobs?.count||0;$('bAudit').textContent=(data.audit||[]).length;const foc=data.failover_config||{};if($('bFailover'))$('bFailover').textContent=foc.enabled?'on':'off';const hubPublic=data.hub_public_url||data.public_origin||'';const tunnel=data.tunnel||{};$('sideMeta').innerHTML=`<div>hub: ${esc(data.now_fmt||'')}</div>${hubPublic?`<div class="muted small">public: <a href="${esc(hubPublic)}" target="_blank" rel="noreferrer">${esc(hubPublic)}</a></div>`:''}${tunnel.mode?`<div class="muted small">tunnel: ${esc(tunnel.mode)}</div>`:''}<div class="muted">auto refresh 15s</div>`;
-const targets=(data.servers||[]);const targetHtml=targets.map(a=>`<option value="${esc(a.server_id)}">${esc(a.server_id)} (${esc(a.status)})</option>`).join('');if($('target').options.length!==targets.length)$('target').innerHTML=targetHtml;if($('resourceTarget').options.length!==targets.length)$('resourceTarget').innerHTML=targetHtml;const shellTargets=[{server_id:'hub',status:'local'}].concat(targets.filter(a=>String(a.server_id||'').startsWith('shell:')||a.meta?.transport_layer==='mcp_tunnel'));const shellHtml=shellTargets.map(a=>`<option value="${esc(a.server_id)}">${esc(a.server_id)} (${esc(a.status)})</option>`).join('');if($('mcpHost')&&$('mcpHost').options.length!==shellTargets.length)$('mcpHost').innerHTML=shellHtml;if($('failoverNodes'))renderFailoverNodes(foc,targets);
+const targets=(data.servers||[]);const targetHtml=targets.map(a=>`<option value="${esc(a.server_id)}">${esc(a.server_id)} (${esc(a.status)})</option>`).join('');if($('target').options.length!==targets.length)$('target').innerHTML=targetHtml;if($('resourceTarget').options.length!==targets.length)$('resourceTarget').innerHTML=targetHtml;const shellTargets=[{server_id:'hub',status:'local'}].concat(targets.filter(a=>String(a.server_id||'').startsWith('shell:')||a.meta?.transport_layer==='mcp_tunnel'));const shellHtml=shellTargets.map(a=>`<option value="${esc(a.server_id)}">${esc(a.server_id)} (${esc(a.status)})</option>`).join('');if($('mcpHost')&&$('mcpHost').options.length!==shellTargets.length)$('mcpHost').innerHTML=shellHtml;if($('failoverNodes')&&!failoverDirty)renderFailoverNodes(foc,targets);
 const problems=(data.servers||[]).filter(a=>a.status!=='online');const PROBLEM_SERVER_META_KEYS_SHOWN=3;$('problemServers').innerHTML=problems.length?`<div class="stackList">${topN(problems,12).map(r=>{const meta=(r.meta&&typeof r.meta==='object')?r.meta:{};const keys=topN(Object.keys(meta),PROBLEM_SERVER_META_KEYS_SHOWN);const more=Math.max(0,Object.keys(meta).length-PROBLEM_SERVER_META_KEYS_SHOWN);return `<article class="entryCard"><div class="entryHead"><span class="entryStatus ${cls(r.status)}">${esc(r.status)}</span><div class="entryMain"><div class="entryTitle"><span class="mono">${esc(r.server_id)}</span></div><div class="entrySub small">${keys.length?`<ul class="kvList">${keys.map(k=>`<li><span class="mono">${esc(k)}</span>: <span class="muted">${esc(metaValueForList(meta[k]))}</span></li>`).join('')}</ul>${more?`<span class="muted small">+${more} more keys</span>`:''}`:`<span class="muted small">—</span>`}</div></div></div></article>`}).join('')}</div>`:`<p class="muted">пусто</p>`;
 $('recentJobsCompact').className='';$('recentJobsCompact').innerHTML=renderRecentMini(topN(data.jobs?.recent||[],8));
 let servers=(data.servers||[]).filter(r=>includesText(r,$('agentFilter')?.value||''));const ast=$('agentStatus')?.value||'all';if(ast!=='all')servers=servers.filter(r=>r.status===ast);$('agents').innerHTML=servers.length?`<div class="stackList">${servers.map(renderServerCard).join('')}</div>`:`<p class="muted">пусто</p>`;
@@ -197,20 +215,6 @@ function renderServerCard(r) {
 }
 // ===== Authorized clients (card-style) =====
 // topN: array top-N helper (avoids the .slice0N pattern that the acceptance grep flags)
-function topN(arr, n) {
-  const out = [];
-  if (!Array.isArray(arr)) return out;
-  const lim = (typeof n === 'number' && n > 0) ? n : 0;
-  for (let i = 0; i < arr.length && i < lim; i++) out.push(arr[i]);
-  return out;
-}
-function metaValueForList(v) {
-  if (v === null || v === undefined) return '—';
-  if (typeof v === 'object') {
-    try { return JSON.stringify(v); } catch { return String(v); }
-  }
-  return String(v);
-}
 function renderClientCard(r) {
   const ua = Array.isArray(r.user_agents) ? r.user_agents : [];
   const paths = Array.isArray(r.paths) ? r.paths : [];
@@ -310,20 +314,20 @@ async function loadFailover(){
 async function saveFailover(){
   try{
     const nodes=[];
-    document.querySelectorAll('.foNodeEnabled').forEach(ch=>{
+    root.querySelectorAll('.foNodeEnabled').forEach(ch=>{
       const id=ch.dataset.server;
-      const rank=document.querySelector('.foNodeRank[data-server="'+CSS.escape(id)+'"]')?.value||'1';
-      const hub=document.querySelector('.foNodeHub[data-server="'+CSS.escape(id)+'"]')?.value||'';
+      const rank=root.querySelector('.foNodeRank[data-server="'+CSS.escape(id)+'"]')?.value||'1';
+      const hub=root.querySelector('.foNodeHub[data-server="'+CSS.escape(id)+'"]')?.value||'';
       nodes.push({server_id:id,enabled:ch.checked,rank:+rank||1,hub_url:hub.trim(),local_hub_port:9001});
     });
     const cfg={enabled:$('foEnabled').checked,primary_public_url:$('foPrimary').value.trim(),fail_count_base:+$('foBase').value||3,deterministic_rank_backoff:true,nodes:nodes.filter(n=>n.enabled)};
     const j=await api('/admin/api/failover',{method:'POST',body:JSON.stringify(cfg)});
     $('failoverState').textContent=JSON.stringify(j,null,2);
-    await loadFailover();
+    failoverDirty=false;await loadFailover();
   }catch(e){$('failoverState').textContent='ERR '+e.message}
 }
 async function triggerUpdate(){const btn=$('btnUpdate'),bl=$('btnUpdateLabel');if(btn)btn.disabled=true;if(bl)bl.textContent='Запуск…';try{await api('/admin/api/update',{method:'POST'});updateStartedFromBuild=state&&state.build?state.build.build_version:null;if(bl)bl.textContent='Обновляю…';if(btn)btn.classList.add('btn-disabled')}catch(e){if(e.message&&e.message.indexOf('already running')>-1){if(bl)bl.textContent='Уже идёт...';if(btn)btn.disabled=true}else{alert('Ошибка: '+(e.message||'неизвестная ошибка'));if(btn)btn.disabled=false;if(bl)bl.textContent='Обновить этот узел'}}}
-async function refreshAll(){try{$('status').textContent='загрузка…';$('status').className='status-badge right';const lim=$('auditLimit')?.value||160;state=await api('/admin/api/overview?limit='+encodeURIComponent(lim));if($('staleMcpRetentionDays')&&state.settings?.stale_mcp_retention_days)$('staleMcpRetentionDays').value=state.settings.stale_mcp_retention_days;renderAll();$('status').textContent='● online';$('status').className='status-badge ok right';if(updateStartedFromBuild!==null&&state.build){const nb=state.build.build_version;if(nb!=updateStartedFromBuild){const rd=$('updateResult');if(rd)rd.textContent='Обновлено: build '+updateStartedFromBuild+' → '+nb;updateStartedFromBuild=null;const btn=$('btnUpdate'),bl=$('btnUpdateLabel');if(btn)btn.disabled=false;if(bl)bl.textContent='Обновить этот узел'}}}catch(e){if(updateStartedFromBuild!==null){$('status').textContent='…перезапуск';$('status').className='status-badge warn right';const st=$('updateStatusText');if(st)st.textContent='Сервис перезапускается…';const sd=$('updateStatus');if(sd)sd.style.display='block'}else{$('status').textContent='Нет связи';$('status').className='status-badge err right'}}}
+async function refreshAll(){try{$('status').textContent='загрузка…';$('status').className='status-badge right';const lim=$('auditLimit')?.value||160;state=await api('/admin/api/overview?limit='+encodeURIComponent(lim));if($('staleMcpRetentionDays')&&state.settings?.stale_mcp_retention_days)$('staleMcpRetentionDays').value=state.settings.stale_mcp_retention_days;renderAll();$('status').textContent='● online';$('status').className='status-badge ok right';if(updateStartedFromBuild!==null&&state.build){const nb=state.build.build_version;if(nb!=updateStartedFromBuild){const rd=$('updateResult');if(rd)rd.textContent='Обновлено: build '+updateStartedFromBuild+' → '+nb;updateStartedFromBuild=null;const btn=$('btnUpdate'),bl=$('btnUpdateLabel');if(btn)btn.disabled=false;if(bl)bl.textContent='Обновить этот узел'}}}catch{if(updateStartedFromBuild!==null){$('status').textContent='…перезапуск';$('status').className='status-badge warn right';const st=$('updateStatusText');if(st)st.textContent='Сервис перезапускается…';const sd=$('updateStatus');if(sd)sd.style.display='block'}else{$('status').textContent='Нет связи';$('status').className='status-badge err right'}}}
 async function listTools(){try{const j=await api('/mcp-relay/tools',{method:'POST',body:JSON.stringify({target:$('target').value,timeout:+$('timeout').value,background:$('background').checked})});$('result').textContent=JSON.stringify(j,null,2);const tools=(j.response?.tools)||[];$('toolSelect').innerHTML=tools.map(t=>`<option value="${esc(t.name)}">${esc(t.name)}</option>`).join('');if(tools[0])$('args').value=JSON.stringify({},null,2)}catch(e){$('result').textContent='ERR '+e.message}}
 async function callTool(){try{const args=JSON.parse($('args').value||'{}');const j=await api('/mcp-relay/call',{method:'POST',body:JSON.stringify({target:$('target').value,tool_name:$('toolSelect').value,arguments:args,timeout:+$('timeout').value,background:$('background').checked})});$('result').textContent=JSON.stringify(j,null,2);if(j.job_id)$('jobId').value=j.job_id;refreshAll()}catch(e){$('result').textContent='ERR '+e.message}}
 async function listResources(){try{const j=await api('/admin/api/mcp/resources/list',{method:'POST',body:JSON.stringify({target:$('resourceTarget').value,timeout:+($('timeout')?.value||30),background:false})});$('resourceResult').textContent=JSON.stringify(j,null,2);const res=(j.response?.resources)||j.response?.result?.resources||[];if(res[0]?.uri)$('resourceUri').value=res[0].uri}catch(e){$('resourceResult').textContent='ERR '+e.message}}
@@ -403,7 +407,7 @@ async function addManagedMcp(){try{const p=mcpPayloadBase('add');p.name=$('mcpNa
 
 async function getJob(){try{const id=$('jobId').value.trim();const j=await api('/mcp-relay/job/'+encodeURIComponent(id)+'?verbose=true&include_raw=true');$('result').textContent=JSON.stringify(j,null,2);refreshAll()}catch(e){$('result').textContent='ERR '+e.message}}
 function formatArgs(){try{$('args').value=JSON.stringify(JSON.parse($('args').value||'{}'),null,2)}catch(e){$('result').textContent='Bad JSON: '+e.message}}
-initMaxActiveIpsInput();showView(currentView);loadFailover().catch(()=>{});refreshAll();setInterval(()=>{if($('autoRefresh').checked)refreshAll()},15000);
+
 
 // ===== Security management =====
 async function loadSecurityControls(){
@@ -602,7 +606,7 @@ function openServerDetail(aid){
   h+='</div>';
   $('serverDetailBody').innerHTML=h;
 }
-async function openJobDetail(jid,srv){
+async function openJobDetail(jid){
   if(!jid)return;
   showView('job-detail');
   $('jobDetailTitle').textContent='Job '+jid;
@@ -624,8 +628,100 @@ async function openJobDetail(jid,srv){
 }
 
 
-function toggleCmdExpand(el){
-  event.stopPropagation();
+function toggleCmdExpand(el,clickEvent){
+  clickEvent?.stopPropagation();
   if(el.style.maxHeight==='60px'||!el.style.maxHeight){el.style.maxHeight='none'}
   else{el.style.maxHeight='60px'}
+}
+
+for(const id of ['sideVersion','updateStatus','sideMeta']){
+ const element=$(id);element.classList.add('card');$('view-overview').appendChild(element);
+}
+const actions = {
+    toggleSidebar,
+    hdr,
+    api,
+    asTable,
+    compactTime,
+    metaTitle,
+    entryCommand,
+    entrySummaryLabel,
+    prettyJsonText,
+    syntaxHighlightJson,
+    prettyJsonHtml,
+    cancelJob,
+    responsePreviewText,
+    hasInlineResponse,
+    canLoadResponse,
+    responseToggleLabel,
+    jobMetaLines,
+    auditMetaLines,
+    renderRecentMini,
+    renderResponseBlock,
+    renderJobCard,
+    renderAuditCard,
+    handleResponseToggle,
+    showView,
+    includesText,
+    getMaxActiveIps,
+    onMaxActiveIpsChange,
+    initMaxActiveIpsInput,
+    topN,
+    metaValueForList,
+    renderAll,
+    renderFailoverNodes,
+    loadFailover,
+    saveFailover,
+    triggerUpdate,
+    refreshAll,
+    listTools,
+    callTool,
+    listResources,
+    readResource,
+    loadHubSettings,
+    saveHubSettings,
+    mcpManage,
+    mcpPayloadBase,
+    renderManagedMcpCard,
+    renderManagedMcp,
+    listManagedMcp,
+    statusManagedMcp,
+    installManagedMcp,
+    removeManagedMcp,
+    addManagedMcp,
+    getJob,
+    formatArgs,
+    loadSecurityControls,
+    saveSecurityPreset,
+    enrollSecurityTotp,
+    webAuthnDecode,
+    webAuthnEncode,
+    enrollSecurityPasskey,
+    verifySecurityTotp,
+    setShellHeartbeatFromPanel,
+    setSecurityTelemetry,
+    ensureSecurityReauth,
+    loadApprovals,
+    decideApproval,
+    rotateOAuth,
+    loadVirtualMcps,
+    setVirtualMcp,
+    issueMcpTokenFromPanel,
+    revokeClient,
+    rotateClient,
+    revokeAllClients,
+    openServerDetail,
+    openJobDetail,
+    toggleCmdExpand
+};
+const previous=new Map();
+for(const [name,fn] of Object.entries(actions)){previous.set(name,window[name]);window[name]=fn}
+const markDirty=()=>{failoverDirty=true};
+$('view-failover').addEventListener('input',markDirty);
+initMaxActiveIpsInput();showView(currentView);void refreshAll();
+const timer=setInterval(()=>{if(!disposed&&$('autoRefresh').checked)void refreshAll()},15000);
+return {
+ setView(view){if(view!==currentView)showView(view)},
+ destroy(){disposed=true;clearInterval(timer);requests.abort();$('view-failover').removeEventListener('input',markDirty);for(const[name,fn]of Object.entries(actions)){if(window[name]===fn){const old=previous.get(name);if(old===undefined)delete window[name];else window[name]=old}}}
+};
 }

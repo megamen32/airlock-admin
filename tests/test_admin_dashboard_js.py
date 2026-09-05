@@ -1,9 +1,9 @@
 from pathlib import Path
 
 
-ADMIN_HTML = Path(__file__).resolve().parents[1] / "public" / "admin_dashboard.html"
-ADMIN_INDEX = Path(__file__).resolve().parents[1] / "public" / "admin" / "index.html"
-ADMIN_APP_JS = Path(__file__).resolve().parents[1] / "public" / "admin" / "app.js"
+ADMIN_HTML = Path(__file__).resolve().parents[1] / "admin-ui" / "src" / "operations" / "runtime.js"
+ADMIN_INDEX = Path(__file__).resolve().parents[1] / "admin-ui" / "src" / "operations" / "template.html"
+ADMIN_APP_JS = Path(__file__).resolve().parents[1] / "admin-ui" / "src" / "operations" / "runtime.js"
 
 
 def _line_no(text: str, needle: str) -> int:

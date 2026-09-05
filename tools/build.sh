@@ -383,7 +383,7 @@ copy_admin_static_payloads() {
   rm -rf "$ART_DIR/public/admin" "$ART_DIR/public/admin-legacy"
   cp -a public/admin "$ART_DIR/public/admin-legacy"
   cp -a admin-ui/dist "$ART_DIR/public/admin"
-  echo "packaged React admin at $ART_DIR/public/admin; legacy console at $ART_DIR/public/admin-legacy"
+  echo "packaged React admin at $ART_DIR/public/admin; compatibility redirect at $ART_DIR/public/admin-legacy"
 }
 
 archive_component_cli() { build_cli; }

@@ -349,3 +349,17 @@ dd { display: flex; align-items: center; gap: 7px; margin: 0; color: #344441; fo
   .job-result { grid-column: auto; }
   .job-result dl { grid-template-columns: 1fr; }
 }
+
+/* Unified workspace: one navigation, no secondary admin application. */
+.app-shell > .sidebar { position: sticky; top: 0; height: 100vh; overflow-y: auto; padding-top: 20px; }
+.app-shell > .sidebar .brand { padding-bottom: 22px; }
+.app-shell > .sidebar .nav-item { min-height: 35px; padding-top: 8px; padding-bottom: 8px; }
+.main-content { min-width: 0; flex: 1; }
+@media (max-width: 760px) {
+  .app-shell { display: block; }
+  .app-shell > .sidebar { position: static; width: 100%; height: auto; padding: 12px; }
+  .app-shell > .sidebar .brand { padding-bottom: 12px; }
+  .app-shell > .sidebar nav { display: flex; overflow-x: auto; padding-bottom: 6px; }
+  .app-shell > .sidebar .nav-item { white-space: nowrap; flex-shrink: 0; }
+  .app-shell > .sidebar .sidebar-footer,.app-shell > .sidebar .workspace-label { display: none; }
+}

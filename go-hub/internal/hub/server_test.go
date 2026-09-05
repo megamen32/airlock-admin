@@ -1223,7 +1223,7 @@ func TestAdminPasswordLoginCookieProtectsStaticAndAPI(t *testing.T) {
 	}
 }
 
-func TestAdminLegacyStaticKeepsOperationsAvailableAfterReactCutover(t *testing.T) {
+func TestAdminLegacyRouteRedirectsToUnifiedConsole(t *testing.T) {
 	tmp := t.TempDir()
 	for _, name := range []string{"admin", "admin-legacy"} {
 		if err := os.MkdirAll(filepath.Join(tmp, name), 0o755); err != nil {
@@ -1271,7 +1271,7 @@ func TestAdminLegacyStaticKeepsOperationsAvailableAfterReactCutover(t *testing.T
 	req.AddCookie(session)
 	w = httptest.NewRecorder()
 	h.ServeHTTP(w, req)
-	if w.Code != http.StatusOK || !strings.Contains(w.Body.String(), "legacy-operations") {
+	if w.Code != http.StatusFound || w.Header().Get("Location") != "/admin/#overview" {
 		t.Fatalf("legacy operations static page status=%d body=%s", w.Code, w.Body.String())
 	}
 
@@ -1279,7 +1279,7 @@ func TestAdminLegacyStaticKeepsOperationsAvailableAfterReactCutover(t *testing.T
 	req.AddCookie(session)
 	w = httptest.NewRecorder()
 	h.ServeHTTP(w, req)
-	if w.Code != http.StatusOK || w.Header().Get("Content-Type") != "text/css; charset=utf-8" || w.Body.String() != "body { color: red; }" {
+	if w.Code != http.StatusFound || w.Header().Get("Location") != "/admin/#overview" {
 		t.Fatalf("legacy stylesheet static status=%d content-type=%q body=%s", w.Code, w.Header().Get("Content-Type"), w.Body.String())
 	}
 }

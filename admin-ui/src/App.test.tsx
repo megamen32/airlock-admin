@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import App from "./App";
@@ -63,6 +63,8 @@ function mockInstructionFetch(options: MockOptions = {}) {
   });
 }
 
+beforeEach(() => { window.history.replaceState(null, "", "#instructions"); });
+
 afterEach(() => {
   cleanup();
   window.history.replaceState(null, "", "#instructions");
@@ -116,40 +118,19 @@ describe("Profiles / Instructions", () => {
     expect(screen.queryByText(/1970/)).not.toBeInTheDocument();
   });
 
-  it("keeps navigation keyboard accessible", async () => {
+  it("keeps unified navigation keyboard accessible", async () => {
     mockInstructionFetch();
     render(<App />);
     await screen.findByRole("textbox");
-
-    const current = screen.getByRole("link", { name: "Инструкции" });
-    expect(current).toHaveAttribute("aria-current", "page");
-    expect(screen.getByRole("link", { name: "Профили" })).toHaveAttribute("href", "#profiles");
-    expect(screen.getByRole("link", { name: "Клиенты" })).toHaveAttribute("href", "#clients");
-    expect(screen.getByRole("link", { name: "Вебхуки и агенты" })).toHaveAttribute("href", "#webhooks");
-    expect(screen.getByRole("link", { name: "Авторизация" })).toHaveAttribute("href", "#auth");
-    expect(screen.getByRole("link", { name: "Виртуальные MCP" })).toHaveAttribute("href", "#capabilities");
-    expect(screen.getByRole("link", { name: "Операции и MCP" })).toHaveAttribute("href", "/admin/legacy/");
-    expect(screen.getByRole("link", { name: "Открыть CloudOS" })).toHaveAttribute("href", "/cloudos/");
-    expect(screen.getByRole("link", { name: "Выйти" })).toHaveAttribute("href", "/admin/logout");
-
-    await userEvent.tab();
-    expect(current).toHaveFocus();
-    await userEvent.tab();
-    expect(screen.getByRole("link", { name: "Профили" })).toHaveFocus();
-    await userEvent.tab();
-    expect(screen.getByRole("link", { name: "Клиенты" })).toHaveFocus();
-    await userEvent.tab();
-    expect(screen.getByRole("link", { name: "Вебхуки и агенты" })).toHaveFocus();
-    await userEvent.tab();
-    expect(screen.getByRole("link", { name: "Авторизация" })).toHaveFocus();
-    await userEvent.tab();
-    expect(screen.getByRole("link", { name: "Виртуальные MCP" })).toHaveFocus();
-    await userEvent.tab();
-    expect(screen.getByRole("link", { name: "Операции и MCP" })).toHaveFocus();
-    await userEvent.tab();
-    expect(screen.getByRole("link", { name: "Открыть CloudOS" })).toHaveFocus();
-    await userEvent.tab();
-    expect(screen.getByRole("link", { name: "Выйти" })).toHaveFocus();
+    expect(screen.getByRole("link", { name: "Инструкции" })).toHaveAttribute("aria-current", "page");
+    expect(screen.getByRole("link", { name: "Обзор" })).toHaveAttribute("href", "#overview");
+    expect(screen.getByRole("link", { name: "Серверы" })).toHaveAttribute("href", "#agents");
+    expect(screen.getByRole("link", { name: "Задачи" })).toHaveAttribute("href", "#jobs");
+    expect(screen.queryByRole("link", { name: "Операции и MCP" })).not.toBeInTheDocument();
+    for (const link of document.querySelectorAll("nav a")) {
+      await userEvent.tab();
+      expect(link).toHaveFocus();
+    }
   });
 });
 
@@ -277,7 +258,7 @@ describe("Profiles", () => {
 });
 
 describe("Clients / Auth", () => {
-  it("navigates to the client inventory, issues a one-time bearer, and clears it on navigation", async () => {
+  it("retains an issued bearer when navigating between clients and connections", async () => {
     window.history.replaceState(null, "", "#clients");
     const clients = [
       { id: "jwt-1", client_id: "codex", token_kind: "managed_jwt", status: "active", access_mode: "readonly", profile_id: "ops", scope: "mcp", redirect_uris: [], issued_at: null, created_at: null, expires_at: null, revoked_at: null },
@@ -306,9 +287,11 @@ describe("Clients / Auth", () => {
     expect(screen.getByRole("button", { name: "Скопировать bearer" })).toBeInTheDocument();
     expect(fetchMock).toHaveBeenCalledWith("/admin/api/mcp/issue-token", expect.objectContaining({ method: "POST" }));
 
-    await userEvent.click(screen.getByRole("link", { name: "Авторизация" }));
+    await userEvent.click(screen.getByRole("link", { name: "Токены и подключение" }));
     expect(await screen.findByRole("heading", { name: "Авторизация" })).toBeInTheDocument();
-    expect(screen.queryByText("bearer-once")).not.toBeInTheDocument();
+    expect(screen.getByDisplayValue("bearer-once")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("link", { name: "Клиенты" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("bearer-once");
   });
 
   it("binds and unbinds the selected profile, rotates and revokes managed tokens, and gates unsupported actions", async () => {
@@ -515,4 +498,17 @@ describe("Вебхуки и агенты", () => {
     expect(jobResult).not.toHaveTextContent("must-never-render");
     expect(jobResult).not.toHaveTextContent("also-secret");
   });
+});
+
+it("allows issuing the first token when the client inventory is empty", async () => {
+  window.history.replaceState(null, "", "#clients");
+  vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+    const path = String(input);
+    if (path === "/admin/api/clients") return new Response(JSON.stringify({ clients: [] }), { status: 200 });
+    if (path === "/admin/api/access-profiles") return new Response(JSON.stringify({ profiles: [] }), { status: 200 });
+    throw new Error(`Unexpected request ${path}`);
+  });
+  render(<App />);
+  expect(await screen.findByRole("heading", { name: "Клиентов пока нет" })).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Выдать managed token" })).toBeEnabled();
 });

@@ -1,3 +1,4 @@
+import OperationsScreen, { isOperationView, type OperationView } from "./OperationsScreen";
 import { useEffect, useRef, useState } from "react";
 import {
   ApiError,
@@ -41,21 +42,32 @@ import {
 } from "./api";
 import "./styles.css";
 
-type View = "instructions" | "profiles" | "clients" | "webhooks" | "auth" | "capabilities";
+type View = OperationView | "instructions" | "profiles" | "clients" | "webhooks" | "auth" | "capabilities";
 type LoadState = "loading" | "ready" | "empty" | "error" | "stale";
 
 const navigation: Array<{ id: View; label: string; href: string }> = [
+  { id: "overview", label: "Обзор", href: "#overview" },
+  { id: "agents", label: "Серверы", href: "#agents" },
+  { id: "jobs", label: "Задачи", href: "#jobs" },
+  { id: "mcpmanage", label: "MCP-менеджер", href: "#mcpmanage" },
+  { id: "tools", label: "Вызов инструментов", href: "#tools" },
+  { id: "resources", label: "Ресурсы", href: "#resources" },
   { id: "instructions", label: "Инструкции", href: "#instructions" },
   { id: "profiles", label: "Профили", href: "#profiles" },
   { id: "clients", label: "Клиенты", href: "#clients" },
   { id: "webhooks", label: "Вебхуки и агенты", href: "#webhooks" },
-  { id: "auth", label: "Авторизация", href: "#auth" },
+  { id: "auth", label: "Токены и подключение", href: "#auth" },
   { id: "capabilities", label: "Виртуальные MCP", href: "#capabilities" },
+  { id: "failover", label: "Резервирование", href: "#failover" },
+  { id: "security", label: "Безопасность · opt-in", href: "#security" },
+  { id: "audit", label: "Аудит", href: "#audit" },
+  { id: "activity", label: "Активность клиентов", href: "#activity" },
+  { id: "raw", label: "Диагностика JSON", href: "#raw" },
 ];
 
 function viewFromHash(): View {
-  const hash = window.location.hash;
-  return hash === "#profiles" || hash === "#clients" || hash === "#webhooks" || hash === "#auth" || hash === "#capabilities" ? hash.slice(1) as View : "instructions";
+  const view = window.location.hash.slice(1);
+  return navigation.some((item) => item.id === view) ? view as View : "overview";
 }
 
 const emptyWorkspace = (): ExternalWorkspaceRef => ({
@@ -370,14 +382,13 @@ function clientStatusLabel(status: string): string {
   return status;
 }
 
-function ClientsScreen() {
+function ClientsScreen({ token, setToken }: { token: TokenResponse | null; setToken: (value: TokenResponse | null) => void }) {
   const [loadState, setLoadState] = useState<LoadState>("loading");
   const [clients, setClients] = useState<ClientInventoryItem[]>([]);
   const [profiles, setProfiles] = useState<AccessProfile[]>([]);
   const [clientId, setClientId] = useState("managed-client");
   const [ttlDays, setTtlDays] = useState("7");
   const [accessMode, setAccessMode] = useState<AccessMode>("readonly");
-  const [token, setToken] = useState<TokenResponse | null>(null);
   const [selectedClientId, setSelectedClientId] = useState<string | null>(null);
   const [selectedProfileId, setSelectedProfileId] = useState("");
   const [message, setMessage] = useState<string | null>(null);
@@ -425,7 +436,7 @@ function ClientsScreen() {
 
   const profileName = (profileId: string | null): string => profiles.find((profile) => profile.id === profileId)?.name ?? profileId ?? "Не привязан";
   const selectedClient = clients.find((client) => client.id === selectedClientId) ?? null;
-  const supportsManagedActions = selectedClient?.token_kind === "managed_jwt";
+  const supportsManagedActions = ["managed_jwt", "durable"].includes(selectedClient?.token_kind ?? "");
 
   function selectClient(client: ClientInventoryItem): void {
     setSelectedClientId(client.id);
@@ -496,13 +507,13 @@ function ClientsScreen() {
     <>
       <header className="topbar"><div><span className="eyebrow">CLIENT ACCESS / 03</span><h1>Клиенты</h1></div><button className="button secondary topbar-action" type="button" onClick={() => void load()}>Обновить</button></header>
       <div className="content-wrap">
-        <section className="intro"><div><p className="section-kicker">MANAGED CONNECTIONS / INVENTORY</p><h2>Подключения MCP-клиентов</h2><p className="lede">Инвентарь показывает только метаданные. Bearer появляется только после явной выдачи и исчезает при уходе со страницы.</p></div><div className={`data-badge state-${loadState}`} role="status"><span className="state-dot" aria-hidden="true" />{loadState === "loading" ? "Загрузка клиентов" : stateLabel(loadState)}</div></section>
-        {token && <div className="token-callout" role="alert"><strong>Bearer выдан один раз</strong><span>Скопируйте его сейчас. Он не хранится в интерфейсе после навигации или перезагрузки.</span><code>{token.access_token}</code><div className="button-row"><button className="button primary" type="button" onClick={() => void copyToken()}>Скопировать bearer</button><button className="text-button" type="button" onClick={() => setToken(null)}>Скрыть</button></div></div>}
+        <section className="intro"><div><p className="section-kicker">MANAGED CONNECTIONS / INVENTORY</p><h2>Подключения MCP-клиентов</h2><p className="lede">Инвентарь показывает подключения. Выданный bearer остаётся доступен при переходах между разделами; перезагрузка страницы очищает его.</p></div><div className={`data-badge state-${loadState}`} role="status"><span className="state-dot" aria-hidden="true" />{loadState === "loading" ? "Загрузка клиентов" : stateLabel(loadState)}</div></section>
+        {token && <div className="token-callout" role="alert"><strong>Токен подключения</strong><span>Доступен также в разделе «Токены и подключение». Скопируйте его до перезагрузки страницы.</span><code>{token.access_token}</code><div className="button-row"><button className="button primary" type="button" onClick={() => void copyToken()}>Скопировать bearer</button><button className="text-button" type="button" onClick={() => setToken(null)}>Скрыть</button></div></div>}
         {message && <div className="state-panel state-error card standalone-state" role="alert"><span>{message}</span></div>}
         {loadState === "loading" && <div className="state-panel card standalone-state" role="status"><span className="loader" aria-hidden="true" />Загрузка клиентов</div>}
         {loadState === "error" && <div className="state-panel card standalone-state state-error" role="alert"><strong>Не удалось загрузить клиентов</strong><button className="button secondary" type="button" onClick={() => void load()}>Повторить</button></div>}
         {loadState === "empty" && <div className="empty-card card"><span className="empty-mark" aria-hidden="true">+</span><h3>Клиентов пока нет</h3><p>Выдайте первый managed token для подключения MCP-клиента.</p></div>}
-        {loadState === "ready" && <div className="clients-grid"><section className="card client-inventory" aria-labelledby="client-inventory-title"><div className="card-heading"><div><p className="section-kicker">INVENTORY</p><h3 id="client-inventory-title">Зарегистрированные клиенты</h3></div><span className="chip">{clients.length} записей</span></div><div className="client-list">{clients.map((client) => <article className={`client-row ${selectedClientId === client.id ? "selected" : ""}`} key={client.id}><div><strong>{client.client_id}</strong><span>{clientKindLabel(client.token_kind)} · {clientStatusLabel(client.status)}</span></div><button className="text-button" type="button" onClick={() => selectClient(client)}>Выбрать {client.client_id}</button><dl><div><dt>Профиль</dt><dd>{profileName(client.profile_id)}</dd></div><div><dt>Scope</dt><dd>{client.scope ?? "Не задан"}</dd></div></dl></article>)}</div></section><section className="card client-controls" aria-labelledby="client-controls-title"><p className="section-kicker">SELECTED CLIENT</p><h3 id="client-controls-title">Доступ и токен</h3>{selectedClient ? <><p className="muted">{selectedClient.client_id} · {clientKindLabel(selectedClient.token_kind)}</p><label>Профиль для выбранного клиента<select value={selectedProfileId} onChange={(event) => setSelectedProfileId(event.target.value)}><option value="">Без профиля</option>{profiles.map((profile) => <option value={profile.id} key={profile.id}>{profile.name || profile.id}</option>)}</select></label><div className="button-row"><button className="button secondary" type="button" onClick={() => void bindProfile()} disabled={!selectedProfileId || mutating}>Привязать профиль</button><button className="button secondary" type="button" onClick={() => void unbindProfile()} disabled={!selectedClient.profile_id || mutating || selectedClient.token_kind === "legacy_ctl"}>Снять привязку</button></div><div className="button-row"><button className="button secondary" type="button" onClick={() => void rotateToken()} disabled={!supportsManagedActions || mutating}>Ротировать токен</button><button className="button danger" type="button" onClick={() => void revokeToken()} disabled={!supportsManagedActions || mutating}>Отозвать токен</button></div>{!supportsManagedActions && <p className="field-help">OAuth-клиенты управляются через Авторизация; legacy-клиенты нельзя ротировать или отзывать из этого интерфейса.</p>}</> : <p className="muted">Выберите клиента из инвентаря.</p>}</section><section className="card token-issue-card" aria-labelledby="issue-title"><p className="section-kicker">MANAGED JWT</p><h3 id="issue-title">Выдать managed token</h3><p className="muted">Токен будет показан только в одноразовом callout.</p><label>Client ID<input value={clientId} onChange={(event) => setClientId(event.target.value)} /></label><label>Срок действия, дней<input type="number" min="1" max="3650" value={ttlDays} onChange={(event) => setTtlDays(event.target.value)} /></label><label>Режим доступа<select value={accessMode} onChange={(event) => setAccessMode(event.target.value as AccessMode)}><option value="readonly">Только чтение</option><option value="full">Полный доступ</option></select></label><button className="button primary" type="button" onClick={() => void issueToken()} disabled={!clientId.trim() || issuing}>{issuing ? "Выдаём…" : "Выдать managed token"}</button></section></div>}
+        {(loadState === "ready" || loadState === "empty") && <div className="clients-grid"><section className="card client-inventory" aria-labelledby="client-inventory-title"><div className="card-heading"><div><p className="section-kicker">INVENTORY</p><h3 id="client-inventory-title">Зарегистрированные клиенты</h3></div><span className="chip">{clients.length} записей</span></div><div className="client-list">{clients.map((client) => <article className={`client-row ${selectedClientId === client.id ? "selected" : ""}`} key={client.id}><div><strong>{client.client_id}</strong><span>{clientKindLabel(client.token_kind)} · {clientStatusLabel(client.status)}</span></div><button className="text-button" type="button" onClick={() => selectClient(client)}>Выбрать {client.client_id}</button><dl><div><dt>Профиль</dt><dd>{profileName(client.profile_id)}</dd></div><div><dt>Scope</dt><dd>{client.scope ?? "Не задан"}</dd></div></dl></article>)}</div></section><section className="card client-controls" aria-labelledby="client-controls-title"><p className="section-kicker">SELECTED CLIENT</p><h3 id="client-controls-title">Доступ и токен</h3>{selectedClient ? <><p className="muted">{selectedClient.client_id} · {clientKindLabel(selectedClient.token_kind)}</p><label>Профиль для выбранного клиента<select value={selectedProfileId} onChange={(event) => setSelectedProfileId(event.target.value)}><option value="">Без профиля</option>{profiles.map((profile) => <option value={profile.id} key={profile.id}>{profile.name || profile.id}</option>)}</select></label><div className="button-row"><button className="button secondary" type="button" onClick={() => void bindProfile()} disabled={!selectedProfileId || mutating}>Привязать профиль</button><button className="button secondary" type="button" onClick={() => void unbindProfile()} disabled={!selectedClient.profile_id || mutating || selectedClient.token_kind === "legacy_ctl"}>Снять привязку</button></div><div className="button-row"><button className="button secondary" type="button" onClick={() => void rotateToken()} disabled={!supportsManagedActions || mutating}>Ротировать токен</button><button className="button danger" type="button" onClick={() => void revokeToken()} disabled={!supportsManagedActions || mutating}>Отозвать токен</button></div>{!supportsManagedActions && <p className="field-help">OAuth-клиенты управляются через Авторизация; legacy-клиенты нельзя ротировать или отзывать из этого интерфейса.</p>}</> : <p className="muted">Выберите клиента из инвентаря.</p>}</section><section className="card token-issue-card" aria-labelledby="issue-title"><p className="section-kicker">MANAGED JWT</p><h3 id="issue-title">Выдать managed token</h3><p className="muted">Значение появится здесь и в разделе «Токены и подключение».</p><label>Client ID<input value={clientId} onChange={(event) => setClientId(event.target.value)} /></label><label>Срок действия, дней<input type="number" min="1" max="3650" value={ttlDays} onChange={(event) => setTtlDays(event.target.value)} /></label><label>Режим доступа<select value={accessMode} onChange={(event) => setAccessMode(event.target.value as AccessMode)}><option value="readonly">Только чтение</option><option value="full">Полный доступ</option></select></label><button className="button primary" type="button" onClick={() => void issueToken()} disabled={!clientId.trim() || issuing}>{issuing ? "Выдаём…" : "Выдать managed token"}</button></section></div>}
       </div>
     </>
   );
@@ -917,7 +928,7 @@ function WebhooksScreen() {
   );
 }
 
-function AuthScreen() {
+function AuthScreen({ token }: { token: TokenResponse | null }) {
   const [rotating, setRotating] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
 
@@ -934,7 +945,7 @@ function AuthScreen() {
     }
   }
 
-  return <><header className="topbar"><div><span className="eyebrow">AUTHENTICATION / 04</span><h1>Авторизация</h1></div></header><div className="content-wrap"><section className="intro"><div><p className="section-kicker">OAUTH CLIENT SECRET</p><h2>Управление доступом Hub</h2><p className="lede">Секрет OAuth никогда не показывается в UI. Ротация инвалидирует прежний секрет и может потребовать перезапуска Hub.</p></div></section><section className="card auth-card"><h3>OAuth secret</h3><p className="muted">Используйте ротацию только при плановом обновлении или подозрении на компрометацию.</p><button className="button primary" type="button" onClick={() => void rotate()} disabled={rotating}>{rotating ? "Обновляем…" : "Ротировать OAuth secret"}</button>{message && <p className="success-text" role="status">{message}</p>}</section></div></>;
+  return <><header className="topbar"><div><span className="eyebrow">AUTHENTICATION / 04</span><h1>Авторизация</h1></div></header><div className="content-wrap"><section className="intro"><div><p className="section-kicker">OAUTH CLIENT SECRET</p><h2>Управление доступом Hub</h2><p className="lede">Токены подключения и управление OAuth. Ротация — отдельное действие, а не условие просмотра.</p></div></section><section className="card auth-card"><h3>Выданный токен</h3>{token ? <><p>{token.client_id || token.token_id}</p><textarea aria-label="Выданный токен подключения" readOnly value={token.access_token} /><p className="muted">Сохраняется при переключении разделов. Перезагрузка страницы очищает значение.</p></> : <p>Выдайте токен в разделе «Клиенты». Просмотр не ротирует существующие подключения.</p>}</section><section className="card auth-card"><h3>OAuth secret</h3><p className="muted">Используйте ротацию только при плановом обновлении или подозрении на компрометацию.</p><button className="button primary" type="button" onClick={() => void rotate()} disabled={rotating}>{rotating ? "Обновляем…" : "Ротировать OAuth secret"}</button>{message && <p className="success-text" role="status">{message}</p>}</section></div></>;
 }
 
 function CapabilitiesScreen() {
@@ -1096,6 +1107,7 @@ function CapabilitiesScreen() {
 }
 
 export default function App() {
+  const [issuedToken, setIssuedToken] = useState<TokenResponse | null>(null);
   const [view, setView] = useState<View>(viewFromHash);
 
   useEffect(() => {
@@ -1109,8 +1121,8 @@ export default function App() {
 
   return (
     <div className="app-shell">
-      <aside className="sidebar"><div className="brand"><span className="brand-mark" aria-hidden="true">G</span><span>GPTAdmin</span></div><div className="workspace-label">ОПЕРАЦИОННАЯ КОНСОЛЬ</div><nav aria-label="Основная навигация">{navigation.map((item) => <a className={`nav-item ${view === item.id ? "active" : ""}`} href={item.href} aria-current={view === item.id ? "page" : undefined} key={item.id} onClick={(event) => { event.preventDefault(); setView(item.id); window.history.replaceState(null, "", item.href); }}>{<><span className="nav-dot" aria-hidden="true" /><span>{item.label}</span></>}</a>)}<a className="nav-item" href="/admin/legacy/"><span className="nav-dot" aria-hidden="true" /><span>Операции и MCP</span></a><a className="nav-item" href="/cloudos/"><span className="nav-dot" aria-hidden="true" /><span>Открыть CloudOS</span></a></nav><div className="sidebar-footer"><span className="profile-state">{view === "profiles" ? "Профильный доступ" : "Рабочий контекст"}</span><a className="logout-link" href="/admin/logout">Выйти</a></div></aside>
-      <main className="main-content">{view === "instructions" ? <InstructionsScreen /> : view === "profiles" ? <ProfilesScreen /> : view === "clients" ? <ClientsScreen /> : view === "webhooks" ? <WebhooksScreen /> : view === "capabilities" ? <CapabilitiesScreen /> : <AuthScreen />}</main>
+      <aside className="sidebar"><div className="brand"><span className="brand-mark" aria-hidden="true">G</span><span>GPTAdmin</span></div><div className="workspace-label">ОПЕРАЦИОННАЯ КОНСОЛЬ</div><nav aria-label="Основная навигация">{navigation.map((item) => <a className={`nav-item ${view === item.id ? "active" : ""}`} href={item.href} aria-current={view === item.id ? "page" : undefined} key={item.id} onClick={(event) => { event.preventDefault(); setView(item.id); window.history.pushState(null, "", item.href); }}>{<><span className="nav-dot" aria-hidden="true" /><span>{item.label}</span></>}</a>)}<a className="nav-item" href="/cloudos/"><span className="nav-dot" aria-hidden="true" /><span>Открыть CloudOS</span></a></nav><div className="sidebar-footer"><span className="profile-state">{view === "profiles" ? "Профильный доступ" : "Рабочий контекст"}</span><a className="logout-link" href="/admin/logout">Выйти</a></div></aside>
+      <main className="main-content">{isOperationView(view) ? <OperationsScreen view={view} onNavigate={(next) => { setView(next); if (window.location.hash !== `#${next}`) window.history.pushState(null, "", `#${next}`); }} /> : view === "instructions" ? <InstructionsScreen /> : view === "profiles" ? <ProfilesScreen /> : view === "clients" ? <ClientsScreen token={issuedToken} setToken={setIssuedToken} /> : view === "webhooks" ? <WebhooksScreen /> : view === "capabilities" ? <CapabilitiesScreen /> : <AuthScreen token={issuedToken} />}</main>
     </div>
   );
 }

@@ -21,11 +21,11 @@ def test_cli_installs_packaged_admin_static_payload_with_hub_runtime():
     assert "shutil.copytree(admin_src" in cli
 
 
-def test_legacy_admin_uses_document_relative_static_asset_urls():
-    """The release builder serves this source payload below /admin/legacy/."""
+def test_old_admin_bookmarks_redirect_instead_of_shipping_a_second_application():
     html = (ROOT / "public" / "admin" / "index.html").read_text(encoding="utf-8")
-
-    assert 'href="style.css"' in html
-    assert 'src="app.js"' in html
-    assert 'href="/admin/style.css"' not in html
-    assert 'src="/admin/app.js"' not in html
+    component = (ROOT / "admin-ui" / "src" / "OperationsScreen.tsx").read_text(encoding="utf-8")
+    assert 'url=/admin/#overview' in html
+    assert 'src="app.js"' not in html
+    assert './operations/runtime.js' in component
+    assert './operations/template.html?raw' in component
+    assert 'iframe' not in component

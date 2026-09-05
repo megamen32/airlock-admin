@@ -25,7 +25,7 @@ def test_admin_ui_build_job_is_an_explicit_runtime_release_contract():
     assert "npm run lint" in runs
     assert "npm run build" in runs
     assert "grep -q '/admin/assets/' dist/index.html" in runs
-    assert "the complete operational shell at /admin/legacy/" in WORKFLOW.read_text()
+    assert "/admin/legacy/ redirects there" in WORKFLOW.read_text()
     release_runs = "\n".join(
         step.get("run", "")
         for step in yaml.safe_load(WORKFLOW.read_text())["jobs"]["build-and-release"]["steps"]

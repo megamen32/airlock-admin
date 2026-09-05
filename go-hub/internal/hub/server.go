@@ -5812,10 +5812,8 @@ func (s *Server) adminStatic(w http.ResponseWriter, r *http.Request) {
 	fs.ServeHTTP(w, r)
 }
 
-// adminLegacyStatic keeps the operational console available while the React
-// policy console owns the primary /admin/ entrypoint. It deliberately shares
-// the admin session gate and API origin with the primary UI so legacy tools do
-// not require a second credential or a hidden bearer token.
+// adminLegacyStatic preserves old bookmarks and the existing session gate.
+// Operational panels now live in the primary React application.
 func (s *Server) adminLegacyStatic(w http.ResponseWriter, r *http.Request) {
 	if !s.adminSessionValid(r) {
 		if wantsHTML(r) || strings.HasPrefix(r.URL.Path, "/admin/legacy/") {
@@ -5825,9 +5823,7 @@ func (s *Server) adminLegacyStatic(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "unauthorized", http.StatusUnauthorized)
 		return
 	}
-	root := filepath.Join(s.cfg.PublicDir, "admin-legacy")
-	fs := http.StripPrefix("/admin/legacy/", http.FileServer(http.Dir(root)))
-	fs.ServeHTTP(w, r)
+	http.Redirect(w, r, "/admin/#overview", http.StatusFound)
 }
 
 func (s *Server) adminLogin(w http.ResponseWriter, r *http.Request) {
