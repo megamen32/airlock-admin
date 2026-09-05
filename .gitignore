@@ -90,3 +90,4 @@ deploy/systemd/*
 !deploy/systemd/gptadmin-wanb-health.timer
 !deploy/systemd/gptadmin-auto-update-disabled.conf
 !deploy/systemd/gptadmin-hub.service
+.playwright-mcp/

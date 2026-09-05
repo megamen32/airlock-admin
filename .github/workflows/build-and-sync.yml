@@ -165,6 +165,9 @@ jobs:
           cd go-proxyrelay
           go test ./...
 
+      - name: Sanitize tree for public bundles
+        run: bash scripts/publicize_sanitize.sh
+
       - name: Build binaries
         run: |
           chmod +x tools/build.sh
