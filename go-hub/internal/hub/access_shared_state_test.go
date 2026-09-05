@@ -280,3 +280,22 @@ func TestSharedAccessExpiredRefreshCannotAuthenticateAsBearerWithRelaxedChecks(t
 		t.Fatal("explicitly revoked refresh accepted")
 	}
 }
+
+func TestSharedAccessNativeMCPAdministrator(t *testing.T) {
+	a, b := sharedAccessPair(t)
+	token, _, err := a.issueManagedMCPTokenWithMode("native-admin", 7, a.cfg.PublicOrigin, a.cfg.PublicOrigin, "full", "", "admin")
+	if err != nil {
+		t.Fatal(err)
+	}
+	w := sharedAccessCall(t, b, token, "POST", "/mcp", map[string]any{"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": map[string]any{"name": "execute", "arguments": map[string]any{"target": "hub", "tool": "access_profiles", "arguments": map[string]any{"action": "list"}}}})
+	if w.Code != 200 {
+		t.Fatalf("native MCP status=%d", w.Code)
+	}
+	var response map[string]any
+	if err = json.Unmarshal(w.Body.Bytes(), &response); err != nil {
+		t.Fatal(err)
+	}
+	if response["error"] != nil || !bytes.Contains(w.Body.Bytes(), []byte("profiles")) {
+		t.Fatal("native MCP administration did not reach profile handler")
+	}
+}

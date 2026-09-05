@@ -15,7 +15,8 @@ Status: incremental implementation; see docs/ACCESS_OPERATIONS.md
 
 - [x] Owner API tools for profiles, named connections and durable access history.
 - [x] Preserve profile fields in the UI; effective read-only permission; retire the unserved duplicate dashboard.
-- [ ] Paired production upgrade with a compatible rollback and real-connector acceptance.
+- [x] Paired production upgrade to acb80d0 / build 193; independent systemd supervisor, compatible fallback 835b240, live connector and both process versions verified.
+- [ ] Activate the explicitly selected AI connection's admin role: the platform rejected the owner role-assignment call before execution; owner UI action remains pending.
 - [x] Explicit delegated admin roles, shared token/OAuth state and owner retrieval of stored token values (source and isolated-process/browser proof).
 - [ ] Persist queued execution inputs and define executor delivery acknowledgements.
 - [ ] Measure and narrow remaining coarse locks and other snapshot stores.

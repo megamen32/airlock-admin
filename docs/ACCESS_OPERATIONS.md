@@ -128,3 +128,15 @@ Shared-access regressions are `access_shared_state_test.go` and
 immediate revocation/binding/role edits, atomic rotation failure, stored values,
 ordinary-client denial, and independent HTTP Hub processes. The real browser
 script also reads the same stored token and role after restarting its fixture.
+
+## Deployment checkpoint — 2026-09-05
+
+Both local production Hub services were verified running `acb80d0`, build 193.
+The independent systemd deployment completed successfully, with a private
+configuration backup and compatible `835b240` fallback. Connector command
+execution and each process's version were checked after the switch. No existing
+production connection was bulk-revoked. Delegated-administrator behavior is
+proven in independent-process HTTP/native MCP tests and the browser fixture;
+activating the particular current AI connection remains an owner action because
+the platform rejected that live administrative call before execution. Do not
+confuse this with an unavailable Hub or claim the connection is already admin.
