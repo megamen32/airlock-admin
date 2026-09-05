@@ -15,14 +15,13 @@ rm -f GPTADMIN_PROMPT.md docs/old_prompt.txt \
 rm -rf .gitpublic tests/fixtures/private .playwright-mcp
 
 echo "▸ Applying text replacements"
-# Plain line-mode grep (-rIl): the -I+-z combination silently skips files.
-while IFS= read -r -d '' file; do
+while IFS= read -r file; do
 	sed -i -E \
 		-e 's/95\.[0-9]+\.[0-9]+\.[0-9]+/203.0.113.10/g' \
 		-e 's/10\.[0-9]+\.[0-9]+\.[0-9]+/203.0.113.10/g' \
 		-e 's/192\.168\.[0-9]+\.[0-9A-Za-z]+/203.0.113.10/g' \
 		-e 's/172\.(1[6-9]|2[0-9]|3[01])\.[0-9]+\.[0-9]+/203.0.113.10/g' \
-		-e 's/roomhacker-server-100|roomhacker-server-88|server-44|homeassistant|openwrt|vpn2|vusa/server-01/g' \
+		-e 's/roomhacker-server-100|roomhacker-server-88|server-44|homeassistant|openwrt|vpn2|vusa/server01/g' \
 		-e 's/roomhacker/admin/g' \
 		-e 's/MGTS|Beeline/uplink/g' \
 		-e 's/[0-9]{8,12}:[A-Za-z0-9_-]{30,}/<TELEGRAM_TOKEN>/g' \
