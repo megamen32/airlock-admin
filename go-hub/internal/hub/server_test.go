@@ -1679,6 +1679,38 @@ func TestCompatibilityEndpoints(t *testing.T) {
 	}
 }
 
+func TestActionsOpenAPIAdvertisesRequestHost(t *testing.T) {
+	s := New(Config{
+		CtlToken:       "ctl",
+		PublicOrigin:   "https://gptadmin.bezrabotnyi.com",
+		DefaultTimeout: time.Second,
+		PollMaxTimeout: time.Second,
+	})
+	h := s.Handler()
+
+	fetch := func(host string) string {
+		req := httptest.NewRequest(http.MethodGet, "/actions/openapi.yaml", nil)
+		req.Host = host
+		req.Header.Set("X-Forwarded-Proto", "https")
+		w := httptest.NewRecorder()
+		h.ServeHTTP(w, req)
+		if w.Code != http.StatusOK {
+			t.Fatalf("/actions/openapi.yaml host=%s status=%d body=%s", host, w.Code, w.Body.String())
+		}
+		return w.Body.String()
+	}
+
+	for host, wantURL := range map[string]string{
+		"u-f1102930.t.gptadmin.bezrabotnyi.com": "https://u-f1102930.t.gptadmin.bezrabotnyi.com",
+		"gptadmin.bezrabotnyi.com":              "https://gptadmin.bezrabotnyi.com",
+		"127.0.0.1:9001":                        "https://gptadmin.bezrabotnyi.com",
+	} {
+		if body := fetch(host); !strings.Contains(body, `url: "`+wantURL+`"`) {
+			t.Fatalf("host %q: servers url %q not advertised in %s", host, wantURL, body)
+		}
+	}
+}
+
 func TestCallMcpToolAcceptsTopLevelShellArgs(t *testing.T) {
 	s := New(Config{CtlToken: "ctl", DefaultTimeout: time.Second, PollMaxTimeout: time.Second})
 	s.mu.Lock()

@@ -17,6 +17,7 @@ import (
 	"html"
 	"io"
 	"log"
+	"net"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
@@ -1916,12 +1917,39 @@ func tokenMatches(r *http.Request, expected string) bool {
 }
 
 func (s *Server) actionsOpenAPI(w http.ResponseWriter, r *http.Request) {
-	body := defaultCustomGPTActionsOpenAPI(s.origin(r))
+	body := defaultCustomGPTActionsOpenAPI(s.actionsSpecOrigin(r))
 	w.Header().Set("Cache-Control", "no-store")
 	w.Header().Set("Content-Type", "application/yaml; charset=utf-8")
 	w.Header().Set("Content-Length", strconv.Itoa(len(body)))
 	w.WriteHeader(http.StatusOK)
 	_, _ = w.Write([]byte(body))
+}
+
+// actionsSpecOrigin advertises the public host the Actions spec was actually
+// fetched from. OpenAI Custom GPTs require servers.url to share the domain of
+// the OpenAPI URL, and this hub is published under several public hosts (the
+// main domain and per-user tenant hosts), so the configured PublicOrigin would
+// mislabel every spec fetched through any other host.
+func (s *Server) actionsSpecOrigin(r *http.Request) string {
+	host := strings.TrimSpace(r.Header.Get("X-Forwarded-Host"))
+	if host == "" {
+		host = strings.TrimSpace(r.Host)
+	}
+	if host == "" || isLoopbackServiceHost(stripPort(host)) {
+		return s.origin(r)
+	}
+	scheme := "https"
+	if r.TLS == nil && r.Header.Get("X-Forwarded-Proto") != "https" {
+		scheme = "http"
+	}
+	return normalizePublicURL(scheme + "://" + host)
+}
+
+func stripPort(hostport string) string {
+	if host, _, err := net.SplitHostPort(hostport); err == nil {
+		return host
+	}
+	return hostport
 }
 
 // legacyActionsOpenAPIContract is retained only for source compatibility while
