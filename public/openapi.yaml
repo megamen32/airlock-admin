@@ -750,6 +750,16 @@ components:
         cwd:
           type: string
           nullable: true
+        run_as_user:
+          type: string
+          nullable: true
+          description: Shell execution user when supported by the selected tool.
+        secret_env:
+          type: object
+          nullable: true
+          additionalProperties:
+            type: string
+          description: Environment names mapped to opaque secret_ref values when supported.
         timeout:
           type: integer
           nullable: true
@@ -759,6 +769,10 @@ components:
         background:
           type: boolean
           default: false
+        detail:
+          type: string
+          enum: [compact, full]
+          description: Response detail level; full adds transport diagnostics.
         idempotency_key:
           type: string
           minLength: 1

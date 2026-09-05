@@ -510,3 +510,14 @@ def test_generated_core_openapi_operations_have_structural_contract():
         ]
         assert actual_contract["POST /mcp-relay/tools"]["requestBody"]["required"] is True  # type: ignore[index]
         assert actual_contract["POST /mcp-relay/call"]["requestBody"]["required"] is True  # type: ignore[index]
+        execute_schema = generated["paths"]["/mcp-relay/call"]["post"]["requestBody"]["content"]["application/json"]["schema"]
+        execute_properties = execute_schema["properties"]
+        for field in (
+            "target", "tool", "tool_name", "args", "arguments", "cmd", "query", "cwd",
+            "timeout", "run_as_user", "secret_env", "background", "idempotency_key", "detail",
+        ):
+            assert field in execute_properties, f"generated execute schema is missing explicit JIT passthrough field {field}"
+
+        static_execute = yaml.safe_load(PUBLIC_OPENAPI.read_text(encoding="utf-8"))["components"]["schemas"]["ExecuteRequest"]
+        for field in ("timeout", "run_as_user", "secret_env", "background", "detail"):
+            assert field in static_execute["properties"], f"static ExecuteRequest is missing {field}"

@@ -2581,6 +2581,10 @@ paths:
                 cmd: {type: string}
                 query: {type: string}
                 cwd: {type: string}
+                timeout: {type: integer, minimum: 1, maximum: 86400, description: "Tool execution timeout in seconds. Independent from the bounded Actions HTTP wait."}
+                run_as_user: {type: string, description: "Shell execution user when supported by the selected tool."}
+                secret_env: {type: object, additionalProperties: {type: string}, description: "Environment names mapped to opaque secret_ref values when supported."}
+                background: {type: boolean, default: false}
                 idempotency_key: {type: string}
                 detail: {type: string, enum: [compact, full], description: "Full includes transport diagnostics."}
               additionalProperties: true
