@@ -3595,3 +3595,95 @@ func TestFromEnvReadsLegacyPublicOrigins(t *testing.T) {
 		t.Fatalf("legacy origins=%v", got)
 	}
 }
+
+func TestActionsCallDecouplesCommandTimeoutFromHTTPWait(t *testing.T) {
+	s := New(Config{CtlToken: "ctl", DefaultTimeout: 30 * time.Second, ActionSyncWait: 25 * time.Millisecond})
+	s.mu.Lock()
+	s.agents["shell:test"] = &Agent{AgentID: "shell:test", Name: "Shell: test", Kind: "virtual_shell", Status: "online"}
+	s.mu.Unlock()
+
+	start := time.Now()
+	req := httptest.NewRequest(http.MethodPost, "/mcp-relay/call", strings.NewReader(`{"target":"shell:test","tool_name":"shell_exec","cmd":"sleep 60","timeout":60}`))
+	req.Header.Set("Authorization", "Bearer ctl")
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	s.Handler().ServeHTTP(rec, req)
+	elapsed := time.Since(start)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	var body map[string]any
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatal(err)
+	}
+	id := firstString(body, "job_id", "task_id")
+	if id == "" || body["status"] != "running" {
+		t.Fatalf("expected running job handle: %v", body)
+	}
+	if elapsed > 500*time.Millisecond {
+		t.Fatalf("Actions facade waited %s for a 60s command", elapsed)
+	}
+	s.mu.Lock()
+	job := s.shellJobs[id]
+	s.mu.Unlock()
+	if job == nil || job.Timeout != 60 {
+		t.Fatalf("command timeout was not preserved independently: %+v", job)
+	}
+}
+
+func TestActionsCallStillReturnsFastCompletionInline(t *testing.T) {
+	s := New(Config{CtlToken: "ctl", DefaultTimeout: 30 * time.Second, ActionSyncWait: 750 * time.Millisecond})
+	s.mu.Lock()
+	s.agents["shell:test"] = &Agent{AgentID: "shell:test", Name: "Shell: test", Kind: "virtual_shell", Status: "online"}
+	s.mu.Unlock()
+
+	done := make(chan struct{})
+	go func() {
+		deadline := time.Now().Add(500 * time.Millisecond)
+		for time.Now().Before(deadline) {
+			s.mu.Lock()
+			for _, job := range s.shellJobs {
+				if job.Server == "test" && job.Status == "queued" {
+					job.Status = "completed"
+					job.StartedAt = nowFloat()
+					job.DoneAt = nowFloat()
+					job.Result = map[string]any{"stdout": "quick-ok", "returncode": 0}
+					s.cond.Broadcast()
+					s.mu.Unlock()
+					close(done)
+					return
+				}
+			}
+			s.mu.Unlock()
+			time.Sleep(5 * time.Millisecond)
+		}
+		close(done)
+	}()
+
+	req := httptest.NewRequest(http.MethodPost, "/mcp-relay/call", strings.NewReader(`{"target":"shell:test","tool_name":"shell_exec","cmd":"printf quick-ok","timeout":60}`))
+	req.Header.Set("Authorization", "Bearer ctl")
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	s.Handler().ServeHTTP(rec, req)
+	<-done
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	var body map[string]any
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatal(err)
+	}
+	if body["status"] != "completed" {
+		t.Fatalf("fast completion was forced to background: %v", body)
+	}
+	if firstString(body, "stdout") != "quick-ok" {
+		t.Fatalf("unexpected quick result: %v", body)
+	}
+}
+
+func TestFromEnvReadsActionSyncWait(t *testing.T) {
+	t.Setenv("GPTADMIN_ACTION_SYNC_WAIT_MS", "1234")
+	if got := FromEnv().ActionSyncWait; got != 1234*time.Millisecond {
+		t.Fatalf("ActionSyncWait=%s", got)
+	}
+}

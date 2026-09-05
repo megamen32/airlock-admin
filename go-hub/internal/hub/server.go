@@ -58,6 +58,10 @@ type Config struct {
 	ShellToken      string
 	DefaultTimeout  time.Duration
 	PollMaxTimeout  time.Duration
+	// ActionSyncWait bounds how long the HTTP Actions facade waits for a
+	// queued shell/child MCP operation before returning a durable job handle.
+	// Tool/command timeout remains an independent argument.
+	ActionSyncWait time.Duration
 	// SchemaContractValidation makes schema version/digest admission an explicit
 	// opt-in. It stays false by default so relay calls never depend on metadata.
 	SchemaContractValidation bool
@@ -122,6 +126,7 @@ func FromEnv() Config {
 	cfgDir := env("GPTADMIN_CONFIG_DIR", filepath.Join(root, "config"))
 	defTimeout := secondsEnv("MCP_RELAY_DEFAULT_TIMEOUT", 30)
 	pollTimeout := secondsEnv("MCP_RELAY_POLL_MAX_TIMEOUT", 55)
+	actionSyncWaitMS := positiveIntEnv("GPTADMIN_ACTION_SYNC_WAIT_MS", 2000)
 	secretTTL := secondsEnv("GPTADMIN_SECRET_INGRESS_TTL", 15*60)
 	if secretTTL < 60 || secretTTL > 3600 {
 		secretTTL = 15 * 60
@@ -136,6 +141,7 @@ func FromEnv() Config {
 		ShellToken:                 env("SHELL_TOKEN", env("SHELLMCP_TOKEN", "")),
 		DefaultTimeout:             time.Duration(defTimeout) * time.Second,
 		PollMaxTimeout:             time.Duration(pollTimeout) * time.Second,
+		ActionSyncWait:             time.Duration(actionSyncWaitMS) * time.Millisecond,
 		SchemaContractValidation:   truthyString(env("GPTADMIN_SCHEMA_CONTRACT_VALIDATION", "0")),
 		OutputDir:                  env("GPTADMIN_OUTPUT_DIR", filepath.Join(cfgDir, "outputs")),
 		PublicOrigin:               normalizePublicURL(env("PUBLIC_ORIGIN", "")),
@@ -563,6 +569,12 @@ func New(cfg Config) *Server {
 	cfg.PublicOrigin = normalizePublicURL(cfg.PublicOrigin)
 	cfg.MCPResource = normalizePublicURL(cfg.MCPResource)
 	cfg.LegacyPublicOrigins = normalizePublicURLList(cfg.LegacyPublicOrigins)
+	if cfg.ActionSyncWait <= 0 {
+		cfg.ActionSyncWait = 2 * time.Second
+	}
+	if cfg.ActionSyncWait > 10*time.Second {
+		cfg.ActionSyncWait = 10 * time.Second
+	}
 	normalizeDebugVerifyWorkLowSecurityMode(&cfg)
 	if cfg.AuthRateLimit <= 0 {
 		cfg.AuthRateLimit = 60
@@ -2037,6 +2049,13 @@ paths:
           description: Job id returned by execute.
           schema:
             type: string
+        - name: detail
+          in: query
+          required: false
+          description: Response detail level; compact is the default and full adds transport diagnostics.
+          schema:
+            type: string
+            enum: [compact, full]
         - name: ack
           in: query
           required: false
@@ -2580,7 +2599,13 @@ paths:
         - name: detail
           in: query
           required: false
+          description: Response detail level; compact is the default and full adds transport diagnostics.
           schema: {type: string, enum: [compact, full]}
+        - name: ack
+          in: query
+          required: false
+          description: Remove completed or failed job result after reading.
+          schema: {type: boolean, default: false}
       responses:
         "200": {description: Job status}
 components:
@@ -4047,7 +4072,12 @@ func (s *Server) mcpRelayCall(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusConflict, response)
 		return
 	}
-	resp, status := s.executeMCPTool(r, target, toolName, args, truthy(req["background"]), timeoutFromReq(req, s.cfg.DefaultTimeout), firstString(req, "idempotency_key"))
+	// /mcp-relay/call is a task-aware Actions facade. Do not hold its HTTP
+	// request open for the tool's execution timeout: that makes in-flight calls
+	// fragile across Hub handover. Short calls still complete inline; longer
+	// calls return job_id/task_id and are read through the job endpoint.
+	waitTimeout := s.cfg.ActionSyncWait
+	resp, status := s.executeMCPTool(r, target, toolName, args, truthy(req["background"]), waitTimeout, firstString(req, "idempotency_key"))
 	writeJSON(w, status, s.formatToolOutput(resp, toolName, req["detail"]))
 }
 

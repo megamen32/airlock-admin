@@ -211,6 +211,7 @@ EXPECTED_GENERATED_CORE_CONTRACT = {
         "parameters": [
             _param("path", "job_id", True, _schema("string")),
             _param("query", "ack", False, _schema("boolean", default=False)),
+            _param("query", "detail", False, _schema("string", enum=["compact", "full"])),
         ],
         "requestBody": None,
         "responses": {
@@ -408,6 +409,10 @@ def test_public_openapi_artifact_matches_go_hub_renderer():
                 "GPTADMIN_CONFIG_DIR": str(Path(tmpdir) / "config"),
                 "GPTADMIN_ARTIFACT_DIR": str(Path(tmpdir) / "build"),
                 "PUBLIC_ORIGIN": origin,
+                # Override both modern and legacy bind variables so a test
+                # running on a production Hub host cannot inherit :9001.
+                "GPTADMIN_HUB_HOST": "127.0.0.1",
+                "GPTADMIN_HUB_PORT": str(port),
                 "HUB_HOST": "127.0.0.1",
                 "HUB_PORT": str(port),
             }
@@ -460,6 +465,10 @@ def test_generated_core_openapi_operations_have_structural_contract():
                 "GPTADMIN_CONFIG_DIR": str(Path(tmpdir) / "config"),
                 "GPTADMIN_ARTIFACT_DIR": str(Path(tmpdir) / "build"),
                 "PUBLIC_ORIGIN": origin,
+                # Override both modern and legacy bind variables so a test
+                # running on a production Hub host cannot inherit :9001.
+                "GPTADMIN_HUB_HOST": "127.0.0.1",
+                "GPTADMIN_HUB_PORT": str(port),
                 "HUB_HOST": "127.0.0.1",
                 "HUB_PORT": str(port),
             }
@@ -496,6 +505,8 @@ def test_generated_core_openapi_operations_have_structural_contract():
         )
         assert actual_contract["GET /mcp-relay/job/{job_id}"]["parameters"] == [
             _param("path", "job_id", True, _schema("string")),
+            _param("query", "ack", False, _schema("boolean", default=False)),
+            _param("query", "detail", False, _schema("string", enum=["compact", "full"])),
         ]
         assert actual_contract["POST /mcp-relay/tools"]["requestBody"]["required"] is True  # type: ignore[index]
         assert actual_contract["POST /mcp-relay/call"]["requestBody"]["required"] is True  # type: ignore[index]

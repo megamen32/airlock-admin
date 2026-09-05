@@ -107,6 +107,13 @@ paths:
           description: Job id returned by execute.
           schema:
             type: string
+        - name: detail
+          in: query
+          required: false
+          description: Response detail level; compact is the default and full adds transport diagnostics.
+          schema:
+            type: string
+            enum: [compact, full]
         - name: ack
           in: query
           required: false
@@ -747,8 +754,8 @@ components:
           type: integer
           nullable: true
           minimum: 1
-          maximum: 35
-          default: 30
+          maximum: 86400
+          description: Tool execution timeout in seconds when the selected tool supports it. This does not control the Actions HTTP wait; long calls return a job_id/task_id after the bounded synchronous wait window.
         background:
           type: boolean
           default: false
