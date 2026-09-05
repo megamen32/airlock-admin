@@ -125,3 +125,13 @@ def test_proxy_and_webhook_surfaces_remain_disabled_by_default_and_separate() ->
     assert "default `approval_mode` is `ask_before_write`" in compact_webhooks
     assert "rejected with an approval-required result and no job is queued until an explicit workflow is added." in compact_webhooks
     assert 'approval_mode: "bounded_autonomous"' in compact_webhooks
+
+
+def test_custom_gpt_prompt_selects_actions_not_native_mcp() -> None:
+    """Custom GPT instructions must not route an Actions client to /mcp."""
+    prompt = (ROOT / "GPTADMIN_PROMPT.md").read_text(encoding="utf-8")
+    compact = " ".join(prompt.split())
+    assert "uses the OpenAI Actions facade" in compact
+    assert "Do **not** call or probe `/mcp` from this Custom GPT" in compact
+    assert "401" in compact
+    assert "operations `discover`, `schema`, `execute` and `job`" in compact
