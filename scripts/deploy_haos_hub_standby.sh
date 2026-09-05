@@ -128,7 +128,7 @@ if not frp_token:
     match = re.search(r'^\s*token\s*=\s*["\']([^"\']+)["\']\s*$', protected_text('/etc/gptadmin/frpc.toml'), re.MULTILINE)
     frp_token = match.group(1) if match else ''
 
-public = get('HUB_PUBLIC_URL') or get('PUBLIC_ORIGIN') or 'https://u-f1102930.t.gptadmin.bezrabotnyi.com'
+public = get('HUB_PUBLIC_URL') or get('PUBLIC_ORIGIN') or 'https://gptadmin.bezrabotnyi.com'
 repl = {
     '__PUBLIC_ORIGIN__': public,
     '__MCP_RESOURCE__': get('MCP_RESOURCE', public),

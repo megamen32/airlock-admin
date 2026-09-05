@@ -11,7 +11,7 @@ GPTAdmin is a remote MCP server. Installing this plugin adds the configured
 ## First connection
 
 1. Confirm the MCP URL is the user's public HTTPS Hub URL ending in `/mcp`.
-   The packaged default is `https://became.bezrabotnyi.com/mcp`; use the user's
+   The packaged default is `https://gptadmin.bezrabotnyi.com/mcp`; use the user's
    own Hub URL when it differs.
 2. Let the MCP client perform OAuth discovery from the Hub. It should use the
    protected-resource and authorization-server metadata, dynamic registration,

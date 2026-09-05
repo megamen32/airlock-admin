@@ -8,7 +8,7 @@ browser consent page. Enter the GPTAdmin admin password in that page. Never put
 the password, authorization code, access token, refresh token, or internal
 signing secret into Codex chat, `.mcp.json`, a skill, or a task file.
 
-The default endpoint is `https://became.bezrabotnyi.com/mcp`. For another
+The default endpoint is `https://gptadmin.bezrabotnyi.com/mcp`. For another
 GPTAdmin installation, change only the URL in `.mcp.json` to that Hub's public
 HTTPS `/mcp` endpoint before connecting. The Hub must advertise the standard
 OAuth discovery endpoints:

@@ -3532,3 +3532,66 @@ func TestShellRuntimeSettingsAdvertiseGitHubSelfRepair(t *testing.T) {
 		t.Fatal("desired_build_version missing")
 	}
 }
+
+func TestCanonicalOriginMigrationAcceptsOnlyExplicitLegacyOrigin(t *testing.T) {
+	canonical := "https://gptadmin.example"
+	legacy := "https://u-user.t.gptadmin.example"
+	s := New(Config{OAuthClientSecret: "oauth-secret", PublicOrigin: canonical, MCPResource: canonical, LegacyPublicOrigins: []string{legacy}})
+	req := httptest.NewRequest(http.MethodGet, canonical+"/mcp", nil)
+	claims := func(origin string) map[string]any {
+		return map[string]any{
+			"sub": "client", "iss": origin, "aud": origin, "resource": origin,
+			"scope": "gptadmin.read", "exp": time.Now().Add(time.Hour).Unix(), "iat": time.Now().Unix(), "kid": defaultJWTKeyID,
+		}
+	}
+	legacyToken, err := s.signJWT(claims(legacy))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.verifyJWTForRequest(req, legacyToken); err != nil {
+		t.Fatalf("explicit legacy origin rejected: %v", err)
+	}
+	wrongToken, err := s.signJWT(claims("https://other.example"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.verifyJWTForRequest(req, wrongToken); err == nil {
+		t.Fatal("unlisted third-party origin accepted")
+	}
+	if !s.allowedResource(legacy, req) || s.allowedResource("https://other.example", req) {
+		t.Fatal("resource migration allowlist incorrect")
+	}
+	legacyCallback, _ := url.Parse(legacy + "/connect/callback")
+	if !s.sameOriginOAuthCallback(legacyCallback) {
+		t.Fatal("legacy same-origin OAuth callback rejected")
+	}
+}
+
+func TestCanonicalOriginMigrationRefreshResourceEquivalence(t *testing.T) {
+	canonical := "https://gptadmin.example"
+	legacy := "https://u-user.t.gptadmin.example"
+	s := New(Config{ConfigDir: t.TempDir(), OAuthClientSecret: "oauth-secret", PublicOrigin: canonical, MCPResource: canonical, LegacyPublicOrigins: []string{legacy}})
+	token, record, err := newOAuthRefreshToken("client", legacy, "gptadmin.read", time.Now())
+	if err != nil {
+		t.Fatal(err)
+	}
+	s.mu.Lock()
+	s.managedMCP[record.ID] = record
+	s.mu.Unlock()
+	if _, ok := s.oauthRefreshTokenRecord(token, "client", canonical); !ok {
+		t.Fatal("legacy refresh token rejected for canonical migration resource")
+	}
+	if _, ok := s.oauthRefreshTokenRecord(token, "client", "https://other.example"); ok {
+		t.Fatal("refresh token accepted for unrelated resource")
+	}
+}
+
+func TestFromEnvReadsLegacyPublicOrigins(t *testing.T) {
+	t.Setenv("PUBLIC_ORIGIN", "https://gptadmin.example")
+	t.Setenv("MCP_RESOURCE", "https://gptadmin.example")
+	t.Setenv("GPTADMIN_LEGACY_PUBLIC_ORIGINS", " https://u-one.example/ ,https://u-two.example,https://u-one.example ")
+	cfg := FromEnv()
+	if got := cfg.LegacyPublicOrigins; len(got) != 2 || got[0] != "https://u-one.example" || got[1] != "https://u-two.example" {
+		t.Fatalf("legacy origins=%v", got)
+	}
+}

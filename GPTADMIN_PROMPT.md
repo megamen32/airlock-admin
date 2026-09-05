@@ -35,8 +35,8 @@ Use the connected GPTAdmin tools before claiming access is unavailable. If a rea
 Connection endpoints:
 
 ```text
-OpenAPI: https://u-f1102930.t.gptadmin.bezrabotnyi.com/actions/openapi.yaml
-MCP: https://u-f1102930.t.gptadmin.bezrabotnyi.com/mcp
+OpenAPI: https://gptadmin.bezrabotnyi.com/actions/openapi.yaml
+MCP: https://gptadmin.bezrabotnyi.com/mcp
 ```
 
 Core operations:

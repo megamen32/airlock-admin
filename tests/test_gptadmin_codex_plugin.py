@@ -26,7 +26,7 @@ def test_gptadmin_mcp_config_is_remote_https_without_credentials():
     assert server["url"].startswith("https://")
     assert server["url"].endswith("/mcp")
     assert not any("token" in key.lower() or "password" in key.lower() for key in server)
-    assert "became.bezrabotnyi.com" in server["url"]
+    assert server["url"] == "https://gptadmin.bezrabotnyi.com/mcp"
 
 
 def test_gptadmin_marketplace_entry_is_installable_and_points_at_plugin():

@@ -64,6 +64,9 @@ type Config struct {
 	OutputDir                string
 	PublicOrigin             string
 	MCPResource              string
+	// LegacyPublicOrigins is an explicit migration allowlist for previously
+	// issued OAuth/JWT origins/resources. It never enables wildcard matching.
+	LegacyPublicOrigins      []string
 	AdminPassword            string
 	OAuthClientSecret        string
 	OAuthKeyID               string
@@ -137,6 +140,7 @@ func FromEnv() Config {
 		OutputDir:                  env("GPTADMIN_OUTPUT_DIR", filepath.Join(cfgDir, "outputs")),
 		PublicOrigin:               normalizePublicURL(env("PUBLIC_ORIGIN", "")),
 		MCPResource:                normalizePublicURL(env("MCP_RESOURCE", env("PUBLIC_ORIGIN", ""))),
+		LegacyPublicOrigins:        parsePublicURLList(env("GPTADMIN_LEGACY_PUBLIC_ORIGINS", "")),
 		AdminPassword:              env("ADMIN_PASSWORD", ""),
 		OAuthClientSecret:          env("OAUTH_CLIENT_SECRET", ""),
 		OAuthKeyID:                 env("GPTADMIN_JWT_KEY_ID", defaultJWTKeyID),
@@ -558,6 +562,7 @@ func New(cfg Config) *Server {
 	// contract as FromEnv and the CLI token issuer.
 	cfg.PublicOrigin = normalizePublicURL(cfg.PublicOrigin)
 	cfg.MCPResource = normalizePublicURL(cfg.MCPResource)
+	cfg.LegacyPublicOrigins = normalizePublicURLList(cfg.LegacyPublicOrigins)
 	normalizeDebugVerifyWorkLowSecurityMode(&cfg)
 	if cfg.AuthRateLimit <= 0 {
 		cfg.AuthRateLimit = 60
@@ -6448,6 +6453,63 @@ func (s *Server) resource(r *http.Request) string {
 	return s.origin(r)
 }
 
+func normalizePublicURLList(values []string) []string {
+	seen := map[string]bool{}
+	out := make([]string, 0, len(values))
+	for _, value := range values {
+		normalized := normalizePublicURL(value)
+		if normalized == "" || seen[normalized] {
+			continue
+		}
+		u, err := url.Parse(normalized)
+		if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Hostname() == "" {
+			continue
+		}
+		seen[normalized] = true
+		out = append(out, normalized)
+	}
+	return out
+}
+
+func parsePublicURLList(raw string) []string {
+	if strings.TrimSpace(raw) == "" {
+		return nil
+	}
+	return normalizePublicURLList(strings.Split(raw, ","))
+}
+
+func publicURLMatchesAny(value string, allowed []string) bool {
+	candidate := normalizePublicURL(value)
+	if candidate == "" {
+		return false
+	}
+	for _, expected := range allowed {
+		if candidate == normalizePublicURL(expected) {
+			return true
+		}
+	}
+	return false
+}
+
+func (s *Server) acceptedPublicURLs(primary string) []string {
+	values := []string{normalizePublicURL(primary)}
+	values = append(values, s.cfg.LegacyPublicOrigins...)
+	return normalizePublicURLList(values)
+}
+
+func (s *Server) migrationEquivalentResource(left, right string) bool {
+	l := normalizePublicURL(left)
+	r := normalizePublicURL(right)
+	if l == "" || r == "" {
+		return false
+	}
+	if l == r {
+		return true
+	}
+	allowed := s.acceptedPublicURLs(s.cfg.MCPResource)
+	return publicURLMatchesAny(l, allowed) && publicURLMatchesAny(r, allowed)
+}
+
 // normalizePublicURL is the canonical issuer/audience/resource
 // representation. It preserves an optional resource path while dropping
 // values that cannot identify an OAuth protected resource.
@@ -6670,7 +6732,7 @@ func (s *Server) oauthToken(w http.ResponseWriter, r *http.Request) {
 	if resource == "" {
 		resource = data.Resource
 	}
-	if !ok || time.Since(data.Created) > 5*time.Minute || !s.allowedResource(resource, r) || strings.TrimRight(data.Resource, "/") != resource {
+	if !ok || time.Since(data.Created) > 5*time.Minute || !s.allowedResource(resource, r) || !s.migrationEquivalentResource(data.Resource, resource) {
 		s.authAudit("oauth_token_denied", r, map[string]any{"reason": "code not found, expired, or resource mismatch", "resource": resource, "stored_resource": data.Resource, "code_found": ok, "form": s.formForAudit(r)})
 		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid_grant", "error_description": "code not found, expired, or resource mismatch"})
 		return
@@ -6819,7 +6881,7 @@ func (s *Server) oauthRefreshTokenRecord(token, clientID, resource string) (mana
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	record, ok := s.managedMCP[parts[1]]
-	if !ok || record.TokenKind != "oauth_refresh" || record.RevokedAt != 0 || record.ExpiresAt <= now || record.ClientID != clientID || (resource != "" && strings.TrimRight(record.Audience, "/") != resource) || record.TokenDigest == "" || !hmac.Equal([]byte(record.TokenDigest), []byte(hex.EncodeToString(digest[:]))) {
+	if !ok || record.TokenKind != "oauth_refresh" || record.RevokedAt != 0 || record.ExpiresAt <= now || record.ClientID != clientID || (resource != "" && !s.migrationEquivalentResource(record.Audience, resource)) || record.TokenDigest == "" || !hmac.Equal([]byte(record.TokenDigest), []byte(hex.EncodeToString(digest[:]))) {
 		return managedMCPToken{}, false
 	}
 	return record, true
@@ -8950,17 +9012,19 @@ func (s *Server) verifyJWTForRequest(r *http.Request, token string) (map[string]
 	if rawIssuer, present := claims["iss"]; present && rawIssuer != nil {
 		issuer = strings.TrimSpace(fmt.Sprint(rawIssuer))
 	}
-	if profile.RequireIssuer && (issuer == "" || normalizePublicURL(issuer) != expectedIssuer) {
+	acceptedIssuers := s.acceptedPublicURLs(expectedIssuer)
+	acceptedResources := s.acceptedPublicURLs(expected)
+	if profile.RequireIssuer && (issuer == "" || !publicURLMatchesAny(issuer, acceptedIssuers)) {
 		return nil, errors.New("token issuer does not match this Hub")
 	}
-	if !profile.RequireIssuer && profile.Mode == processSecurityNormal && issuer != "" && normalizePublicURL(issuer) != expectedIssuer {
+	if !profile.RequireIssuer && profile.Mode == processSecurityNormal && issuer != "" && !publicURLMatchesAny(issuer, acceptedIssuers) {
 		return nil, errors.New("token issuer does not match this Hub")
 	}
-	if profile.RequireAudience && (expected == "" || !jwtAudienceMatches(claims["aud"], expected)) {
+	if profile.RequireAudience && (expected == "" || !jwtAudienceMatchesAny(claims["aud"], acceptedResources)) {
 		return nil, errors.New("token audience does not match this Hub")
 	}
 	resource, ok := claims["resource"].(string)
-	if profile.RequireResource && (!ok || normalizePublicURL(resource) != expected) {
+	if profile.RequireResource && (!ok || !publicURLMatchesAny(resource, acceptedResources)) {
 		return nil, errors.New("token resource does not match this Hub")
 	}
 	if profile.RequireScope {
@@ -9041,6 +9105,15 @@ func jwtAudienceMatches(value any, expected string) bool {
 			if candidate, ok := item.(string); ok && normalizePublicURL(candidate) == expected {
 				return true
 			}
+		}
+	}
+	return false
+}
+
+func jwtAudienceMatchesAny(value any, expected []string) bool {
+	for _, candidate := range expected {
+		if jwtAudienceMatches(value, normalizePublicURL(candidate)) {
+			return true
 		}
 	}
 	return false
@@ -9255,11 +9328,16 @@ func (s *Server) sameOriginOAuthCallback(uri *url.URL) bool {
 	if uri == nil || uri.Path != "/connect/callback" || uri.RawQuery != "" || uri.Fragment != "" {
 		return false
 	}
-	origin, err := url.Parse(strings.TrimRight(s.cfg.PublicOrigin, "/"))
-	if err != nil || origin.Scheme == "" || origin.Host == "" {
-		return false
+	for _, raw := range s.acceptedPublicURLs(s.cfg.PublicOrigin) {
+		origin, err := url.Parse(strings.TrimRight(raw, "/"))
+		if err != nil || origin.Scheme == "" || origin.Host == "" {
+			continue
+		}
+		if uri.Scheme == origin.Scheme && strings.EqualFold(uri.Host, origin.Host) {
+			return true
+		}
 	}
-	return uri.Scheme == origin.Scheme && strings.EqualFold(uri.Host, origin.Host)
+	return false
 }
 
 func (s *Server) allowedResource(resource string, r *http.Request) bool {
@@ -9267,8 +9345,7 @@ func (s *Server) allowedResource(resource string, r *http.Request) bool {
 		return true
 	}
 	want := strings.TrimRight(s.resource(r), "/")
-	got := strings.TrimRight(resource, "/")
-	return got == want
+	return publicURLMatchesAny(resource, s.acceptedPublicURLs(want))
 }
 
 func pkceOK(verifier, challenge string) bool {

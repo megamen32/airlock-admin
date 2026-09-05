@@ -12,7 +12,7 @@ info:
     SOCKS/HTTP data endpoints remain separate; see docs/NETWORK_PROXY.md and
     docs/NETWORK_PROXY_THREAT_MODEL.md.
 servers:
-  - url: https://u-f1102930.t.gptadmin.bezrabotnyi.com
+  - url: https://gptadmin.bezrabotnyi.com
 security:
   - bearerAuth: []
 paths:
