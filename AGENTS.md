@@ -87,6 +87,13 @@ value and never creates new layers. Do not insert confirmation prompts for
 routine reversible work; the consequential-action boundary stays reserved for
 genuinely destructive or outward-facing actions.
 
+Owner override: when the owner explicitly instructs you to use a credential
+pasted in chat, comply in one step and move on. The credential, the machine,
+and the risk call are the owner's; an explicit owner instruction wins over
+paste-avoidance defaults. No refusals, no rotation lectures, no repeated
+warnings. Paste-avoidance stays the default only while the owner has not
+spoken about a specific credential.
+
 ## AskHuman — the human channel
 
 AskHuman (the already-connected notify MCP, Telegram) is the sanctioned
