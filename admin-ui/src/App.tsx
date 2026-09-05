@@ -143,9 +143,13 @@ function InstructionsScreen() {
 
   useEffect(() => {
     let cancelled = false;
+    const fillPlaceholders = (text: string): string => {
+      const origin = window.location.origin;
+      return text.split("{{OPENAPI_URL}}").join(`${origin}/actions/openapi.yaml`).split("{{MCP_URL}}").join(`${origin}/mcp`);
+    };
     fetch("/actions/instructions.md")
       .then((response) => (response.ok ? response.text() : Promise.reject(new Error(String(response.status)))))
-      .then((text) => { if (!cancelled) setGptPrompt(text); })
+      .then((text) => { if (!cancelled) setGptPrompt(fillPlaceholders(text)); })
       .catch(() => { if (!cancelled) setGptPromptError(true); });
     return () => { cancelled = true; };
   }, []);
