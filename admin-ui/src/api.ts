@@ -231,7 +231,7 @@ function parseClient(body: unknown): ClientInventoryItem {
   };
   const revokedAt = numeric("revoked_at");
   const status = value.status === undefined
-    ? revokedAt === null ? tokenKind === "oauth" ? "registered" : tokenKind === "legacy_ctl" ? "legacy" : "active" : "revoked"
+    ? !(revokedAt && revokedAt > 0) ? tokenKind === "oauth" ? "registered" : tokenKind === "legacy_ctl" ? "legacy" : "active" : "revoked"
     : value.status;
   if (typeof status !== "string") throw new ApiError(502, "Сервер вернул некорректный статус клиента.");
   return {

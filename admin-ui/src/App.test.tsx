@@ -277,7 +277,7 @@ describe("Clients / Auth", () => {
 
     expect(await screen.findByRole("heading", { name: "Клиенты" })).toBeInTheDocument();
     expect(screen.getByText("codex")).toBeInTheDocument();
-    expect(screen.getByText("oauth-app")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Выбрать oauth-app" })).toBeInTheDocument();
     expect(screen.getByText("legacy")).toBeInTheDocument();
     expect(screen.queryByText("client-secret")).not.toBeInTheDocument();
     expect(screen.queryByText("bearer-once")).not.toBeInTheDocument();
@@ -327,7 +327,7 @@ describe("Clients / Auth", () => {
     await userEvent.click(screen.getByRole("button", { name: "Выбрать oauth-app" }));
     expect(screen.getByRole("button", { name: "Ротировать токен" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "Отозвать токен" })).toBeDisabled();
-    expect(screen.getByText(/OAuth-клиенты управляются через Авторизация/)).toBeInTheDocument();
+    expect(screen.getByText(/OAuth сам обновляет свои токены/)).toBeInTheDocument();
     expect(fetchMock).toHaveBeenCalledWith("/admin/api/client-bindings/jwt-1", expect.objectContaining({ method: "PUT" }));
   });
 });
@@ -522,4 +522,30 @@ it("does not erase a new profile draft when the initial list arrives late", asyn
   await userEvent.type(screen.getByLabelText("Название профиля"), "Keep this draft");
   finish(new Response(JSON.stringify({ profiles: [] }), { status: 200 }));
   await waitFor(() => expect(screen.getByLabelText("Название профиля")).toHaveValue("Keep this draft"));
+});
+
+it("selects the stable OAuth connection from a link and edits no refresh record", async () => {
+  const id = "gptadmin-741d3194016e5b84199e3b12936e6aa9";
+  window.history.replaceState(null, "", `#clients?connection=${id}`);
+  const registration = { id, client_id: id, token_kind: "oauth", role: "client", status: "registered", redirect_uris: ["https://chatgpt.com/connector_platform/oauth/callback"] };
+  const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+    const path = String(input);
+    if (path === "/admin/api/clients") return new Response(JSON.stringify({ clients: [
+      ...Array.from({ length: 11 }, (_, index) => ({ id: `refresh-${index}`, client_id: id, token_kind: "oauth_refresh", revoked_at: 123, role: "admin" })), registration,
+    ] }), { status: 200 });
+    if (path === "/admin/api/access-profiles") return new Response(JSON.stringify({ profiles: [] }), { status: 200 });
+    if (path === `/admin/api/client-roles/${id}` && init?.method === "PUT") {
+      expect(JSON.parse(String(init.body))).toEqual({ role: "admin" });
+      return new Response(JSON.stringify({ ok: true, id, role: "admin" }), { status: 200 });
+    }
+    throw new Error(`Unexpected request ${path}`);
+  });
+  render(<App />);
+  await screen.findByText("История OAuth: 11 записей");
+  expect(document.querySelectorAll("[data-connection-id]")).toHaveLength(1);
+  expect(document.querySelector("[data-connection-id].selected")).toHaveAttribute("data-connection-id", id);
+  expect(screen.getByLabelText("Роль выбранного подключения")).toHaveValue("client");
+  await userEvent.selectOptions(screen.getByLabelText("Роль выбранного подключения"), "admin");
+  await userEvent.click(screen.getByRole("button", { name: "Сохранить роль" }));
+  expect(fetchMock).toHaveBeenCalledWith(`/admin/api/client-roles/${id}`, expect.objectContaining({ method: "PUT" }));
 });

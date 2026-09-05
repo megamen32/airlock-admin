@@ -5259,7 +5259,7 @@ func (s *Server) adminMCPResourceRead(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) adminOverview(w http.ResponseWriter, r *http.Request) {
 	s.mu.Lock()
-	servers := s.publicServersLocked(r)
+	servers := s.publicServersLockedWithDetail(r, true)
 	jobs := s.adminJobsDataLocked()
 	audit := append([]auditEvent(nil), s.audit...)
 	clients := s.managedMCPClientsLocked()
@@ -5573,8 +5573,19 @@ func (s *Server) adminMCPTokenAction(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) adminJobs(w http.ResponseWriter, r *http.Request) {
+	limit, offset := 200, 0
+	for key, dest := range map[string]*int{"limit": &limit, "offset": &offset} {
+		if raw := r.URL.Query().Get(key); raw != "" {
+			n, err := strconv.Atoi(raw)
+			if err != nil || n < 0 || (key == "limit" && (n < 1 || n > 500)) {
+				writeJSON(w, 400, map[string]any{"detail": "invalid jobs pagination"})
+				return
+			}
+			*dest = n
+		}
+	}
 	s.mu.Lock()
-	jobs := s.adminJobsDataLocked()
+	jobs := s.adminJobsDataLocked(offset, limit)
 	s.mu.Unlock()
 	writeJSON(w, http.StatusOK, jobs)
 }
@@ -5916,30 +5927,6 @@ func (s *Server) managedMCPClientsLocked() []managedMCPToken {
 		})
 	}
 	return clients
-}
-
-func (s *Server) adminJobsDataLocked() map[string]any {
-	items := make([]map[string]any, 0, len(s.relayJobs)+len(s.shellJobs))
-	for _, j := range s.relayJobs {
-		items = append(items, map[string]any{"job_id": j.ID, "server_id": j.AgentID, "kind": "mcp_relay", "method": j.Method, "status": j.Status, "created_at": j.CreatedAt, "started_at": j.StartedAt, "completed_at": j.DoneAt})
-	}
-	for _, j := range s.shellJobs {
-		items = append(items, map[string]any{"job_id": j.ID, "task_id": j.ID, "server": j.Server, "server_id": "shell:" + j.Server, "kind": "shell", "command": j.Cmd, "status": j.Status, "created_at": j.CreatedAt, "started_at": j.StartedAt, "completed_at": j.DoneAt})
-	}
-	queued := []map[string]any{}
-	background := []map[string]any{}
-	counts := map[string]int{}
-	for _, item := range items {
-		st, _ := item["status"].(string)
-		counts[st]++
-		if st == "queued" || st == "queued_offline" {
-			queued = append(queued, item)
-		}
-		if st == "running" || st == "dispatching" {
-			background = append(background, item)
-		}
-	}
-	return map[string]any{"count": len(items), "status_counts": counts, "queued": queued, "background": background, "recent": items}
 }
 
 func serverStatusCounts(servers []map[string]any) map[string]int {

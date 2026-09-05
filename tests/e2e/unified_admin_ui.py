@@ -18,6 +18,24 @@ def main() -> None:
     (fixture / 'public').mkdir()
     (fixture / 'public/admin').symlink_to(root / 'admin-ui/dist', target_is_directory=True)
     (fixture / 'fixture.env').write_text('SHELLMCP_HEARTBEAT=0\n')
+    # Reproduce the reported inventory, not an almost-empty happy-path fixture.
+    config = fixture / 'config'
+    config.mkdir()
+    client_ids = ['gptadmin-' + format(i + 1, '032x') for i in range(8)]
+    now = int(time.time())
+    registrations = {client_id: {'created_at': now - 3600, 'redirect_uris': ['https://chatgpt.com/connector_platform/oauth/callback'], 'role': 'client'} for client_id in client_ids}
+    credentials = {}
+    for index in range(99):
+        client_id = client_ids[0 if index < 11 else 1 + ((index - 11) % 7)]
+        credential_id = f'fixture-refresh-{index:032d}'
+        credentials[credential_id] = {'id': credential_id, 'client_id': client_id, 'token_kind': 'oauth_refresh', 'issued_at': now - index, 'revoked_at': now - index + 1, 'role': 'admin', 'scope': 'gptadmin.read gptadmin.exec'}
+    (config / 'oauth_clients_state.json').write_text(json.dumps({'clients': registrations}))
+    (config / 'mcp_tokens_state.json').write_text(json.dumps({'tokens': credentials}))
+    (config / 'tasks_state.json').write_text(json.dumps({'relay_jobs': {
+        'fixture-result': {'id': 'fixture-result', 'agent_id': 'fixture', 'method': 'tools/call', 'params': {'name': 'inspect', 'arguments': {'path': '/work'}}, 'created_at': now - 3, 'completed_at': now - 2, 'status': 'completed', 'result': {'stdout': 'SCREENSHOT_RESULT_VISIBLE'}},
+        'fixture-error': {'id': 'fixture-error', 'agent_id': 'fixture', 'method': 'tools/call', 'params': {'name': 'inspect', 'arguments': {'path': '/missing'}}, 'created_at': now - 2, 'completed_at': now - 1, 'status': 'failed', 'error': {'message': 'SCREENSHOT_ERROR_VISIBLE'}},
+    }}))
+
     with socket.socket() as sock:
         sock.bind(('127.0.0.1', 0))
         address = f'127.0.0.1:{sock.getsockname()[1]}'
@@ -50,6 +68,29 @@ def main() -> None:
             page.screenshot(path=str(artifacts / 'unified-desktop.png'), full_page=True)
             with page.expect_response(lambda response: '/admin/api/overview' in response.url):
                 page.locator('.operations-console .topbar button[onclick="refreshAll()"]').click()
+            assert page.locator('#recentJobsCompact').inner_text().find('SCREENSHOT_RESULT_VISIBLE') >= 0
+            assert page.locator('#recentJobsCompact').inner_text().find('SCREENSHOT_ERROR_VISIBLE') >= 0
+            page.locator('#recentJobsCompact button').first.click()
+            page.get_by_role('heading', name='Ошибка', exact=True).wait_for()
+            assert 'SCREENSHOT_ERROR_VISIBLE' in page.locator('#jobDetailBody').inner_text()
+            assert page.locator('#jobDetailBody .entryStatus').text_content() == 'failed'
+            page.goto(url + '/admin/#clients?connection=' + client_ids[0])
+            page.locator('[data-connection-id].selected').wait_for()
+            assert page.locator('[data-connection-id]').count() == 8
+            assert page.locator('[data-connection-id].selected').get_attribute('data-connection-id') == client_ids[0]
+            assert page.get_by_label('Роль выбранного подключения', exact=True).input_value() == 'client'
+            page.locator('[data-connection-id].selected summary').click()
+            assert page.locator('[data-connection-id].selected .credential-history-row').count() == 11
+            screenshot_widths = []
+            for width in (1440, 1280, 1024, 390):
+                page.set_viewport_size({'width': width, 'height': 1000})
+                dimensions = page.evaluate('({viewport:innerWidth,content:document.documentElement.scrollWidth})')
+                overlaps = page.locator('.client-row').evaluate_all('rows=>rows.filter(row=>{let a=row.querySelector("strong").getBoundingClientRect(),b=row.querySelector("button").getBoundingClientRect();return Math.min(a.right,b.right)>Math.max(a.left,b.left)+1 && Math.min(a.bottom,b.bottom)>Math.max(a.top,b.top)+1}).length')
+                assert dimensions['content'] <= width + 2, dimensions
+                assert overlaps == 0, {'width': width, 'overlaps': overlaps}
+                screenshot_widths.append(width)
+                page.screenshot(path=str(artifacts / f'connections-107-records-{width}.png'), full_page=True)
+            page.set_viewport_size({'width': 1440, 'height': 1000})
             routes = [
                 ('Серверы', 'agents'), ('Задачи', 'jobs'), ('MCP-менеджер', 'mcpmanage'),
                 ('Вызов инструментов', 'tools'), ('Ресурсы', 'resources'),
@@ -109,6 +150,7 @@ def main() -> None:
                 except Exception:
                     time.sleep(0.1)
             page.goto(url + '/admin/#clients')
+            page.get_by_role('button', name='Выбрать managed-client', exact=True).click()
             page.get_by_role('button', name='Показать сохранённый токен', exact=True).click()
             page.locator('.token-callout code').wait_for()
             assert page.locator('.token-callout code').inner_text() == issued
@@ -130,7 +172,7 @@ def main() -> None:
             assert dimensions['content'] <= dimensions['width'] + 2, dimensions
             assert not errors, errors
             browser.close()
-        print(json.dumps({'result': 'PASS', 'routes': len(routes), 'real_go_hub': True, 'profile_edit_and_restart': True, 'operations': operations['total'], 'token_retained_on_navigation': True, 'saved_token_after_restart': True, 'admin_role_visible': True, 'legacy_redirect': True, 'mobile': dimensions, 'page_errors': errors}, ensure_ascii=False))
+        print(json.dumps({'result': 'PASS', 'inventory_records': 107, 'logical_oauth_connections': 8, 'no_overlap_widths': screenshot_widths, 'task_result_and_error_visible': True, 'routes': len(routes), 'real_go_hub': True, 'profile_edit_and_restart': True, 'operations': operations['total'], 'token_retained_on_navigation': True, 'saved_token_after_restart': True, 'admin_role_visible': True, 'legacy_redirect': True, 'mobile': dimensions, 'page_errors': errors}, ensure_ascii=False))
     finally:
         server.terminate()
         try:

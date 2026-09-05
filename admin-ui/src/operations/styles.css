@@ -251,3 +251,17 @@
 .operations-console #view-overview .metric-value{font-size:32px}
 .operations-console .topbar-title{font-size:24px;margin-right:auto}
 .operations-console .mono{overflow-wrap:anywhere}
+
+/* The original dark code backgrounds were retained after the light theme
+   switch, making real output almost invisible. Use one readable code palette. */
+.operations-console pre, .operations-console .entryCommand, .operations-console .recentMiniCmd, .operations-console .responseBody {
+  background: #f0f2ef; color: #24323a; overflow-wrap: anywhere; max-width: 100%;
+}
+.operations-console .json-key { color: #804526; }
+.operations-console .json-str { color: #246b4a; }
+.operations-console .json-num, .operations-console .json-bool { color: #4f4981; }
+.operations-console .entryMain, .operations-console .recentMiniItem { min-width: 0; }
+.operations-console .recentMiniItem pre { max-height: 110px; font-size: 12px; }
+.operations-console .entryError { color: #9b3026; }
+.operations-console .entryResponse summary { cursor: pointer; padding: 8px 0; }
+.operations-console .entryTitle, .operations-console .entrySub { overflow-wrap: anywhere; }

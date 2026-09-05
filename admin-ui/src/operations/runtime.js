@@ -6,6 +6,7 @@ export function mountOperations(root, initialView, onNavigate) {
    ═══════════════════════════════════════════════════════════════ */
 
 const $=(id)=>root.querySelector('[id="'+id+'"]');let state=null,currentView=initialView,updateStartedFromBuild=null;
+let olderJobs=[];
 const requests=new AbortController(); let disposed=false, failoverLoaded=false, failoverDirty=false;
 function hdr(){return {'Content-Type':'application/json'}}function esc(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}function cls(s){return String(s||'').replace(/[^a-zA-Z0-9_-]/g,'_')}function displayKind(kind){return kind==='virtual_hub'?'hub':kind}function toggleSidebar(){ $('sidebar').classList.toggle('open') }
 async function api(path,opts={}){const r=await fetch(path,{...opts,signal:requests.signal,headers:{...hdr(),...(opts.headers||{})}});const t=await r.text();let j;try{j=JSON.parse(t)}catch{j={text:t}}if(!r.ok)throw new Error((j&&j.detail)||j.error||t||r.status);return j}
@@ -37,13 +38,33 @@ function cancelJob(jobId,server){
   api('/tasks/'+encodeURIComponent(server||'hub')+'/'+encodeURIComponent(jobId)+'/edit',{method:'POST',body:JSON.stringify({action:'cancel',reason:'cancelled_from_dashboard'})}).then(()=>refreshAll()).catch(e=>alert('ERR '+e.message))
 }
 
-function responsePreviewText(row){if(row.stdout_preview||row.stderr_preview)return [row.stdout_preview&&('stdout\n'+prettyJsonText(row.stdout_preview)),row.stderr_preview&&('stderr\n'+prettyJsonText(row.stderr_preview))].filter(Boolean).join('\n\n');if(row.error)return prettyJsonText(row.error);return ''}
-function hasInlineResponse(row){return Boolean(row.stdout_preview||row.stderr_preview||row.error)}
+function responsePreviewText(row){if(row.error_preview)return row.error_preview;if(row.result_preview)return row.result_preview;if(row.stdout_preview||row.stderr_preview)return [row.stdout_preview&&('stdout\n'+prettyJsonText(row.stdout_preview)),row.stderr_preview&&('stderr\n'+prettyJsonText(row.stderr_preview))].filter(Boolean).join('\n\n');if(row.error)return prettyJsonText(row.error);return ''}
+function hasInlineResponse(row){return Boolean(row.result_preview||row.error_preview||row.stdout_preview||row.stderr_preview||row.error)}
 function canLoadResponse(row){return Boolean(row.job_id)}
 function responseToggleLabel(row){if(row.error)return '▼ ошибка';return '▼ полный вывод'}
 function jobMetaLines(row){const ctx=row.request_context||{};return ['token: '+(ctx.token_id||'—'),'ip: '+(ctx.client_ip||'—'),'ua: '+(ctx.user_agent||'—'),row.server_id?'server: '+row.server_id:'',row.server?'server: '+row.server:'',row.job_id?'job: '+row.job_id:'',row.task_id?'task: '+row.task_id:''].filter(Boolean)}
 function auditMetaLines(row){return ['event: '+(row.event||'—'),'token: '+(row.token_id||'—'),'ip: '+(row.client_ip||'—'),'ua: '+(row.user_agent||'—'),row.target?'target: '+row.target:'',row.job_id?'job: '+row.job_id:'',row.path?'path: '+row.path:''].filter(Boolean)}
-function renderRecentMini(rows){if(!rows.length)return '<p class="muted">пусто</p>';return '<div class="recentMini">'+rows.map(r=>`<div class="recentMiniItem"><div class="recentMiniTop"><span class="${cls(r.status)}">${esc(r.status||'—')}</span><span class="entryCompactTime muted">${esc(compactTime(r.created_fmt||r.created_at||''))}</span></div><div><b>${esc(entrySummaryLabel(r))}</b></div><div class="recentMiniCmd mono">${esc(String(entryCommand(r)).substring(0,160))}</div></div>`).join('')+'</div>'}
+function listedJobs(){return [...new Map([...(state?.jobs?.recent||[]),...olderJobs].map(row=>[row.job_id,row])).values()]}
+async function loadMoreJobs(){
+ const button=$('loadMoreJobs');if(button)button.disabled=true;
+ try{const page=await api('/admin/api/jobs?offset='+listedJobs().length+'&limit=200');olderJobs=olderJobs.concat(page.recent||[]);renderAll()}
+ catch(error){if(button){button.disabled=false;button.textContent='Повторить загрузку: '+error.message}}
+}
+function renderRecentMini(rows){
+ if(!rows.length)return '<p class="muted">Задач пока нет</p>';
+ return '<div class="recentMini">'+rows.map(r=>{
+  const command=entryCommand(r),preview=responsePreviewText(r);
+  const input=command==='—'?'Входные данные не сохранены':String(command).slice(0,180);
+  return `<div class="recentMiniItem"><div class="recentMiniTop"><span class="${cls(r.status)}">${esc(r.status||'unknown')}</span><span class="entryCompactTime muted">${esc(compactTime(r.created_at))}</span></div><div><b>${esc(entrySummaryLabel(r))}</b> <span class="muted small">${esc(r.server_id||r.server||'')}</span></div><div class="recentMiniCmd mono">${esc(input)}</div>${preview?`<pre class="responseBody mono ${r.error_preview?'entryError':''}">${esc(preview.slice(0,240))}</pre>`:'<p class="muted small">'+(r.status==='running'||r.status==='queued'?'Ожидается результат':'Превью отсутствует — откройте задачу')+'</p>'}<button type="button" onclick="openJobDetail('${esc(r.job_id||'')}')">Открыть задачу</button></div>`;
+ }).join('')+'</div>';
+}
+function taskResultPayload(envelope){
+ const payload=envelope.response ?? envelope.result ?? envelope;
+ if(payload && typeof payload==='object' && payload.structuredContent){
+  return payload.structuredContent.result ?? payload.structuredContent;
+ }
+ return payload;
+}
 function renderResponseBlock(row){
   if(!canLoadResponse(row)&&!hasInlineResponse(row))return '';
   const preview=responsePreviewText(row);
@@ -57,7 +78,7 @@ function renderResponseBlock(row){
   const previewHtml=shortPreview?`<pre class="responseBody mono" style="max-height:60px;overflow:hidden;border-radius:var(--radius-sm);margin-bottom:0;border-bottom:none;opacity:0.6">${prettyJsonHtml(shortPreview)}…</pre>`:'';
   const body=preview?`<pre class="responseBody mono">${prettyJsonHtml(preview)}</pre>`:'<div class="responseEmpty">Ответ ещё не загружен.</div>';
   const attrs=row.job_id?` data-job-id="${esc(row.job_id)}"`:'';
-  return `<div class="entryResponse">${previewHtml}<details${attrs} ontoggle="handleResponseToggle(this)"><summary><span class="muted small">▼ полный вывод</span></summary>${body}</details></div>`;
+  return `<div class="entryResponse" onclick="event.stopPropagation()">${previewHtml}<details${attrs} ontoggle="handleResponseToggle(this)"><summary><span class="muted small">▼ полный вывод</span></summary>${body}</details></div>`;
 }
 function renderJobCard(row){
   const isCancelable=row.status==='running'||row.status==='queued'||String(row.status||'').startsWith('queued');
@@ -109,7 +130,7 @@ function renderAuditCard(row){
     ${renderResponseBlock(pseudoRow,row.job_id?'клик для полного вывода':'ответа нет')}
   </article>`;
 }
-async function handleResponseToggle(details){if(!details.open||details.dataset.loaded||details.dataset.loading||!details.dataset.jobId)return;details.dataset.loading='1';const pre=details.querySelector('pre');const empty=details.querySelector('.responseEmpty');if(pre)pre.textContent='loading…';if(empty)empty.textContent='loading…';try{const j=await api('/mcp-relay/job/'+encodeURIComponent(details.dataset.jobId)+'?verbose=true&include_raw=true');const payload=('response' in j)?j.response:('result' in j?j.result:j);const textHtml=prettyJsonHtml(payload);const next=`<pre class="responseBody mono">${textHtml||'—'}</pre>`;if(pre)pre.outerHTML=next;else if(empty)empty.outerHTML=next;else details.insertAdjacentHTML('beforeend',next);details.dataset.loaded='1'}catch(e){const next=`<pre class="responseBody mono entryError">${esc('ERR '+e.message)}</pre>`;if(pre)pre.outerHTML=next;else if(empty)empty.outerHTML=next;else details.insertAdjacentHTML('beforeend',next)}finally{delete details.dataset.loading}}
+async function handleResponseToggle(details){if(!details.open||details.dataset.loaded||details.dataset.loading||!details.dataset.jobId)return;details.dataset.loading='1';const pre=details.querySelector('pre');const empty=details.querySelector('.responseEmpty');if(pre)pre.textContent='loading…';if(empty)empty.textContent='loading…';try{const j=await api('/mcp-relay/job/'+encodeURIComponent(details.dataset.jobId)+'?detail=full');const payload=j.error ?? taskResultPayload(j);const textHtml=prettyJsonHtml(payload);const next=`<pre class="responseBody mono">${textHtml||'—'}</pre>`;if(pre)pre.outerHTML=next;else if(empty)empty.outerHTML=next;else details.insertAdjacentHTML('beforeend',next);details.dataset.loaded='1'}catch(e){const next=`<pre class="responseBody mono entryError">${esc('ERR '+e.message)}</pre>`;if(pre)pre.outerHTML=next;else if(empty)empty.outerHTML=next;else details.insertAdjacentHTML('beforeend',next)}finally{delete details.dataset.loading}}
 function showView(v){if(disposed)return;currentView=v;localStorage.setItem('gptadmin_view',v);root.querySelectorAll('.view').forEach(x=>x.classList.remove('active'));root.querySelectorAll('.navbtn').forEach(x=>x.classList.toggle('active',x.dataset.view===v));$('view-'+v)?.classList.add('active');$('viewTitle').textContent=({overview:'Обзор',agents:'Серверы','agent-detail':'Детали сервера',clients:'Клиенты и Auth',jobs:'Jobs и очереди','job-detail':'Детали job',tools:'Tools тестер',resources:'Ресурсы',mcpmanage:'MCP менеджер',security:'Токены и Auth',failover:'Failover',audit:'Журнал аудита',raw:'Сырой JSON'}[v]||v);$('sidebar').classList.remove('open');renderAll();onNavigate(v);if(v==='failover'&&!failoverLoaded){failoverLoaded=true;void loadFailover()}if(v==='security'){void loadSecurityControls();void loadVirtualMcps()}}
 function includesText(row,q){return !q||JSON.stringify(row).toLowerCase().includes(q.toLowerCase())}
 // getMaxActiveIps / onMaxActiveIpsChange — client-side tolerance for token IP count.
@@ -185,11 +206,11 @@ function renderServerCard(r) {
           '<div class="entrySub muted small">' +
             (r.kind ? '<span class="pill">' + esc(displayKind(r.kind)) + '</span> ' : '') +
             (r.transport ? esc(r.transport) + ' · ' : '') +
-            caps.length + ' cap' + (caps.length === 1 ? '' : 's') +
+            (Array.isArray(r.capabilities)?caps.length+' возможностей':'возможности не переданы') +
             (r.last_seen ? ' · last seen <b>' + esc(r.last_seen) + '</b>' : '') +
           '</div>' +
           '<div class="entrySub small">' +
-            '<b>Capabilities:</b>' +
+            '<b>Возможности:</b>' +
             (caps.length
               ? '<ul class="kvList">' + capList + '</ul>' +
                 (capMore > 0
@@ -199,7 +220,7 @@ function renderServerCard(r) {
               : '<span class="muted small">—</span>') +
           '</div>' +
           '<div class="entrySub small">' +
-            '<b>Meta:</b>' +
+            '<b>Метаданные:</b>' +
             (metaKeys.length
               ? '<ul class="kvList">' + metaList + '</ul>' +
                 (metaMore > 0
@@ -286,7 +307,8 @@ const _clients = data.clients || [];
 $('clients').innerHTML = _clients.length
   ? '<div class="stackList">' + _clients.map(renderClientCard).join('') + '</div>'
   : '<p class="muted">пусто</p>';
-let jobs=(data.jobs?.recent||[]).filter(r=>includesText(r,$('jobFilter')?.value||''));const jst=$('jobStatus')?.value||'all';if(jst==='queued')jobs=jobs.filter(r=>String(r.status||'').startsWith('queued'));else if(jst!=='all')jobs=jobs.filter(r=>r.status===jst);$('jobs').innerHTML=jobs.length?`<div class="stackList">${jobs.map(renderJobCard).join('')}</div>`:'<p class="muted">пусто</p>';
+let jobs=listedJobs().filter(r=>includesText(r,$('jobFilter')?.value||''));const jst=$('jobStatus')?.value||'all';if(jst==='queued')jobs=jobs.filter(r=>String(r.status||'').startsWith('queued'));else if(jst!=='all')jobs=jobs.filter(r=>r.status===jst);$('jobs').innerHTML=jobs.length?`<div class="stackList">${jobs.map(renderJobCard).join('')}</div>`:'<p class="muted">пусто</p>';
+if(listedJobs().length<(data.jobs?.count||0))$('jobs').insertAdjacentHTML('beforeend','<p class="muted">Загружено '+listedJobs().length+' из '+data.jobs.count+' задач</p><button id="loadMoreJobs" onclick="loadMoreJobs()">Показать ещё 200 задач</button>');
 let audit=(data.audit||[]).filter(r=>includesText(r,$('auditFilter')?.value||''));$('audit').innerHTML=audit.length?`<div class="stackList">${audit.map(renderAuditCard).join('')}</div>`:'<p class="muted">пусто</p>';$('rawJson').textContent=JSON.stringify(data,null,2);const hv=$('hubVersion'),sv=$('shellVersion');if(hv){const b=state.build||{};hv.textContent='build '+(b.build_version||'—')+' ('+(b.git_commit||'').slice(0,7)+')'}if(sv){const sb=state.shell_builds||{},vs=sb.versions||{},p=[];for(const[v,c]of Object.entries(vs))p.push(v+'×'+c);sv.textContent=p.length?p.join(', '):'—'}const upd=state.update||{},cur=upd.current||{},lr=upd.last_result,btn=$('btnUpdate'),bl=$('btnUpdateLabel'),sd=$('updateStatus'),st=$('updateStatusText'),rd=$('updateResult');if(cur.status==='running'){if(btn){btn.disabled=true;btn.classList.add('btn-disabled')}if(bl)bl.textContent='Обновляю…';if(sd)sd.style.display='block';if(st)st.textContent='Сервис перезапускается…'}else{if(btn){btn.disabled=false;btn.classList.remove('btn-disabled')}if(bl)bl.textContent='Обновить этот узел'}if(lr&&lr.status==='done'){if(sd)sd.style.display='block';if(st)st.textContent='';if(rd)rd.textContent=lr.message||'Обновление завершено'}else if(lr&&lr.status==='error'){if(sd)sd.style.display='block';if(rd){rd.textContent=lr.message||'Ошибка обновления';rd.style.color='var(--red,#e74c3c)'}}}
 function renderFailoverNodes(cfg, servers){
   if(!$('failoverNodes')) return;
@@ -405,7 +427,7 @@ async function installManagedMcp(name){try{const p=mcpPayloadBase('install');p.n
 async function removeManagedMcp(name){try{if(!confirm('Удалить MCP '+name+' на '+$('mcpHost').value+'?'))return;const p=mcpPayloadBase('remove');p.name=name;p.keep_service=$('mcpKeepService').checked;const j=await mcpManage(p);$('mcpManageResult').textContent=JSON.stringify(j,null,2);await listManagedMcp();refreshAll()}catch(e){$('mcpManageResult').textContent='ERR '+e.message}}
 async function addManagedMcp(){try{const p=mcpPayloadBase('add');p.name=$('mcpName').value.trim();p.server_id=$('mcpAgentId').value.trim()||undefined;p.url=$('mcpUrl').value.trim()||undefined;p.command=$('mcpCommand').value.trim()||undefined;p.args=JSON.parse($('mcpArgs').value||'[]');p.env=JSON.parse($('mcpEnv').value||'{}');p.run_as_user=$('mcpRunAs').value.trim()||undefined;p.stdio_format=$('mcpStdio').value||undefined;p.install=$('mcpInstall').checked;p.force=$('mcpForce').checked;p.disabled=$('mcpDisabled').checked;if(!p.name)throw new Error('name required');if(!p.url&&!p.command)throw new Error('remote URL or command required');const j=await mcpManage(p);$('mcpManageResult').textContent=JSON.stringify(j,null,2);await listManagedMcp();refreshAll()}catch(e){$('mcpManageResult').textContent='ERR '+e.message}}
 
-async function getJob(){try{const id=$('jobId').value.trim();const j=await api('/mcp-relay/job/'+encodeURIComponent(id)+'?verbose=true&include_raw=true');$('result').textContent=JSON.stringify(j,null,2);refreshAll()}catch(e){$('result').textContent='ERR '+e.message}}
+async function getJob(){try{const id=$('jobId').value.trim();const j=await api('/mcp-relay/job/'+encodeURIComponent(id)+'?detail=full');$('result').textContent=JSON.stringify(j,null,2);refreshAll()}catch(e){$('result').textContent='ERR '+e.message}}
 function formatArgs(){try{$('args').value=JSON.stringify(JSON.parse($('args').value||'{}'),null,2)}catch(e){$('result').textContent='Bad JSON: '+e.message}}
 
 
@@ -607,24 +629,26 @@ function openServerDetail(aid){
   $('serverDetailBody').innerHTML=h;
 }
 async function openJobDetail(jid){
-  if(!jid)return;
-  showView('job-detail');
-  $('jobDetailTitle').textContent='Job '+jid;
-  $('jobDetailBody').innerHTML='<p class="muted">Загрузка…</p>';
-  try{
-    const j=await api('/mcp-relay/job/'+encodeURIComponent(jid)+'?verbose=true&include_raw=true');
-    const p=('response' in j)?j.response:('result' in j?j.result:j);
-    let h='<div class="stackList">';
-    h+='<div class="entryCard"><span class="entryStatus pill '+cls(p.status)+'">'+esc(p.status||'?')+'</span></div>';
-    const cmd=p.command||p.arguments_preview||'—';
-    h+='<div class="entryCard"><h2>Input</h2><pre class="responseBody mono" style="max-height:none">'+prettyJsonHtml(cmd)+'</pre></div>';
-    if(p.stdout||p.stdout_preview)h+='<div class="entryCard"><h2>Stdout</h2><pre class="responseBody mono" style="max-height:none">'+prettyJsonHtml(p.stdout||p.stdout_preview)+'</pre></div>';
-    if(p.stderr||p.stderr_preview)h+='<div class="entryCard"><h2>Stderr</h2><pre class="responseBody mono entryError" style="max-height:none">'+prettyJsonHtml(p.stderr||p.stderr_preview)+'</pre></div>';
-    if(p.error)h+='<div class="entryCard"><h2>Error</h2><pre class="responseBody mono entryError" style="max-height:none">'+prettyJsonHtml(p.error)+'</pre></div>';
-    if(!p.stdout&&!p.stderr&&!p.error)h+='<div class="entryCard"><h2>Response</h2><pre class="responseBody mono" style="max-height:none">'+prettyJsonHtml(p)+'</pre></div>';
-    h+='</div>';
-    $('jobDetailBody').innerHTML=h;
-  }catch(e){$('jobDetailBody').innerHTML='<p class="bad">ERR '+esc(e.message)+'</p>'}
+ if(!jid)return;
+ showView('job-detail');
+ $('jobDetailTitle').textContent='Задача '+jid;
+ $('jobDetailBody').innerHTML='<p class="muted">Загрузка…</p>';
+ try{
+  const j=await api('/mcp-relay/job/'+encodeURIComponent(jid)+'?detail=full');
+  const payload=taskResultPayload(j),p=payload && typeof payload==='object'?payload:{};
+  const row=listedJobs().find(item=>item.job_id===jid)||{};
+  const status=j.status||row.status||p.status||'unknown';
+  const command=row.command||row.arguments_preview||p.command||p.arguments_preview;
+  let h='<div class="stackList"><div class="entryCard"><span class="entryStatus pill '+cls(status)+'">'+esc(status)+'</span><p class="mono">'+esc(j.server_id||row.server_id||'')+'</p></div>';
+  h+='<div class="entryCard"><h2>Входные данные</h2>'+(command?'<pre class="responseBody mono">'+prettyJsonHtml(command)+'</pre>':'<p class="muted">Входные данные этой задачи не сохранены.</p>')+'</div>';
+  if(p.stdout||p.stdout_preview)h+='<div class="entryCard"><h2>Stdout</h2><pre class="responseBody mono">'+prettyJsonHtml(p.stdout||p.stdout_preview)+'</pre></div>';
+  if(p.stderr||p.stderr_preview)h+='<div class="entryCard"><h2>Stderr</h2><pre class="responseBody mono entryError">'+prettyJsonHtml(p.stderr||p.stderr_preview)+'</pre></div>';
+  const error=j.error||p.error;
+  if(error)h+='<div class="entryCard"><h2>Ошибка</h2><pre class="responseBody mono entryError">'+prettyJsonHtml(error)+'</pre></div>';
+  if(!p.stdout&&!p.stderr&&!error)h+='<div class="entryCard"><h2>Результат</h2><pre class="responseBody mono">'+prettyJsonHtml(payload)+'</pre></div>';
+  h+='</div>';
+  $('jobDetailBody').innerHTML=h;
+ }catch(e){$('jobDetailBody').innerHTML='<p class="bad">Не удалось получить задачу: '+esc(e.message)+'</p>'}
 }
 
 
@@ -638,6 +662,7 @@ for(const id of ['sideVersion','updateStatus','sideMeta']){
  const element=$(id);element.classList.add('card');$('view-overview').appendChild(element);
 }
 const actions = {
+    loadMoreJobs,
     toggleSidebar,
     hdr,
     api,

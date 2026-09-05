@@ -363,3 +363,32 @@ dd { display: flex; align-items: center; gap: 7px; margin: 0; color: #344441; fo
   .app-shell > .sidebar .nav-item { white-space: nowrap; flex-shrink: 0; }
   .app-shell > .sidebar .sidebar-footer,.app-shell > .sidebar .workspace-label { display: none; }
 }
+
+/* Connection identity must fit regardless of generated IDs or browser zoom. */
+.clients-grid > *, .client-row > *, .client-controls > *, .client-identity { min-width: 0; max-width: 100%; }
+.client-row { grid-template-columns: minmax(0, 1fr) max-content; align-items: start; }
+.client-row strong, .client-controls p, .client-row dd, .connection-full-id { overflow-wrap: anywhere; word-break: break-word; }
+.client-row .text-button { white-space: nowrap; align-self: start; }
+.client-row dl { margin: 0; }
+.client-row dl div { display: grid; gap: 5px; }
+.client-row dd { margin: 0; }
+.connection-id { display: block; margin-top: 8px; color: #687572; font-size: 11px; }
+.connection-full-id { display: block; padding: 9px; background: #f0f1eb; font-size: 12px; }
+.client-controls input, .client-controls select { min-width: 0; width: 100%; max-width: 100%; }
+.connection-filters { display: grid; gap: 12px; padding-top: 16px; }
+.connection-filters .inline-check { display: flex; align-items: center; gap: 8px; }
+.connection-filters input[type="checkbox"] { width: 16px; min-height: 16px; }
+.connection-notice { background: #edf3e9; border-radius: 6px; padding: 10px; font-size: 12px; }
+.connection-history { grid-column: 1 / -1; font-size: 12px; min-width: 0; }
+.connection-history summary { cursor: pointer; color: #365f55; padding: 7px 0; }
+.connection-history p { color: #687572; line-height: 1.5; }
+.credential-history-row { display: grid; grid-template-columns: minmax(0, 1fr) 85px minmax(0, 1fr); gap: 10px; padding: 8px 0; border-top: 1px solid #e2ddd2; overflow-wrap: anywhere; }
+.credential-history-row span { margin: 0; }
+@media (max-width: 1100px) {
+  .clients-grid { grid-template-columns: minmax(0, 1fr); }
+  .client-inventory { grid-row: auto; }
+}
+@media (max-width: 620px) {
+  .client-row { grid-template-columns: minmax(0, 1fr); }
+  .credential-history-row { grid-template-columns: minmax(0, 1fr); gap: 4px; }
+}
