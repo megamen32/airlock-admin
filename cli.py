@@ -594,6 +594,20 @@ def _copy_pkg_runtime_payloads(tdp: Path):
             if legacy_dst.exists():
                 shutil.rmtree(legacy_dst, ignore_errors=True)
             os.replace(staged_legacy, legacy_dst)
+        for sibling in public_src.iterdir():
+            if sibling.name in {'admin', 'admin-legacy'}:
+                continue
+            target = public_dst / sibling.name
+            if sibling.is_dir():
+                staged = public_dst / f'.{sibling.name}.new'
+                if staged.exists():
+                    shutil.rmtree(staged, ignore_errors=True)
+                shutil.copytree(sibling, staged)
+                if target.exists():
+                    shutil.rmtree(target, ignore_errors=True)
+                os.replace(staged, target)
+            elif sibling.is_file():
+                shutil.copy2(sibling, target)
 
 
 def _arch_tag() -> str:
