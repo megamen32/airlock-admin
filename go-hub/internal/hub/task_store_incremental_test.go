@@ -3,6 +3,7 @@ package hub
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -126,8 +127,8 @@ func TestTaskStoreStaleWriterCannotOverwriteCompletedTask(t *testing.T) {
 		t.Fatal(err)
 	}
 	s2.shellJobs["same"].Result = "stale result"
-	if err := s2.saveTaskStateLocked("same"); err != nil {
-		t.Fatal(err)
+	if err := s2.saveTaskStateLocked("same"); !errors.Is(err, errTaskConflict) {
+		t.Fatalf("stale writer must receive a conflict, got %v", err)
 	}
 	state, err := s2.readTaskState()
 	if err != nil {

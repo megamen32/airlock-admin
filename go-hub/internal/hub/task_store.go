@@ -1,7 +1,9 @@
 package hub
 
 import (
+	"errors"
 	"path/filepath"
+	"strings"
 	"time"
 )
 
@@ -23,6 +25,9 @@ type persistedIdempotencyEntry struct {
 }
 
 type persistedRelayTask struct {
+	RequestKey   string         `json:"request_key,omitempty"`
+	Revision     int64          `json:"-"`
+	OwnerID      string         `json:"owner_id,omitempty"`
 	ID           string         `json:"id"`
 	AgentID      string         `json:"agent_id,omitempty"`
 	TraceID      string         `json:"trace_id,omitempty"`
@@ -39,6 +44,10 @@ type persistedRelayTask struct {
 }
 
 type persistedShellTask struct {
+	Timeout      int     `json:"timeout,omitempty"`
+	RequestKey   string  `json:"request_key,omitempty"`
+	Revision     int64   `json:"-"`
+	OwnerID      string  `json:"owner_id,omitempty"`
 	ID           string  `json:"id"`
 	Server       string  `json:"server,omitempty"`
 	TraceID      string  `json:"trace_id,omitempty"`
@@ -65,6 +74,9 @@ func (s *Server) taskStatePath() string {
 // records. No IDs means an explicit full reconciliation (tests/imports only).
 // A group includes its children so parent links/cancellation commit atomically.
 func (s *Server) saveTaskStateLocked(taskIDs ...string) error {
+	if s.taskRuntimeClosed {
+		return errors.New("task runtime is closed")
+	}
 	path := s.taskStatePath()
 	if path == "" {
 		return nil
@@ -106,7 +118,7 @@ func (s *Server) saveTaskStateLocked(taskIDs ...string) error {
 		if j.DoneAt > 0 && j.DoneAt < cutoff {
 			continue
 		}
-		state.Relay[id] = persistedRelayTask{ID: j.ID, AgentID: j.AgentID, TraceID: j.TraceID, TraceParent: j.TraceParent, Method: j.Method, Params: persistableTaskParams(j.Params), CreatedAt: j.CreatedAt, StartedAt: j.StartedAt, DoneAt: j.DoneAt, Status: j.Status, Result: j.Result, Error: j.Error, ParentTaskID: j.ParentTaskID}
+		state.Relay[id] = persistedRelayTask{ID: j.ID, RequestKey: j.RequestKey, Revision: j.Revision, OwnerID: j.OwnerID, AgentID: j.AgentID, TraceID: j.TraceID, TraceParent: j.TraceParent, Method: j.Method, Params: persistableTaskParams(j.Params), CreatedAt: j.CreatedAt, StartedAt: j.StartedAt, DoneAt: j.DoneAt, Status: j.Status, Result: j.Result, Error: j.Error, ParentTaskID: j.ParentTaskID}
 	}
 	for id, j := range shell {
 		if j == nil {
@@ -115,7 +127,7 @@ func (s *Server) saveTaskStateLocked(taskIDs ...string) error {
 		if j.DoneAt > 0 && j.DoneAt < cutoff {
 			continue
 		}
-		state.Shell[id] = persistedShellTask{ID: j.ID, Server: j.Server, TraceID: j.TraceID, TraceParent: j.TraceParent, ToolName: j.ToolName, CreatedAt: j.CreatedAt, StartedAt: j.StartedAt, DoneAt: j.DoneAt, Status: j.Status, Result: persistableShellResult(j), Error: redactSecretValues(j.Error, j.SecretValues), ApprovalID: j.ApprovalID, ParentTaskID: j.ParentTaskID}
+		state.Shell[id] = persistedShellTask{Timeout: j.Timeout, ID: j.ID, RequestKey: j.RequestKey, Revision: j.Revision, OwnerID: j.OwnerID, Server: j.Server, TraceID: j.TraceID, TraceParent: j.TraceParent, ToolName: j.ToolName, CreatedAt: j.CreatedAt, StartedAt: j.StartedAt, DoneAt: j.DoneAt, Status: j.Status, Result: persistableShellResult(j), Error: redactSecretValues(j.Error, j.SecretValues), ApprovalID: j.ApprovalID, ParentTaskID: j.ParentTaskID}
 	}
 	nowTime := time.Now()
 	for key, entry := range s.idempotency {
@@ -129,12 +141,30 @@ func (s *Server) saveTaskStateLocked(taskIDs ...string) error {
 		}
 	}
 
-	return s.withTaskDatabase(func(tx *taskTransaction) error {
+	var revisions map[string]int64
+	err := s.withTaskDatabase(func(tx *taskTransaction) error {
 		if err := tx.save(state); err != nil {
 			return err
 		}
+		revisions = tx.revisions
 		return tx.prune(cutoff, nowFloat()-idempotencyTTL.Seconds())
 	})
+	if err != nil {
+		return err
+	}
+	for key, revision := range revisions {
+		if strings.HasPrefix(key, "shell:") {
+			if j := s.shellJobs[strings.TrimPrefix(key, "shell:")]; j != nil {
+				j.Revision = revision
+			}
+		}
+		if strings.HasPrefix(key, "relay:") {
+			if j := s.relayJobs[strings.TrimPrefix(key, "relay:")]; j != nil {
+				j.Revision = revision
+			}
+		}
+	}
+	return nil
 }
 
 func persistableTaskParams(params map[string]any) map[string]any {
@@ -197,36 +227,56 @@ func (s *Server) loadTaskState() error {
 		return err
 	}
 
+	aliveOwners := map[string]bool{}
+	for _, p := range state.Shell {
+		if p.OwnerID != "" {
+			aliveOwners[p.OwnerID] = false
+		}
+	}
+	for _, p := range state.Relay {
+		if p.OwnerID != "" {
+			aliveOwners[p.OwnerID] = false
+		}
+	}
+	for owner := range aliveOwners {
+		alive, err := s.taskOwnerAlive(owner)
+		if err != nil {
+			return err
+		}
+		aliveOwners[owner] = alive
+	}
 	now := nowFloat()
 	var recoveredIDs []string
 	for id, p := range state.Relay {
+		alive := aliveOwners[p.OwnerID]
 		status := p.Status
 		errVal := p.Error
 		done := p.DoneAt
-		if status == "queued" {
+		if status == "queued" && !alive {
 			status = "failed"
 			errVal = map[string]any{"code": "hub_restarted_before_dispatch", "message": "Hub restarted before queued relay task was dispatched; task was not replayed"}
 			done = now
 			recoveredIDs = append(recoveredIDs, id)
 		}
-		s.relayJobs[id] = &relayJob{ID: p.ID, AgentID: p.AgentID, TraceID: p.TraceID, TraceParent: p.TraceParent, Method: p.Method, Params: p.Params, CreatedAt: p.CreatedAt, StartedAt: p.StartedAt, DoneAt: done, Status: status, Result: p.Result, Error: errVal, ParentTaskID: p.ParentTaskID}
+		s.relayJobs[id] = &relayJob{ID: p.ID, RequestKey: p.RequestKey, Revision: p.Revision, OwnerID: p.OwnerID, AgentID: p.AgentID, TraceID: p.TraceID, TraceParent: p.TraceParent, Method: p.Method, Params: p.Params, CreatedAt: p.CreatedAt, StartedAt: p.StartedAt, DoneAt: done, Status: status, Result: p.Result, Error: errVal, ParentTaskID: p.ParentTaskID}
 	}
 	for id, p := range state.Shell {
+		alive := aliveOwners[p.OwnerID]
 		status := p.Status
 		errVal := p.Error
 		done := p.DoneAt
-		if status == "queued" {
+		if status == "queued" && !alive {
 			status = "failed"
 			errVal = map[string]any{"code": "hub_restarted_before_dispatch", "message": "Hub restarted before queued shell task was dispatched; task was not replayed"}
 			done = now
 			recoveredIDs = append(recoveredIDs, id)
-		} else if status == "input_required" {
+		} else if status == "input_required" && !alive {
 			status = "failed"
 			errVal = map[string]any{"code": "hub_restarted_during_input_required", "message": "Hub restarted while task awaited approval; original arguments were intentionally not persisted and task was not replayed"}
 			done = now
 			recoveredIDs = append(recoveredIDs, id)
 		}
-		s.shellJobs[id] = &shellJob{ID: p.ID, Server: p.Server, TraceID: p.TraceID, TraceParent: p.TraceParent, ToolName: p.ToolName, CreatedAt: p.CreatedAt, StartedAt: p.StartedAt, DoneAt: done, Status: status, Result: p.Result, Error: errVal, ApprovalID: p.ApprovalID, ParentTaskID: p.ParentTaskID}
+		s.shellJobs[id] = &shellJob{Timeout: p.Timeout, ID: p.ID, RequestKey: p.RequestKey, Revision: p.Revision, OwnerID: p.OwnerID, Server: p.Server, TraceID: p.TraceID, TraceParent: p.TraceParent, ToolName: p.ToolName, CreatedAt: p.CreatedAt, StartedAt: p.StartedAt, DoneAt: done, Status: status, Result: p.Result, Error: errVal, ApprovalID: p.ApprovalID, ParentTaskID: p.ParentTaskID}
 		if status == "cancelled" && p.StartedAt > 0 && p.Server != "" {
 			s.shellControls[p.Server] = append(s.shellControls[p.Server], shellControl{TaskID: p.ID})
 		}

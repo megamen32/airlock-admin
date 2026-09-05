@@ -365,6 +365,9 @@ type relayEnrollment struct {
 }
 
 type relayJob struct {
+	RequestKey   string         `json:"request_key,omitempty"`
+	Revision     int64          `json:"-"`
+	OwnerID      string         `json:"owner_id,omitempty"`
 	ID           string         `json:"id"`
 	AgentID      string         `json:"agent_id,omitempty"`
 	TraceID      string         `json:"trace_id,omitempty"`
@@ -385,6 +388,9 @@ type shellControl struct {
 }
 
 type shellJob struct {
+	RequestKey        string         `json:"request_key,omitempty"`
+	Revision          int64          `json:"-"`
+	OwnerID           string         `json:"owner_id,omitempty"`
 	ID                string         `json:"id"`
 	Server            string         `json:"server,omitempty"`
 	TraceID           string         `json:"trace_id,omitempty"`
@@ -477,6 +483,7 @@ type authRateWindow struct {
 }
 
 type idempotencyEntry struct {
+	Key         string
 	Fingerprint string
 	CreatedAt   time.Time
 	Done        chan struct{}
@@ -499,6 +506,9 @@ type Server struct {
 	shellQueues       map[string][]string
 	shellControls     map[string][]shellControl
 	shellJobs         map[string]*shellJob
+	taskOwner         *taskOwner
+	taskRuntimeClosed bool
+	taskRuntimeStop   chan struct{}
 	idempotency       map[string]*idempotencyEntry
 	oauthCodes        map[string]oauthCode
 	managedMCP        map[string]managedMCPToken
@@ -597,6 +607,7 @@ func New(cfg Config) *Server {
 		webauthnState = defaultWebAuthnState()
 	}
 	s := &Server{
+		taskRuntimeStop:   make(chan struct{}),
 		cfg:               cfg,
 		agents:            map[string]*Agent{},
 		relayCredentials:  map[string]string{},
@@ -1373,58 +1384,6 @@ func (s *Server) applyHubSettingsLocked(updates map[string]any) (map[string]any,
 	return changed, nil
 }
 
-func (s *Server) expireOrphanedShellJobsLocked() []string {
-	now := nowFloat()
-	minAge := s.hubSettingIntLocked("orphan_shell_job_min_age_seconds")
-	if minAge < 300 {
-		minAge = 300
-	}
-	expired := []string{}
-	for _, job := range s.shellJobs {
-		if job == nil || job.Status != "running" || job.StartedAt <= 0 {
-			continue
-		}
-		requestedTimeout := job.Timeout
-		if requestedTimeout <= 0 {
-			requestedTimeout = 300
-		}
-		maxAge := requestedTimeout + 300
-		if maxAge < minAge {
-			maxAge = minAge
-		}
-		if now-job.StartedAt <= float64(maxAge) {
-			continue
-		}
-		job.Status = "failed"
-		job.DoneAt = now
-		job.Error = map[string]any{
-			"code":    "orphaned_running_task",
-			"message": fmt.Sprintf("shell task remained running for %.0fs, exceeding orphan threshold %ds", now-job.StartedAt, maxAge),
-		}
-		if job.Server != "" {
-			s.shellControls[job.Server] = append(s.shellControls[job.Server], shellControl{TaskID: job.ID})
-		}
-		expired = append(expired, job.ID)
-	}
-	return expired
-}
-
-func (s *Server) refreshTaskGroupsLocked() int {
-	changed := 0
-	for _, group := range s.relayJobs {
-		if group == nil || group.Method != "task/group" {
-			continue
-		}
-		before := fmt.Sprintf("%s|%.6f|%v", group.Status, group.DoneAt, group.Result)
-		s.refreshTaskGroupLocked(group)
-		after := fmt.Sprintf("%s|%.6f|%v", group.Status, group.DoneAt, group.Result)
-		if before != after {
-			changed++
-		}
-	}
-	return changed
-}
-
 func (s *Server) registryCleanupLoop() {
 	ticker := time.NewTicker(10 * time.Second)
 	defer ticker.Stop()
@@ -1432,8 +1391,10 @@ func (s *Server) registryCleanupLoop() {
 	for {
 		s.mu.Lock()
 		changed := s.refreshAgentLifecycleLocked()
-		expiredJobs := s.expireOrphanedShellJobsLocked()
-		groupChanges := s.refreshTaskGroupsLocked()
+		expiredJobs, taskErr := s.maintainTaskStateLocked()
+		if taskErr != nil {
+			log.Printf("task maintenance commit failed: %v", taskErr)
+		}
 		removed := []string{}
 		if lastCleanup.IsZero() || s.now().Sub(lastCleanup) >= time.Hour {
 			removed = s.cleanupStaleMCPAgentsLocked()
@@ -1445,30 +1406,22 @@ func (s *Server) registryCleanupLoop() {
 		if len(expiredJobs) > 0 {
 			s.addAuditLocked("orphan_shell_jobs_expired", map[string]any{"job_ids": expiredJobs, "count": len(expiredJobs)})
 		}
-		if len(expiredJobs) > 0 || groupChanges > 0 {
-			changedTaskIDs := append([]string(nil), expiredJobs...)
-			if groupChanges > 0 {
-				for id, group := range s.relayJobs {
-					if group != nil && group.Method == "task/group" {
-						changedTaskIDs = append(changedTaskIDs, id)
-					}
-				}
-			}
-			if err := s.saveTaskStateLocked(changedTaskIDs...); err != nil {
-				log.Printf("task maintenance state save failed: %v", err)
-			}
-		}
 		if changed > 0 || len(removed) > 0 {
 			if err := s.saveRegistryStateLocked(); err != nil {
 				log.Printf("registry lifecycle save failed: %v", err)
 			}
 		}
 		s.mu.Unlock()
-		<-ticker.C
+		select {
+		case <-ticker.C:
+		case <-s.taskRuntimeStop:
+			return
+		}
 	}
 }
 
 func (s *Server) ListenAndServe() error {
+	defer s.Close()
 	if s.secretStoreErr != nil {
 		return fmt.Errorf("secret ingress store unavailable: %w", s.secretStoreErr)
 	}
@@ -2831,6 +2784,15 @@ func (s *Server) reserveFleetIdempotency(r *http.Request, key, fingerprint strin
 		authorization = r.Header.Get("Authorization")
 	}
 	entryKey := sha256Hex([]byte(authorization)) + ":fleet:" + key
+	if s.cfg.ConfigDir != "" {
+		decision, err := s.reserveDurableTaskRequest(entryKey, fingerprint)
+		if err != nil {
+			return nil, taskPersistenceFailure(err), http.StatusServiceUnavailable, true
+		}
+		if decision.replay {
+			return nil, decision.response, decision.status, true
+		}
+	}
 	s.mu.Lock()
 	now := time.Now()
 	for existingKey, entry := range s.idempotency {
@@ -2871,17 +2833,23 @@ func (s *Server) reserveFleetIdempotency(r *http.Request, key, fingerprint strin
 			return nil, map[string]any{"detail": "idempotency store is temporarily full; retry later"}, http.StatusTooManyRequests, true
 		}
 	}
-	entry := &idempotencyEntry{Fingerprint: fingerprint, CreatedAt: now, Done: make(chan struct{})}
+	entry := &idempotencyEntry{Key: entryKey, Fingerprint: fingerprint, CreatedAt: now, Done: make(chan struct{})}
 	s.idempotency[entryKey] = entry
 	s.mu.Unlock()
 	return entry, nil, 0, false
 }
 
-func (s *Server) finishFleetIdempotency(entry *idempotencyEntry, response map[string]any, status int) {
+func (s *Server) finishFleetIdempotency(entry *idempotencyEntry, response map[string]any, status int) error {
 	if entry == nil {
-		return
+		return nil
+	}
+	if s.cfg.ConfigDir != "" {
+		if err := s.withTaskDatabase(func(t *taskTransaction) error { return t.finishRequest(entry.Key, response, status) }); err != nil {
+			return err
+		}
 	}
 	s.mu.Lock()
+	defer s.mu.Unlock()
 	entry.JobID = firstString(response, "task_id", "job_id")
 	entry.Response = cloneMap(response)
 	entry.Status = status
@@ -2890,12 +2858,7 @@ func (s *Server) finishFleetIdempotency(entry *idempotencyEntry, response map[st
 	default:
 		close(entry.Done)
 	}
-	if entry.JobID != "" {
-		if err := s.saveTaskStateLocked(entry.JobID); err != nil {
-			log.Printf("fleet task/idempotency state save failed: %v", err)
-		}
-	}
-	s.mu.Unlock()
+	return nil
 }
 
 func (s *Server) fleetExecForRequest(r *http.Request, req map[string]any, taskMode bool) (map[string]any, int) {
@@ -2962,7 +2925,7 @@ func (s *Server) fleetExecForRequest(r *http.Request, req map[string]any, taskMo
 		if taskMode && status == http.StatusPreconditionRequired && firstString(result, "status") == "approval_required" {
 			cleanArgs, _ := approvalArguments(args)
 			result = s.createApprovalShellTask(policyRequest, target, "shell_exec", cleanArgs, result)
-			status = http.StatusOK
+			status = taskResponseStatus(result)
 		}
 		results[srv] = result
 		if status > responseStatus {
@@ -2980,6 +2943,24 @@ func (s *Server) fleetExecForRequest(r *http.Request, req map[string]any, taskMo
 			Params: map[string]any{"label": "fleetExec", "children": children},
 		}
 		s.mu.Lock()
+		changedIDs := []string{parentID}
+		for _, raw := range children {
+			if id, ok := raw.(string); ok {
+				changedIDs = append(changedIDs, id)
+			}
+		}
+		change := s.beginTaskMutationLocked(changedIDs...)
+		var ownerErr error
+		parent.OwnerID, ownerErr = s.ensureTaskOwnerLocked()
+		if ownerErr != nil {
+			s.mu.Unlock()
+			failure := taskPersistenceFailure(ownerErr)
+			failure["results"] = results
+			return failure, http.StatusServiceUnavailable
+		}
+		if idemEntry != nil {
+			parent.RequestKey = idemEntry.Key
+		}
 		s.relayJobs[parentID] = parent
 		for _, rawID := range children {
 			id, _ := rawID.(string)
@@ -2991,8 +2972,11 @@ func (s *Server) fleetExecForRequest(r *http.Request, req map[string]any, taskMo
 			}
 		}
 		s.refreshTaskGroupLocked(parent)
-		if err := s.saveTaskStateLocked(parentID); err != nil {
-			log.Printf("fleet task group state save failed: %v", err)
+		if err := change.commit(); err != nil {
+			s.mu.Unlock()
+			failure := taskPersistenceFailure(err)
+			failure["results"] = results
+			return failure, http.StatusServiceUnavailable
 		}
 		parentStatus := parent.Status
 		s.mu.Unlock()
@@ -3001,7 +2985,11 @@ func (s *Server) fleetExecForRequest(r *http.Request, req map[string]any, taskMo
 		response["background"] = true
 		response["status"] = parentStatus
 	}
-	s.finishFleetIdempotency(idemEntry, response, responseStatus)
+	if err := s.finishFleetIdempotency(idemEntry, response, responseStatus); err != nil {
+		failure := taskPersistenceFailure(err)
+		failure["results"] = results
+		return failure, http.StatusServiceUnavailable
+	}
 	return response, responseStatus
 }
 
@@ -3134,6 +3122,15 @@ func (s *Server) pollShellQueue(w http.ResponseWriter, r *http.Request, name str
 			writeJSON(w, http.StatusOK, map[string]any{"server_id": "shell:" + name, "status": "awaiting_approval"})
 			return
 		}
+		controlID, err := s.nextDurableTaskControlLocked(name)
+		if err != nil {
+			writeJSON(w, http.StatusServiceUnavailable, map[string]any{"detail": "task controls unavailable; retry"})
+			return
+		}
+		if controlID != "" {
+			writeJSON(w, http.StatusOK, map[string]any{"id": "control_" + controlID, "server": name, "tool_name": "__gptadmin_cancel_task", "arguments": map[string]any{"task_id": controlID}})
+			return
+		}
 		if controls := s.shellControls[name]; len(controls) > 0 {
 			control := controls[0]
 			s.shellControls[name] = controls[1:]
@@ -3147,9 +3144,13 @@ func (s *Server) pollShellQueue(w http.ResponseWriter, r *http.Request, name str
 		}
 		if q := s.shellQueues[name]; len(q) > 0 {
 			id := q[0]
+			if err := s.refreshTaskRecordsLocked(id); err != nil {
+				writeJSON(w, http.StatusServiceUnavailable, map[string]any{"detail": "task state unavailable; retry"})
+				return
+			}
 			s.shellQueues[name] = q[1:]
 			job := s.shellJobs[id]
-			if job == nil || job.Status == "cancelled" {
+			if job == nil || job.Status != "queued" {
 				continue
 			}
 			previousStatus, previousStarted := job.Status, job.StartedAt
@@ -3281,6 +3282,11 @@ func (s *Server) shellQueueResult(w http.ResponseWriter, r *http.Request, name s
 	}
 	s.mu.Lock()
 	s.touchShellPollLocked(name, r)
+	if err := s.refreshTaskRecordsLocked(res.ID); err != nil {
+		s.mu.Unlock()
+		writeJSON(w, http.StatusServiceUnavailable, map[string]any{"detail": "task state unavailable; retry"})
+		return
+	}
 	job := s.shellJobs[res.ID]
 	if job == nil {
 		s.mu.Unlock()
@@ -3288,10 +3294,16 @@ func (s *Server) shellQueueResult(w http.ResponseWriter, r *http.Request, name s
 		return
 	}
 	if job.Status == "cancelled" {
+		if err := s.acknowledgeTaskControlLocked(name, job.ID); err != nil {
+			s.mu.Unlock()
+			writeJSON(w, http.StatusServiceUnavailable, map[string]any{"detail": "cancellation acknowledgement failed; retry"})
+			return
+		}
 		s.mu.Unlock()
 		writeJSON(w, http.StatusOK, map[string]any{"ok": true, "cancelled": true})
 		return
 	}
+	change := s.beginTaskMutationLocked(job.ID)
 	job.DoneAt = nowFloat()
 	job.Status = "completed"
 	job.Result = res.Result
@@ -3307,7 +3319,7 @@ func (s *Server) shellQueueResult(w http.ResponseWriter, r *http.Request, name s
 		fields["traceparent"] = job.TraceParent
 	}
 	s.addAuditLocked("shell_result", fields)
-	if err := s.saveTaskStateLocked(job.ID); err != nil {
+	if err := change.commit(); err != nil {
 		log.Printf("task result commit failed: %v", err)
 		s.mu.Unlock()
 		writeJSON(w, http.StatusServiceUnavailable, map[string]any{"detail": "task result persistence failed; retry delivery"})
@@ -3487,9 +3499,13 @@ func (s *Server) mcpRelayPoll(w http.ResponseWriter, r *http.Request) {
 		}
 		if q := s.relayQueues[agentID]; len(q) > 0 {
 			id := q[0]
+			if err := s.refreshTaskRecordsLocked(id); err != nil {
+				writeJSON(w, http.StatusServiceUnavailable, map[string]any{"detail": "task state unavailable; retry"})
+				return
+			}
 			s.relayQueues[agentID] = q[1:]
 			job := s.relayJobs[id]
-			if job == nil || job.Status == "cancelled" {
+			if job == nil || job.Status != "queued" {
 				continue
 			}
 			previousStatus, previousStarted := job.Status, job.StartedAt
@@ -3549,6 +3565,11 @@ func (s *Server) mcpRelayResult(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.mu.Lock()
+	if err := s.refreshTaskRecordsLocked(res.ID); err != nil {
+		s.mu.Unlock()
+		writeJSON(w, http.StatusServiceUnavailable, map[string]any{"detail": "task state unavailable; retry"})
+		return
+	}
 	job := s.relayJobs[res.ID]
 	if job == nil {
 		s.mu.Unlock()
@@ -3569,6 +3590,7 @@ func (s *Server) mcpRelayResult(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusConflict, map[string]any{"detail": "relay job already has a terminal result"})
 		return
 	}
+	change := s.beginTaskMutationLocked(job.ID)
 	job.DoneAt = nowFloat()
 	job.Result = res.Result
 	if res.OK != nil && !*res.OK {
@@ -3590,7 +3612,7 @@ func (s *Server) mcpRelayResult(w http.ResponseWriter, r *http.Request) {
 		fields["traceparent"] = job.TraceParent
 	}
 	s.addAuditLocked("mcp_result", fields)
-	if err := s.saveTaskStateLocked(job.ID); err != nil {
+	if err := change.commit(); err != nil {
 		log.Printf("task result commit failed: %v", err)
 		s.mu.Unlock()
 		writeJSON(w, http.StatusServiceUnavailable, map[string]any{"detail": "task result persistence failed; retry delivery"})
@@ -3966,6 +3988,10 @@ func (s *Server) mcpRelayTools(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	jobID := s.enqueueRelay(target, "tools/list", nil)
+	if failure := s.relayEnqueueFailure(jobID); failure != nil {
+		writeJSON(w, http.StatusServiceUnavailable, failure)
+		return
+	}
 	if truthy(req["background"]) {
 		writeJSON(w, http.StatusOK, map[string]any{"server_id": target, "status": "running", "background": true, "job_id": jobID})
 		return
@@ -4048,6 +4074,7 @@ func (s *Server) executeMCPTool(r *http.Request, target, toolName string, args m
 		args = resolvedArgs
 		secretValues = resolvedSecrets
 	}
+	durableRequestKey := ""
 	operation := func() (map[string]any, int) {
 		if target == "hub" {
 			resp, status := s.callHubToolForRequest(r, toolName, args)
@@ -4058,7 +4085,7 @@ func (s *Server) executeMCPTool(r *http.Request, target, toolName string, args m
 			return map[string]any{"server_id": target, "status": "completed", "response": resp}, status
 		}
 		if strings.HasPrefix(target, "shell:") {
-			return s.callShellToolWithTraceParentAndSecrets(target, toolName, args, background, timeout, requestTraceID(r), requestTraceParent(r), secretValues), http.StatusOK
+			return s.callShellToolWithTraceParentAndSecrets(target, toolName, args, background, timeout, requestTraceID(r), requestTraceParent(r), secretValues, durableRequestKey), http.StatusOK
 		}
 		s.mu.Lock()
 		child, isChild := s.exposedAgentByIDLocked(target)
@@ -4068,9 +4095,12 @@ func (s *Server) executeMCPTool(r *http.Request, target, toolName string, args m
 			ref := firstString(child.Meta, "child_ref")
 			return s.callShellToolWithTraceParentAndSecrets(parent, "mcp_call", map[string]any{
 				"ref": ref, "name": toolName, "arguments": args,
-			}, background, timeout, requestTraceID(r), requestTraceParent(r), secretValues), http.StatusOK
+			}, background, timeout, requestTraceID(r), requestTraceParent(r), secretValues, durableRequestKey), http.StatusOK
 		}
-		jobID := s.enqueueRelayWithTraceParent(target, "tools/call", map[string]any{"name": toolName, "arguments": args}, requestTraceID(r), requestTraceParent(r))
+		jobID := s.enqueueRelayWithTraceParent(target, "tools/call", map[string]any{"name": toolName, "arguments": args}, requestTraceID(r), requestTraceParent(r), durableRequestKey)
+		if failure := s.relayEnqueueFailure(jobID); failure != nil {
+			return failure, http.StatusServiceUnavailable
+		}
 		if background {
 			response := map[string]any{"server_id": target, "status": "running", "background": true, "job_id": jobID}
 			if traceID := requestTraceID(r); traceID != "" {
@@ -4086,6 +4116,9 @@ func (s *Server) executeMCPTool(r *http.Request, target, toolName string, args m
 	key = strings.TrimSpace(key)
 	if key == "" {
 		response, status := operation()
+		if taskResponseStatus(response) != http.StatusOK {
+			status = taskResponseStatus(response)
+		}
 		s.auditToolDecision(r, target, toolName, args, "allow", "", response, status)
 		return response, status
 	}
@@ -4107,6 +4140,17 @@ func (s *Server) executeMCPTool(r *http.Request, target, toolName string, args m
 	}
 	scope := sha256Hex([]byte(authorization))
 	entryKey := scope + ":" + key
+	if s.cfg.ConfigDir != "" {
+		durableRequestKey = entryKey
+		return s.executeDurableTaskRequest(entryKey, fingerprint, func() (map[string]any, int) {
+			response, status := operation()
+			if taskResponseStatus(response) != http.StatusOK {
+				status = taskResponseStatus(response)
+			}
+			s.auditToolDecision(r, target, toolName, args, "allow", "", response, status)
+			return response, status
+		})
+	}
 
 	s.mu.Lock()
 	now := time.Now()
@@ -4459,6 +4503,11 @@ func (s *Server) mcpRelayJob(w http.ResponseWriter, r *http.Request) {
 	}
 	ack := r.URL.Query().Get("ack") == "true" || r.URL.Query().Get("ack") == "1"
 	s.mu.Lock()
+	if err := s.refreshTaskRecordsLocked(jobID); err != nil {
+		s.mu.Unlock()
+		writeJSON(w, http.StatusServiceUnavailable, map[string]any{"detail": "task state unavailable; retry"})
+		return
+	}
 	if j := s.relayJobs[jobID]; j != nil {
 		resp := relayJobResponse(j)
 		if ack && (j.Status == "completed" || j.Status == "failed") {
@@ -4489,11 +4538,13 @@ func (s *Server) enqueueRelayWithTrace(agentID, method string, params map[string
 	return s.enqueueRelayWithTraceParent(agentID, method, params, traceID, "")
 }
 
-func (s *Server) enqueueRelayWithTraceParent(agentID, method string, params map[string]any, traceID, traceParent string) string {
+func (s *Server) enqueueRelayWithTraceParent(agentID, method string, params map[string]any, traceID, traceParent string, requestKeys ...string) string {
 	id := newID()
 	s.mu.Lock()
 	s.relayJobs[id] = &relayJob{ID: id, AgentID: agentID, TraceID: traceID, TraceParent: traceParent, Method: method, Params: params, CreatedAt: nowFloat(), Status: "queued"}
-	s.relayQueues[agentID] = append(s.relayQueues[agentID], id)
+	if len(requestKeys) > 0 {
+		s.relayJobs[id].RequestKey = requestKeys[0]
+	}
 	fields := map[string]any{"server_id": agentID, "job_id": id, "method": method}
 	if traceID != "" {
 		fields["trace_id"] = traceID
@@ -4502,8 +4553,17 @@ func (s *Server) enqueueRelayWithTraceParent(agentID, method string, params map[
 		fields["traceparent"] = traceParent
 	}
 	s.addAuditLocked("mcp_enqueue", fields)
-	if err := s.saveTaskStateLocked(id); err != nil {
-		log.Printf("task state save failed: %v", err)
+	owner, err := s.ensureTaskOwnerLocked()
+	if err == nil {
+		s.relayJobs[id].OwnerID = owner
+		err = s.saveTaskStateLocked(id)
+	}
+	if err != nil {
+		s.relayJobs[id].Status = "failed"
+		s.relayJobs[id].Error = taskPersistenceFailure(err)["error"]
+		s.relayJobs[id].DoneAt = nowFloat()
+	} else {
+		s.relayQueues[agentID] = append(s.relayQueues[agentID], id)
 	}
 	s.cond.Broadcast()
 	s.mu.Unlock()
@@ -4515,11 +4575,14 @@ func (s *Server) waitRelay(jobID string, timeout time.Duration) map[string]any {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	for {
+		if err := s.refreshTaskRecordsLocked(jobID); err != nil {
+			return taskPersistenceFailure(err)
+		}
 		job := s.relayJobs[jobID]
 		if job == nil {
 			return map[string]any{"status": "failed", "error": "unknown job", "job_id": jobID}
 		}
-		if job.Status == "completed" || job.Status == "failed" {
+		if job.Status == "completed" || job.Status == "failed" || job.Status == "cancelled" {
 			return relayJobResponse(job)
 		}
 		remaining := time.Until(deadline)
@@ -4785,7 +4848,7 @@ func (s *Server) callShellToolWithTraceParent(target, toolName string, args map[
 	return s.callShellToolWithTraceParentAndSecrets(target, toolName, args, background, timeout, traceID, traceParent, nil)
 }
 
-func (s *Server) callShellToolWithTraceParentAndSecrets(target, toolName string, args map[string]any, background bool, timeout time.Duration, traceID, traceParent string, secretValues []string) map[string]any {
+func (s *Server) callShellToolWithTraceParentAndSecrets(target, toolName string, args map[string]any, background bool, timeout time.Duration, traceID, traceParent string, secretValues []string, requestKeys ...string) map[string]any {
 	server := canonicalShellQueueName(strings.TrimPrefix(target, "shell:"))
 	if toolName == "" {
 		return map[string]any{"server_id": target, "status": "failed", "error": "missing tool name"}
@@ -4800,9 +4863,18 @@ func (s *Server) callShellToolWithTraceParentAndSecrets(target, toolName string,
 		job.Timeout = intFromAny(args["timeout"])
 		job.Env = mapValue(args["env"])
 	}
+	if len(requestKeys) > 0 {
+		job.RequestKey = requestKeys[0]
+	}
 	s.mu.Lock()
+	owner, err := s.ensureTaskOwnerLocked()
+	if err != nil {
+		s.mu.Unlock()
+		return taskPersistenceFailure(err)
+	}
+	job.OwnerID = owner
+	change := s.beginTaskMutationLocked(job.ID)
 	s.shellJobs[job.ID] = job
-	s.shellQueues[server] = append(s.shellQueues[server], job.ID)
 	fields := map[string]any{"server": server, "job_id": job.ID}
 	if traceID != "" {
 		fields["trace_id"] = traceID
@@ -4811,9 +4883,11 @@ func (s *Server) callShellToolWithTraceParentAndSecrets(target, toolName string,
 		fields["traceparent"] = traceParent
 	}
 	s.addAuditLocked("shell_enqueue", fields)
-	if err := s.saveTaskStateLocked(job.ID); err != nil {
-		log.Printf("task state save failed: %v", err)
+	if err := change.commit(); err != nil {
+		s.mu.Unlock()
+		return taskPersistenceFailure(err)
 	}
+	s.shellQueues[server] = append(s.shellQueues[server], job.ID)
 	s.cond.Broadcast()
 	s.mu.Unlock()
 	if background {
@@ -4830,8 +4904,11 @@ func (s *Server) callShellToolWithTraceParentAndSecrets(target, toolName string,
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	for {
+		if err := s.refreshTaskRecordsLocked(job.ID); err != nil {
+			return taskPersistenceFailure(err)
+		}
 		j := s.shellJobs[job.ID]
-		if j.Status == "completed" || j.Status == "failed" {
+		if j.Status == "completed" || j.Status == "failed" || j.Status == "cancelled" {
 			return shellJobResponse(j)
 		}
 		remaining := time.Until(deadline)
@@ -7896,9 +7973,17 @@ func (s *Server) createApprovalShellTask(r *http.Request, target, toolName strin
 		job.Env = mapValue(args["env"])
 	}
 	s.mu.Lock()
+	owner, err := s.ensureTaskOwnerLocked()
+	if err != nil {
+		s.mu.Unlock()
+		return taskPersistenceFailure(err)
+	}
+	job.OwnerID = owner
+	change := s.beginTaskMutationLocked(job.ID)
 	s.shellJobs[job.ID] = job
-	if err := s.saveTaskStateLocked(job.ID); err != nil {
-		log.Printf("task state save failed: %v", err)
+	if err := change.commit(); err != nil {
+		s.mu.Unlock()
+		return taskPersistenceFailure(err)
 	}
 	s.mu.Unlock()
 	out := mcpCreateTaskResult(job.ID, job.CreatedAt, job.CreatedAt, job.Status)
@@ -7942,30 +8027,6 @@ func (s *Server) mcpTaskResultFromPayload(payload any, params map[string]any) ma
 		return out
 	}
 	return nil
-}
-
-func taskGroupChildIDs(j *relayJob) []string {
-	if j == nil || j.Method != "task/group" {
-		return nil
-	}
-	items, _ := j.Params["children"].([]any)
-	ids := make([]string, 0, len(items))
-	for _, item := range items {
-		if id, ok := item.(string); ok && id != "" {
-			ids = append(ids, id)
-		}
-	}
-	return ids
-}
-
-func (s *Server) taskStatusLocked(taskID string) string {
-	if j := s.shellJobs[taskID]; j != nil {
-		return mcpTaskStatus(j.Status)
-	}
-	if j := s.relayJobs[taskID]; j != nil {
-		return mcpTaskStatus(j.Status)
-	}
-	return "failed"
 }
 
 func (s *Server) taskGroupInputRequestsLocked(group *relayJob) map[string]any {
@@ -8036,49 +8097,6 @@ func (s *Server) shellApprovalReadyLocked(job *shellJob) error {
 		return fmt.Errorf("approval %s does not match child task %s", job.ApprovalID, job.ID)
 	}
 	return nil
-}
-
-func (s *Server) refreshTaskGroupLocked(group *relayJob) {
-	if group == nil || group.Method != "task/group" {
-		return
-	}
-	ids := taskGroupChildIDs(group)
-	if len(ids) == 0 {
-		return
-	}
-	counts := map[string]int{"working": 0, "input_required": 0, "completed": 0, "failed": 0, "cancelled": 0}
-	for _, id := range ids {
-		counts[s.taskStatusLocked(id)]++
-	}
-	countPayload := map[string]any{}
-	for key, value := range counts {
-		countPayload[key] = value
-	}
-	group.Result = map[string]any{"children": append([]string(nil), ids...), "counts": countPayload}
-	switch {
-	case counts["input_required"] > 0:
-		group.Status = "input_required"
-	case counts["working"] > 0:
-		group.Status = "running"
-		if group.StartedAt <= 0 {
-			group.StartedAt = nowFloat()
-		}
-	case counts["failed"] > 0:
-		group.Status = "failed"
-		if group.DoneAt <= 0 {
-			group.DoneAt = nowFloat()
-		}
-	case counts["cancelled"] > 0 && counts["completed"]+counts["cancelled"] == len(ids):
-		group.Status = "cancelled"
-		if group.DoneAt <= 0 {
-			group.DoneAt = nowFloat()
-		}
-	default:
-		group.Status = "completed"
-		if group.DoneAt <= 0 {
-			group.DoneAt = nowFloat()
-		}
-	}
 }
 
 func (s *Server) detailedTaskGroup(group *relayJob) map[string]any {
@@ -8153,6 +8171,9 @@ func (s *Server) mcpTaskGet(taskID, owner string) (any, any) {
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if err := s.refreshTaskRecordsLocked(taskID); err != nil {
+		return nil, taskPersistenceRPCError(err)
+	}
 	if j := s.shellJobs[taskID]; j != nil {
 		if owner != "" && owner != "shell:"+j.Server && owner != "hub" {
 			return nil, map[string]any{"code": -32602, "message": "invalid taskId for this MCP server"}
@@ -8245,251 +8266,6 @@ func (s *Server) detailedRelayTask(j *relayJob) map[string]any {
 		out["error"] = map[string]any{"code": -32000, "message": "GPTAdmin relay task failed", "data": j.Error}
 	}
 	return out
-}
-
-func (s *Server) cancelTaskLocked(taskID string) {
-	if j := s.shellJobs[taskID]; j != nil {
-		if j.Status == "completed" || j.Status == "failed" || j.Status == "cancelled" {
-			return
-		}
-		wasRunning := j.Status == "running"
-		j.Status = "cancelled"
-		j.DoneAt = nowFloat()
-		if wasRunning {
-			s.shellControls[j.Server] = append(s.shellControls[j.Server], shellControl{TaskID: j.ID})
-		}
-		return
-	}
-	if j := s.relayJobs[taskID]; j != nil {
-		if j.Status == "completed" || j.Status == "failed" || j.Status == "cancelled" {
-			return
-		}
-		j.Status = "cancelled"
-		j.DoneAt = nowFloat()
-	}
-}
-
-func (s *Server) mcpTaskCancel(taskID, owner string) (any, any) {
-	if taskID == "" {
-		return nil, map[string]any{"code": -32602, "message": "taskId is required"}
-	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if j := s.shellJobs[taskID]; j != nil {
-		if owner != "" && owner != "shell:"+j.Server && owner != "hub" {
-			return nil, map[string]any{"code": -32602, "message": "invalid taskId for this MCP server"}
-		}
-		if j.Status != "completed" && j.Status != "failed" && j.Status != "cancelled" {
-			wasRunning := j.Status == "running"
-			j.Status = "cancelled"
-			j.DoneAt = nowFloat()
-			if wasRunning {
-				s.shellControls[j.Server] = append(s.shellControls[j.Server], shellControl{TaskID: j.ID})
-			}
-			if err := s.saveTaskStateLocked(j.ID); err != nil {
-				log.Printf("task state save failed: %v", err)
-			}
-			s.cond.Broadcast()
-		}
-		return map[string]any{"resultType": "complete"}, nil
-	}
-	if j := s.relayJobs[taskID]; j != nil {
-		if j.Method == "task/group" {
-			if owner != "" && owner != "hub" {
-				return nil, map[string]any{"code": -32602, "message": "invalid taskId for this MCP server"}
-			}
-			for _, childID := range taskGroupChildIDs(j) {
-				s.cancelTaskLocked(childID)
-			}
-			s.refreshTaskGroupLocked(j)
-			if err := s.saveTaskStateLocked(j.ID); err != nil {
-				log.Printf("task group cancel state save failed: %v", err)
-			}
-			s.cond.Broadcast()
-			return map[string]any{"resultType": "complete"}, nil
-		}
-		if owner != "" && owner != j.AgentID && owner != "hub" {
-			return nil, map[string]any{"code": -32602, "message": "invalid taskId for this MCP server"}
-		}
-		if j.Status != "completed" && j.Status != "failed" && j.Status != "cancelled" {
-			j.Status = "cancelled"
-			j.DoneAt = nowFloat()
-			if err := s.saveTaskStateLocked(j.ID); err != nil {
-				log.Printf("task state save failed: %v", err)
-			}
-			s.cond.Broadcast()
-		}
-		return map[string]any{"resultType": "complete"}, nil
-	}
-	return nil, map[string]any{"code": -32602, "message": "unknown taskId"}
-}
-
-func (s *Server) mcpTaskUpdate(r *http.Request, taskID string, inputResponses map[string]any, owner string) (any, any) {
-	if taskID == "" {
-		return nil, map[string]any{"code": -32602, "message": "taskId is required"}
-	}
-	s.mu.Lock()
-	if group := s.relayJobs[taskID]; group != nil && group.Method == "task/group" {
-		if owner != "" && owner != "hub" {
-			s.mu.Unlock()
-			return nil, map[string]any{"code": -32602, "message": "invalid taskId for this MCP server"}
-		}
-		s.refreshTaskGroupLocked(group)
-		if group.Status != "input_required" {
-			out := s.detailedTaskGroup(group)
-			s.mu.Unlock()
-			return out, nil
-		}
-		decision, decisionErr := approvalInputDecision(inputResponses)
-		if decisionErr != nil {
-			s.mu.Unlock()
-			return nil, map[string]any{"code": -32602, "message": decisionErr.Error()}
-		}
-		if decision == "decline" {
-			for _, childID := range taskGroupChildIDs(group) {
-				s.cancelTaskLocked(childID)
-			}
-			s.refreshTaskGroupLocked(group)
-			if err := s.saveTaskStateLocked(group.ID); err != nil {
-				log.Printf("task group decline state save failed: %v", err)
-			}
-			out := s.detailedTaskGroup(group)
-			s.mu.Unlock()
-			s.cond.Broadcast()
-			return out, nil
-		}
-		children := []string{}
-		for _, childID := range taskGroupChildIDs(group) {
-			if child := s.shellJobs[childID]; child != nil && child.Status == "input_required" {
-				if err := s.shellApprovalReadyLocked(child); err != nil {
-					s.mu.Unlock()
-					return nil, map[string]any{"code": -32004, "message": err.Error()}
-				}
-				children = append(children, childID)
-			}
-		}
-		s.mu.Unlock()
-		for _, childID := range children {
-			if _, childErr := s.mcpTaskUpdate(r, childID, inputResponses, "hub"); childErr != nil {
-				return nil, childErr
-			}
-		}
-		s.mu.Lock()
-		group = s.relayJobs[taskID]
-		if group == nil {
-			s.mu.Unlock()
-			return nil, map[string]any{"code": -32602, "message": "unknown taskId"}
-		}
-		s.refreshTaskGroupLocked(group)
-		if err := s.saveTaskStateLocked(group.ID); err != nil {
-			log.Printf("task group update state save failed: %v", err)
-		}
-		out := s.detailedTaskGroup(group)
-		s.mu.Unlock()
-		s.cond.Broadcast()
-		return out, nil
-	}
-	job := s.shellJobs[taskID]
-	if job == nil {
-		s.mu.Unlock()
-		if _, err := s.mcpTaskGet(taskID, owner); err != nil {
-			return nil, err
-		}
-		return map[string]any{"resultType": "complete"}, nil
-	}
-	if owner != "" && owner != "shell:"+job.Server && owner != "hub" {
-		s.mu.Unlock()
-		return nil, map[string]any{"code": -32602, "message": "invalid taskId for this MCP server"}
-	}
-	if job.Status != "input_required" {
-		s.mu.Unlock()
-		return map[string]any{"resultType": "complete"}, nil
-	}
-	approvalID := job.ApprovalID
-	approvalResponse := mapValue(inputResponses["approval"])
-	if len(approvalResponse) == 0 {
-		// Temporary compatibility with the first GPTAdmin v2 task draft.
-		legacyID := firstString(inputResponses, "approvalId", "approval_id")
-		if legacyID == "" {
-			s.mu.Unlock()
-			return map[string]any{"resultType": "complete"}, nil
-		}
-		if legacyID != approvalID {
-			s.mu.Unlock()
-			return nil, map[string]any{"code": -32602, "message": "approval response does not match this task"}
-		}
-	} else {
-		action := firstString(approvalResponse, "action")
-		if action != "accept" {
-			if action == "decline" || action == "cancel" {
-				job.Status = "cancelled"
-				job.DoneAt = nowFloat()
-				if err := s.saveTaskStateLocked(job.ID); err != nil {
-					log.Printf("task state save failed: %v", err)
-				}
-				s.mu.Unlock()
-				return map[string]any{"resultType": "complete"}, nil
-			}
-			s.mu.Unlock()
-			return nil, map[string]any{"code": -32602, "message": "approval input response action must be accept or decline"}
-		}
-		content := mapValue(approvalResponse["content"])
-		if !truthy(content["approved"]) {
-			s.mu.Unlock()
-			return nil, map[string]any{"code": -32602, "message": "approval response must contain content.approved=true"}
-		}
-	}
-	originalArgs := cloneMap(job.Arguments)
-	server := job.Server
-	toolName := job.ToolName
-	expectedApprovalID := job.ApprovalID
-	expectedActor := job.ApprovalActor
-	expectedProfileID := job.ApprovalProfileID
-	s.mu.Unlock()
-
-	resolvedArgs := originalArgs
-	secretValues := []string(nil)
-	if toolName == "shell_exec" {
-		var err error
-		resolvedArgs, secretValues, err = s.resolveSecretEnvForRequest(r, "shell:"+server, originalArgs)
-		if err != nil {
-			return nil, map[string]any{"code": -32003, "message": err.Error()}
-		}
-	}
-	digestBytes, err := json.Marshal(originalArgs)
-	if err != nil {
-		return nil, map[string]any{"code": -32602, "message": "task arguments cannot be serialized"}
-	}
-	digest := sha256Hex(digestBytes)
-
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	job = s.shellJobs[taskID]
-	if job == nil || job.Status != "input_required" || job.ApprovalID != expectedApprovalID {
-		return nil, map[string]any{"code": -32004, "message": "task is no longer awaiting this approval"}
-	}
-	approval := s.approvals[approvalID]
-	now := s.now()
-	if approval == nil || approval.Status != "approved" || !now.Before(approval.ExpiresAt) || approval.Target != "shell:"+server || approval.Tool != toolName || approval.ArgumentsDigest != digest || approval.ProfileID != expectedProfileID || approval.Actor != expectedActor {
-		return nil, map[string]any{"code": -32004, "message": "approval is not approved, expired, or does not match this task"}
-	}
-	approval.Status = "consumed"
-	job.ApprovalID = ""
-	job.Arguments = cloneMap(resolvedArgs)
-	job.SecretValues = append([]string(nil), secretValues...)
-	if toolName == "shell_exec" {
-		job.Cmd = firstString(resolvedArgs, "cmd", "command")
-		job.Cwd = firstString(resolvedArgs, "cwd")
-		job.Timeout = intFromAny(resolvedArgs["timeout"])
-		job.Env = mapValue(resolvedArgs["env"])
-	}
-	job.Status = "queued"
-	s.shellQueues[job.Server] = append(s.shellQueues[job.Server], job.ID)
-	if err := s.saveTaskStateLocked(job.ID); err != nil {
-		log.Printf("task state save failed: %v", err)
-	}
-	s.cond.Broadcast()
-	return map[string]any{"resultType": "complete"}, nil
 }
 
 func (s *Server) bridgeKeyMatches(key string) bool {
@@ -8636,6 +8412,10 @@ func (s *Server) appsSDKCall(name string, args map[string]any) any {
 		}
 		jobID := firstString(args, "id", "job_id")
 		s.mu.Lock()
+		if err := s.refreshTaskRecordsLocked(jobID); err != nil {
+			s.mu.Unlock()
+			return taskPersistenceFailure(err)
+		}
 		if j := s.relayJobs[jobID]; j != nil {
 			resp := relayJobResponse(j)
 			s.mu.Unlock()

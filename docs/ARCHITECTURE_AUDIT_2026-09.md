@@ -53,31 +53,47 @@ owner-facing credential inventory, with an explicit storage/display contract,
 remains separate work; this change does not claim to have restored all token
 values from configuration or old token records.
 
+## Task-runtime follow-up — 2026-09-05
+
+The first audit findings about local primary/standby task ownership and durable
+acknowledgement now have an implemented, tested follow-up. Creator OS locks keep
+standby startup and maintenance from failing a live creator's tasks. Record
+revisions reject stale updates. Durable request reservations and task linkage
+prevent duplicate task creation across the local Hubs. Mutation rollback covers
+failed creation, cancellation, result and approval transitions; cancellation
+delivery survives a lost poll response. Maintenance follows the same commit
+boundary and preserves restored execution timeouts. The obsolete task JSON
+merge implementation was removed; registry merging remains in use.
+
+Eight lifecycle functions were moved out of `server.go` into `task_lifecycle.go`.
+The responsibilities are now split into `task_owner.go`, `task_mutation.go`,
+`task_reconcile.go`, `task_maintenance.go`, `task_idempotency.go`,
+`task_controls.go` and the storage module. See [TASK_PERSISTENCE.md](TASK_PERSISTENCE.md)
+for the transaction, recovery, migration and dependency contracts.
+
+These are source/test results, including separate-process HTTP acceptance, not
+a production rollout. Security presets, access-profile semantics and owner UI
+credential policy were not changed by this follow-up.
+
 ## Remaining architecture work, in priority order
 
-1. **HA ownership and error acknowledgement.** SQLite protects record commits,
-   but primary/standby still have independent in-memory queues and idempotency
-   maps. This is not a distributed exactly-once scheduler. Define task ownership,
-   leadership/fencing and failover reconciliation. Some enqueue/cancellation
-   paths still log persistence errors instead of returning failure; make durable
-   acknowledgement consistent before redesigning the scheduler.
-2. **Storage API and coarse locking.** `Server` owns too many subsystems, and
-   task transactions still execute while holding its broad mutex. Introduce a
-   small task-store interface, explicit mutations and lifecycle tests before
-   narrowing lock scope. Other JSON state stores still use snapshot patterns;
-   profile their actual writes instead of applying blanket debounce. The old
-   task-specific JSON merge helper is now dead code, but registry merging still
-   has live consumers.
-3. **Owner UX, not another rewrite.** Split `App.tsx` by feature. Move the
-   operational adapter incrementally to typed components, preserving tool and
-   resource actions, outputs, cancellation and updates. Group navigation around
-   work, connections and diagnostics. Keep owner credential viewing separate
-   from telemetry redaction; keep hardening presets explicitly opt-in.
-4. **Contract tests and dormant legacy.** Some old Python assertions still
-   describe the old security-driven UX or inspect the unserved
-   `public/admin_dashboard.html`. Replace text-presence assertions with
-   owner-action and persistence tests as each area is migrated. Avoid deleting
-   a working capability simply to satisfy an outdated test.
+1. **Cross-machine execution ownership and recovery.** Local shared-disk Hubs
+   now coordinate their task records, but executable queued arguments still
+   live with the creator. An exited creator's undispatched task fails visibly;
+   this is not a replicated scheduler with transferable execution ownership.
+   Exactly-once external side effects require executor-specific contracts.
+2. **Coarse locking and other state stores.** Many task commits still hold the
+   broad Server mutex. Other JSON state subsystems retain their own write and
+   merge patterns. Narrow locks and migrate storage only with measurements and
+   subsystem-specific regression evidence, not blanket debounce.
+3. **Owner UX and remaining UI legacy.** A single admin app exists, but the
+   operational component is still partly imperative JavaScript. Split feature
+   modules without deleting controls. The durable owner credential inventory
+   described above remains separate work; access policy is not a substitute for
+   restoring useful owner controls.
+4. **Outdated contracts and dormant assets.** Some text assertions and the
+   unserved `public/admin_dashboard.html` still describe the old UI. Replace
+   them with action-level tests while migrating their respective areas.
 
 ## Reproducing verification
 

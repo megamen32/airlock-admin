@@ -1,6 +1,6 @@
-FROM golang:1.24-bookworm AS build
+FROM golang:1.25-bookworm AS build
 WORKDIR /src
-COPY go-hub/go.mod ./
+COPY go-hub/go.mod go-hub/go.sum ./
 RUN go mod download
 COPY go-hub/ ./
 RUN CGO_ENABLED=0 go build -o /out/gptadmin_hub ./cmd/gptadmin-hub

@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"errors"
 	"os"
-	"time"
 )
 
 func mergeRegistryAgentsFromDisk(path string, state *persistentRegistryState) error {
@@ -85,56 +84,4 @@ func persistedTaskUpdated(created, started, done float64) float64 {
 		return started
 	}
 	return created
-}
-
-func mergeTaskStateFromDisk(path string, state *persistedTaskState, cutoff float64) error {
-	b, err := os.ReadFile(path)
-	if errors.Is(err, os.ErrNotExist) {
-		return nil
-	}
-	if err != nil {
-		return err
-	}
-	var disk persistedTaskState
-	if err := json.Unmarshal(b, &disk); err != nil {
-		return err
-	}
-	if state.Relay == nil {
-		state.Relay = map[string]persistedRelayTask{}
-	}
-	if state.Shell == nil {
-		state.Shell = map[string]persistedShellTask{}
-	}
-	if state.Idempotency == nil {
-		state.Idempotency = map[string]persistedIdempotencyEntry{}
-	}
-	for id, old := range disk.Relay {
-		if old.DoneAt > 0 && old.DoneAt < cutoff {
-			continue
-		}
-		cur, ok := state.Relay[id]
-		if !ok || persistedTaskUpdated(old.CreatedAt, old.StartedAt, old.DoneAt) > persistedTaskUpdated(cur.CreatedAt, cur.StartedAt, cur.DoneAt) {
-			state.Relay[id] = old
-		}
-	}
-	for id, old := range disk.Shell {
-		if old.DoneAt > 0 && old.DoneAt < cutoff {
-			continue
-		}
-		cur, ok := state.Shell[id]
-		if !ok || persistedTaskUpdated(old.CreatedAt, old.StartedAt, old.DoneAt) > persistedTaskUpdated(cur.CreatedAt, cur.StartedAt, cur.DoneAt) {
-			state.Shell[id] = old
-		}
-	}
-	now := time.Now()
-	for key, old := range disk.Idempotency {
-		if old.JobID == "" || old.Response == nil || now.Sub(old.CreatedAt) > idempotencyTTL {
-			continue
-		}
-		cur, ok := state.Idempotency[key]
-		if !ok || old.CreatedAt.After(cur.CreatedAt) {
-			state.Idempotency[key] = old
-		}
-	}
-	return nil
 }

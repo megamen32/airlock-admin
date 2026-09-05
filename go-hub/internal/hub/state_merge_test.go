@@ -6,7 +6,6 @@ import (
 	"path/filepath"
 	"sync"
 	"testing"
-	"time"
 )
 
 func TestMergeRegistryAgentsPrefersNewerHeartbeat(t *testing.T) {
@@ -56,40 +55,6 @@ func TestMergeRegistryDoesNotBypassAwaitingApproval(t *testing.T) {
 	}
 	if got := state.Agents["shell:a"].Status; got != "awaiting_approval" {
 		t.Fatalf("approval gate bypassed: %q", got)
-	}
-}
-
-func TestMergeTaskStatePreservesIndependentTasksAndNewerLifecycle(t *testing.T) {
-	dir := t.TempDir()
-	path := filepath.Join(dir, "tasks_state.json")
-	disk := persistedTaskState{Shell: map[string]persistedShellTask{
-		"same": {ID: "same", CreatedAt: 10, StartedAt: 20, DoneAt: 40, Status: "completed"},
-		"disk": {ID: "disk", CreatedAt: 11, DoneAt: 30, Status: "completed"},
-	}, Idempotency: map[string]persistedIdempotencyEntry{
-		"disk-key": {Fingerprint: "x", CreatedAt: time.Now(), JobID: "disk", Response: map[string]any{"job_id": "disk"}, Status: 200},
-	}}
-	b, _ := json.Marshal(disk)
-	if err := os.WriteFile(path, b, 0o600); err != nil {
-		t.Fatal(err)
-	}
-	state := persistedTaskState{Shell: map[string]persistedShellTask{
-		"same":    {ID: "same", CreatedAt: 10, StartedAt: 25, Status: "running"},
-		"current": {ID: "current", CreatedAt: 50, Status: "working"},
-	}, Idempotency: map[string]persistedIdempotencyEntry{}}
-	if err := mergeTaskStateFromDisk(path, &state, 0); err != nil {
-		t.Fatal(err)
-	}
-	if got := state.Shell["same"].Status; got != "completed" {
-		t.Fatalf("newer terminal lifecycle lost: %q", got)
-	}
-	if _, ok := state.Shell["disk"]; !ok {
-		t.Fatal("disk-only task lost")
-	}
-	if _, ok := state.Shell["current"]; !ok {
-		t.Fatal("current-only task lost")
-	}
-	if _, ok := state.Idempotency["disk-key"]; !ok {
-		t.Fatal("disk idempotency lost")
 	}
 }
 
