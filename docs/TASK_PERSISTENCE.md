@@ -122,3 +122,13 @@ and consumed approvals. Other tests cover WAL recovery, migration, stale writes,
 configured retention, long-running request TTL, lost cancellation delivery,
 maintenance retry and preserved timeouts. The existing browser acceptance is
 `python tests/e2e/unified_admin_ui.py` from the repository root.
+
+### Retry after a known storage failure
+
+A known task-creation failure before the task association commits releases only
+that unassociated request reservation, so the same idempotency key can retry
+after the storage problem is fixed. A failure reading an already-associated
+task leaves its association pending, so retry returns the original task instead
+of caching the temporary error or creating a duplicate. This does not weaken
+the separate unknown-outcome rule after a process crash. These cases are covered
+by `task_request_retry_test.go` with an actual failing SQLite insert.

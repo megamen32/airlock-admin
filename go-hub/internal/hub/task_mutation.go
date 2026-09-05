@@ -116,7 +116,7 @@ func taskCommitRPCError(err error) map[string]any {
 }
 
 func taskPersistenceFailure(err error) map[string]any {
-	return map[string]any{"status": "failed", "error": map[string]any{"code": "task_persistence_failed", "message": fmt.Sprintf("task was not committed: %v", err)}}
+	return map[string]any{"status": "failed", "error": map[string]any{"code": "task_persistence_failed", "message": fmt.Sprintf("task persistence failed: %v", err)}}
 }
 func taskPersistenceRPCError(err error) map[string]any { return taskCommitRPCError(err) }
 func taskResponseStatus(response map[string]any) int {

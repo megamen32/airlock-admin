@@ -160,6 +160,30 @@ func (s *Server) executeDurableTaskRequest(key, fingerprint string, operation fu
 		return decision.response, decision.status
 	}
 	response, status := operation()
+	if taskResponseStatus(response) == http.StatusServiceUnavailable {
+		// A known pre-commit failure is retryable with the SAME key. Release
+		// only a reservation with no committed task association. If a task
+		// exists, preserve its pending association rather than cache a transient
+		// response-read failure as a permanent result or enqueue another task.
+		var released bool
+		err = s.withTaskDatabase(func(t *taskTransaction) error {
+			result, err := t.tx.Exec(`DELETE FROM task_requests WHERE key=? AND job_id='' AND response IS NULL`, key)
+			if err != nil {
+				return err
+			}
+			rows, err := result.RowsAffected()
+			released = rows == 1
+			return err
+		})
+		if err != nil {
+			return response, http.StatusServiceUnavailable
+		}
+		if released {
+			delete(response, "job_id")
+			delete(response, "task_id")
+		}
+		return response, http.StatusServiceUnavailable
+	}
 	err = s.withTaskDatabase(func(t *taskTransaction) error { return t.finishRequest(key, response, status) })
 	if err != nil {
 		failure := taskPersistenceFailure(err)
