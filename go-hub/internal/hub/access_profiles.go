@@ -413,8 +413,8 @@ func normalizeAccessProfile(profile AccessProfile) (AccessProfile, error) {
 	if profile.AccessMode == accessModeReadonly {
 		approvalMode = approvalModeReadOnly
 	}
-	if approvalMode != approvalModeReadOnly && approvalMode != approvalModeAskBeforeWrite && approvalMode != approvalModeBoundedAutonomous {
-		return AccessProfile{}, errors.New("approval_mode must be read_only, ask_before_write or bounded_autonomous")
+	if approvalMode != approvalModeReadOnly && approvalMode != approvalModeAskBeforeWrite && approvalMode != approvalModeBoundedAutonomous && approvalMode != approvalModeUnrestricted {
+		return AccessProfile{}, errors.New("approval_mode must be unrestricted, read_only, ask_before_write or bounded_autonomous")
 	}
 	if profile.Version < 1 {
 		return AccessProfile{}, errors.New("version must be positive")
@@ -674,6 +674,10 @@ func (s *Server) adminClientBinding(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if _, err := s.accessProfilesSnapshot(); err != nil {
+		writeAccessProfileError(w, err)
+		return
+	}
 	s.mu.Lock()
 	if _, ok := s.accessProfiles[profileID]; !ok {
 		s.mu.Unlock()

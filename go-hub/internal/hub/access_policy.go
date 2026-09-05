@@ -15,6 +15,7 @@ const (
 type authClaimsContextKey struct{}
 
 const (
+	approvalModeUnrestricted      = "unrestricted"
 	approvalModeReadOnly          = "read_only"
 	approvalModeAskBeforeWrite    = "ask_before_write"
 	approvalModeBoundedAutonomous = "bounded_autonomous"
@@ -51,6 +52,9 @@ func requestWithAutomationProfile(r *http.Request, actor, target, tool, approval
 }
 
 func requestAccessMode(r *http.Request) string {
+	if profile, ok := AccessProfileFromRequest(r); ok && (profile.AccessMode == accessModeReadonly || profile.ApprovalMode == approvalModeReadOnly) {
+		return accessModeReadonly
+	}
 	if r == nil {
 		return accessModeFull
 	}
@@ -117,7 +121,7 @@ func profileAllowsTarget(r *http.Request, target string) bool {
 	if !bound {
 		return true
 	}
-	return containsString(profile.AllowedTargets, target)
+	return containsString(profile.AllowedTargets, target) || containsString(profile.AllowedTargets, "*")
 }
 
 func profileAllowsTool(r *http.Request, toolName string) bool {
@@ -125,7 +129,7 @@ func profileAllowsTool(r *http.Request, toolName string) bool {
 	if !bound {
 		return true
 	}
-	return containsString(profile.AllowedTools, toolName)
+	return containsString(profile.AllowedTools, toolName) || containsString(profile.AllowedTools, "*")
 }
 
 func authorizeToolCall(r *http.Request, target, toolName string) error {
