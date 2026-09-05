@@ -82,6 +82,9 @@ func newNetworkProxyTestServer(t *testing.T, clock *proxyTestClock) *Server {
 }
 
 func networkProxyMCPToken(t *testing.T, s *Server, profileID string) string {
+	if err := saveAccessProfilesState(s.accessProfilesStatePath(), s.accessProfiles); err != nil {
+		t.Fatal(err)
+	}
 	t.Helper()
 	token, err := s.signJWT(map[string]any{
 		"sub":        "network-proxy-test",

@@ -462,8 +462,11 @@ type oauthCode struct {
 	State       string
 }
 
-// managedMCPToken stores inventory and verification metadata only.
+// managedMCPToken is safe to marshal as inventory. TokenValue is serialized
+// only by the private on-disk state envelope and the explicit owner read API.
 type managedMCPToken struct {
+	TokenValue   string   `json:"-"`
+	Role         string   `json:"role,omitempty"`
 	ID           string   `json:"id"`
 	ClientID     string   `json:"client_id"`
 	TokenDigest  string   `json:"token_digest,omitempty"`
@@ -501,7 +504,9 @@ type idempotencyEntry struct {
 }
 
 type Server struct {
-	cfg Config
+	managedMCPPersisted   map[string]managedMCPToken
+	oauthClientsPersisted map[string]oauthClientMetadata
+	cfg                   Config
 
 	mu                sync.Mutex
 	authRateMu        sync.Mutex
@@ -804,47 +809,6 @@ func (s *Server) managedMCPStatePath() string {
 	return filepath.Join(s.cfg.ConfigDir, "mcp_tokens_state.json")
 }
 
-func (s *Server) loadManagedMCPState() error {
-	path := s.managedMCPStatePath()
-	if path == "" {
-		return nil
-	}
-	b, err := os.ReadFile(path)
-	if errors.Is(err, os.ErrNotExist) {
-		return nil
-	}
-	if err != nil {
-		return err
-	}
-	var state managedMCPTokenState
-	if err := json.Unmarshal(b, &state); err != nil {
-		return err
-	}
-	if state.Tokens != nil {
-		s.managedMCP = state.Tokens
-	}
-	return nil
-}
-
-func (s *Server) saveManagedMCPStateLocked() error {
-	path := s.managedMCPStatePath()
-	if path == "" {
-		return nil
-	}
-	if err := os.MkdirAll(filepath.Dir(path), 0o750); err != nil {
-		return err
-	}
-	b, err := json.MarshalIndent(managedMCPTokenState{Tokens: s.managedMCP}, "", "  ")
-	if err != nil {
-		return err
-	}
-	tmp := path + ".tmp"
-	if err := os.WriteFile(tmp, append(b, '\n'), 0o600); err != nil {
-		return err
-	}
-	return os.Rename(tmp, path)
-}
-
 func configuredMCPBearerID(name string) string {
 	return "configured-mcp-" + strings.ToLower(strings.ReplaceAll(name, "_", "-"))
 }
@@ -874,6 +838,8 @@ func (s *Server) reconcileExistingMCPBearers() error {
 		}
 		s.managedMCP[id] = managedMCPToken{
 			ID:          id,
+			Role:        record.Role,
+			ProfileID:   record.ProfileID,
 			ClientID:    name,
 			TokenDigest: digest,
 			TokenKind:   configuredMCPBearerTokenKind,
@@ -901,8 +867,11 @@ func (s *Server) existingMCPBearerClaims(token string) (map[string]any, bool) {
 	lifecycle := s.effectiveBearerSecurityProfile().EnforceTokenLifecycle
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if err := s.refreshManagedMCPStateLocked(); err != nil {
+		return nil, false
+	}
 	for _, record := range s.managedMCP {
-		if lifecycle && (record.TokenKind != configuredMCPBearerTokenKind || record.RevokedAt != 0 || record.ExpiresAt <= now) {
+		if record.TokenKind != configuredMCPBearerTokenKind || record.RevokedAt != 0 || (lifecycle && record.ExpiresAt > 0 && record.ExpiresAt <= now) {
 			continue
 		}
 		if hmac.Equal([]byte(record.TokenDigest), []byte(digest)) {
@@ -1573,6 +1542,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/admin/api/connection-debug", s.requireCtl(s.connectionDebug))
 	mux.HandleFunc("/admin/api/approvals", s.requireCtl(s.adminApprovals))
 	mux.HandleFunc("/admin/api/approvals/", s.requireCtl(s.adminApproval))
+	mux.HandleFunc("/admin/api/client-roles/", s.requireCtl(s.trackAccessOperation(s.adminClientRole)))
 	mux.HandleFunc("/admin/api/clients", s.requireCtl(s.adminClients))
 	mux.HandleFunc("/admin/login", s.adminLogin)
 	mux.HandleFunc("/admin/logout", s.adminLogout)
@@ -1769,7 +1739,7 @@ func (s *Server) requireCtl(next http.HandlerFunc) http.HandlerFunc {
 				s.authAudit("ctl_auth_ok", r, map[string]any{"auth_kind": configuredMCPBearerTokenKind, "client_id": claims["client_id"]})
 				*r = *requestWithAuthClaims(r, claims)
 				*r = *s.applyAccessProfileContext(r, claims)
-				if !mcpClientHTTPPathAllowed(r.URL.Path) {
+				if !s.clientHTTPPathAllowed(r) {
 					writeJSON(w, http.StatusForbidden, map[string]any{"detail": "MCP client credentials cannot access the admin API"})
 					return
 				}
@@ -1781,7 +1751,7 @@ func (s *Server) requireCtl(next http.HandlerFunc) http.HandlerFunc {
 			s.authAudit("ctl_auth_ok", r, map[string]any{"auth_kind": "oauth_jwt", "jwt_claims": claims})
 			*r = *requestWithAuthClaims(r, claims)
 			*r = *s.applyAccessProfileContext(r, claims)
-			if !mcpClientHTTPPathAllowed(r.URL.Path) {
+			if !s.clientHTTPPathAllowed(r) {
 				detail := "MCP client credentials cannot access the admin API"
 				if requestAccessMode(r) == accessModeReadonly {
 					detail = "read-only client cannot access the admin API"
@@ -5175,6 +5145,10 @@ func (s *Server) adminMCPManage(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) adminClientsRevokeAll(w http.ResponseWriter, r *http.Request) {
+	if err := s.refreshAccessState(); err != nil {
+		writeJSON(w, 503, map[string]any{"detail": "access state unavailable"})
+		return
+	}
 	if r.Method != http.MethodPost {
 		writeJSON(w, http.StatusMethodNotAllowed, map[string]any{"detail": "method not allowed"})
 		return
@@ -5201,6 +5175,10 @@ func (s *Server) adminClientsRevokeAll(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) adminClientDelete(w http.ResponseWriter, r *http.Request) {
+	if err := s.refreshAccessState(); err != nil {
+		writeJSON(w, 503, map[string]any{"detail": "access state unavailable"})
+		return
+	}
 	if r.Method != http.MethodDelete {
 		writeJSON(w, http.StatusMethodNotAllowed, map[string]any{"detail": "method not allowed"})
 		return
@@ -5424,6 +5402,7 @@ func (s *Server) adminMCPIssueToken(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var req struct {
+		Role       string `json:"role"`
 		ProfileID  string `json:"profile_id"`
 		ClientID   string `json:"client_id"`
 		TTLDays    int    `json:"ttl_days"`
@@ -5443,6 +5422,11 @@ func (s *Server) adminMCPIssueToken(w http.ResponseWriter, r *http.Request) {
 	}
 	if ttlDays < 0 {
 		writeJSON(w, http.StatusBadRequest, map[string]any{"detail": "ttl_days must be zero or positive"})
+		return
+	}
+	role, roleErr := normalizedAccessRole(req.Role)
+	if roleErr != nil {
+		writeJSON(w, 400, map[string]any{"detail": roleErr.Error()})
 		return
 	}
 	origin := s.origin(r)
@@ -5466,7 +5450,7 @@ func (s *Server) adminMCPIssueToken(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	token, record, err := s.issueManagedMCPTokenWithMode(clientID, ttlDays, origin, resource, accessMode, req.ProfileID)
+	token, record, err := s.issueManagedMCPTokenWithMode(clientID, ttlDays, origin, resource, accessMode, req.ProfileID, role)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]any{"detail": err.Error()})
 		return
@@ -5476,6 +5460,7 @@ func (s *Server) adminMCPIssueToken(w http.ResponseWriter, r *http.Request) {
 		"client_id":    clientID,
 		"access_mode":  record.AccessMode,
 		"token_id":     record.ID,
+		"role":         record.Role,
 		"access_token": token,
 		"token_type":   "Bearer",
 		"expires_in":   ttlDays * 24 * 3600,
@@ -5489,8 +5474,7 @@ func (s *Server) issueManagedMCPToken(clientID string, ttlDays int, origin, reso
 	return s.issueManagedMCPTokenWithMode(clientID, ttlDays, origin, resource, accessModeFull, "")
 }
 
-func (s *Server) issueManagedMCPTokenWithMode(clientID string, ttlDays int, origin, resource, accessMode, profileID string) (string, managedMCPToken, error) {
-	now := s.now().Unix()
+func newManagedMCPToken(clientID string, ttlDays int, origin, resource, accessMode, profileID, role string, now int64) (string, managedMCPToken, error) {
 	scope := "gptadmin.read gptadmin.exec"
 	if accessMode == accessModeReadonly {
 		scope = "gptadmin.read gptadmin.inspect"
@@ -5499,61 +5483,93 @@ func (s *Server) issueManagedMCPTokenWithMode(clientID string, ttlDays int, orig
 	if _, err := rand.Read(secret); err != nil {
 		return "", managedMCPToken{}, err
 	}
-	record := managedMCPToken{ID: newID(), ClientID: clientID, TokenKind: "durable", Issuer: origin, Audience: resource, Scope: scope, AccessMode: accessMode, ProfileID: profileID, IssuedAt: now}
+	record := managedMCPToken{ID: newID(), ClientID: clientID, Role: role, TokenKind: "durable", Issuer: origin, Audience: resource, Scope: scope, AccessMode: accessMode, ProfileID: profileID, IssuedAt: now}
 	if ttlDays > 0 {
-		record.ExpiresAt = now + int64(ttlDays)*24*3600
+		record.ExpiresAt = now + int64(ttlDays)*86400
 	}
 	token := "gptk_" + record.ID + "_" + base64.RawURLEncoding.EncodeToString(secret)
 	digest := sha256.Sum256([]byte(token))
 	record.TokenDigest = hex.EncodeToString(digest[:])
+	record.TokenValue = token
+	return token, record, nil
+}
+func (s *Server) issueManagedMCPTokenWithMode(clientID string, ttlDays int, origin, resource, accessMode, profileID string, roles ...string) (string, managedMCPToken, error) {
+	role := "client"
+	if len(roles) > 0 {
+		var err error
+		role, err = normalizedAccessRole(roles[0])
+		if err != nil {
+			return "", managedMCPToken{}, err
+		}
+	}
+	token, record, err := newManagedMCPToken(clientID, ttlDays, origin, resource, accessMode, profileID, role, s.now().Unix())
+	if err != nil {
+		return "", managedMCPToken{}, err
+	}
 	s.mu.Lock()
 	s.managedMCP[record.ID] = record
-	err := s.saveManagedMCPStateLocked()
+	err = s.saveManagedMCPStateLocked()
 	s.mu.Unlock()
-	return token, record, err
+	if err != nil {
+		return "", managedMCPToken{}, err
+	}
+	return token, record, nil
 }
-
 func (s *Server) adminMCPTokenAction(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Cache-Control", "no-store")
 	parts := strings.Split(strings.Trim(strings.TrimPrefix(r.URL.Path, "/admin/api/mcp/tokens/"), "/"), "/")
-	if len(parts) != 2 || parts[0] == "" || parts[1] != "rotate" || r.Method != http.MethodPost {
-		writeJSON(w, http.StatusNotFound, map[string]any{"detail": "not found"})
+	if len(parts) != 2 || parts[0] == "" {
+		writeJSON(w, 404, map[string]any{"detail": "not found"})
 		return
 	}
 	id, err := url.PathUnescape(parts[0])
 	if err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"detail": "invalid token id"})
+		writeJSON(w, 400, map[string]any{"detail": "invalid token id"})
+		return
+	}
+	if parts[1] == "value" && r.Method == http.MethodGet {
+		s.adminTokenValue(w, r, id)
+		return
+	}
+	if parts[1] != "rotate" || r.Method != http.MethodPost {
+		writeJSON(w, 404, map[string]any{"detail": "not found"})
+		return
+	}
+	if err = s.refreshAccessState(); err != nil {
+		writeJSON(w, 503, map[string]any{"detail": "access state unavailable"})
 		return
 	}
 	s.mu.Lock()
 	record, ok := s.managedMCP[id]
-	if ok && record.RevokedAt == 0 {
-		record.RevokedAt = time.Now().Unix()
+	if !ok {
+		s.mu.Unlock()
+		writeJSON(w, 404, map[string]any{"detail": "token not found"})
+		return
+	}
+	if record.RevokedAt != 0 {
+		s.mu.Unlock()
+		writeJSON(w, 409, map[string]any{"detail": "token already revoked"})
+		return
+	}
+	if record.TokenKind != "durable" && record.TokenKind != "managed_jwt" && record.TokenKind != "" {
+		s.mu.Unlock()
+		writeJSON(w, 400, map[string]any{"detail": "token kind cannot be rotated here"})
+		return
+	}
+	token, replacement, err := newManagedMCPToken(record.ClientID, 0, s.origin(r), s.resource(r), record.AccessMode, record.ProfileID, record.Role, s.now().Unix())
+	if err == nil {
+		replacement.ExpiresAt = record.ExpiresAt
+		record.RevokedAt = s.now().Unix()
 		s.managedMCP[id] = record
+		s.managedMCP[replacement.ID] = replacement
 		err = s.saveManagedMCPStateLocked()
 	}
 	s.mu.Unlock()
-	if !ok {
-		writeJSON(w, http.StatusNotFound, map[string]any{"detail": "MCP token not found"})
-		return
-	}
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]any{"detail": err.Error()})
+		writeJSON(w, 409, map[string]any{"detail": err.Error()})
 		return
 	}
-	remainingDays := int((record.ExpiresAt - time.Now().Unix()) / 86400)
-	if remainingDays < 1 {
-		remainingDays = 1
-	}
-	accessMode := record.AccessMode
-	if accessMode == "" {
-		accessMode = accessModeFull
-	}
-	token, replacement, err := s.issueManagedMCPTokenWithMode(record.ClientID, remainingDays, s.origin(r), s.resource(r), accessMode, record.ProfileID)
-	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]any{"detail": err.Error()})
-		return
-	}
-	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "replaced_token_id": id, "token_id": replacement.ID, "client_id": replacement.ClientID, "access_mode": replacement.AccessMode, "access_token": token, "token_type": "Bearer", "mcp_url": s.origin(r) + "/mcp"})
+	writeJSON(w, 200, map[string]any{"ok": true, "replaced_token_id": id, "token_id": replacement.ID, "client_id": replacement.ClientID, "role": replacement.Role, "access_mode": replacement.AccessMode, "access_token": token, "token_type": "Bearer", "mcp_url": s.origin(r) + "/mcp"})
 }
 
 func (s *Server) adminJobs(w http.ResponseWriter, r *http.Request) {
@@ -5872,6 +5888,10 @@ func replaceEnvValue(filename, key, value string) error {
 }
 
 func (s *Server) adminClients(w http.ResponseWriter, r *http.Request) {
+	if err := s.refreshAccessState(); err != nil {
+		writeJSON(w, 503, map[string]any{"detail": "access state unavailable"})
+		return
+	}
 	s.mu.Lock()
 	clients := s.managedMCPClientsLocked()
 	s.mu.Unlock()
@@ -6902,6 +6922,7 @@ func newOAuthRefreshToken(clientID, resource, scope string, now time.Time) (stri
 	token := "gptr_" + record.ID + "_" + base64.RawURLEncoding.EncodeToString(secret)
 	digest := sha256.Sum256([]byte(token))
 	record.TokenDigest = hex.EncodeToString(digest[:])
+	record.TokenValue = token
 	return token, record, nil
 }
 
@@ -6914,6 +6935,9 @@ func (s *Server) oauthRefreshTokenRecord(token, clientID, resource string) (mana
 	now := s.now().Unix()
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if err := s.refreshManagedMCPStateLocked(); err != nil {
+		return managedMCPToken{}, false
+	}
 	record, ok := s.managedMCP[parts[1]]
 	if !ok || record.TokenKind != "oauth_refresh" || record.RevokedAt != 0 || record.ExpiresAt <= now || record.ClientID != clientID || (resource != "" && !s.migrationEquivalentResource(record.Audience, resource)) || record.TokenDigest == "" || !hmac.Equal([]byte(record.TokenDigest), []byte(hex.EncodeToString(digest[:]))) {
 		return managedMCPToken{}, false
@@ -6926,6 +6950,9 @@ func (s *Server) rotateOAuthRefreshToken(token string, oldRecord, newRecord mana
 	now := s.now().Unix()
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if err := s.refreshManagedMCPStateLocked(); err != nil {
+		return false
+	}
 	stored, ok := s.managedMCP[oldRecord.ID]
 	if !ok || stored.TokenKind != "oauth_refresh" || stored.RevokedAt != 0 || stored.ExpiresAt <= now || stored.TokenDigest == "" || !hmac.Equal([]byte(stored.TokenDigest), []byte(hex.EncodeToString(digest[:]))) {
 		return false
@@ -6934,8 +6961,6 @@ func (s *Server) rotateOAuthRefreshToken(token string, oldRecord, newRecord mana
 	s.managedMCP[stored.ID] = stored
 	s.managedMCP[newRecord.ID] = newRecord
 	if err := s.saveManagedMCPStateLocked(); err != nil {
-		s.managedMCP[stored.ID] = oldRecord
-		delete(s.managedMCP, newRecord.ID)
 		return false
 	}
 	return true
@@ -9093,12 +9118,16 @@ func (s *Server) verifyManagedMCPToken(token string) (map[string]any, bool) {
 	}
 	digest := sha256.Sum256([]byte(token))
 	s.mu.Lock()
+	if err := s.refreshManagedMCPStateLocked(); err != nil {
+		s.mu.Unlock()
+		return nil, false
+	}
 	record, known := s.managedMCP[parts[1]]
 	s.mu.Unlock()
 	if !known || record.TokenDigest == "" || !hmac.Equal([]byte(record.TokenDigest), []byte(hex.EncodeToString(digest[:]))) {
 		return nil, false
 	}
-	if s.effectiveBearerSecurityProfile().EnforceTokenLifecycle && (record.TokenKind != "durable" || record.RevokedAt != 0) {
+	if record.TokenKind != "durable" || record.RevokedAt != 0 {
 		return nil, false
 	}
 	if s.effectiveBearerSecurityProfile().EnforceTokenLifecycle && record.ExpiresAt > 0 && !s.now().Before(time.Unix(record.ExpiresAt, 0)) {
@@ -9479,6 +9508,10 @@ func (s *Server) verifyJWT(token string) (map[string]any, error) {
 	}
 	if jti, _ := claims["jti"].(string); jti != "" {
 		s.mu.Lock()
+		if err := s.refreshManagedMCPStateLocked(); err != nil {
+			s.mu.Unlock()
+			return nil, err
+		}
 		record, known := s.managedMCP[jti]
 		s.mu.Unlock()
 		if known && record.RevokedAt != 0 {

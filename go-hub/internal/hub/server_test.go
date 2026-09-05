@@ -3577,6 +3577,10 @@ func TestCanonicalOriginMigrationRefreshResourceEquivalence(t *testing.T) {
 	}
 	s.mu.Lock()
 	s.managedMCP[record.ID] = record
+	if err := s.saveManagedMCPStateLocked(); err != nil {
+		s.mu.Unlock()
+		t.Fatal(err)
+	}
 	s.mu.Unlock()
 	if _, ok := s.oauthRefreshTokenRecord(token, "client", canonical); !ok {
 		t.Fatal("legacy refresh token rejected for canonical migration resource")

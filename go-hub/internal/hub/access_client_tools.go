@@ -19,6 +19,10 @@ func (s *Server) callAccessClientTool(r *http.Request, name string, args map[str
 	handler := s.adminClients
 	body := map[string]any{}
 	action, id := firstString(args, "action"), firstString(args, "id")
+	if name == "access_clients" && action == "whoami" {
+		claims, _ := r.Context().Value(authClaimsContextKey{}).(map[string]any)
+		return map[string]any{"client_id": firstString(claims, "client_id"), "token_id": firstString(claims, "jti"), "admin": s.requestHasAdminRole(r), "access_mode": requestAccessMode(r)}, 200
+	}
 	if strings.ContainsAny(id, "/\\") {
 		return map[string]any{"detail": "id must be one identifier"}, 400
 	}
@@ -32,11 +36,25 @@ func (s *Server) callAccessClientTool(r *http.Request, name string, args map[str
 			method = http.MethodPost
 			path = "/admin/api/mcp/issue-token"
 			handler = s.adminMCPIssueToken
-			for _, key := range []string{"client_id", "profile_id", "ttl_days", "access_mode"} {
+			for _, key := range []string{"client_id", "profile_id", "ttl_days", "access_mode", "role"} {
 				if value, ok := args[key]; ok {
 					body[key] = value
 				}
 			}
+		case "token":
+			if id == "" {
+				return map[string]any{"detail": "id required"}, 400
+			}
+			path = "/admin/api/mcp/tokens/" + url.PathEscape(id) + "/value"
+			handler = s.adminMCPTokenAction
+		case "set_role":
+			if id == "" {
+				return map[string]any{"detail": "id required"}, 400
+			}
+			path = "/admin/api/client-roles/" + url.PathEscape(id)
+			method = http.MethodPut
+			handler = s.adminClientRole
+			body["role"] = firstString(args, "role")
 		case "bind", "unbind":
 			if id == "" {
 				return map[string]any{"detail": "id required"}, 400
@@ -56,7 +74,7 @@ func (s *Server) callAccessClientTool(r *http.Request, name string, args map[str
 			path = "/admin/api/clients/" + url.PathEscape(id)
 			handler = s.adminClientDelete
 		default:
-			return map[string]any{"detail": "use list, issue, bind, unbind or revoke"}, 400
+			return map[string]any{"detail": "use list, issue, bind, unbind, revoke, token or set_role"}, 400
 		}
 	}
 	data, err := json.Marshal(body)
@@ -95,7 +113,7 @@ func (s *Server) callAccessClientTool(r *http.Request, name string, args map[str
 func accessClientTools() []map[string]any {
 	str := map[string]any{"type": "string"}
 	return []map[string]any{
-		{"name": "access_clients", "description": "Owner API for named MCP connections: list, issue with profile_id, bind/unbind, revoke an exact id. Same authorization as the browser. These are not OS user accounts.", "inputSchema": map[string]any{"type": "object", "properties": map[string]any{"action": map[string]any{"type": "string", "enum": []string{"list", "issue", "bind", "unbind", "revoke"}}, "id": str, "client_id": str, "profile_id": str, "ttl_days": map[string]any{"type": "integer", "minimum": 0, "maximum": 3650}, "access_mode": map[string]any{"type": "string", "enum": []string{"full", "readonly"}}}, "required": []string{"action"}, "additionalProperties": false}},
+		{"name": "access_clients", "description": "Admin API for named MCP connections: list, issue with profile_id/role, bind/unbind, revoke, set_role, token (read saved value for exact id). Explicit admin/owner authority required; full execution alone is not admin.", "inputSchema": map[string]any{"type": "object", "properties": map[string]any{"action": map[string]any{"type": "string", "enum": []string{"list", "issue", "bind", "unbind", "revoke", "token", "set_role", "whoami"}}, "id": str, "client_id": str, "profile_id": str, "role": map[string]any{"type": "string", "enum": []string{"client", "admin", "owner"}}, "ttl_days": map[string]any{"type": "integer", "minimum": 0, "maximum": 3650}, "access_mode": map[string]any{"type": "string", "enum": []string{"full", "readonly"}}}, "required": []string{"action"}, "additionalProperties": false}},
 		{"name": "operations", "description": "Owner API: persisted access-operation history. A started operation without completion was interrupted; inspect rather than blindly repeat.", "inputSchema": map[string]any{"type": "object", "properties": map[string]any{"limit": map[string]any{"type": "integer", "minimum": 1, "maximum": 200}, "offset": map[string]any{"type": "integer", "minimum": 0}}, "additionalProperties": false}, "annotations": map[string]any{"readOnlyHint": true, "destructiveHint": false}},
 	}
 }

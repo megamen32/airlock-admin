@@ -603,6 +603,10 @@ func clientBindingIDFromPath(r *http.Request) (string, error) {
 }
 
 func (s *Server) adminClientBinding(w http.ResponseWriter, r *http.Request) {
+	if err := s.refreshAccessState(); err != nil {
+		writeJSON(w, 503, map[string]any{"detail": "access state unavailable"})
+		return
+	}
 	w.Header().Set("Cache-Control", "no-store")
 	if r.Method != http.MethodPut && r.Method != http.MethodDelete {
 		w.Header().Set("Allow", "PUT, DELETE")
@@ -631,23 +635,13 @@ func (s *Server) adminClientBinding(w http.ResponseWriter, r *http.Request) {
 		}
 		var saveErr error
 		if managed {
-			previous := record.ProfileID
 			record.ProfileID = ""
 			s.managedMCP[id] = record
 			saveErr = s.saveManagedMCPStateLocked()
-			if saveErr != nil {
-				record.ProfileID = previous
-				s.managedMCP[id] = record
-			}
 		} else {
-			previous := oauthClient.ProfileID
 			oauthClient.ProfileID = ""
 			s.oauthClients[id] = oauthClient
 			saveErr = s.saveOAuthClientsStateLocked()
-			if saveErr != nil {
-				oauthClient.ProfileID = previous
-				s.oauthClients[id] = oauthClient
-			}
 		}
 		s.mu.Unlock()
 		if saveErr != nil {
@@ -693,23 +687,13 @@ func (s *Server) adminClientBinding(w http.ResponseWriter, r *http.Request) {
 	}
 	var saveErr error
 	if managed {
-		previous := record.ProfileID
 		record.ProfileID = profileID
 		s.managedMCP[id] = record
 		saveErr = s.saveManagedMCPStateLocked()
-		if saveErr != nil {
-			record.ProfileID = previous
-			s.managedMCP[id] = record
-		}
 	} else {
-		previous := oauthClient.ProfileID
 		oauthClient.ProfileID = profileID
 		s.oauthClients[id] = oauthClient
 		saveErr = s.saveOAuthClientsStateLocked()
-		if saveErr != nil {
-			oauthClient.ProfileID = previous
-			s.oauthClients[id] = oauthClient
-		}
 	}
 	if saveErr != nil {
 		s.mu.Unlock()
@@ -727,6 +711,9 @@ func (s *Server) adminClientBinding(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) applyAccessProfileContext(r *http.Request, claims map[string]any) *http.Request {
+	if err := s.refreshAccessState(); err != nil {
+		return requestWithAccessProfile(r, AccessProfile{ID: "unavailable", AccessMode: accessModeReadonly, ApprovalMode: approvalModeReadOnly})
+	}
 	jti := firstString(claims, "jti")
 	clientID := firstString(claims, "client_id")
 	s.mu.Lock()
@@ -735,15 +722,19 @@ func (s *Server) applyAccessProfileContext(r *http.Request, claims map[string]an
 	if managed {
 		profileID = record.ProfileID
 	}
+	oauthClient, registered := s.oauthClients[clientID]
 	if profileID == "" && clientID != "" {
-		profileID = s.oauthClients[clientID].ProfileID
+		profileID = oauthClient.ProfileID
 	}
-	if profileID == "" {
+	if profileID == "" && !managed && !registered {
 		profileID = firstString(claims, "profile_id")
 	}
 	profile, bound := s.accessProfiles[profileID]
 	s.mu.Unlock()
 	if !bound {
+		if profileID != "" {
+			return requestWithAccessProfile(r, AccessProfile{ID: profileID, AccessMode: accessModeReadonly, ApprovalMode: approvalModeReadOnly})
+		}
 		return r
 	}
 	claims["profile_id"] = profileID

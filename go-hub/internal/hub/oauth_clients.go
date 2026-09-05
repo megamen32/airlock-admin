@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"os"
 	"path/filepath"
 	"strings"
 )
@@ -23,6 +22,7 @@ const (
 // oauthClientMetadata contains only registration metadata. Client secrets and
 // issued bearer tokens deliberately have no field in this durable state.
 type oauthClientMetadata struct {
+	Role         string   `json:"role,omitempty"`
 	RedirectURIs []string `json:"redirect_uris,omitempty"`
 	ProfileID    string   `json:"profile_id,omitempty"`
 	CreatedAt    int64    `json:"created_at"`
@@ -37,92 +37,6 @@ func (s *Server) oauthClientsStatePath() string {
 		return ""
 	}
 	return filepath.Join(s.cfg.ConfigDir, oauthClientsStateFilename)
-}
-
-func (s *Server) loadOAuthClientsState() error {
-	path := s.oauthClientsStatePath()
-	if path == "" {
-		return nil
-	}
-	b, err := os.ReadFile(path)
-	if errors.Is(err, os.ErrNotExist) {
-		return nil
-	}
-	if err != nil {
-		return err
-	}
-	if len(b) > oauthClientsStateMaxBytes {
-		return fmt.Errorf("OAuth client state exceeds %d bytes", oauthClientsStateMaxBytes)
-	}
-	var state oauthClientsState
-	if err := json.Unmarshal(b, &state); err != nil {
-		return err
-	}
-	if len(state.Clients) > oauthClientsMaxItems {
-		return fmt.Errorf("OAuth client state contains too many clients")
-	}
-	for clientID, metadata := range state.Clients {
-		if err := validateOAuthClientMetadata(clientID, metadata); err != nil {
-			return err
-		}
-		s.oauthClients[clientID] = cloneOAuthClientMetadata(metadata)
-	}
-	return nil
-}
-
-func (s *Server) saveOAuthClientsStateLocked() error {
-	path := s.oauthClientsStatePath()
-	if path == "" {
-		return nil
-	}
-	state := oauthClientsState{Clients: make(map[string]oauthClientMetadata, len(s.oauthClients))}
-	for clientID, metadata := range s.oauthClients {
-		state.Clients[clientID] = cloneOAuthClientMetadata(metadata)
-	}
-	b, err := json.MarshalIndent(state, "", "  ")
-	if err != nil {
-		return err
-	}
-	b = append(b, '\n')
-	if len(b) > oauthClientsStateMaxBytes {
-		return fmt.Errorf("OAuth client state exceeds %d bytes", oauthClientsStateMaxBytes)
-	}
-	if err := os.MkdirAll(filepath.Dir(path), 0o750); err != nil {
-		return err
-	}
-	tmp, err := os.CreateTemp(filepath.Dir(path), ".oauth-clients-*")
-	if err != nil {
-		return err
-	}
-	tmpName := tmp.Name()
-	defer os.Remove(tmpName)
-	if err := tmp.Chmod(0o600); err != nil {
-		_ = tmp.Close()
-		return err
-	}
-	if _, err := tmp.Write(b); err != nil {
-		_ = tmp.Close()
-		return err
-	}
-	if err := tmp.Sync(); err != nil {
-		_ = tmp.Close()
-		return err
-	}
-	if err := tmp.Close(); err != nil {
-		return err
-	}
-	if err := os.Rename(tmpName, path); err != nil {
-		return err
-	}
-	if err := os.Chmod(path, 0o600); err != nil {
-		return err
-	}
-	dir, err := os.Open(filepath.Dir(path))
-	if err != nil {
-		return err
-	}
-	defer dir.Close()
-	return dir.Sync()
 }
 
 func cloneOAuthClientMetadata(metadata oauthClientMetadata) oauthClientMetadata {
@@ -187,6 +101,10 @@ func oauthRedirectURIsFromRequest(raw any) ([]string, error) {
 
 func (s *Server) oauthClientAllowsRedirect(clientID, redirectURI string) bool {
 	s.mu.Lock()
+	if err := s.refreshOAuthClientsStateLocked(); err != nil {
+		s.mu.Unlock()
+		return false
+	}
 	metadata, registered := s.oauthClients[clientID]
 	s.mu.Unlock()
 	if !registered {
@@ -211,6 +129,7 @@ func oauthClientInventory(metadata oauthClientMetadata, clientID string) managed
 		ID:           clientID,
 		ClientID:     clientID,
 		TokenKind:    "oauth",
+		Role:         metadata.Role,
 		Status:       "registered",
 		RedirectURIs: append([]string(nil), metadata.RedirectURIs...),
 		ProfileID:    metadata.ProfileID,
