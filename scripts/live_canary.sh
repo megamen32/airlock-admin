@@ -22,7 +22,7 @@ env_val() {
 	sudo grep -oP "(?<=^$1=).*" "$ENV_FILE" 2>/dev/null | head -1 | tr -d '"'
 }
 
-MAIN_ORIGIN="$(env_val PUBLIC_ORIGIN)"
+MAIN_ORIGIN="$(env_val MCP_ORIGIN)"
 TENANT_ORIGIN="$(env_val TENANT_ORIGIN)"
 BEARER="$(env_val GPTADMIN_CUSTOM_MCP_BEARER)"
 TARGET="${GPTADMIN_CANARY_TARGET:-shell:roomhacker-server-100}"
