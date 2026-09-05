@@ -1445,7 +1445,15 @@ func (s *Server) registryCleanupLoop() {
 			s.addAuditLocked("orphan_shell_jobs_expired", map[string]any{"job_ids": expiredJobs, "count": len(expiredJobs)})
 		}
 		if len(expiredJobs) > 0 || groupChanges > 0 {
-			if err := s.saveTaskStateLocked(); err != nil {
+			changedTaskIDs := append([]string(nil), expiredJobs...)
+			if groupChanges > 0 {
+				for id, group := range s.relayJobs {
+					if group != nil && group.Method == "task/group" {
+						changedTaskIDs = append(changedTaskIDs, id)
+					}
+				}
+			}
+			if err := s.saveTaskStateLocked(changedTaskIDs...); err != nil {
 				log.Printf("task maintenance state save failed: %v", err)
 			}
 		}
@@ -2877,7 +2885,7 @@ func (s *Server) finishFleetIdempotency(entry *idempotencyEntry, response map[st
 		close(entry.Done)
 	}
 	if entry.JobID != "" {
-		if err := s.saveTaskStateLocked(); err != nil {
+		if err := s.saveTaskStateLocked(entry.JobID); err != nil {
 			log.Printf("fleet task/idempotency state save failed: %v", err)
 		}
 	}
@@ -2977,7 +2985,7 @@ func (s *Server) fleetExecForRequest(r *http.Request, req map[string]any, taskMo
 			}
 		}
 		s.refreshTaskGroupLocked(parent)
-		if err := s.saveTaskStateLocked(); err != nil {
+		if err := s.saveTaskStateLocked(parentID); err != nil {
 			log.Printf("fleet task group state save failed: %v", err)
 		}
 		parentStatus := parent.Status
@@ -3138,10 +3146,15 @@ func (s *Server) pollShellQueue(w http.ResponseWriter, r *http.Request, name str
 			if job == nil || job.Status == "cancelled" {
 				continue
 			}
+			previousStatus, previousStarted := job.Status, job.StartedAt
 			job.Status = "running"
 			job.StartedAt = nowFloat()
-			if err := s.saveTaskStateLocked(); err != nil {
-				log.Printf("task state save failed: %v", err)
+			if err := s.saveTaskStateLocked(job.ID); err != nil {
+				log.Printf("task dispatch commit failed: %v", err)
+				job.Status, job.StartedAt = previousStatus, previousStarted
+				s.shellQueues[name] = append([]string{id}, s.shellQueues[name]...)
+				writeJSON(w, http.StatusServiceUnavailable, map[string]any{"detail": "task dispatch persistence failed; retry polling"})
+				return
 			}
 			payload := map[string]any{"id": job.ID, "trace_id": job.TraceID, "traceparent": job.TraceParent, "tool_name": job.ToolName, "arguments": job.Arguments, "cmd": job.Cmd, "cwd": job.Cwd, "timeout": job.Timeout, "env": job.Env, "runtime_settings": s.shellRuntimeSettingsLocked()}
 			writeJSON(w, http.StatusOK, payload)
@@ -3288,8 +3301,11 @@ func (s *Server) shellQueueResult(w http.ResponseWriter, r *http.Request, name s
 		fields["traceparent"] = job.TraceParent
 	}
 	s.addAuditLocked("shell_result", fields)
-	if err := s.saveTaskStateLocked(); err != nil {
-		log.Printf("task state save failed: %v", err)
+	if err := s.saveTaskStateLocked(job.ID); err != nil {
+		log.Printf("task result commit failed: %v", err)
+		s.mu.Unlock()
+		writeJSON(w, http.StatusServiceUnavailable, map[string]any{"detail": "task result persistence failed; retry delivery"})
+		return
 	}
 	s.cond.Broadcast()
 	s.mu.Unlock()
@@ -3470,10 +3486,15 @@ func (s *Server) mcpRelayPoll(w http.ResponseWriter, r *http.Request) {
 			if job == nil || job.Status == "cancelled" {
 				continue
 			}
+			previousStatus, previousStarted := job.Status, job.StartedAt
 			job.Status = "running"
 			job.StartedAt = nowFloat()
-			if err := s.saveTaskStateLocked(); err != nil {
-				log.Printf("task state save failed: %v", err)
+			if err := s.saveTaskStateLocked(job.ID); err != nil {
+				log.Printf("task dispatch commit failed: %v", err)
+				job.Status, job.StartedAt = previousStatus, previousStarted
+				s.relayQueues[agentID] = append([]string{id}, s.relayQueues[agentID]...)
+				writeJSON(w, http.StatusServiceUnavailable, map[string]any{"detail": "task dispatch persistence failed; retry polling"})
+				return
 			}
 			payload := map[string]any{"id": job.ID, "method": job.Method, "params": job.Params}
 			if job.TraceID != "" {
@@ -3563,8 +3584,11 @@ func (s *Server) mcpRelayResult(w http.ResponseWriter, r *http.Request) {
 		fields["traceparent"] = job.TraceParent
 	}
 	s.addAuditLocked("mcp_result", fields)
-	if err := s.saveTaskStateLocked(); err != nil {
-		log.Printf("task state save failed: %v", err)
+	if err := s.saveTaskStateLocked(job.ID); err != nil {
+		log.Printf("task result commit failed: %v", err)
+		s.mu.Unlock()
+		writeJSON(w, http.StatusServiceUnavailable, map[string]any{"detail": "task result persistence failed; retry delivery"})
+		return
 	}
 	s.cond.Broadcast()
 	s.mu.Unlock()
@@ -4126,7 +4150,7 @@ func (s *Server) executeMCPTool(r *http.Request, target, toolName string, args m
 	entry.Status = status
 	close(entry.Done)
 	if entry.JobID != "" {
-		if err := s.saveTaskStateLocked(); err != nil {
+		if err := s.saveTaskStateLocked(entry.JobID); err != nil {
 			log.Printf("task/idempotency state save failed: %v", err)
 		}
 	}
@@ -4462,7 +4486,7 @@ func (s *Server) enqueueRelayWithTraceParent(agentID, method string, params map[
 		fields["traceparent"] = traceParent
 	}
 	s.addAuditLocked("mcp_enqueue", fields)
-	if err := s.saveTaskStateLocked(); err != nil {
+	if err := s.saveTaskStateLocked(id); err != nil {
 		log.Printf("task state save failed: %v", err)
 	}
 	s.cond.Broadcast()
@@ -4771,7 +4795,7 @@ func (s *Server) callShellToolWithTraceParentAndSecrets(target, toolName string,
 		fields["traceparent"] = traceParent
 	}
 	s.addAuditLocked("shell_enqueue", fields)
-	if err := s.saveTaskStateLocked(); err != nil {
+	if err := s.saveTaskStateLocked(job.ID); err != nil {
 		log.Printf("task state save failed: %v", err)
 	}
 	s.cond.Broadcast()
@@ -7861,7 +7885,7 @@ func (s *Server) createApprovalShellTask(r *http.Request, target, toolName strin
 	}
 	s.mu.Lock()
 	s.shellJobs[job.ID] = job
-	if err := s.saveTaskStateLocked(); err != nil {
+	if err := s.saveTaskStateLocked(job.ID); err != nil {
 		log.Printf("task state save failed: %v", err)
 	}
 	s.mu.Unlock()
@@ -8250,7 +8274,7 @@ func (s *Server) mcpTaskCancel(taskID, owner string) (any, any) {
 			if wasRunning {
 				s.shellControls[j.Server] = append(s.shellControls[j.Server], shellControl{TaskID: j.ID})
 			}
-			if err := s.saveTaskStateLocked(); err != nil {
+			if err := s.saveTaskStateLocked(j.ID); err != nil {
 				log.Printf("task state save failed: %v", err)
 			}
 			s.cond.Broadcast()
@@ -8266,7 +8290,7 @@ func (s *Server) mcpTaskCancel(taskID, owner string) (any, any) {
 				s.cancelTaskLocked(childID)
 			}
 			s.refreshTaskGroupLocked(j)
-			if err := s.saveTaskStateLocked(); err != nil {
+			if err := s.saveTaskStateLocked(j.ID); err != nil {
 				log.Printf("task group cancel state save failed: %v", err)
 			}
 			s.cond.Broadcast()
@@ -8278,7 +8302,7 @@ func (s *Server) mcpTaskCancel(taskID, owner string) (any, any) {
 		if j.Status != "completed" && j.Status != "failed" && j.Status != "cancelled" {
 			j.Status = "cancelled"
 			j.DoneAt = nowFloat()
-			if err := s.saveTaskStateLocked(); err != nil {
+			if err := s.saveTaskStateLocked(j.ID); err != nil {
 				log.Printf("task state save failed: %v", err)
 			}
 			s.cond.Broadcast()
@@ -8314,7 +8338,7 @@ func (s *Server) mcpTaskUpdate(r *http.Request, taskID string, inputResponses ma
 				s.cancelTaskLocked(childID)
 			}
 			s.refreshTaskGroupLocked(group)
-			if err := s.saveTaskStateLocked(); err != nil {
+			if err := s.saveTaskStateLocked(group.ID); err != nil {
 				log.Printf("task group decline state save failed: %v", err)
 			}
 			out := s.detailedTaskGroup(group)
@@ -8345,7 +8369,7 @@ func (s *Server) mcpTaskUpdate(r *http.Request, taskID string, inputResponses ma
 			return nil, map[string]any{"code": -32602, "message": "unknown taskId"}
 		}
 		s.refreshTaskGroupLocked(group)
-		if err := s.saveTaskStateLocked(); err != nil {
+		if err := s.saveTaskStateLocked(group.ID); err != nil {
 			log.Printf("task group update state save failed: %v", err)
 		}
 		out := s.detailedTaskGroup(group)
@@ -8388,7 +8412,7 @@ func (s *Server) mcpTaskUpdate(r *http.Request, taskID string, inputResponses ma
 			if action == "decline" || action == "cancel" {
 				job.Status = "cancelled"
 				job.DoneAt = nowFloat()
-				if err := s.saveTaskStateLocked(); err != nil {
+				if err := s.saveTaskStateLocked(job.ID); err != nil {
 					log.Printf("task state save failed: %v", err)
 				}
 				s.mu.Unlock()
@@ -8449,7 +8473,7 @@ func (s *Server) mcpTaskUpdate(r *http.Request, taskID string, inputResponses ma
 	}
 	job.Status = "queued"
 	s.shellQueues[job.Server] = append(s.shellQueues[job.Server], job.ID)
-	if err := s.saveTaskStateLocked(); err != nil {
+	if err := s.saveTaskStateLocked(job.ID); err != nil {
 		log.Printf("task state save failed: %v", err)
 	}
 	s.cond.Broadcast()

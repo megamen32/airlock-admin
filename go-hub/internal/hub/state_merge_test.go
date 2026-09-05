@@ -144,12 +144,8 @@ func TestConcurrentHubStateSavesMergeInsteadOfOverwrite(t *testing.T) {
 		t.Fatalf("shell:b lost: %v", reg.Agents)
 	}
 
-	var tasks persistedTaskState
-	b, err = os.ReadFile(filepath.Join(dir, "tasks_state.json"))
+	tasks, err := s1.readTaskState()
 	if err != nil {
-		t.Fatal(err)
-	}
-	if err := json.Unmarshal(b, &tasks); err != nil {
 		t.Fatal(err)
 	}
 	if _, ok := tasks.Shell["task-a"]; !ok {
