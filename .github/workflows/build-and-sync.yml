@@ -283,7 +283,7 @@ jobs:
           path: gptadmin_opensource
           fetch-depth: 0
 
-      - name: Mirror source + tag + GitHub Release to public repo
+      - name: Tag + GitHub Release on public repo
         if: startsWith(github.ref, 'refs/tags/v') && env.OPENSOURCE_PAT != ''
         env:
           GH_TOKEN: ${{ env.OPENSOURCE_PAT }}
@@ -292,35 +292,10 @@ jobs:
           set -euo pipefail
           PUB="$GITHUB_WORKSPACE/gptadmin_opensource"
           SRC="$GITHUB_WORKSPACE"
-          echo "=== Mirror private source -> public repo ==="
-          # Public v151 still contains `website` as a legacy gitlink (mode
-          # 160000) but has no .gitmodules entry. rsync cannot convert an
-          # indexed gitlink into ordinary files, so explicitly retire it before
-          # mirroring the now-normal website tree from the private repo.
-          if git -C "$PUB" ls-files --stage website | awk '$1 == "160000" { found=1 } END { exit !found }'; then
-            git -C "$PUB" rm -f --cached website
-            rm -rf "$PUB/website"
-          fi
-          # rsync private tree into the public checkout, EXCLUDING things that
-          # must never live in the public repo: git internals, build artifacts,
-          # venvs, caches, local agent settings, and the public checkout itself.
-          rsync -a --delete \
-            --exclude='.git' \
-            --exclude='.github' \
-            --exclude='build' \
-            --exclude='.buildcache' \
-            --exclude='.venv' \
-            --exclude='__pycache__' \
-            --exclude='*.pyc' \
-            --exclude='gptadmin_opensource' \
-            --exclude='.claude' \
-            --exclude='.serena' \
-            --exclude='private' \
-            --exclude='.superpowers' \
-            --exclude='*.bak.*' \
-            --exclude='node_modules' \
-            --exclude='.gitpublic' \
-            "$SRC/" "$PUB/"
+          # Source mirroring is owned by local `git-private2public` (rules in
+          # .gitpublic/): this job must NOT rsync the raw private tree into the
+          # public repo, or personal infrastructure leaks straight into the
+          # mirror. Only the tag and release assets are published here.
           cd "$PUB"
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
