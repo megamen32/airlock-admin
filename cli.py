@@ -4792,6 +4792,290 @@ def cmd_security_bearer(args):
     print(json.dumps({'bearer_profile': profile, 'restart_bound': True}, ensure_ascii=False, indent=2))
 
 
+
+def _candidate_client_origin(env: dict) -> str:
+    """Return the public tenant URL used by the real Custom GPT client.
+
+    TENANT_ORIGIN wins intentionally: HUB_PUBLIC_URL/PUBLIC_ORIGIN can name the
+    canonical control-plane origin, while update admission must preserve the
+    already-documented client-facing tenant URL.
+    """
+    tenant = canonical_public_url(env.get('TENANT_ORIGIN') or '')
+    if tenant:
+        return tenant
+    legacy = str(env.get('GPTADMIN_LEGACY_PUBLIC_ORIGINS') or '').split(',')[0].strip()
+    if legacy:
+        return canonical_public_url(legacy)
+    return canonical_public_url(env.get('PUBLIC_ORIGIN') or env.get('HUB_PUBLIC_URL') or env.get('HUB_URL') or '')
+
+
+def _openapi_operation_map(text: str) -> dict[str, tuple[str, str]]:
+    """Read operationId -> (method, path) from our plain OpenAPI YAML.
+
+    This deliberately does not import server internals: the candidate gate
+    discovers the public API from the same document a Custom GPT imports.
+    """
+    operations: dict[str, tuple[str, str]] = {}
+    current_path = ''
+    current_method = ''
+    methods = {'get', 'post', 'put', 'patch', 'delete', 'head', 'options'}
+    for raw in text.splitlines():
+        stripped = raw.strip()
+        indent = len(raw) - len(raw.lstrip(' '))
+        if indent == 2 and stripped.startswith('/') and stripped.endswith(':'):
+            current_path = stripped[:-1]
+            current_method = ''
+            continue
+        if indent == 4 and stripped.endswith(':') and stripped[:-1].lower() in methods:
+            current_method = stripped[:-1].upper()
+            continue
+        if indent == 6 and stripped.startswith('operationId:') and current_path and current_method:
+            operation_id = stripped.split(':', 1)[1].strip().strip('"\'')
+            if operation_id:
+                operations[operation_id] = (current_method, current_path)
+    return operations
+
+
+def _candidate_http(base: str, method: str, path: str, *, host: str = '', token: str = '', payload=None, timeout: float = 12.0):
+    data = None if payload is None else json.dumps(payload).encode('utf-8')
+    headers = {'Accept': 'application/json, text/yaml, */*', 'User-Agent': 'gptadmin-candidate-gate/1'}
+    if host:
+        headers['Host'] = host
+    if token:
+        headers['Authorization'] = 'Bearer ' + token
+    if data is not None:
+        headers['Content-Type'] = 'application/json'
+    request = urllib.request.Request(base.rstrip('/') + path, data=data, headers=headers, method=method)
+    with urllib.request.urlopen(request, timeout=timeout) as response:  # noqa: S310 - explicit local/public update probe
+        body = response.read()
+        if not 200 <= response.status < 300:
+            raise RuntimeError(f'candidate API {method} {path} returned HTTP {response.status}')
+        ctype = response.headers.get('Content-Type', '')
+        if 'json' in ctype:
+            return json.loads(body.decode('utf-8'))
+        return body.decode('utf-8')
+
+
+def _candidate_mcp_rpc(base: str, method: str, params: dict, *, token: str, host: str, request_id: int):
+    payload = _candidate_http(
+        base, 'POST', '/mcp', host=host, token=token,
+        payload={'jsonrpc': '2.0', 'id': request_id, 'method': method, 'params': params},
+        timeout=12.0,
+    )
+    if not isinstance(payload, dict):
+        raise RuntimeError(f'candidate gate: MCP {method} did not return a JSON object')
+    if payload.get('error'):
+        raise RuntimeError(f"candidate gate: MCP {method} returned error: {payload.get('error')}")
+    if 'result' not in payload:
+        raise RuntimeError(f'candidate gate: MCP {method} response has no result')
+    return payload['result']
+
+
+def _candidate_tools(payload) -> list[dict]:
+    if not isinstance(payload, dict):
+        return []
+    tools = payload.get('tools')
+    if not isinstance(tools, list):
+        response = payload.get('response')
+        tools = response.get('tools') if isinstance(response, dict) else []
+    return [item for item in tools if isinstance(item, dict)] if isinstance(tools, list) else []
+
+
+def _candidate_servers(payload) -> list[dict]:
+    if not isinstance(payload, dict):
+        return []
+    rows = payload.get('servers')
+    if not isinstance(rows, list):
+        response = payload.get('response')
+        rows = response.get('servers') if isinstance(response, dict) else []
+    return [item for item in rows if isinstance(item, dict)] if isinstance(rows, list) else []
+
+
+def _run_hub_candidate_pre_restart_gate(pkg_tgz: Path, env: dict) -> dict:
+    """Black-box a downloaded Hub before any running Hub process is stopped.
+
+    The public tenant URL is probed for the client-imported OpenAPI document.
+    The downloaded binary then runs on an isolated loopback port with a private
+    copy of state, and is exercised through both documented client surfaces:
+    Custom GPT/OpenAPI (discover -> schema -> safe execute) and native MCP
+    (initialize -> tools/list -> safe tools/call).
+    """
+    client_origin = _candidate_client_origin(env)
+    if not client_origin:
+        raise RuntimeError('candidate gate: client-facing TENANT_ORIGIN/public URL is missing')
+    client_host = urllib.parse.urlsplit(client_origin).netloc
+    # Verify the address the real client imports, not a control-plane shortcut.
+    public_schema_url = client_origin.rstrip('/') + '/actions/openapi.yaml'
+    req = urllib.request.Request(public_schema_url, headers={'User-Agent': 'gptadmin-candidate-gate/1'})
+    with urllib.request.urlopen(req, timeout=12) as response:  # noqa: S310 - configured public client URL
+        if response.status != 200:
+            raise RuntimeError(f'candidate gate: client OpenAPI returned HTTP {response.status}')
+        live_schema = response.read().decode('utf-8')
+    if 'operationId: discover' not in live_schema or 'operationId: execute' not in live_schema:
+        raise RuntimeError('candidate gate: client OpenAPI does not document discover/execute')
+
+    with tempfile.TemporaryDirectory(prefix='gptadmin-candidate-gate-') as raw:
+        root = Path(raw)
+        extracted = root / 'release'
+        extracted.mkdir()
+        extract_tgz(pkg_tgz, extracted)
+        candidate = next((path for path in _platform_hub_candidates(extracted) if path.is_file() and _binary_looks_native(path)), None)
+        if candidate is None:
+            raise RuntimeError('candidate gate: downloaded package contains no Hub binary for this platform')
+        os.chmod(candidate, 0o755)
+        candidate_public = extracted / 'public'
+        if not (candidate_public / 'openapi.yaml').is_file():
+            raise RuntimeError('candidate gate: downloaded package contains no public/openapi.yaml')
+
+        config_source = Path(env.get('GPTADMIN_CONFIG_DIR') or ETC_DIR)
+        config_copy = root / 'config'
+        if config_source.is_dir():
+            shutil.copytree(config_source, config_copy, symlinks=False)
+        else:
+            config_copy.mkdir()
+
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+            sock.bind(('127.0.0.1', 0))
+            port = sock.getsockname()[1]
+        local_base = f'http://127.0.0.1:{port}'
+        child_env = os.environ.copy()
+        child_env.update({str(k): str(v) for k, v in env.items() if v is not None})
+        child_env.update({
+            'GPTADMIN_HUB_HOST': '127.0.0.1', 'HUB_HOST': '127.0.0.1', 'HUB_BIND': '127.0.0.1',
+            'GPTADMIN_HUB_PORT': str(port), 'HUB_PORT': str(port), 'PORT': str(port),
+            'GPTADMIN_CONFIG_DIR': str(config_copy),
+            'GPTADMIN_PUBLIC_DIR': str(candidate_public),
+            'GPTADMIN_OUTPUT_DIR': str(config_copy / 'outputs'),
+            'GPTADMIN_ENV_FILE': str(root / 'candidate.env'),
+            'NO_PROXY': 'localhost,127.0.0.1', 'no_proxy': 'localhost,127.0.0.1',
+        })
+        process = subprocess.Popen(
+            [str(candidate)], cwd=str(extracted), env=child_env,
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+            start_new_session=True,
+        )
+        try:
+            deadline = time.monotonic() + 15
+            while time.monotonic() < deadline:
+                if process.poll() is not None:
+                    raise RuntimeError('candidate gate: downloaded Hub exited before readiness')
+                try:
+                    _candidate_http(local_base, 'GET', '/version', host=client_host, timeout=1.0)
+                    break
+                except Exception:
+                    time.sleep(0.1)
+            else:
+                raise RuntimeError('candidate gate: downloaded Hub did not become ready')
+
+            candidate_schema = _candidate_http(local_base, 'GET', '/actions/openapi.yaml', host=client_host)
+            if not isinstance(candidate_schema, str):
+                raise RuntimeError('candidate gate: candidate OpenAPI is not text')
+            ops = _openapi_operation_map(candidate_schema)
+            missing = sorted({'discover', 'schema', 'execute'} - set(ops))
+            if missing:
+                raise RuntimeError('candidate gate: candidate OpenAPI is missing operations: ' + ', '.join(missing))
+
+            token_env = dict(env)
+            # Reproduce the real existing client's identity. This is what would
+            # have caught the canonical-origin regression before restart.
+            token_env['PUBLIC_ORIGIN'] = client_origin
+            token_env['MCP_RESOURCE'] = client_origin
+            token = make_mcp_bearer_token(token_env, 'gptadmin-candidate-preflight', ttl_days=1, access_mode='full')
+
+            # Native MCP client contract. This is intentionally separate from the
+            # Custom GPT Actions contract below: both must survive an update.
+            initialized = _candidate_mcp_rpc(
+                local_base, 'initialize',
+                {
+                    'protocolVersion': '2024-11-05',
+                    'capabilities': {},
+                    'clientInfo': {'name': 'gptadmin-candidate-gate', 'version': '1'},
+                },
+                token=token, host=client_host, request_id=1,
+            )
+            if not isinstance(initialized, dict) or not initialized.get('protocolVersion') or not initialized.get('serverInfo'):
+                raise RuntimeError('candidate gate: MCP initialize returned an invalid result')
+            listed = _candidate_mcp_rpc(
+                local_base, 'tools/list', {}, token=token, host=client_host, request_id=2,
+            )
+            mcp_tools = listed.get('tools') if isinstance(listed, dict) else None
+            if not isinstance(mcp_tools, list) or not any(
+                isinstance(item, dict) and str(item.get('name') or '') == 'demo' for item in mcp_tools
+            ):
+                raise RuntimeError('candidate gate: MCP tools/list does not expose safe demo')
+            mcp_called = _candidate_mcp_rpc(
+                local_base, 'tools/call', {'name': 'demo', 'arguments': {}},
+                token=token, host=client_host, request_id=3,
+            )
+            if not isinstance(mcp_called, dict):
+                raise RuntimeError('candidate gate: MCP tools/call demo returned an invalid result')
+
+            # Custom GPT Actions contract, discovered from the candidate's own
+            # OpenAPI artifact rather than hard-coded relay paths.
+            method, path = ops['discover']
+            discovered = _candidate_http(local_base, method, path, host=client_host, token=token)
+            servers = _candidate_servers(discovered)
+            if not servers:
+                raise RuntimeError('candidate gate: discover returned no targets')
+
+            selected_target = next(
+                (str(server.get('server_id') or server.get('agent_id') or server.get('id') or '')
+                 for server in servers
+                 if str(server.get('server_id') or server.get('agent_id') or server.get('id') or '') == 'hub'),
+                '',
+            )
+            if not selected_target:
+                raise RuntimeError('candidate gate: documented hub target is absent from discover')
+
+            smethod, spath = ops['schema']
+            schema_payload = _candidate_http(
+                local_base, smethod, spath, host=client_host, token=token,
+                payload={'target': selected_target}, timeout=8.0,
+            )
+            tools = _candidate_tools(schema_payload)
+            demo = next((item for item in tools if str(item.get('name') or '') == 'demo'), None)
+            if demo is None:
+                raise RuntimeError('candidate gate: hub schema does not expose the safe demo tool')
+            input_schema = demo.get('inputSchema') if isinstance(demo.get('inputSchema'), dict) else {}
+            if input_schema.get('required'):
+                raise RuntimeError('candidate gate: safe demo unexpectedly requires arguments')
+
+            emethod, epath = ops['execute']
+            result = _candidate_http(
+                local_base, emethod, epath, host=client_host, token=token,
+                payload={'target': selected_target, 'tool_name': 'demo', 'arguments': {}},
+                timeout=12.0,
+            )
+            job_id = str(result.get('job_id') or '') if isinstance(result, dict) else ''
+            if job_id:
+                jmethod, jpath = ops.get('job', ('GET', '/mcp-relay/job/{job_id}'))
+                jpath = jpath.replace('{job_id}', urllib.parse.quote(job_id, safe=''))
+                deadline = time.monotonic() + 30
+                while time.monotonic() < deadline:
+                    result = _candidate_http(local_base, jmethod, jpath, host=client_host, token=token, timeout=5.0)
+                    status = str(result.get('status') or '') if isinstance(result, dict) else ''
+                    if status in {'completed', 'success'}:
+                        break
+                    if status in {'failed', 'error', 'cancelled'}:
+                        raise RuntimeError(f'candidate gate: execute job failed with status {status}')
+                    time.sleep(0.2)
+                else:
+                    raise RuntimeError('candidate gate: execute job did not complete')
+            elif isinstance(result, dict):
+                status = str(result.get('status') or '')
+                if status and status not in {'completed', 'success'}:
+                    raise RuntimeError(f'candidate gate: execute returned status {status}')
+            return {'status': 'passed', 'client_origin': client_origin, 'target': selected_target, 'custom_gpt': 'passed', 'mcp': 'passed'}
+        finally:
+            if process.poll() is None:
+                process.terminate()
+                try:
+                    process.wait(timeout=5)
+                except subprocess.TimeoutExpired:
+                    process.kill()
+                    process.wait(timeout=5)
+
+
 @_transactional_update
 def cmd_update(args):
     """In-place upgrade for existing installs.
@@ -4903,10 +5187,16 @@ def cmd_update(args):
                 download_release(pkg_all, pkg)
             components = ('shellmcp',)
 
-        # Download and verify every selected release artifact before taking the
-        # live control plane down. The rollback path still protects package
-        # installation and health failures, but a network hiccup must not
-        # create user-visible downtime in the first place.
+        # Admission gate: the downloaded Hub must pass the client-facing public
+        # contract while the old Hub is still serving traffic. A failed
+        # candidate is rejected here; no Hub service has been stopped yet.
+        if install_hub:
+            print('[Update] black-box testing downloaded Hub before restart...')
+            gate = _run_hub_candidate_pre_restart_gate(pkg, env)
+            print(f"  Candidate gate passed via {gate['client_origin']} ({gate['target']})")
+
+        # Only a candidate that passed the external contract may cross the
+        # service-stop boundary.
         print('Stopping installed GPTAdmin services for safe in-place update...')
         _mark_update_runtime_started()
         svc_stop_multi(_service_pairs_for_update(install_hub, install_shellmcp, env))

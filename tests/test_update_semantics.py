@@ -135,6 +135,7 @@ def test_update_restores_auth_material_if_package_install_rewrites_env(monkeypat
     monkeypatch.setattr(cli, "wait_local_hub_health", lambda *_args, **_kwargs: True)
     monkeypatch.setattr(cli, "svc_autoupdate_enable_start", lambda *_args: None)
     monkeypatch.setattr(cli, "auto_configure_ai_mcp_clients", lambda *_args: None)
+    monkeypatch.setattr(cli, "_run_hub_candidate_pre_restart_gate", lambda *_args, **_kwargs: {"status": "passed", "client_origin": "https://client.example", "target": "shell:test"})
     monkeypatch.setattr(cli, "_update_runtime_paths", lambda: [])
 
     cli.cmd_update(SimpleNamespace(
