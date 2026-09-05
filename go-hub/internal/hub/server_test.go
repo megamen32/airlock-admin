@@ -1711,6 +1711,30 @@ func TestActionsOpenAPIAdvertisesRequestHost(t *testing.T) {
 	}
 }
 
+func TestActionsInstructionsServesPublicPrompt(t *testing.T) {
+	publicDir := t.TempDir()
+	promptPath := filepath.Join(publicDir, "custom-gpt-instructions.md")
+	if err := os.WriteFile(promptPath, []byte("# Custom GPT instructions\nOpenAPI: https://example/actions/openapi.yaml\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	s := New(Config{CtlToken: "ctl", PublicDir: publicDir, DefaultTimeout: time.Second, PollMaxTimeout: time.Second})
+	h := s.Handler()
+
+	req := httptest.NewRequest(http.MethodGet, "/actions/instructions.md", nil)
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, req)
+	if w.Code != http.StatusOK || !strings.Contains(w.Body.String(), "OpenAPI: https://example/actions/openapi.yaml") {
+		t.Fatalf("/actions/instructions.md status=%d body=%s", w.Code, w.Body.String())
+	}
+
+	missing := New(Config{CtlToken: "ctl", PublicDir: t.TempDir(), DefaultTimeout: time.Second, PollMaxTimeout: time.Second})
+	w2 := httptest.NewRecorder()
+	missing.Handler().ServeHTTP(w2, httptest.NewRequest(http.MethodGet, "/actions/instructions.md", nil))
+	if w2.Code != http.StatusNotFound {
+		t.Fatalf("missing instructions file: status=%d body=%s", w2.Code, w2.Body.String())
+	}
+}
+
 func TestCallMcpToolAcceptsTopLevelShellArgs(t *testing.T) {
 	s := New(Config{CtlToken: "ctl", DefaultTimeout: time.Second, PollMaxTimeout: time.Second})
 	s.mu.Lock()

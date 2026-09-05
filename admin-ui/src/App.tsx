@@ -137,6 +137,29 @@ function InstructionsScreen() {
   const [etag, setEtag] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [publishing, setPublishing] = useState(false);
+  const [gptPrompt, setGptPrompt] = useState<string | null>(null);
+  const [gptPromptError, setGptPromptError] = useState(false);
+  const [copied, setCopied] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/actions/instructions.md")
+      .then((response) => (response.ok ? response.text() : Promise.reject(new Error(String(response.status)))))
+      .then((text) => { if (!cancelled) setGptPrompt(text); })
+      .catch(() => { if (!cancelled) setGptPromptError(true); });
+    return () => { cancelled = true; };
+  }, []);
+
+  async function copyGptPrompt(): Promise<void> {
+    if (!gptPrompt) return;
+    try {
+      await navigator.clipboard.writeText(gptPrompt);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      setCopied(false);
+    }
+  }
 
   async function load(): Promise<void> {
     setLoadState("loading");
@@ -197,6 +220,22 @@ function InstructionsScreen() {
             <p className="lede">Опубликованный текст становится рабочим контекстом подключённых MCP-клиентов. Права доступа Hub остаются отдельной границей.</p>
           </div>
           <div className={`data-badge state-${loadState}`} role="status"><span className="state-dot" aria-hidden="true" />{stateLabel(loadState)}</div>
+        </section>
+        <section className="profile-grid" aria-label="Инструкции для Custom GPT">
+          <div className="editor-card card">
+            <div className="card-heading"><div><h3>Custom GPT</h3><p className="muted">Готовый текст для редактора Custom GPT в ChatGPT: скопируйте и вставьте в Instructions</p></div><span className="chip">Actions only</span></div>
+            {gptPrompt === null ? (
+              <div className="state-panel" role="status"><strong>{gptPromptError ? "Не удалось загрузить текст инструкций" : "Загрузка текста…"}</strong>{gptPromptError && <span>Hub не вернул /actions/instructions.md.</span>}</div>
+            ) : (
+              <>
+                <label className="editor-label" htmlFor="custom-gpt-prompt">Текст инструкций Custom GPT</label>
+                <textarea id="custom-gpt-prompt" readOnly value={gptPrompt} spellCheck={false} />
+                <div className="editor-footer"><span className="editor-hint">Endpoint-контракт: только discover → schema → execute → job из /actions/openapi.yaml</span></div>
+                <div className="action-row"><a className="button secondary" href="/actions/openapi.yaml">Открыть OpenAPI</a><button className="button primary" type="button" onClick={() => void copyGptPrompt()}>{copied ? "Скопировано" : "Скопировать"}</button></div>
+              </>
+            )}
+          </div>
+          <aside className="details-column" aria-label="Сведения о Custom GPT"><div className="note-card"><span className="note-icon" aria-hidden="true">i</span><p><strong>Граница Custom GPT</strong><br />Этот GPT работает только через Actions-фасад. Нативный /mcp и shell-скрипты с вызовом /mcp запрещены инструкцией.</p></div></aside>
         </section>
         <section className="profile-grid">
           <div className="editor-card card">

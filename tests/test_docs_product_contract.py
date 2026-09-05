@@ -135,3 +135,10 @@ def test_custom_gpt_prompt_selects_actions_not_native_mcp() -> None:
     assert "Do **not** call or probe `/mcp` from this Custom GPT" in compact
     assert "401" in compact
     assert "operations `discover`, `schema`, `execute` and `job`" in compact
+
+
+def test_public_custom_gpt_instructions_stay_in_sync_with_prompt_source() -> None:
+    """The hub serves public/custom-gpt-instructions.md; it must match the prompt source."""
+    assert (ROOT / "public" / "custom-gpt-instructions.md").read_text(
+        encoding="utf-8"
+    ) == (ROOT / "GPTADMIN_PROMPT.md").read_text(encoding="utf-8")

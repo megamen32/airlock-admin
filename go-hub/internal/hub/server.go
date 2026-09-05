@@ -1431,6 +1431,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/api/v1/cloud-os/browser/connectors", s.cloudOSBrowserConnectors)
 	mux.HandleFunc("/api/v1/cloud-os/browser/tabs", s.cloudOSBrowserTabs)
 	mux.HandleFunc("/actions/openapi.yaml", s.actionsOpenAPI)
+	mux.HandleFunc("/actions/instructions.md", s.actionsInstructions)
 	mux.HandleFunc("/artifacts/shellmcp.json", s.requireArtifact(s.shellmcpArtifactManifest))
 	mux.HandleFunc("/artifacts/shellmcp.tar.gz", s.requireArtifact(s.shellmcpArtifactDownload))
 	mux.HandleFunc("/artifacts/shellmcp-android-arm64.json", s.requireArtifact(s.androidShellmcpArtifactManifest))
@@ -1923,6 +1924,20 @@ func (s *Server) actionsOpenAPI(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Length", strconv.Itoa(len(body)))
 	w.WriteHeader(http.StatusOK)
 	_, _ = w.Write([]byte(body))
+}
+
+// actionsInstructions serves the ready-to-paste Custom GPT instructions text
+// from the public payload so the admin UI and operators always copy the
+// current prompt instead of a stale local file.
+func (s *Server) actionsInstructions(w http.ResponseWriter, r *http.Request) {
+	path := filepath.Join(s.cfg.PublicDir, "custom-gpt-instructions.md")
+	if _, err := os.Stat(path); err != nil {
+		writeJSON(w, http.StatusNotFound, map[string]any{"detail": "Custom GPT instructions file was not found"})
+		return
+	}
+	w.Header().Set("Cache-Control", "no-store")
+	w.Header().Set("Content-Type", "text/markdown; charset=utf-8")
+	http.ServeFile(w, r, path)
 }
 
 // actionsSpecOrigin advertises the public host the Actions spec was actually
