@@ -51,7 +51,7 @@ func TestRequestTraceIDFollowsQueuedMCPJobAndResultAudit(t *testing.T) {
 	s := New(Config{CtlToken: "ctl", RelayAgentToken: "relay", DefaultTimeout: 1, PollMaxTimeout: 1})
 	registerRelayAgent(t, s, "demo")
 
-	req := httptest.NewRequest(http.MethodPost, "/mcp-relay/call", bytes.NewBufferString(`{"target":"demo","tool_name":"ping","arguments":{"value":"safe"},"background":true}`))
+	req := httptest.NewRequest(http.MethodPost, "/mcp-relay/call", bytes.NewBufferString(`{"target":"demo","tool_name":"ping","arguments":{"value":"safe"},"background":true,"detail":"full"}`))
 	req.Header.Set("Authorization", "Bearer ctl")
 	req.Header.Set("X-Request-ID", "trace-job-456")
 	w := httptest.NewRecorder()
@@ -152,7 +152,7 @@ func TestTraceParentCrossesRelayQueue(t *testing.T) {
 	s := New(Config{CtlToken: "ctl", RelayAgentToken: "relay", DefaultTimeout: 1, PollMaxTimeout: 1})
 	registerRelayAgent(t, s, "demo")
 	incoming := "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"
-	req := httptest.NewRequest(http.MethodPost, "/mcp-relay/call", bytes.NewBufferString(`{"target":"demo","tool_name":"ping","arguments":{"value":"safe"},"background":true}`))
+	req := httptest.NewRequest(http.MethodPost, "/mcp-relay/call", bytes.NewBufferString(`{"target":"demo","tool_name":"ping","arguments":{"value":"safe"},"background":true,"detail":"full"}`))
 	req.Header.Set("Authorization", "Bearer ctl")
 	req.Header.Set("traceparent", incoming)
 	w := httptest.NewRecorder()

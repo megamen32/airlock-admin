@@ -317,6 +317,7 @@ type agentTombstone struct {
 func intPtr(v int) *int { return &v }
 
 var hubSettingRegistry = []hubSettingDefinition{
+	{Key: "tool_output_verbose", Type: "boolean", Category: "transport", Title: "Подробные ответы инструментов", Description: "Включать служебные поля и полные обёртки execute/job. По умолчанию выключено; detail=full или compact меняет формат одного ответа без повторного выполнения.", Default: false, RestartRequired: false, Advanced: true, Order: 50},
 	{Key: "mcp_auto_cleanup_enabled", Type: "boolean", Category: "mcp_registry", Title: "Автоочистка stale MCP", Description: "Автоматически удалять stale non-shell MCP по retention policy.", Default: true, RestartRequired: false, Order: 5},
 	{Key: "stale_mcp_retention_days", Type: "integer", Category: "mcp_registry", Title: "Удаление stale MCP", Description: "Удалять stale non-shell MCP из registry после указанного срока.", Default: defaultStaleMCPRetentionDays, Minimum: intPtr(1), Maximum: intPtr(3650), Unit: "days", RestartRequired: false, Order: 10},
 	{Key: "mcp_offline_after_seconds", Type: "integer", Category: "agent_lifecycle", Title: "Порог offline", Description: "Считать агент offline, если Hub не видел poll/heartbeat дольше этого времени.", Default: 90, Minimum: intPtr(15), Maximum: intPtr(86400), Unit: "seconds", RestartRequired: false, Order: 10},
@@ -2605,6 +2606,7 @@ paths:
                 query: {type: string}
                 cwd: {type: string}
                 idempotency_key: {type: string}
+                detail: {type: string, enum: [compact, full], description: "Full includes transport diagnostics."}
               additionalProperties: true
       responses:
         "200": {description: Tool result or background job}
@@ -2618,6 +2620,10 @@ paths:
           in: path
           required: true
           schema: {type: string}
+        - name: detail
+          in: query
+          required: false
+          schema: {type: string, enum: [compact, full]}
       responses:
         "200": {description: Job status}
 components:
@@ -3979,6 +3985,10 @@ func (s *Server) mcpRelayCall(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, map[string]any{"detail": err.Error()})
 		return
 	}
+	if err := validateToolOutputDetail(req["detail"]); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"detail": err.Error()})
+		return
+	}
 	target := firstString(req, "target", "server_id", "agent_id")
 	toolName := firstString(req, "tool", "tool_name", "name")
 	args := mapValue(req["arguments"])
@@ -4008,7 +4018,7 @@ func (s *Server) mcpRelayCall(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	resp, status := s.executeMCPTool(r, target, toolName, args, truthy(req["background"]), timeoutFromReq(req, s.cfg.DefaultTimeout), firstString(req, "idempotency_key"))
-	writeJSON(w, status, resp)
+	writeJSON(w, status, s.formatToolOutput(resp, toolName, req["detail"]))
 }
 
 const (
@@ -4337,6 +4347,7 @@ func toolArgsFromTopLevel(req map[string]any) map[string]any {
 		"tool": true, "tool_name": true, "name": true,
 		"arguments": true, "args": true,
 		"background":           true,
+		"detail":               true,
 		"idempotency_key":      true,
 		"schema_version":       true,
 		"schema_digest_sha256": true,
@@ -4441,6 +4452,11 @@ func (s *Server) mcpRelayJob(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, map[string]any{"detail": "missing job_id"})
 		return
 	}
+	outputDetail := r.URL.Query().Get("detail")
+	if err := validateToolOutputDetail(outputDetail); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"detail": err.Error()})
+		return
+	}
 	ack := r.URL.Query().Get("ack") == "true" || r.URL.Query().Get("ack") == "1"
 	s.mu.Lock()
 	if j := s.relayJobs[jobID]; j != nil {
@@ -4449,7 +4465,7 @@ func (s *Server) mcpRelayJob(w http.ResponseWriter, r *http.Request) {
 			delete(s.relayJobs, jobID)
 		}
 		s.mu.Unlock()
-		writeJSON(w, http.StatusOK, resp)
+		writeJSON(w, http.StatusOK, s.formatToolOutput(resp, "", outputDetail))
 		return
 	}
 	if j := s.shellJobs[jobID]; j != nil {
@@ -4458,7 +4474,7 @@ func (s *Server) mcpRelayJob(w http.ResponseWriter, r *http.Request) {
 			delete(s.shellJobs, jobID)
 		}
 		s.mu.Unlock()
-		writeJSON(w, http.StatusOK, resp)
+		writeJSON(w, http.StatusOK, s.formatToolOutput(resp, j.ToolName, outputDetail))
 		return
 	}
 	s.mu.Unlock()
@@ -8615,17 +8631,20 @@ func (s *Server) appsSDKCall(name string, args map[string]any) any {
 	case "execute", "call_mcp_tool", "callMcpTool":
 		return s.appsSDKCallMCP(nil, name, args)
 	case "job", "get_mcp_job", "getMcpJob":
+		if err := validateToolOutputDetail(args["detail"]); err != nil {
+			return map[string]any{"status": "failed", "error": err.Error()}
+		}
 		jobID := firstString(args, "id", "job_id")
 		s.mu.Lock()
 		if j := s.relayJobs[jobID]; j != nil {
 			resp := relayJobResponse(j)
 			s.mu.Unlock()
-			return resp
+			return s.formatToolOutput(resp, "", args["detail"])
 		}
 		if j := s.shellJobs[jobID]; j != nil {
 			resp := shellJobResponse(j)
 			s.mu.Unlock()
-			return resp
+			return s.formatToolOutput(resp, j.ToolName, args["detail"])
 		}
 		s.mu.Unlock()
 		return map[string]any{"status": "failed", "error": "unknown job", "job_id": jobID}
@@ -8735,6 +8754,9 @@ func (s *Server) appsSDKSchemaForRequest(r *http.Request, args map[string]any) a
 }
 
 func (s *Server) appsSDKCallMCP(r *http.Request, name string, args map[string]any) any {
+	if err := validateToolOutputDetail(args["detail"]); err != nil {
+		return map[string]any{"status": "failed", "error": err.Error()}
+	}
 	target := firstString(args, "target", "server_id", "agent_id")
 	toolName := firstString(args, "tool", "tool_name", "name")
 	if toolName == "" {
@@ -8758,7 +8780,7 @@ func (s *Server) appsSDKCallMCP(r *http.Request, name string, args map[string]an
 	if status >= http.StatusBadRequest {
 		return map[string]any{"server_id": selectedTarget, "status": "failed", "error": response}
 	}
-	return response
+	return s.formatToolOutput(response, toolName, args["detail"])
 }
 
 func resourceReceiptInputSchema() map[string]any {
@@ -8875,19 +8897,19 @@ func appsSDKTools() []map[string]any {
 			"annotations": map[string]any{"readOnlyHint": true, "destructiveHint": false, "openWorldHint": false}, "securitySchemes": readSecurity, "_meta": readMeta,
 		},
 		{
-			"name": "settings_get", "title": "Hub settings", "description": "Read values from the unified persisted Hub settings registry.",
+			"name": "settings_get", "title": "Hub settings", "description": "Read Hub settings.",
 			"inputSchema": map[string]any{"type": "object", "properties": map[string]any{}, "additionalProperties": false}, "outputSchema": map[string]any{"type": "object", "additionalProperties": true},
 			"annotations": map[string]any{"readOnlyHint": true, "destructiveHint": false, "openWorldHint": false}, "securitySchemes": readSecurity, "_meta": readMeta,
 		},
 		{
-			"name": "settings_set", "title": "Update Hub settings", "description": "Update one or more values in the unified persisted Hub settings registry.",
+			"name": "settings_set", "title": "Update Hub settings", "description": "Update persisted Hub settings.",
 			"inputSchema": map[string]any{"type": "object", "properties": map[string]any{"settings": map[string]any{"type": "object", "additionalProperties": true}}, "required": []string{"settings"}, "additionalProperties": false}, "outputSchema": map[string]any{"type": "object", "additionalProperties": true},
 			"annotations": map[string]any{"readOnlyHint": false, "destructiveHint": true, "openWorldHint": false}, "securitySchemes": execSecurity, "_meta": execMeta,
 		},
 		{
 			"name":            "schema",
 			"title":           "Schema",
-			"description":     "List tools for one target selected by discover. Never use target=default.",
+			"description":     "List target tools; never use target=default.",
 			"inputSchema":     map[string]any{"type": "object", "properties": map[string]any{"target": map[string]any{"type": "string"}}, "required": []string{"target"}, "additionalProperties": false},
 			"outputSchema":    map[string]any{"type": "object", "properties": map[string]any{"server_id": map[string]any{"type": "string"}, "status": map[string]any{"type": "string"}, "response": map[string]any{"type": "object", "description": "May include schema_version and schema_digest_sha256 as optional cache/debug metadata when listing tools.", "additionalProperties": true}}, "additionalProperties": true},
 			"annotations":     map[string]any{"readOnlyHint": true, "destructiveHint": false, "openWorldHint": false},
@@ -8929,8 +8951,8 @@ func appsSDKTools() []map[string]any {
 		{
 			"name":            "execute",
 			"title":           "Execute",
-			"description":     "Execute one tool on one target. Use schema first. Retry the same operation with the same idempotency_key.",
-			"inputSchema":     map[string]any{"type": "object", "properties": map[string]any{"target": map[string]any{"type": "string"}, "tool": map[string]any{"type": "string"}, "args": map[string]any{"type": "object", "additionalProperties": true}, "background": map[string]any{"type": "boolean"}, "idempotency_key": map[string]any{"type": "string", "minLength": 1, "maxLength": idempotencyKeyMax}}, "required": []string{"target", "tool"}, "additionalProperties": true},
+			"description":     "Execute target/tool. Use schema first; reuse idempotency_key on retry. detail=full adds diagnostics.",
+			"inputSchema":     map[string]any{"type": "object", "properties": map[string]any{"target": map[string]any{"type": "string"}, "tool": map[string]any{"type": "string"}, "args": map[string]any{"type": "object", "additionalProperties": true}, "background": map[string]any{"type": "boolean"}, "detail": toolOutputDetailSchema(), "idempotency_key": map[string]any{"type": "string", "minLength": 1, "maxLength": idempotencyKeyMax}}, "required": []string{"target", "tool"}, "additionalProperties": true},
 			"outputSchema":    map[string]any{"type": "object", "additionalProperties": true},
 			"annotations":     map[string]any{"readOnlyHint": false, "destructiveHint": true, "openWorldHint": true},
 			"securitySchemes": execSecurity,
@@ -8939,8 +8961,8 @@ func appsSDKTools() []map[string]any {
 		{
 			"name":            "job",
 			"title":           "Job",
-			"description":     "Read a background job by id.",
-			"inputSchema":     map[string]any{"type": "object", "properties": map[string]any{"id": map[string]any{"type": "string"}, "ack": map[string]any{"type": "boolean"}}, "required": []string{"id"}, "additionalProperties": false},
+			"description":     "Read a job; detail=full adds diagnostics.",
+			"inputSchema":     map[string]any{"type": "object", "properties": map[string]any{"id": map[string]any{"type": "string"}, "ack": map[string]any{"type": "boolean"}, "detail": toolOutputDetailSchema()}, "required": []string{"id"}, "additionalProperties": false},
 			"outputSchema":    map[string]any{"type": "object", "additionalProperties": true},
 			"annotations":     map[string]any{"readOnlyHint": true, "destructiveHint": false, "openWorldHint": false},
 			"securitySchemes": readSecurity,

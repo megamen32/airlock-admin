@@ -50,6 +50,29 @@ Dynamic loading means loading data after the model selects a target. It does
 not mean changing `tools/list` unpredictably during a session; stable schemas
 preserve client compatibility and prompt caching.
 
+### Results are useful data, not transport logs
+
+Successful tool calls return the useful result, status and one recovery handle
+(`job_id`), not a transport transcript. Do not repeat job/task identifiers,
+server names, empty streams, successful exit codes, byte counts, timings or
+trace fields in the default response. Remove only wrappers owned by GPTAdmin;
+upstream business payloads, warnings, non-zero exit codes, errors, multimodal
+content and links to spilled output must remain intact.
+
+`execute` and `job` use compact output by default. Request `detail: "full"` for
+one diagnostic response, or read `job(id, detail: "full")` to inspect an already
+executed command without running it again. `detail: "compact"` explicitly selects
+the short format. The existing persisted Hub setting `tool_output_verbose`
+(default `false`, under advanced transport settings) changes the default without
+a restart. A per-call choice takes precedence over that setting. The HTTP
+counterparts accept `detail` in the execute body and job query string.
+
+This is a presentation policy, not lossy storage: keep full results, audit,
+tracing, redaction, idempotency and recovery semantics unchanged. Presentation
+options must not be passed to an upstream tool or change its execution identity.
+Do not truncate useful stdout to make an envelope look small. Keep required MCP
+protocol fields; optimize GPTAdmin's own payload rather than breaking clients.
+
 ## The user's task comes first
 
 Maintenance and migration notices must never block an urgent read or action.

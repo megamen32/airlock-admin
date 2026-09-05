@@ -1693,8 +1693,17 @@ func TestCallMcpToolAcceptsTopLevelShellArgs(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("callMcpTool shell_exec status=%d body=%s", w.Code, w.Body.String())
 	}
-	if !strings.Contains(w.Body.String(), `"server_id":"shell:roomhacker-server-100"`) {
-		t.Fatalf("callMcpTool shell_exec bad response: %s", w.Body.String())
+	var response map[string]any
+	if err := json.Unmarshal(w.Body.Bytes(), &response); err != nil {
+		t.Fatal(err)
+	}
+	jobID := firstString(response, "job_id")
+	s.mu.Lock()
+	queued := s.shellJobs[jobID]
+	valid := queued != nil && queued.Server == "roomhacker-server-100" && queued.Cmd == "pwd"
+	s.mu.Unlock()
+	if !valid || response["status"] != "running" {
+		t.Fatalf("callMcpTool shell_exec did not queue the requested command: %s", w.Body.String())
 	}
 	if strings.Contains(w.Body.String(), "missing cmd") {
 		t.Fatalf("callMcpTool did not forward top-level cmd: %s", w.Body.String())
