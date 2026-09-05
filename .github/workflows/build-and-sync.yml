@@ -13,6 +13,10 @@ on:
     tags: [ 'v*' ]
   workflow_dispatch:
 
+concurrency:
+  group: gptadmin-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+
 permissions:
   contents: write
 
@@ -23,7 +27,7 @@ jobs:
   admin-ui-build:
     # The React UI is build-tested independently. The release package puts it
     # at /admin/ with native operations; /admin/legacy/ redirects there.
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, Linux, X64, gptadmin-ci]
     steps:
       - name: Checkout
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
@@ -32,8 +36,6 @@ jobs:
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 22
-          cache: npm
-          cache-dependency-path: admin-ui/package-lock.json
 
       - name: Install admin UI dependencies
         working-directory: admin-ui
@@ -66,7 +68,7 @@ jobs:
   failover-e2e:
     # The suite builds its own Go image and needs no repository-hosted service.
     # Keep it separate so HA regressions are visible independently from releases.
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, Linux, X64, gptadmin-ci]
     steps:
       - name: Checkout
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
@@ -76,7 +78,7 @@ jobs:
 
   docs-as-code-contract:
     name: Docs-as-code contract
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, Linux, X64, gptadmin-ci]
     steps:
       - name: Checkout
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
@@ -84,12 +86,13 @@ jobs:
       - name: Setup uv
         uses: astral-sh/setup-uv@caf0cab7a618c569241d31dcd442f54681755d39 # v3
         with:
-          enable-cache: true
+          enable-cache: false
 
       - name: Setup Go
         uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
         with:
           go-version: stable
+          cache: false
 
       - name: Verify root docs-as-code contract
         run: |
@@ -98,9 +101,9 @@ jobs:
 
   candidate-client-contract:
     name: Candidate client contract
-    # Runs on every main push/tag so a source change cannot reach release
-    # packaging unless the built Hub still behaves like both supported clients.
-    runs-on: ubuntu-latest
+    # Runs locally on every main push/tag so a source change cannot reach
+    # release packaging unless the built Hub still behaves like both clients.
+    runs-on: [self-hosted, Linux, X64, gptadmin-ci]
     steps:
       - name: Checkout
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
@@ -109,14 +112,13 @@ jobs:
         uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
         with:
           go-version: stable
+          cache: false
           cache-dependency-path: go-hub/go.sum
 
       - name: Setup Node for Hub public payload
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 22
-          cache: npm
-          cache-dependency-path: admin-ui/package-lock.json
 
       - name: Build Hub candidate artifact
         run: |
@@ -135,7 +137,7 @@ jobs:
     # to avoid duplicate full builds racing the tagged release.
     if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
     needs: [admin-ui-build, failover-e2e, docs-as-code-contract, candidate-client-contract, macos-build, windows-shellmcp]
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, Linux, X64, gptadmin-ci]
     permissions:
       contents: read
       id-token: write
@@ -149,12 +151,13 @@ jobs:
       - name: Setup uv
         uses: astral-sh/setup-uv@caf0cab7a618c569241d31dcd442f54681755d39 # v3
         with:
-          enable-cache: true
+          enable-cache: false
 
       - name: Setup Go
         uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
         with:
           go-version: stable
+          cache: false
           cache-dependency-path: |
             go-hub/go.sum
             go-shellmcp/go.sum
@@ -164,8 +167,6 @@ jobs:
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 22
-          cache: npm
-          cache-dependency-path: admin-ui/package-lock.json
 
       - name: Setup Android SDK command-line tools
         uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407 # v3
@@ -454,7 +455,8 @@ jobs:
           fi
 
   macos-build:
-    # Catches Darwin-only regressions before merge. We just want real darwin
+    if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
+    # Catches Darwin-only regressions before a release. We just want real darwin
     # runtime coverage (syscall/exec behavior used by launchd auto-update) plus
     # proof that Mac can produce Linux artifacts. No secrets, no opensource
     # sync, no service install — those are Linux-only and run in build-and-release.
@@ -490,6 +492,7 @@ jobs:
         run: python3 -c "import ast; ast.parse(open('cli.py').read())"
 
   windows-shellmcp:
+    if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
     # Windows needs a real runner: cross-compilation cannot exercise cmd.exe
     # process creation or the installer-compatible polling configuration.
     runs-on: windows-latest
