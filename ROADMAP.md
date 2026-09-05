@@ -9,11 +9,16 @@ Status: complete; v140 receipt and live UI acceptance deployed
 - [x] P0.1 Update the public primary and HAOS standby to tested build 140; prove public OAuth metadata and authorization routing without 502.
 - [x] P0.2 Live authenticated GPTADMIN plugin proved a server-side canonical resource-read receipt for `ui://widget/admin-v3.html`, plus a separate live UI render. This is not a captured literal ChatGPT protocol transcript.
 
-## M1 — [user-visible outcome]
+## M1 — AI-first administration and restart recovery
 
-Status: planned
+Status: incremental implementation; see docs/ACCESS_OPERATIONS.md
 
-- [ ] M1.1 [stable deliverable]
+- [x] Owner API tools for profiles, named connections and durable access history.
+- [x] Preserve profile fields in the UI; effective read-only permission; retire the unserved duplicate dashboard.
+- [ ] Paired production upgrade with a compatible rollback and real-connector acceptance.
+- [ ] Explicit delegated admin roles and owner retrieval of stored token values.
+- [ ] Persist queued execution inputs and define executor delivery acknowledgements.
+- [ ] Measure and narrow remaining coarse locks and other snapshot stores.
 
 ## Proposed
 

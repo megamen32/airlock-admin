@@ -21,6 +21,8 @@ export type ExternalWorkspaceRef = {
 };
 
 export type AccessProfile = {
+  instruction_set_id?: string;
+  approval_mode?: string;
   id: string;
   name: string;
   access_mode: AccessMode;
@@ -77,6 +79,7 @@ export type VirtualMCP = {
 };
 
 export type IssueTokenRequest = {
+  profile_id?: string;
   client_id: string;
   ttl_days: number;
   access_mode: AccessMode;
@@ -129,7 +132,7 @@ function parseInstruction(body: unknown): InstructionSet {
 }
 
 function parseStringList(value: unknown, field: string): string[] {
-  if (value === undefined) return [];
+  if (value === undefined || value === null) return [];
   if (!Array.isArray(value) || value.some((item) => typeof item !== "string")) {
     throw new ApiError(502, `Сервер вернул некорректное поле ${field}.`);
   }
@@ -137,7 +140,7 @@ function parseStringList(value: unknown, field: string): string[] {
 }
 
 function parseExternalWorkspaceRefs(value: unknown): ExternalWorkspaceRef[] {
-  if (value === undefined) return [];
+  if (value === undefined || value === null) return [];
   if (!Array.isArray(value)) {
     throw new ApiError(502, "Сервер вернул некорректные ссылки рабочих пространств.");
   }
@@ -172,9 +175,11 @@ function parseAccessProfile(body: unknown): AccessProfile {
     id: value.id,
     name: typeof value.name === "string" ? value.name : value.id,
     access_mode: value.access_mode,
+    instruction_set_id: typeof value.instruction_set_id === "string" ? value.instruction_set_id : "default",
+    approval_mode: typeof value.approval_mode === "string" ? value.approval_mode : value.access_mode === "readonly" ? "read_only" : "bounded_autonomous",
     allowed_targets: parseStringList(value.allowed_targets, "allowed_targets"),
     allowed_tools: parseStringList(value.allowed_tools, "allowed_tools"),
-    external_workspace_refs: parseExternalWorkspaceRefs(value.external_workspace_refs),
+    external_workspace_refs: parseExternalWorkspaceRefs(value.workspace_refs ?? value.external_workspace_refs),
     version: typeof value.version === "number" ? value.version : 0,
     updated_at: typeof value.updated_at === "string" ? value.updated_at : null,
   };
@@ -379,7 +384,9 @@ export async function putAccessProfile(profile: AccessProfile, etag: string): Pr
       access_mode: profile.access_mode,
       allowed_targets: profile.allowed_targets,
       allowed_tools: profile.allowed_tools,
-      external_workspace_refs: profile.external_workspace_refs,
+      workspace_refs: profile.external_workspace_refs.filter((ref) => ref.machine_id.trim() || ref.workspace_path.trim() || ref.shell_target.trim()),
+      instruction_set_id: profile.instruction_set_id ?? "default",
+      approval_mode: profile.approval_mode ?? (profile.access_mode === "readonly" ? "read_only" : "bounded_autonomous"),
     }),
   });
   return { value: parseAccessProfile(await responseJSON(response)), etag: responseETag(response) };

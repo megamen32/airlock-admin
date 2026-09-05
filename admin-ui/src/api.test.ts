@@ -16,6 +16,8 @@ import {
 const profile: AccessProfile = {
   id: "ops",
   name: "Operations",
+  instruction_set_id: "default",
+  approval_mode: "read_only",
   access_mode: "readonly",
   allowed_targets: ["hub"],
   allowed_tools: ["discover"],
@@ -71,7 +73,9 @@ describe("admin API contracts", () => {
         access_mode: "readonly",
         allowed_targets: ["hub"],
         allowed_tools: ["discover"],
-        external_workspace_refs: profile.external_workspace_refs,
+        workspace_refs: profile.external_workspace_refs,
+        instruction_set_id: "default",
+        approval_mode: "read_only",
       }),
       headers: { Accept: "application/json", "Content-Type": "application/json", "If-Match": '"2"' },
     }));
@@ -164,4 +168,20 @@ describe("admin API contracts", () => {
 
     await expect(putAccessProfile(profile, '"1"')).rejects.toMatchObject({ status: 412 });
   });
+});
+
+it("preserves the real Go profile fields and does not invent required empty workspaces", async () => {
+  const wire = { id: "real", name: "Real", access_mode: "full", approval_mode: "ask_before_write", instruction_set_id: "special", allowed_targets: ["*"], allowed_tools: ["*"], workspace_refs: profile.external_workspace_refs, version: 1 };
+  const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async () => jsonResponse(wire, { ETag: '"1"' }));
+  const result = await getAccessProfile("real");
+  expect(result.value.approval_mode).toBe("ask_before_write");
+  expect(result.value.instruction_set_id).toBe("special");
+  expect(result.value.external_workspace_refs).toEqual(profile.external_workspace_refs);
+  await putAccessProfile({ ...result.value, external_workspace_refs: [{ machine_id: "", workspace_path: "", startup_document: "AGENTS.md", shell_target: "" }] }, result.etag);
+  const request = fetchMock.mock.calls.at(-1)?.[1];
+  const saved = JSON.parse(String(request?.body));
+  expect(saved.workspace_refs).toEqual([]);
+  expect(saved).not.toHaveProperty("external_workspace_refs");
+  expect(saved.approval_mode).toBe("ask_before_write");
+  expect(saved.instruction_set_id).toBe("special");
 });

@@ -45,7 +45,10 @@ def test_unit_rendering_replaces_import_time_profile_without_prefix_corruption()
     assert "Description=GPTAdmin Hub Proxy" in rendered
 
 
-def test_admin_dashboard_exposes_process_and_bearer_profiles():
-    dashboard = (Path(__file__).parents[1] / "public" / "admin_dashboard.html").read_text(encoding="utf-8")
-    for marker in ("processSecurityMode", "bearerSecurityMode", "require_issuer", "/admin/api/security/profile"):
-        assert marker in dashboard
+def test_unified_admin_exposes_explicit_security_presets():
+    root = Path(__file__).parents[1]
+    template = (root / "admin-ui/src/operations/template.html").read_text(encoding="utf-8")
+    runtime = (root / "admin-ui/src/operations/runtime.js").read_text(encoding="utf-8")
+    for marker in ("securityPreset", "working_default", "private_access", "locked_down"):
+        assert marker in template
+    assert "/admin/api/security/preset" in runtime

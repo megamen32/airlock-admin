@@ -91,9 +91,9 @@ credential policy were not changed by this follow-up.
    modules without deleting controls. The durable owner credential inventory
    described above remains separate work; access policy is not a substitute for
    restoring useful owner controls.
-4. **Outdated contracts and dormant assets.** Some text assertions and the
-   unserved `public/admin_dashboard.html` still describe the old UI. Replace
-   them with action-level tests while migrating their respective areas.
+4. **Outdated contracts and dormant assets.** The unserved `public/admin_dashboard.html` and its active snapshot/test
+   dependencies are retired by the access-operations follow-up. Continue
+   auditing remaining compatibility endpoints by actual consumers.
 
 ## Reproducing verification
 
@@ -118,3 +118,15 @@ For rollout, follow [TASK_PERSISTENCE.md](TASK_PERSISTENCE.md): old JSON-only an
 new SQLite writers must not run concurrently against the same configuration.
 Upgrade both Hub writers together after a backup. The frozen migration JSON is
 not a current rollback snapshot after new tasks have been accepted.
+
+## AI-first access and operations follow-up
+
+Owner management is now available through typed `access_profiles`,
+`access_clients` and `operations` tools reusing the existing authenticated
+HTTP handlers. The profile UI preserves actual Go field names, workspace
+references, instruction sets and approval modes. Read-only profiles no longer
+inherit write access from full tokens. Access changes are visible through a
+restart-surviving operation journal and a single UI screen. The duplicate
+1144-line HTML dashboard is removed after consumer inspection. See
+[ACCESS_OPERATIONS.md](ACCESS_OPERATIONS.md) for precise authority boundaries
+and outstanding credential-value/delegated-admin/queued-execution work.

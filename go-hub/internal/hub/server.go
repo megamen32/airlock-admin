@@ -452,9 +452,7 @@ type oauthCode struct {
 	State       string
 }
 
-// managedMCPToken stores revocation metadata only. The bearer value is never
-// persisted, so an operator can revoke or rotate a client without creating a
-// second secret database.
+// managedMCPToken stores inventory and verification metadata only.
 type managedMCPToken struct {
 	ID           string   `json:"id"`
 	ClientID     string   `json:"client_id"`
@@ -1516,11 +1514,11 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/admin/api/handover", s.requireCtl(s.adminHandover))
 	mux.HandleFunc("/admin/api/virtual-mcps", s.requireCtl(s.adminVirtualMCPEndpoint))
 	mux.HandleFunc("/admin/api/virtual-mcps/", s.requireCtl(s.adminVirtualMCPEndpoint))
-	mux.HandleFunc("/admin/api/mcp/issue-token", s.requireCtl(s.adminMCPIssueToken))
-	mux.HandleFunc("/admin/api/mcp/tokens/", s.requireCtl(s.adminMCPTokenAction))
+	mux.HandleFunc("/admin/api/mcp/issue-token", s.requireCtl(s.trackAccessOperation(s.adminMCPIssueToken)))
+	mux.HandleFunc("/admin/api/mcp/tokens/", s.requireCtl(s.trackAccessOperation(s.adminMCPTokenAction)))
 	mux.HandleFunc("/admin/api/access-profiles", s.requireCtl(s.adminAccessProfiles))
-	mux.HandleFunc("/admin/api/access-profiles/", s.requireCtl(s.adminAccessProfile))
-	mux.HandleFunc("/admin/api/client-bindings/", s.requireCtl(s.adminClientBinding))
+	mux.HandleFunc("/admin/api/access-profiles/", s.requireCtl(s.trackAccessOperation(s.adminAccessProfile)))
+	mux.HandleFunc("/admin/api/client-bindings/", s.requireCtl(s.trackAccessOperation(s.adminClientBinding)))
 	mux.HandleFunc("/admin/api/mcp/resources/list", s.requireCtl(s.adminMCPResourcesList))
 	mux.HandleFunc("/admin/api/mcp/resources/read", s.requireCtl(s.adminMCPResourceRead))
 	mux.HandleFunc("/admin/api/auth/rotate-oauth", s.requireCtl(s.adminRotateOAuth))
@@ -1542,7 +1540,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/admin/api/telemetry", s.requireCtl(s.adminTelemetry))
 	mux.HandleFunc("/admin/api/telemetry/event", s.requireCtl(s.adminTelemetry))
 	mux.HandleFunc("/admin/api/clients/revoke-all", s.requireCtl(s.adminClientsRevokeAll))
-	mux.HandleFunc("/admin/api/clients/", s.requireCtl(s.adminClientDelete))
+	mux.HandleFunc("/admin/api/clients/", s.requireCtl(s.trackAccessOperation(s.adminClientDelete)))
 	mux.HandleFunc("/admin/api/overview", s.requireCtl(s.adminOverview))
 	mux.HandleFunc("/admin/api/instruction-sets/default", s.requireCtl(s.adminDefaultInstructionSet))
 	mux.HandleFunc("/admin/api/instruction-sets", s.requireCtl(s.adminInstructionSets))
@@ -1554,6 +1552,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/admin/api/failover", s.requireCtl(s.adminFailover))
 	mux.HandleFunc("/admin/api/jobs", s.requireCtl(s.adminJobs))
 	mux.HandleFunc("/admin/api/audit", s.requireCtl(s.adminAudit))
+	mux.HandleFunc("/admin/api/operations", s.requireCtl(s.adminOperations))
 	mux.HandleFunc("/admin/api/connection-debug", s.requireCtl(s.connectionDebug))
 	mux.HandleFunc("/admin/api/approvals", s.requireCtl(s.adminApprovals))
 	mux.HandleFunc("/admin/api/approvals/", s.requireCtl(s.adminApproval))
@@ -4635,6 +4634,12 @@ func (s *Server) callHubTool(name string, args map[string]any) (map[string]any, 
 }
 
 func (s *Server) callHubToolForRequest(r *http.Request, name string, args map[string]any) (map[string]any, int) {
+	if name == "access_clients" || name == "operations" {
+		return s.callAccessClientTool(r, name, args)
+	}
+	if name == "access_profiles" {
+		return s.callAccessProfileTool(r, args)
+	}
 	if name == "handover_status" {
 		return map[string]any{"state": readHubHandoverState()}, http.StatusOK
 	}
@@ -4948,7 +4953,7 @@ func hubTools() []map[string]any {
 		{"name": "handover_start", "description": "Schedule zero-downtime primary Hub restart through standby and drain", "inputSchema": map[string]any{"type": "object", "properties": map[string]any{}, "additionalProperties": false}},
 		{"name": "diagnose", "description": "Return one bounded self-diagnostic snapshot for Hub, standby, agents, jobs, settings and cleanup", "inputSchema": map[string]any{"type": "object", "properties": map[string]any{}, "additionalProperties": false}},
 	}
-	return append(tools, secretHubTools()...)
+	return append(append(append(tools, accessProfileTool()), accessClientTools()...), secretHubTools()...)
 }
 
 func shellTools() []map[string]any {
@@ -5380,6 +5385,7 @@ func (s *Server) adminMCPIssueToken(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var req struct {
+		ProfileID  string `json:"profile_id"`
 		ClientID   string `json:"client_id"`
 		TTLDays    int    `json:"ttl_days"`
 		AccessMode string `json:"access_mode"`
@@ -5410,7 +5416,18 @@ func (s *Server) adminMCPIssueToken(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, map[string]any{"detail": "access_mode must be full or readonly"})
 		return
 	}
-	token, record, err := s.issueManagedMCPTokenWithMode(clientID, ttlDays, origin, resource, accessMode, "")
+	if req.ProfileID != "" {
+		profiles, err := s.accessProfilesSnapshot()
+		if err != nil {
+			writeAccessProfileError(w, err)
+			return
+		}
+		if _, ok := profiles[req.ProfileID]; !ok {
+			writeJSON(w, http.StatusNotFound, map[string]any{"detail": "access profile not found"})
+			return
+		}
+	}
+	token, record, err := s.issueManagedMCPTokenWithMode(clientID, ttlDays, origin, resource, accessMode, req.ProfileID)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]any{"detail": err.Error()})
 		return

@@ -126,3 +126,20 @@ Diagnostic output hides recognizable credentials before it reaches model
 context. Where an action eventually needs a managed secret, the preferred
 design is an opaque Hub handle that can be used by an authorized tool without
 revealing the underlying value to the model.
+
+## AI-first administration without a mandatory browser
+
+Every administrative capability should have one typed API that both the model
+and the owner UI use. A browser is an optional inspection/control surface, not
+the only way to create a profile, connect a client or inspect an operation.
+Do not hide policy inputs or discard them during a round trip. Explicit
+restrictions must remain effective, and additional hardening stays opt-in.
+Owner/admin viewing of stored connection values is a product requirement;
+redaction in public telemetry is a separate concern and must not replace that
+owner capability. Never silently rotate a connection merely to show a value.
+
+Profile/connection mutations need a restart-surviving operation record: who,
+what, object, result, and an explicit unfinished state after interruption.
+The journal must not itself become a duplicate store of credential values.
+Delete legacy code only after tracing current consumers and preserving the
+working action in the canonical API/UI. Age alone is not evidence of non-use.

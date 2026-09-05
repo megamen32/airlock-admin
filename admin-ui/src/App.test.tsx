@@ -140,7 +140,7 @@ const profileFixture = {
   access_mode: "readonly",
   allowed_targets: ["hub"],
   allowed_tools: ["discover"],
-  external_workspace_refs: [{
+  workspace_refs: [{
     machine_id: "machine-a",
     workspace_path: "/srv/ops",
     startup_document: "AGENTS.md",
@@ -511,4 +511,15 @@ it("allows issuing the first token when the client inventory is empty", async ()
   render(<App />);
   expect(await screen.findByRole("heading", { name: "Клиентов пока нет" })).toBeInTheDocument();
   expect(screen.getByRole("button", { name: "Выдать managed token" })).toBeEnabled();
+});
+
+it("does not erase a new profile draft when the initial list arrives late", async () => {
+  window.history.replaceState(null, "", "#profiles");
+  let finish!: (value: Response) => void;
+  vi.spyOn(globalThis, "fetch").mockImplementation(() => new Promise<Response>((resolve) => { finish = resolve; }));
+  render(<App />);
+  await userEvent.click(screen.getByRole("button", { name: "Новый профиль" }));
+  await userEvent.type(screen.getByLabelText("Название профиля"), "Keep this draft");
+  finish(new Response(JSON.stringify({ profiles: [] }), { status: 200 }));
+  await waitFor(() => expect(screen.getByLabelText("Название профиля")).toHaveValue("Keep this draft"));
 });

@@ -41,7 +41,6 @@ SNAPSHOT_FILES = (
     "go-shellmcp",
     "gptadmin_security.py",
     "gptadmin_build_info.py",
-    "public/admin_dashboard.html",
     "public/openapi.yaml",
 )
 
@@ -932,7 +931,11 @@ PY
 
     def _build_snapshot(self) -> None:
         """Pack the minimum repo subset needed for source-mode remote installs."""
+        admin = REPO_ROOT / "admin-ui" / "dist"
+        if not (admin / "index.html").is_file():
+            raise HarnessError("Build admin-ui before the Mac source snapshot")
         with tarfile.open(self.snapshot_path, "w:gz") as tar:
+            tar.add(admin, arcname="public/admin")
             for rel in SNAPSHOT_FILES:
                 path = REPO_ROOT / rel
                 if not path.exists():
