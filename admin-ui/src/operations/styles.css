@@ -267,3 +267,37 @@
 .operations-console .entryError { color: #9b3026; }
 .operations-console .entryResponse summary { cursor: pointer; padding: 8px 0; }
 .operations-console .entryTitle, .operations-console .entrySub { overflow-wrap: anywhere; }
+
+/* React shell integration: the legacy sidebar is intentionally hidden.
+   Do not reserve its old 248px column or create a nested viewport. */
+.operations-console {
+  height: auto;
+  min-height: 0;
+  overflow: visible;
+}
+.operations-console .app {
+  display: block;
+  height: auto;
+  min-height: 0;
+}
+.operations-console .content {
+  width: 100%;
+  overflow: visible;
+}
+.operations-console .topbar {
+  position: static;
+  min-height: 58px;
+  padding: 11px clamp(18px, 3vw, 32px);
+}
+.operations-console .topbar-title {
+  font-size: 20px;
+}
+.operations-console main {
+  width: 100%;
+  max-width: 1320px;
+  padding: 18px clamp(18px, 3vw, 32px) 40px;
+}
+.operations-console .logbox {
+  max-height: min(560px, 65vh);
+  min-height: 220px;
+}
