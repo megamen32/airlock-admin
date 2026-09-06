@@ -1,6 +1,6 @@
 # GPTAdmin 管理的文件备份
 
-`file_backup` 是编辑文件之前备份的首选 shell 代理工具。
+`file_backup` 仅保留用于旧客户端兼容。新代理应优先使用 `file:<host>`、`file_editor` 和显式 `file_checkpoint`；不要在每次编辑前创建备份/检查点。
 它取代了分散在磁盘上的临时 `cp file file.bak.$date` 文件。
 
 该工具通过集线器在每个 `shell:*` 虚拟代理上公开：

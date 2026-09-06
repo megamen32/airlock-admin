@@ -138,6 +138,7 @@ MCP_AGENTS_DIR = ETC_DIR / 'mcp-agents.d'
 MCP_SUPERVISOR_CONFIG = ETC_DIR / 'mcp-supervisor.json'
 MCP_TOKEN_FILE = ETC_DIR / 'mcp-relay.token'
 STARTUP_INSTRUCTIONS_FILE = ETC_DIR / 'startup_instructions.md'
+GREPMESH_CONFIG_FILE = ETC_DIR / 'grepmesh.json'
 STARTUP_INSTRUCTIONS_MAX_BYTES = 16 * 1024
 
 MCP_CAPABILITY_CATALOG_VERSION = 'gptadmin-capabilities/v1'
@@ -191,11 +192,13 @@ if IS_MACOS:
     SERVICE_PREFIX = f'com.gptadmin{SERVICE_SUFFIX}'
     SVC_HUB_LABEL   = f'{SERVICE_PREFIX}.hub'
     SVC_SHELLMCP_LABEL = f'{SERVICE_PREFIX}.shellmcp'
+    SVC_GREPMESH_LABEL = f'{SERVICE_PREFIX}.grepmesh'
     SVC_FRPC_LABEL  = f'{SERVICE_PREFIX}.tunnel-frpc'
     SVC_CLOUDFLARED_LABEL = f'{SERVICE_PREFIX}.cloudflared'
     SVC_AUTO_UPDATE_LABEL = f'{SERVICE_PREFIX}.auto-update'
     UNIT_PATH_HUB   = SERVICES_DIR / f'{SVC_HUB_LABEL}.plist'
     UNIT_PATH_SHELLMCP = SERVICES_DIR / f'{SVC_SHELLMCP_LABEL}.plist'
+    UNIT_PATH_GREPMESH = SERVICES_DIR / f'{SVC_GREPMESH_LABEL}.plist'
     UNIT_PATH_FRPC  = SERVICES_DIR / f'{SVC_FRPC_LABEL}.plist'
     UNIT_PATH_CLOUDFLARED = SERVICES_DIR / f'{SVC_CLOUDFLARED_LABEL}.plist'
     UNIT_PATH_AUTO_UPDATE = SERVICES_DIR / f'{SVC_AUTO_UPDATE_LABEL}.plist'
@@ -209,6 +212,7 @@ else:
     SYSTEMD_HUB   = 'gptadmin-hub.service'
     SYSTEMD_HUB_STANDBY = 'gptadmin-hub-standby.service'
     SYSTEMD_SHELLMCP = 'shellmcp.service'
+    SYSTEMD_GREPMESH = 'grepmesh-mcp.service'
     SYSTEMD_FRPC  = 'gptadmin-tunnel-frpc.service'
     SYSTEMD_CLOUDFLARED = 'gptadmin-cloudflared.service'
     SYSTEMD_AUTO_UPDATE = 'gptadmin-auto-update.service'
@@ -216,6 +220,7 @@ else:
     UNIT_PATH_HUB   = SYSTEMD_DIR / SYSTEMD_HUB
     UNIT_PATH_HUB_STANDBY = SYSTEMD_DIR / SYSTEMD_HUB_STANDBY
     UNIT_PATH_SHELLMCP = SYSTEMD_DIR / SYSTEMD_SHELLMCP
+    UNIT_PATH_GREPMESH = SYSTEMD_DIR / SYSTEMD_GREPMESH
     UNIT_PATH_FRPC  = SYSTEMD_DIR / SYSTEMD_FRPC
     UNIT_PATH_CLOUDFLARED = SYSTEMD_DIR / SYSTEMD_CLOUDFLARED
     UNIT_PATH_AUTO_UPDATE = SYSTEMD_DIR / SYSTEMD_AUTO_UPDATE
@@ -748,6 +753,35 @@ def _install_shellmcp_binary_from_pkg(tdp: Path) -> None:
     die('Go ShellMCP/rootd binary not found in package. Legacy Python/PyInstaller shellmcp has been removed; ensure the package contains go-shellmcp/<platform>/<arch>/shellmcp-go or rootd-go.')
 
 
+def _grepmesh_binary_candidates(tdp: Path) -> list[Path]:
+    arch = _arch_tag()
+    tags = [f'darwin_{arch}', f'macos_{arch}'] if IS_MACOS else [f'linux_{arch}']
+    out = [tdp / 'bin' / 'grepmesh-mcp', tdp / 'grepmesh-mcp']
+    for tag in tags:
+        out.extend([
+            tdp / 'grepmesh' / tag / 'grepmesh-mcp',
+            tdp / 'build' / 'grepmesh' / tag / 'grepmesh-mcp',
+        ])
+    return out
+
+
+def _install_grepmesh_binary_from_pkg(tdp: Path) -> bool:
+    """Install the bundled GrepMesh binary when this platform package carries it.
+
+    GrepMesh is a default-on companion capability, but package portability remains
+    fail-open: older packages and unsupported cross-builds simply omit the binary.
+    Explicit --no-grepmesh controls activation, not package extraction.
+    """
+    for candidate in _grepmesh_binary_candidates(tdp):
+        if candidate.exists() and candidate.is_file() and _binary_looks_native(candidate):
+            BIN_DIR.mkdir(parents=True, exist_ok=True)
+            dst = BIN_DIR / 'grepmesh-mcp'
+            _install_runtime_binary(candidate, dst)
+            _macos_unquarantine_and_codesign(dst)
+            return True
+    return False
+
+
 def _cleanup_obsolete_runtime_files():
     """Remove obsolete replaceable runtime files after an in-place upgrade.
 
@@ -782,34 +816,26 @@ def _cleanup_obsolete_runtime_files():
             # Older installers used different numeric prefixes; any matching
             # override can replace the canonical gptadmin.env credential.
             obsolete_dropin.unlink(missing_ok=True)
-        # An older server-100 drop-in hard-coded ProtectHome=read-only.  It
-        # predates configurable security profiles and must not override the
-        # normal profile. Preserve its explicit user/group choice.
+        # Older installs could pin ShellMCP itself to the operator account.
+        # The paired file:<host> target now needs a privileged filesystem boundary
+        # in system mode.  ShellMCP therefore runs as root while shell_exec still
+        # defaults to SHELLMCP_DEFAULT_USER and only elevates when explicitly asked.
         legacy_user_mode = dropin_dir / '100-gptadmin-user-mode.conf'
-        try:
-            legacy_text = legacy_user_mode.read_text(encoding='utf-8')
-            if 'ProtectHome=read-only' in legacy_text:
-                cleaned = legacy_text.replace('ProtectHome=read-only\n', '')
-                tmp = legacy_user_mode.with_name(legacy_user_mode.name + '.new')
-                tmp.write_text(cleaned, encoding='utf-8')
-                os.chmod(tmp, 0o644)
-                os.replace(tmp, legacy_user_mode)
-        except FileNotFoundError:
-            pass
-        except OSError as exc:
-            print_warn(f'Could not remove legacy ShellMCP hardening drop-in: {exc}')
-    for directory in (BIN_DIR, CLI_PATH.parent):
-        if not directory.exists():
-            continue
-        for pattern in ('*.bak.*', '*.old', '*.new'):
-            for path in directory.glob(pattern):
+        legacy_system_dropins = (
+            legacy_user_mode,
+            dropin_dir / '110-user-mode-no-self-update.conf',
+            dropin_dir / '120-config-dir-access.conf',
+            dropin_dir / 'zz-user-mode-no-self-update.conf',
+        )
+        if not IS_USER_INSTALL:
+            for legacy_dropin in legacy_system_dropins:
                 try:
-                    if path.is_dir():
-                        shutil.rmtree(path)
-                    else:
-                        path.unlink()
-                except FileNotFoundError:
-                    pass
+                    legacy_dropin.unlink(missing_ok=True)
+                except OSError as exc:
+                    print_warn(f'Could not retire legacy ShellMCP drop-in {legacy_dropin.name}: {exc}')
+    # Do not delete ad-hoc *.bak/*.old/*.new files here. They may be operator
+    # rollback artifacts unrelated to this update. Managed checkpoint/backup GC
+    # is explicit and scoped to its own store.
 
 
 def install_component_from_pkg(pkg_tgz: Path, component: str):
@@ -822,6 +848,7 @@ def install_component_from_pkg(pkg_tgz: Path, component: str):
             return
         if component == 'shellmcp':
             _install_shellmcp_binary_from_pkg(tdp)
+            _install_grepmesh_binary_from_pkg(tdp)
             return
         die(f'unknown component: {component}')
 
@@ -1058,6 +1085,21 @@ if IS_MACOS:
         wrapper = _wrapper_script('shellmcp', BIN_DIR / 'shellmcp')
         SERVICES_DIR.mkdir(parents=True, exist_ok=True)
         UNIT_PATH_SHELLMCP.write_text(_make_plist(SVC_SHELLMCP_LABEL, wrapper, LOG_DIR / 'shellmcp.log'))
+
+    def write_grepmesh_unit(enabled: bool, env: dict):
+        if not enabled or not (BIN_DIR / 'grepmesh-mcp').exists():
+            return
+        LOG_DIR.mkdir(parents=True, exist_ok=True)
+        wrapper = _wrapper_script('grepmesh', BIN_DIR / 'grepmesh-mcp')
+        wrapper.write_text(
+            f'#!/bin/sh\n'
+            f'exec {BIN_DIR / "grepmesh-mcp"} --config {GREPMESH_CONFIG_FILE}\n'
+        )
+        os.chmod(wrapper, 0o755)
+        SERVICES_DIR.mkdir(parents=True, exist_ok=True)
+        UNIT_PATH_GREPMESH.write_text(_make_plist(SVC_GREPMESH_LABEL, wrapper, LOG_DIR / 'grepmesh.log'))
+
+    def svc_grepmesh_name(): return SVC_GREPMESH_LABEL
 
     def write_frpc_unit(frpc_bin: str):
         LOG_DIR.mkdir(parents=True, exist_ok=True)
@@ -1302,6 +1344,22 @@ RestartSec=3
 WantedBy={LINUX_WANTED_BY}
 """
 
+    GREPMESH_UNIT_TPL = """[Unit]
+Description=GPTAdmin GrepMesh search MCP
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+{user_line}{group_line}Environment=PATH=/usr/local/bin:/usr/bin:/bin
+ExecStart={grepmesh_bin} --config {config_file}
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy={wanted_by}
+"""
+
     FRPC_UNIT_TPL = """[Unit]
 Description=FRP client for GPTAdmin
 BindsTo=gptadmin-hub.service
@@ -1480,6 +1538,21 @@ esac
         if install_shellmcp:
             UNIT_PATH_SHELLMCP.parent.mkdir(parents=True, exist_ok=True)
             UNIT_PATH_SHELLMCP.write_text(render_unit_with_hardening(UNIT_SHELLMCP, process_hardening_for_env(env_read())))
+
+    def write_grepmesh_unit(enabled: bool, env: dict):
+        if not enabled or not (BIN_DIR / 'grepmesh-mcp').exists():
+            return
+        UNIT_PATH_GREPMESH.parent.mkdir(parents=True, exist_ok=True)
+        user = '' if IS_USER_INSTALL else (env.get('SHELLMCP_DEFAULT_USER') or env.get('SHELL_DEFAULT_USER') or '')
+        UNIT_PATH_GREPMESH.write_text(GREPMESH_UNIT_TPL.format(
+            user_line=(f'User={user}\n' if user else ''),
+            group_line='',
+            grepmesh_bin=BIN_DIR / 'grepmesh-mcp',
+            config_file=GREPMESH_CONFIG_FILE,
+            wanted_by=LINUX_WANTED_BY,
+        ))
+
+    def svc_grepmesh_name(): return SYSTEMD_GREPMESH
 
     def write_frpc_unit(frpc_bin: str):
         UNIT_PATH_FRPC.parent.mkdir(parents=True, exist_ok=True)
@@ -2062,17 +2135,27 @@ def _server_matches_local_shell_identity(server: dict, identity: dict) -> bool:
         return False
     expected_identity = _normalize_local_shell_identity(identity)
     payload = server.get('payload') if isinstance(server.get('payload'), dict) else {}
-    # This is the security boundary for local auto-approve: the pending server
-    # must match the private key material generated on this machine. Hostname,
-    # base_url, mode, and client IP are advisory and can be spoofed.
+    meta = server.get('meta') if isinstance(server.get('meta'), dict) else {}
+    # Security boundary for local auto-approve: the pending server must match
+    # the cryptographic identity generated on this machine.  Hub discover puts
+    # the relay's stable server_id/public key/fingerprint in meta, while older
+    # pending payloads exposed them at top level/payload.  Accept either shape,
+    # but never hostname/base_url/client IP as identity proof.
+    matched_required = {}
     for key in ('server_id', 'public_key', 'fingerprint'):
         expected = str(expected_identity.get(key) or '')
-        actual = str(server.get(key) or payload.get(key) or '')
-        if expected and actual and expected != actual:
-            return False
-    actual_server_id = server.get('server_id') or payload.get('server_id')
-    actual_public_key = server.get('public_key') or payload.get('public_key')
-    return bool(expected_identity.get('server_id') and actual_server_id and expected_identity.get('public_key') and actual_public_key)
+        actuals = {
+            str(value) for value in (server.get(key), payload.get(key), meta.get(key))
+            if value not in (None, '')
+        }
+        if expected and actuals and expected not in actuals:
+            # server_id has one intentional presentation alias: top-level
+            # shell:<hostname> is the user-facing target, while meta.server_id
+            # is the signed ShellMCP identity.  If meta matches, it is valid.
+            if not (key == 'server_id' and str(meta.get('server_id') or '') == expected):
+                return False
+        matched_required[key] = bool(expected and expected in actuals)
+    return bool(matched_required.get('server_id') and matched_required.get('public_key'))
 
 
 def _server_active_matches_local_shell_identity(server: dict, identity: dict) -> bool:
@@ -2106,12 +2189,13 @@ def _approve_pending_response_ok(res: dict) -> bool:
 
 
 def maybe_autoapprove_local_shellmcp(env: dict, install_hub: bool, install_shellmcp: bool) -> None:
-    """Approve the local shell agent created by a same-machine hub+shell setup.
+    """Approve only the freshly generated same-machine ShellMCP identity.
 
-    A fresh hub intentionally keeps unknown shell agents pending. During a bundled
-    local install the agent was just generated by this setup command, so approving
-    it avoids a broken first-run where long-poll returns 401 until the user finds
-    the pending approval step.
+    Unknown remote agents remain pending.  Bundled hub+shell setup is different:
+    setup generated the ShellMCP keypair locally, so it can prove which pending
+    registration belongs to this machine and approve exactly that one.  A failure
+    here aborts setup instead of leaving a superficially successful but unusable
+    installation.
     """
     if not (install_hub and install_shellmcp):
         return
@@ -2119,7 +2203,86 @@ def maybe_autoapprove_local_shellmcp(env: dict, install_hub: bool, install_shell
     if flag in {'0', 'false', 'no', 'off'}:
         print('Local ShellMCP auto-approve skipped: GPTADMIN_AUTO_APPROVE_LOCAL_SHELLMCP=0')
         return
-    print('Local ShellMCP awaits approval; use Hub MCP pending -> approve_pending_server.')
+
+    fresh_after = time.time() - 0.25
+    identity = _load_local_shellmcp_identity(env, timeout_s=30)
+    normalized = _normalize_local_shell_identity(identity)
+    if not normalized.get('server_id') or not normalized.get('public_key'):
+        raise RuntimeError('local ShellMCP identity was not created; refusing blind auto-approval')
+
+    base = f"http://127.0.0.1:{env.get('HUB_PORT', '9001')}"
+    token = make_mcp_bearer_token(env, 'gptadmin-local-shellmcp-autoapprove', ttl_days=1, access_mode='full')
+
+    def http_json(method: str, path: str, payload=None, timeout: float = 5.0):
+        data = None if payload is None else json.dumps(payload).encode('utf-8')
+        request = urllib.request.Request(
+            base + path, data=data, method=method,
+            headers={
+                'Accept': 'application/json',
+                'Content-Type': 'application/json',
+                'Authorization': 'Bearer ' + token,
+                'User-Agent': 'gptadmin-local-autoapprove/1',
+            },
+        )
+        with urllib.request.urlopen(request, timeout=timeout) as response:
+            body = response.read().decode('utf-8', 'replace')
+            return json.loads(body or '{}')
+
+    deadline = time.monotonic() + 30
+    candidate = None
+    last_servers = []
+    while time.monotonic() < deadline:
+        discovered = http_json('GET', '/mcp-relay/servers?detail=full', timeout=5.0)
+        last_servers = discovered.get('servers', []) if isinstance(discovered, dict) else []
+        matches = [
+            server for server in last_servers
+            if isinstance(server, dict)
+            and str(server.get('status') or '') == 'awaiting_approval'
+            and _server_matches_local_shell_identity(server, identity)
+        ]
+        if len(matches) == 1:
+            candidate = matches[0]
+            break
+        if len(matches) > 1:
+            raise RuntimeError('multiple pending ShellMCP agents matched the local cryptographic identity')
+        # It may already be online after a retry/restart.
+        if any((
+            _server_active_matches_local_shell_identity(server, identity) or (
+                _server_matches_local_shell_identity(server, identity)
+                and str(server.get('status') or '') == 'online'
+            )
+        ) and float(server.get('last_seen') or 0) >= fresh_after for server in last_servers):
+            print('Local ShellMCP already approved and freshly online.')
+            return
+        time.sleep(0.5)
+
+    if candidate is None:
+        raise RuntimeError('local ShellMCP registration did not appear for cryptographic auto-approval')
+
+    target = str(candidate.get('server_id') or '')
+    result = http_json(
+        'POST', '/mcp-relay/call',
+        {'target': 'hub', 'tool': 'approve_pending_server', 'arguments': {'server_id': target}},
+        timeout=10.0,
+    )
+    if not _approve_pending_response_ok(result):
+        raise RuntimeError(f'local ShellMCP auto-approval failed for {target}: {result}')
+
+    deadline = time.monotonic() + 15
+    while time.monotonic() < deadline:
+        discovered = http_json('GET', '/mcp-relay/servers?detail=full', timeout=5.0)
+        servers = discovered.get('servers', []) if isinstance(discovered, dict) else []
+        for server in servers:
+            if (
+                isinstance(server, dict)
+                and str(server.get('status') or '') == 'online'
+                and _server_matches_local_shell_identity(server, identity)
+                and float(server.get('last_seen') or 0) >= fresh_after
+            ):
+                print(f'Local ShellMCP auto-approved: {server.get("server_id") or target}')
+                return
+        time.sleep(0.25)
+    raise RuntimeError(f'local ShellMCP {target} was approved but did not become online')
 
 def setup_interactive(args):
     need_root()
@@ -2152,6 +2315,8 @@ def setup_interactive(args):
         install_shellmcp = ch in ('1', '3')
 
     env = env_read()
+    install_grepmesh = _grepmesh_enabled_from_args(args, env, install_shellmcp)
+    env['GREPMESH_ENABLE'] = 'true' if install_grepmesh else 'false'
 
     # The normal profile is intentionally frictionless. Stronger process
     # isolation is an explicit operator choice, never a hidden system-install
@@ -2175,6 +2340,8 @@ def setup_interactive(args):
         env.setdefault('SHELLMCP_UPDATE_MANIFEST_URL', (env.get('HUB_URL') or env.get('HUB_PUBLIC_URL') or 'https://gptadmin.bezrabotnyi.com').rstrip('/') + '/artifacts/shellmcp.json')
         env.setdefault('SHELLMCP_SERVICE_NAME', svc_shellmcp_name())
         env.setdefault('SHELLMCP_SERVICE_SCOPE', INSTALL_SCOPE)
+        if not IS_USER_INSTALL:
+            env.setdefault('SHELLMCP_FILE_CHECKPOINT_ROOT', '/var/lib/gptadmin/file-checkpoints')
     shellmcp_default_uid = os.environ.get('SHELLMCP_DEFAULT_UID')
     if shellmcp_default_uid and shellmcp_default_uid.isdigit() and shellmcp_default_uid != '0':
         env.setdefault('SHELLMCP_DEFAULT_UID', shellmcp_default_uid)
@@ -2346,6 +2513,8 @@ def setup_interactive(args):
 
     write_hub_unit(install_hub, install_shellmcp)
     write_shellmcp_unit(install_hub, install_shellmcp)
+    grepmesh_ready = _configure_builtin_grepmesh(env, install_grepmesh) if install_shellmcp else False
+    write_grepmesh_unit(grepmesh_ready, env)
 
     if env.get('FRP_ENABLE', 'false') == 'true':
         frpc_bin = ensure_frpc_installed()
@@ -2387,11 +2556,18 @@ def setup_interactive(args):
             env['HUB_URL'] = public_url
         sync_oauth_origin_env(env)
         env_set_many(env)
+    if grepmesh_ready:
+        svc_enable_start(svc_grepmesh_name(), UNIT_PATH_GREPMESH)
+    elif not install_grepmesh and UNIT_PATH_GREPMESH.exists():
+        svc_disable_stop(svc_grepmesh_name(), UNIT_PATH_GREPMESH)
     if install_shellmcp:
         svc_enable_start(svc_shellmcp_name(), UNIT_PATH_SHELLMCP)
         maybe_import_and_install_mcp_from_desktop_clients()
     svc_autoupdate_enable_start(env_read())
     maybe_autoapprove_local_shellmcp(env, install_hub, install_shellmcp)
+    if install_hub and install_shellmcp:
+        verified = _require_real_local_shell_exec(env_read(), timeout_s=90)
+        print(f"Local runtime execution verified: {verified['target']}")
     auto_configure_ai_mcp_clients(env_read(), install_hub)
 
     env = env_read()
@@ -2407,6 +2583,7 @@ def setup_interactive(args):
     installed = [n for n, p in [
         ('gptadmin-hub' if not IS_MACOS else SVC_HUB_LABEL, UNIT_PATH_HUB),
         (svc_shellmcp_name(), UNIT_PATH_SHELLMCP),
+        (svc_grepmesh_name(), UNIT_PATH_GREPMESH if grepmesh_ready else None),
         (SYSTEMD_FRPC if not IS_MACOS else SVC_FRPC_LABEL,
          UNIT_PATH_FRPC if env.get('FRP_ENABLE', 'false') == 'true' else None),
         ('gptadmin-cloudflared' if not IS_MACOS else SVC_CLOUDFLARED_LABEL,
@@ -2613,6 +2790,82 @@ def _mcp_refresh_generated_configs(cfg: dict) -> None:
     """Regenerate the native ShellMCP supervisor registry."""
     _mcp_sync_go_supervisor_config(cfg)
 
+
+
+def _grepmesh_default_config(env: dict) -> dict:
+    home = Path(env.get('SHELLMCP_DEFAULT_HOME') or env.get('SHELL_DEFAULT_HOME') or USER_HOME).expanduser()
+    host_id = (env.get('SHELLMCP_NAME') or socket.gethostname() or 'gptadmin-host').strip()
+    exclude_globs = [
+        '**/.git/**', '**/.svn/**', '**/.hg/**', '**/node_modules/**',
+        '**/.pnpm-store/**', '**/venv/**', '**/.venv/**', '**/__pycache__/**',
+        '**/.pytest_cache/**', '**/.mypy_cache/**', '**/.ruff_cache/**',
+        '**/target/**', '**/dist/**', '**/build/**', '**/out/**', '**/.cache/**',
+        '**/.cargo/**', '**/.rustup/**', '**/go/pkg/mod/**', '**/.local/share/Trash/**',
+        '**/.ssh/**', '**/.gnupg/**', '**/.aws/credentials', '**/.netrc',
+        '**/id_rsa', '**/id_ed25519', '**/*.pem', '**/*.key', '**/shadow', '**/gshadow',
+    ]
+    return {
+        'host_id': host_id,
+        'bind': '127.0.0.1:9419',
+        'root': str(home),
+        'roots': {'home': [str(home)]},
+        'peers': [],
+        'exclude_globs': exclude_globs,
+        'limits': {'max_results': 64, 'context_lines': 2, 'max_response_bytes': 131072,
+                   'peer_timeout_ms': 2000, 'overall_timeout_ms': 5000, 'max_file_bytes': 16777216},
+    }
+
+
+def _configure_builtin_grepmesh(env: dict, enabled: bool) -> bool:
+    """Provision the bundled GrepMesh service and native ShellMCP child entry.
+
+    Default-on is intentionally non-destructive: an existing user-owned GrepMesh
+    config or MCP entry is preserved. --no-grepmesh only removes entries carrying
+    our gptadmin_builtin marker and disables our service unit.
+    """
+    cfg = _mcp_config()
+    servers = cfg.setdefault('mcpServers', {})
+    existing = servers.get('GrepMesh')
+    if not enabled:
+        if isinstance(existing, dict) and existing.get('gptadmin_builtin') is True:
+            servers.pop('GrepMesh', None)
+            _mcp_save(cfg)
+            _mcp_refresh_generated_configs(cfg)
+        return False
+    if isinstance(existing, dict) and existing.get('gptadmin_builtin') is not True:
+        # Respect an operator-managed GrepMesh definition and its service. The
+        # default-on companion must never create a second listener on :9419.
+        return False
+    binary = BIN_DIR / 'grepmesh-mcp'
+    if not binary.exists():
+        print_warn('Bundled GrepMesh binary is unavailable for this package/platform; continuing without GrepMesh. Use --no-grepmesh to silence this capability on future installs.')
+        return False
+    GREPMESH_CONFIG_FILE.parent.mkdir(parents=True, exist_ok=True)
+    if not GREPMESH_CONFIG_FILE.exists():
+        _json_write(GREPMESH_CONFIG_FILE, _grepmesh_default_config(env))
+        if not IS_USER_INSTALL and os.name != 'nt':
+            os.chmod(GREPMESH_CONFIG_FILE, 0o644)
+    if existing is None:
+        servers['GrepMesh'] = {
+            'name': 'grepmesh',
+            'transport': 'streamable-http',
+            'url': 'http://127.0.0.1:9419/mcp',
+            'enabled': True,
+            'gptadmin_builtin': True,
+        }
+        _mcp_save(cfg)
+        _mcp_refresh_generated_configs(cfg)
+    return True
+
+
+def _grepmesh_enabled_from_args(args, env: dict, install_shellmcp: bool) -> bool:
+    if not install_shellmcp:
+        return False
+    if bool(getattr(args, 'no_grepmesh', False)):
+        return False
+    if bool(getattr(args, 'grepmesh', False)):
+        return True
+    return str(env.get('GREPMESH_ENABLE', 'true')).strip().lower() not in {'0', 'false', 'no', 'off'}
 
 
 def _mcp_fix_read_permissions(path: Path, run_as_user: str | None = None):
@@ -2869,6 +3122,21 @@ def cmd_mcp_add(args):
         print(json.dumps(catalog_definition, ensure_ascii=False, indent=2))
         if getattr(args, 'install', False) and not getattr(args, 'accept_capability', False):
             die('curated MCP activation requires --accept-capability after reviewing the catalog definition')
+    # Validate the requested executable before touching persistent/global config.
+    # This keeps malformed CLI invocations deterministic even when the caller
+    # cannot read a system installation's /etc/gptadmin state.
+    if not args.url:
+        if not args.command:
+            die('provide --url URL or COMMAND [ARGS...]')
+        if args.command.startswith('-'):
+            die(
+                f'invalid MCP command {args.command!r}: the first token after NAME must be an executable. '
+                f'For Chrome DevTools use: gptadmin mcp add chrome-devtools npx -y '
+                f'chrome-devtools-mcp@latest --browser-url=http://127.0.0.1:9223'
+            )
+    if getattr(args, 'install', False) and not getattr(args, 'disabled', False) and not _mcp_go_supervisor_enabled():
+        die('Native ShellMCP is required for MCP servers. Install/update ShellMCP, then run `gptadmin mcp install`.')
+
     cfg = _mcp_config()
     servers = cfg.setdefault('mcpServers', {})
     if args.name in servers and not args.force:
@@ -2884,14 +3152,6 @@ def cmd_mcp_add(args):
         cmd_args = args.args or ['-y', 'mcp-remote', args.url]
         stdio = args.stdio_format or 'framed'
     else:
-        if not args.command:
-            die('provide --url URL or COMMAND [ARGS...]')
-        if args.command.startswith('-'):
-            die(
-                f'invalid MCP command {args.command!r}: the first token after NAME must be an executable. '
-                f'For Chrome DevTools use: gptadmin mcp add chrome-devtools npx -y '
-                f'chrome-devtools-mcp@latest --browser-url=http://127.0.0.1:9223'
-            )
         command = args.command
         cmd_args = args.args or []
         stdio = args.stdio_format or 'auto'
@@ -2921,10 +3181,8 @@ def cmd_mcp_add(args):
     if getattr(args, 'install', False):
         if args.disabled:
             print(f'Skip disabled MCP server: {args.name}')
-        elif _mcp_go_supervisor_enabled():
-            print(f'ShellMCP supervisor will manage MCP server {args.name}')
         else:
-            die('Native ShellMCP is required for MCP servers. Install/update ShellMCP, then run `gptadmin mcp install`.')
+            print(f'ShellMCP supervisor will manage MCP server {args.name}')
     if getattr(args, 'status', False):
         print(f'### {args.name}: managed by native ShellMCP')
 
@@ -4667,6 +4925,8 @@ def _restart_update_services_after_rollback() -> None:
         install_shellmcp = env.get('INSTALL_SHELLMCP') == 'true' or UNIT_PATH_SHELLMCP.exists()
         for name, path in _service_pairs_for_update(install_hub, install_shellmcp, env):
             svc_enable_start(name, path)
+        if install_shellmcp and UNIT_PATH_SHELLMCP.exists():
+            svc_restart(svc_shellmcp_name(), UNIT_PATH_SHELLMCP)
     except BaseException:
         print('WARNING: restored runtime could not be restarted automatically', file=sys.stderr)
 
@@ -5076,6 +5336,68 @@ def _run_hub_candidate_pre_restart_gate(pkg_tgz: Path, env: dict) -> dict:
                     process.wait(timeout=5)
 
 
+def _require_real_local_shell_exec(env: dict, timeout_s: int = 90) -> dict:
+    """Prove Hub -> local ShellMCP execution with one harmless real command."""
+    identity = _load_local_shellmcp_identity(env, timeout_s=min(timeout_s, 30))
+    if not _normalize_local_shell_identity(identity).get('public_key'):
+        raise RuntimeError('local ShellMCP identity is unavailable for execution verification')
+    base = f"http://127.0.0.1:{env.get('HUB_PORT') or '9001'}"
+    token = make_mcp_bearer_token(env, 'gptadmin-local-runtime-verifier', ttl_days=1, access_mode='full')
+    deadline = time.monotonic() + max(10, timeout_s)
+    selected = ''
+    while time.monotonic() < deadline:
+        try:
+            payload = _candidate_http(base, 'GET', '/mcp-relay/servers?detail=full', token=token, timeout=5.0)
+            servers = payload.get('servers', []) if isinstance(payload, dict) else []
+            selected = next((
+                str(server.get('server_id') or '') for server in servers
+                if isinstance(server, dict)
+                and str(server.get('status') or '') == 'online'
+                and _server_matches_local_shell_identity(server, identity)
+            ), '')
+        except Exception:
+            selected = ''
+        if selected:
+            break
+        time.sleep(0.25)
+    if not selected:
+        raise RuntimeError('local ShellMCP did not become online for execution verification')
+
+    expected = 'gptadmin-runtime-' + secrets.token_hex(8)
+    result = _candidate_http(
+        base, 'POST', '/mcp-relay/call', token=token,
+        payload={
+            'target': selected,
+            'tool': 'shell_exec',
+            'arguments': {'cmd': f"printf '{expected}'", 'run_as_user': 'root'},
+            'background': True,
+        },
+        timeout=10.0,
+    )
+    if not isinstance(result, dict):
+        raise RuntimeError('local ShellMCP execution verifier returned an invalid response')
+    job_id = str(result.get('job_id') or result.get('task_id') or '')
+    if not job_id:
+        if expected in json.dumps(result, ensure_ascii=False):
+            return {'status': 'passed', 'target': selected, 'mode': 'inline'}
+        raise RuntimeError(f'local ShellMCP execution verifier returned no job id: {result}')
+
+    while time.monotonic() < deadline:
+        current = _candidate_http(
+            base, 'GET', '/mcp-relay/job/' + urllib.parse.quote(job_id, safe=''),
+            token=token, timeout=5.0,
+        )
+        status = str(current.get('status') or '') if isinstance(current, dict) else ''
+        if status in {'completed', 'success'}:
+            if expected not in json.dumps(current, ensure_ascii=False):
+                raise RuntimeError(f'local ShellMCP execution completed without expected output: {current}')
+            return {'status': 'passed', 'target': selected, 'job_id': job_id, 'mode': 'job'}
+        if status in {'failed', 'error', 'cancelled'}:
+            raise RuntimeError(f'local ShellMCP execution failed: {current}')
+        time.sleep(0.25)
+    raise RuntimeError(f'local ShellMCP execution did not complete within {timeout_s}s (job {job_id})')
+
+
 @_transactional_update
 def cmd_update(args):
     """In-place upgrade for existing installs.
@@ -5101,6 +5423,8 @@ def cmd_update(args):
         install_shellmcp = False
     if not install_hub and not install_shellmcp:
         die('No installed components detected. Use --hub and/or --shellmcp, or run: gptadmin setup')
+    install_grepmesh = _grepmesh_enabled_from_args(args, env, install_shellmcp)
+    env['GREPMESH_ENABLE'] = 'true' if install_grepmesh else 'false'
 
     env.setdefault('SHELLMCP_TOKEN', gen_hex())
     env.setdefault('ADMIN_PASSWORD', gen_hex())
@@ -5124,6 +5448,8 @@ def cmd_update(args):
         env['SHELLMCP_UPDATE_TOKEN'] = env.get('SHELLMCP_UPDATE_TOKEN') or env.get('SHELLMCP_TOKEN', '')
         env['SHELLMCP_SERVICE_NAME'] = svc_shellmcp_name()
         env['SHELLMCP_SERVICE_SCOPE'] = INSTALL_SCOPE
+        if not IS_USER_INSTALL:
+            env.setdefault('SHELLMCP_FILE_CHECKPOINT_ROOT', '/var/lib/gptadmin/file-checkpoints')
     sync_oauth_origin_env(env)
     env_set_many(env)
 
@@ -5215,6 +5541,8 @@ def cmd_update(args):
 
     write_hub_unit(install_hub, install_shellmcp)
     write_shellmcp_unit(install_hub, install_shellmcp)
+    grepmesh_ready = _configure_builtin_grepmesh(env, install_grepmesh) if install_shellmcp else False
+    write_grepmesh_unit(grepmesh_ready, env)
     if env.get('FRP_ENABLE', 'false') == 'true':
         frpc_bin = ensure_frpc_installed()
         write_frpc_conf(env)
@@ -5234,11 +5562,24 @@ def cmd_update(args):
         svc_frpc_enable_start_all(env)
     if env.get('TUNNEL_MODE') == 'cloudflare' or env.get('CLOUDFLARE_TUNNEL_ENABLE', 'false') == 'true':
         svc_enable_start(svc_cloudflared_name(), UNIT_PATH_CLOUDFLARED)
+    if grepmesh_ready:
+        if UNIT_PATH_GREPMESH.exists():
+            svc_enable_start(svc_grepmesh_name(), UNIT_PATH_GREPMESH)
+    elif not install_grepmesh and UNIT_PATH_GREPMESH.exists():
+        svc_disable_stop(svc_grepmesh_name(), UNIT_PATH_GREPMESH)
     if install_shellmcp:
         if UNIT_PATH_SHELLMCP.exists():
             svc_restart(svc_shellmcp_name(), UNIT_PATH_SHELLMCP)
         else:
             svc_enable_start(svc_shellmcp_name(), UNIT_PATH_SHELLMCP)
+        # An update is not healthy merely because systemd started ShellMCP.
+        # Require a fresh, cryptographically matching poll to the restarted Hub
+        # and re-approve only this machine's persisted identity if necessary.
+        # This prevents returning success while the shell plane is stale/pending.
+        maybe_autoapprove_local_shellmcp(env_read(), install_hub, install_shellmcp)
+        if install_hub:
+            verified = _require_real_local_shell_exec(env_read(), timeout_s=90)
+            print(f"Post-update runtime execution verified: {verified['target']}")
     if not getattr(args, 'auto', False):
         svc_autoupdate_enable_start(env_read())
     # A new desktop client should work after an ordinary update, without making
@@ -5878,6 +6219,8 @@ def main():
     ap_setup.add_argument('--shellmcp', '--shell', dest='shellmcp', action='store_true', help='Install ShellMCP/rootd component in non-interactive mode')
     ap_setup.add_argument('--no-hub', action='store_true', help='Do not install hub component')
     ap_setup.add_argument('--no-shellmcp', '--no-shell', dest='no_shellmcp', action='store_true', help='Do not install ShellMCP/rootd component')
+    ap_setup.add_argument('--grepmesh', dest='grepmesh', action='store_true', help='Enable bundled GrepMesh companion (default with ShellMCP)')
+    ap_setup.add_argument('--no-grepmesh', dest='no_grepmesh', action='store_true', help='Opt out of bundled GrepMesh companion')
     ap_setup.add_argument('--tunnel', choices=['frp', 'manual', 'cloudflare', 'none'], help='Public hub tunnel mode; --silent defaults to frp')
     ap_setup.add_argument('--hub-url', help='Existing public hub URL for manual tunnel or shell-only install')
     ap_setup.add_argument('--admin-password', help='One-time administrator password for secure shell-only MCP relay enrollment')
@@ -5900,6 +6243,8 @@ def main():
     ap_update.add_argument('--shellmcp', action='store_true', help='Force updating/installing ShellMCP component')
     ap_update.add_argument('--no-hub', action='store_true', help='Do not update hub component')
     ap_update.add_argument('--no-shellmcp', action='store_true', help='Do not update ShellMCP component')
+    ap_update.add_argument('--grepmesh', dest='grepmesh', action='store_true', help='Enable bundled GrepMesh companion')
+    ap_update.add_argument('--no-grepmesh', dest='no_grepmesh', action='store_true', help='Opt out of bundled GrepMesh companion')
     ap_update.add_argument('--user', action='store_true', help='Use per-user install paths/services')
     ap_update.add_argument('--system', action='store_true', help='Use system install paths/services')
     ap_update.add_argument('--auto', action='store_true', help='Run from the automatic updater; obey GPTADMIN_AUTO_UPDATE')

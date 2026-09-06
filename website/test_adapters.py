@@ -21,6 +21,13 @@ from urllib.parse import parse_qs, urlparse
 
 import pytest
 
+# The legacy Python Hub was removed in f3c5577. These imported website tests
+# target that deleted TestClient app and are not a valid acceptance path for the
+# current Go Hub. Real OAuth/MCP adapter acceptance lives under tests/e2e/systemd
+# and launches the actual candidate binaries/services. Keep this historical module
+# out of root pytest collection until/if its assertions are ported to the Go API.
+pytest.skip("legacy Python Hub adapter tests; covered by real Go Hub systemd acceptance", allow_module_level=True)
+
 # Set env before importing hub
 os.environ.setdefault("CTL_TOKEN", "test_ctl_secret")
 os.environ.setdefault("ADMIN_PASSWORD", "test_admin_pw")

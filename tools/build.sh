@@ -392,10 +392,38 @@ archive_component_hub() {
   (cd "$ART_DIR" && tar -czf gptadmin-hub.tar.gz.tmp.$$ gptadmin_hub hub_source cli public && mv -f gptadmin-hub.tar.gz.tmp.$$ gptadmin-hub.tar.gz)
   echo "built: $ART_DIR/gptadmin-hub.tar.gz"
 }
+build_grepmesh_native() {
+  step "Build bundled GrepMesh companion (native host)"
+  local os arch tag src out
+  if [[ ! -f grepmesh/Cargo.toml ]]; then
+    echo "WARN: GrepMesh source is absent from this build tree; skipping companion bundle"
+    return 0
+  fi
+  os="$(uname -s | tr '[:upper:]' '[:lower:]')"
+  arch="$(normalize_arch "$(uname -m)")"
+  case "$os" in
+    linux) tag="linux_${arch}" ;;
+    darwin) tag="darwin_${arch}" ;;
+    *) echo "WARN: GrepMesh bundle unsupported on build host $os/$arch; skipping"; return 0 ;;
+  esac
+  command -v cargo >/dev/null 2>&1 || { echo "ERROR: cargo is required to bundle default-on GrepMesh for $tag" >&2; return 127; }
+  (cd grepmesh && cargo build --release)
+  src="grepmesh/target/release/grepmesh-mcp"
+  [[ -x "$src" ]] || { echo "ERROR: GrepMesh build produced no $src" >&2; return 1; }
+  out="$ART_DIR/grepmesh/$tag"
+  mkdir -p "$out"
+  cp -a "$src" "$out/grepmesh-mcp"
+  chmod 755 "$out/grepmesh-mcp"
+  file "$out/grepmesh-mcp"
+}
+
 archive_component_shellmcp() {
   step "Archive: gptadmin-shellmcp.tar.gz"
   build_go_shellmcp_cross_platforms
-  (cd "$ART_DIR" && tar -czf gptadmin-shellmcp.tar.gz.tmp.$$ shellmcp go-shellmcp cli client && mv -f gptadmin-shellmcp.tar.gz.tmp.$$ gptadmin-shellmcp.tar.gz)
+  build_grepmesh_native
+  local payload=(shellmcp go-shellmcp cli client)
+  [[ -d "$ART_DIR/grepmesh" ]] && payload+=(grepmesh)
+  (cd "$ART_DIR" && tar -czf gptadmin-shellmcp.tar.gz.tmp.$$ "${payload[@]}" && mv -f gptadmin-shellmcp.tar.gz.tmp.$$ gptadmin-shellmcp.tar.gz)
   sha256sum "$ART_DIR/gptadmin-shellmcp.tar.gz" > "$ART_DIR/gptadmin-shellmcp.sha256"
   python3 - <<PY
 import json, pathlib
@@ -404,7 +432,7 @@ pathlib.Path('$ART_DIR/gptadmin-shellmcp.json').write_text(json.dumps({
   'component': 'shellmcp', 'build_version': int('$BUILD_VERSION'), 'build_ts': '$BUILD_TS',
   'git_commit': '$GIT_COMMIT', 'platform': 'linux', 'arch': 'x86_64',
   'artifact_type': 'binary-runtime+source',
-  'runtime_payload': ['go-shellmcp/linux_amd64/shellmcp-go', 'cli', 'client'],
+  'runtime_payload': ['go-shellmcp/linux_amd64/shellmcp-go', 'grepmesh/<native-platform>/grepmesh-mcp (when bundled)', 'cli', 'client'],
   'source_payload': ['client/gptadmin_security.py', 'client/gptadmin_build_info.py'],
   'sha256': sha, 'url': '/gptadmin-shellmcp.tar.gz'
 }, ensure_ascii=False, indent=2) + '\n')
@@ -413,7 +441,9 @@ PY
 }
 archive_all() {
   step "Archive: gptadmin.tar.gz"
-  (cd "$ART_DIR" && tar -czf gptadmin.tar.gz.tmp.$$ shellmcp gptadmin_hub cli hub_source client public && mv -f gptadmin.tar.gz.tmp.$$ gptadmin.tar.gz)
+  local payload=(shellmcp gptadmin_hub cli hub_source client public)
+  [[ -d "$ART_DIR/grepmesh" ]] && payload+=(grepmesh)
+  (cd "$ART_DIR" && tar -czf gptadmin.tar.gz.tmp.$$ "${payload[@]}" && mv -f gptadmin.tar.gz.tmp.$$ gptadmin.tar.gz)
   echo "built: $ART_DIR/gptadmin.tar.gz"
 }
 
@@ -439,6 +469,10 @@ make_platform_archive() {
     cp -a "$ART_DIR/go-shellmcp/${platform}_${arch}/." "$tmp/shellmcp/${platform}_${arch}/"
   fi
   if [[ "$platform" == linux && -d "$ART_DIR/shellmcp" ]]; then cp -a "$ART_DIR/shellmcp" "$tmp/"; fi
+  if [[ -x "$ART_DIR/grepmesh/$hub_tag/grepmesh-mcp" ]]; then
+    mkdir -p "$tmp/grepmesh/$hub_tag"
+    cp -a "$ART_DIR/grepmesh/$hub_tag/grepmesh-mcp" "$tmp/grepmesh/$hub_tag/"
+  fi
   tar -C "$tmp" -czf "$ART_DIR/$out.tmp.$$" .
   mv -f "$ART_DIR/$out.tmp.$$" "$ART_DIR/$out"
   rm -rf "$tmp"
@@ -726,7 +760,7 @@ else
   want cli && build_cli
   if want shellmcp; then build_cli; copy_support_payloads; archive_component_shellmcp; fi
   if want hub; then build_cli; build_admin_ui; build_hub_linux; build_hub_cross_platforms; package_hub_platform_binaries; copy_support_payloads; copy_admin_static_payloads; archive_component_hub; fi
-  if want platform; then build_cli; build_admin_ui; build_hub_cross_platforms; package_hub_platform_binaries; copy_support_payloads; copy_admin_static_payloads; archive_platforms; fi
+  if want platform; then build_cli; build_admin_ui; build_hub_cross_platforms; package_hub_platform_binaries; build_grepmesh_native; copy_support_payloads; copy_admin_static_payloads; archive_platforms; fi
   want windows && build_windows_shellmcp
   want android && build_android_shellmcp
   want network-tunnel && build_network_tunnel

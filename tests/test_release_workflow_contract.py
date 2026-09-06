@@ -20,7 +20,7 @@ def test_release_job_verifies_provenance_before_publication() -> None:
     manifest_step = next(step for step in steps if step.get("name") == "Verify complete release provenance manifest")
     installer_step = next(step for step in steps if step.get("name") == "Verify installer links for shipped targets")
 
-    assert names.index("Verify complete release provenance manifest") < names.index("Mirror source + tag + GitHub Release to public repo")
+    assert names.index("Verify complete release provenance manifest") < names.index("Tag + GitHub Release on public repo")
     assert "python3 tools/verify_release_manifest.py verify" in manifest_step["run"]
     assert "build/manifest.json" in manifest_step["run"]
     assert "build/gptadmin-sbom.spdx.json" in manifest_step["run"]
@@ -68,7 +68,7 @@ def test_public_release_reruns_fail_closed_on_identity_mismatch() -> None:
 
     workflow = yaml.safe_load(WORKFLOW.read_text(encoding="utf-8"))
     steps = workflow["jobs"]["build-and-release"]["steps"]
-    publish_step = next(step for step in steps if step.get("name") == "Mirror source + tag + GitHub Release to public repo")
+    publish_step = next(step for step in steps if step.get("name") == "Tag + GitHub Release on public repo")
     script = publish_step["run"]
 
     assert "--clobber" not in script
@@ -89,7 +89,7 @@ def test_public_release_includes_only_the_named_user_matrix() -> None:
 
     workflow = yaml.safe_load(WORKFLOW.read_text(encoding="utf-8"))
     steps = workflow["jobs"]["build-and-release"]["steps"]
-    publish_step = next(step for step in steps if step.get("name") == "Mirror source + tag + GitHub Release to public repo")
+    publish_step = next(step for step in steps if step.get("name") == "Tag + GitHub Release on public repo")
 
     script = publish_step["run"]
     assert 'gptadmin-{windows,macos,ubuntu,android}-{x64,arm64}-{full,client}.{zip,tar.gz}' in script
@@ -103,7 +103,7 @@ def test_public_release_preflights_immutable_identity_before_mutating_remote_mai
 
     workflow = yaml.safe_load(WORKFLOW.read_text(encoding="utf-8"))
     steps = workflow["jobs"]["build-and-release"]["steps"]
-    publish_step = next(step for step in steps if step.get("name") == "Mirror source + tag + GitHub Release to public repo")
+    publish_step = next(step for step in steps if step.get("name") == "Tag + GitHub Release on public repo")
     script = publish_step["run"]
     main_push_index = script.index("git push origin HEAD:main")
 
@@ -120,7 +120,7 @@ def test_publication_waits_for_every_platform_and_ui_gate() -> None:
     workflow = yaml.safe_load(WORKFLOW.read_text(encoding="utf-8"))
     job = workflow["jobs"]["build-and-release"]
 
-    assert job["needs"] == ["admin-ui-build", "failover-e2e", "docs-as-code-contract", "macos-build", "windows-shellmcp"]
+    assert job["needs"] == ["admin-ui-build", "failover-e2e", "docs-as-code-contract", "candidate-client-contract", "macos-build", "windows-shellmcp"]
     assert "always()" not in str(job.get("if", ""))
 
 
@@ -180,7 +180,7 @@ def test_release_job_attests_artifacts_and_scans_dependencies_before_publication
     job = workflow["jobs"]["build-and-release"]
     steps = job["steps"]
     names = [step.get("name", "") for step in steps]
-    mirror_index = names.index("Mirror source + tag + GitHub Release to public repo")
+    mirror_index = names.index("Tag + GitHub Release on public repo")
 
     assert job["permissions"]["id-token"] == "write"
     assert job["permissions"]["attestations"] == "write"

@@ -38,8 +38,13 @@ def test_verifier_runs_install_bootstrap_and_fetches_platform_artifacts() -> Non
     report = json.loads(result.stdout)
     assert report["ok"] is True
     assert [run["target"] for run in report["runs"]] == ["linux/amd64", "darwin/arm64", "android/arm64"]
+    expected = {
+        "linux/amd64": "/releases/gptadmin-ubuntu-x64-full.tar.gz",
+        "darwin/arm64": "/releases/gptadmin-macos-arm64-full.tar.gz",
+        "android/arm64": "/releases/gptadmin-android-arm64-client.tar.gz",
+    }
     for run in report["runs"]:
-        assert f"/releases/gptadmin-{run['target'].replace('/', '-')}.tar.gz" in run["requests"]
+        assert expected[run["target"]] in run["requests"]
         if run["target"] == "android/arm64":
             assert run["cli_args"] == []
         else:

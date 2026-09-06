@@ -8,7 +8,7 @@ Start with the [Product philosophy](./PHILOSOPHY.md) for the decisions that
 govern setup, resilience, MCP context cost and progressive configuration.
 
 **Website:** https://gptadmin.bezrabotnyi.com
-**Install:** `curl -s https://became.bezrabotnyi.com/install.sh | bash`
+**Install:** `curl -s https://raw.githubusercontent.com/megamen32/gptadmin_opensource/main/deploy/install.sh | bash`
 
 ## Table of contents
 

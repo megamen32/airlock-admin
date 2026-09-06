@@ -38,14 +38,14 @@ def test_interactive_webhook_asks_before_enabling_heartbeat(monkeypatch) -> None
 def test_admin_ui_exposes_heartbeat_as_an_explicit_setting() -> None:
     """The dashboard must expose the same opt-in setting as the CLI."""
     root = cli.Path(__file__).resolve().parents[1]
-    html = (root / "public" / "admin" / "index.html").read_text(encoding="utf-8")
-    js = (root / "public" / "admin" / "app.js").read_text(encoding="utf-8")
+    template = (root / "admin-ui" / "src" / "operations" / "template.html").read_text(encoding="utf-8")
+    runtime = (root / "admin-ui" / "src" / "operations" / "runtime.js").read_text(encoding="utf-8")
 
-    assert 'id="shellHeartbeatEnabled"' in html
-    assert "SHELLMCP_HEARTBEAT" not in html
-    assert "function setShellHeartbeatFromPanel" in js
-    assert "/admin/api/security/heartbeat" in js
-    assert "env.shellmcp_heartbeat" in js
+    assert 'id="shellHeartbeatEnabled"' in template
+    assert "SHELLMCP_HEARTBEAT" not in template
+    assert "setShellHeartbeatFromPanel" in runtime
+    assert "/admin/api/security/heartbeat" in runtime
+    assert "env.shellmcp_heartbeat" in runtime
 
 
 def test_homeassistant_runtime_keeps_heartbeat_opt_in() -> None:

@@ -33,7 +33,7 @@ def test_reclaim_post_authenticates_to_ctl_endpoint(monkeypatch) -> None:
         "http://127.0.0.1:19080/admin/api/failover/reclaim/accept",
         {"action": "demote"},
         3.0,
-        authorization="test-ctl",
+        auth_token="test-ctl",
     )
 
     assert status == 200

@@ -435,14 +435,14 @@ async fn handle_rpc_inner(state: AppState, payload: Value) -> Result<Value> {
                 "protocolVersion": protocol_version,
                 "serverInfo": {"name": "grepmesh", "version": "0.1.0"},
                 "capabilities": {"tools": {"listChanged": false}},
-                "instructions": "Use GrepMesh only when the location is unknown, cross-host search is needed, or configured mesh scopes matter. When a concrete local checkout/path is already known, prefer rg: its per-line output is usually materially more context-efficient. For GrepMesh, start with search_text or find_paths, then use read_text for the exact file.",
+                "instructions": "Use GrepMesh when the location is unknown, cross-host search is needed, or configured mesh scopes matter. When a concrete local checkout/path is already known, prefer rg: its per-line output is usually materially more context-efficient. Start with search_text or find_paths, then read_text for the exact file. read_text returns stable N:hhhh line_id values compatible with GPTAdmin file_editor batch edits; reuse those ids instead of re-reading unchanged ranges.",
             })
         }
         "tools/list" => json!({
             "tools": [
                 tool_meta("search_text", "Search text across one or more hosts."),
                 tool_meta("find_paths", "Find file paths across one or more hosts."),
-                tool_meta("read_text", "Read a text file from a specific host."),
+                tool_meta("read_text", "Read a text file from a specific host. Each returned line includes an N:hhhh line_id bound to its content; pass these ids to GPTAdmin file_editor batch_edit and reuse fresh ids from edit results instead of re-reading unchanged ranges."),
                 tool_meta("search_status", "Report search/status metadata for one or more hosts."),
             ]
         }),

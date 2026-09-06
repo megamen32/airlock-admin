@@ -54,21 +54,14 @@ curl -s https://raw.githubusercontent.com/megamen32/gptadmin_opensource/main/dep
 
 ## 暴露的操作
 
-集线器将这些代理给代理。适用于所有 3 个适配器：
+当代理版本支持配对文件协议时，一次 ShellMCP 安装会由 Hub 暴露为两个逻辑 MCP target：
 
-|运营|示例|
-|------------|---------|
-| `shell_exec` |运行 shell 命令，返回 stdout/stderr |
-| `file_read` |读取文件 |
-| `file_write` |写一个文件（带备份）|
-| `file_backup` |编辑前创建托管备份 |
-| `systemd_*` |状态/启动/停止/重新启动/启用单元|
-| `system_info` | CPU、RAM、磁盘、正常运行时间 |
-| `system_health` |快速健康检查|
-| `venv_*` |管理 Python virtualenvs |
-| `dir` |列表目录|
+- `shell:<host>` — 命令执行和子 MCP 管理（`shell_exec`, `mcp_manage`, `mcp_tools`, `mcp_call`）。
+- `file:<host>` — 文件操作（`system_inspect`, `file_editor`, `file_checkpoint`，以及兼容旧客户端的 `file_backup`）。
 
-请参阅 [API 参考](./API_REFERENCE.md) 了解确切的架构。
+`file_editor` 支持 `view/create/str_replace/batch_edit/delete`，原子修改文本并返回新的 `N:hhhh` line-id。`file_checkpoint` 使用 CAS 保存显式恢复点；`restore` 会先自动创建 safety checkpoint。系统安装中，文件 target 可通过特权 runtime 操作 root-owned 文件，而普通 `shell_exec` 仍默认以 `SHELLMCP_DEFAULT_USER` 运行。
+
+GrepMesh 默认作为 companion capability 安装；使用 `--no-grepmesh` 可退出内置配置。
 
 ## 安全
 

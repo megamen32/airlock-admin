@@ -208,13 +208,13 @@ func handleFilesWrite(ctx context.Context, params json.RawMessage) (interface{},
 		return nil, fmt.Errorf("creating parent directories for %q: %w", p.Path, err)
 	}
 
-	n, err := os.WriteFile(p.Path, []byte(p.Content), 0644)
-	if err != nil {
+	content := []byte(p.Content)
+	if err := os.WriteFile(p.Path, content, 0644); err != nil {
 		return nil, fmt.Errorf("writing file %q: %w", p.Path, err)
 	}
 
 	return filesWriteResult{
-		BytesWritten: int64(n),
+		BytesWritten: int64(len(content)),
 		Path:         p.Path,
 	}, nil
 }

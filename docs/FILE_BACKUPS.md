@@ -1,41 +1,7 @@
-# GPTAdmin managed file backups
+# GPTAdmin legacy managed file backups
 
-`file_backup` is the preferred shell-agent tool for backups before editing files.
-It replaces ad-hoc `cp file file.bak.$date` files that stay scattered across the disk.
+`file_backup` is retained for compatibility with older clients. New agents should use the paired `file:<host>` target and `file_checkpoint` for durable restore points, plus `file_editor` for normal text edits. Do **not** create a backup/checkpoint before every edit.
 
-The tool is exposed on every `shell:*` virtual agent through the hub:
+`file_checkpoint` uses SHA-256 content-addressed storage with deduplication and explicit manifests. `restore` automatically creates a restore-safety checkpoint of the live state first, making rollback itself reversible. Checkpoints should mark meaningful boundaries such as a dangerous configuration change, migration, deploy, or large refactor.
 
-- `action=backup` copies a file or packs a directory into a managed backup object.
-- `action=list` lists known backups in the managed backup root.
-- `action=cleanup` removes expired backups, or backups older than `max_age_days`.
-- `action=restore` restores a backup by `backup_id`.
-
-Default storage on the target host is:
-
-```text
-~/.gptadmin/file-backups/
-```
-
-The default retention for new backups is `ttl_days=30`. Use `ttl_days=0` only for backups that must not expire automatically.
-
-Each backup has a `meta.json` and an append-only `manifest.jsonl`. Cleanup scans only this managed backup root, not the whole filesystem.
-
-Examples:
-
-```json
-{"action":"backup","path":"/home/roomhacker/gptadmin/go-hub/internal/hub/server.go","ttl_days":30,"label":"before-admin-api-change"}
-```
-
-```json
-{"action":"list","limit":20}
-```
-
-```json
-{"action":"cleanup"}
-```
-
-```json
-{"action":"restore","backup_id":"20260624_144633_host_abcd1234_label","overwrite":true}
-```
-
-For privileged files, pass `use_sudo=true`; the target host must allow non-interactive `sudo -n`.
+The legacy `file_backup` actions remain `backup`, `list`, `cleanup`, and `restore`; its default store is `~/.gptadmin/file-backups/`. Avoid ad-hoc `file.bak.$date` files. On new system-mode installations privileged filesystem work belongs on `file:<host>` rather than through `sudo` shell editing.

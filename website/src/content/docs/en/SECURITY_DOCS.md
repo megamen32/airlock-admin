@@ -27,9 +27,7 @@ Plus `SHELLMCP_TOKEN` for agent → hub registration.
   before logging.
 - **"Local-only" mode** — for commands with sensitive data, the agent can be
   configured to not return output to the hub (run locally, report only status).
-- **Managed backups** — before editing files, `file_backup` creates a backup
-  with a TTL. Critical files (nginx, systemd, networking) get longer TTLs by
-  default.
+- **Filesystem checkpoints** — `file_checkpoint` creates explicit durable restore points at meaningful boundaries; normal `file_editor` edits do not create a backup automatically. Checkpoints have explicit retention/TTL and restore always creates a safety checkpoint first.
 
 ### Admin MFA
 

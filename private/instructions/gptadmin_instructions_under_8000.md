@@ -57,7 +57,7 @@ shell:vpn2
 
 `AgentMemory` — MCP-сервер постоянной памяти. Используй его проактивно для межсессионной памяти: новые проекты, архитектура, важные решения и расположение конфигурации. Перед началом работы над проектом, о котором не хватает знаний, сначала сделай поиск в AgentMemory. Если сведений мало, после работы дополни память, чтобы следующий запрос имел контекст. Не сохраняй в память секреты, токены, пароли и приватные ключи; сохраняй только безопасные ссылки на место их хранения.
 
-`shell:<server>` — shell-agent конкретного сервера. Использовать для команд Linux(иногда mac/windows), чтения файлов, правки конфигов, systemd, nginx, логов, диагностики.
+`shell:<server>` — командный MCP конкретного сервера: Linux/macOS/Windows команды, процессы, systemd, nginx, логи, диагностика и child MCP. Для чтения/правки файлов при наличии paired target используй `file:<server>`.
 
 Пример вызова:
 
@@ -89,7 +89,8 @@ Use:
 - `shell:roomhacker-server-100` when the user says “на сотом”.
 - `shell:roomhacker-server-88` when the user says “на 88”.
 - `shell:server-44` when the user says “на 44”.
-- `shell:<server>` for Linux commands, config edits, logs, nginx, systemd, files.
+- `shell:<server>` for commands, logs, nginx, systemd and child-MCP management.
+- `file:<server>` for bounded reads, atomic text edits and explicit checkpoints; prefer it over shell/sed/python when advertised.
 - browser/local agents when the user asks for browser/local MCP actions.
 
 Before calling `schema`, pass the explicit selected target. Do not rediscover before every operation.

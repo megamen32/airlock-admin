@@ -204,11 +204,20 @@ def test_cleanup_removes_obsolete_shellmcp_primary_override(monkeypatch, tmp_pat
     obsolete = dropins / "90-go-primary.conf"
     newer_obsolete = dropins / "95-go-primary.conf"
     preserved = dropins / "80-spool-readable.conf"
+    legacy_user = dropins / "100-gptadmin-user-mode.conf"
+    legacy_no_update = dropins / "110-user-mode-no-self-update.conf"
+    legacy_access = dropins / "120-config-dir-access.conf"
+    legacy_zz = dropins / "zz-user-mode-no-self-update.conf"
     obsolete.write_text("[Service]\nEnvironmentFile=/etc/gptadmin/go-shellmcp-primary.env\n")
     newer_obsolete.write_text("[Service]\nEnvironmentFile=/etc/gptadmin/go-shellmcp.env\n")
     preserved.write_text("[Service]\nExecStartPre=/usr/bin/true\n")
+    legacy_user.write_text("[Service]\nUser=roomhacker\nGroup=roomhacker\n")
+    legacy_no_update.write_text("[Service]\nEnvironment=SHELLMCP_AUTO_UPDATE=0\n")
+    legacy_access.write_text("[Service]\nExecStartPre=/usr/bin/true\n")
+    legacy_zz.write_text("[Service]\nEnvironment=ROOTD_AUTO_UPDATE=0\n")
 
     monkeypatch.setattr(cli, "IS_MACOS", False)
+    monkeypatch.setattr(cli, "IS_USER_INSTALL", False)
     monkeypatch.setattr(cli, "SYSTEMD_DIR", systemd_dir)
     monkeypatch.setattr(cli, "SYSTEMD_SHELLMCP", "shellmcp.service")
     monkeypatch.setattr(cli, "BIN_DIR", tmp_path / "bin")
@@ -219,14 +228,22 @@ def test_cleanup_removes_obsolete_shellmcp_primary_override(monkeypatch, tmp_pat
     assert not obsolete.exists()
     assert not newer_obsolete.exists()
     assert preserved.exists()
+    assert not legacy_user.exists()
+    assert not legacy_no_update.exists()
+    assert not legacy_access.exists()
+    assert not legacy_zz.exists()
 
 
-def test_update_refreshes_automatic_client_registration_without_autoapprove():
+def test_update_requires_fresh_local_shell_registration_before_success():
     text = CLI.read_text()
     start = text.index("def cmd_update(args):")
     end = text.index("\n\n# ===== AI client MCP auto-configuration =====", start)
     block = text[start:end]
-    assert "maybe_autoapprove_local_shellmcp(" not in block
+    restart = block.index("svc_restart(svc_shellmcp_name(), UNIT_PATH_SHELLMCP)")
+    ready = block.index("maybe_autoapprove_local_shellmcp(env_read(), install_hub, install_shellmcp)")
+    execute = block.index("_require_real_local_shell_exec(env_read(), timeout_s=90)")
+    assert ready > restart
+    assert execute > ready
     assert "auto_configure_ai_mcp_clients(env_read(), install_hub)" in block
 
 

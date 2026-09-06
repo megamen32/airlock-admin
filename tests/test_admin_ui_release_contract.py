@@ -37,10 +37,11 @@ def test_cli_install_keeps_secret_input_page_alongside_admin():
     assert 'type="password"' in body
 
 
-def test_old_admin_bookmarks_redirect_instead_of_shipping_a_second_application():
+def test_admin_runtime_is_the_single_react_application():
     html = (ROOT / "public" / "admin" / "index.html").read_text(encoding="utf-8")
     component = (ROOT / "admin-ui" / "src" / "OperationsScreen.tsx").read_text(encoding="utf-8")
-    assert 'url=/admin/#overview' in html
+    assert '<div id="root"></div>' in html
+    assert '/admin/assets/' in html
     assert 'src="app.js"' not in html
     assert './operations/runtime.js' in component
     assert './operations/template.html?raw' in component

@@ -45,10 +45,10 @@ GPT‑Админ 存在于每个操作系统的用户模式和系统模式中。
 
 ```bash
 # Linux / macOS — user-mode (default)
-curl -s https://became.bezrabotnyi.com/install.sh | bash
+curl -s https://raw.githubusercontent.com/megamen32/gptadmin_opensource/main/deploy/install.sh | bash
 
 # Linux / macOS — system-mode (when you need root)
-curl -s https://became.bezrabotnyi.com/install.sh | sudo bash
+curl -s https://raw.githubusercontent.com/megamen32/gptadmin_opensource/main/deploy/install.sh | sudo bash
 ```
 
 ```powershell

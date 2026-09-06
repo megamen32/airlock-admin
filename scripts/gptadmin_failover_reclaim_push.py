@@ -43,11 +43,14 @@ def sign(secret: str, text: str) -> str:
     return base64.urlsafe_b64encode(digest).decode().rstrip("=")
 
 
-def post_json(url: str, payload: dict[str, Any], timeout: float, auth_token: str = "") -> tuple[int, str]:
+def post_json(
+    url: str, payload: dict[str, Any], timeout: float, auth_token: str = "", *, authorization: str = ""
+) -> tuple[int, str]:
     data = json.dumps(payload).encode()
-    headers={"Content-Type": "application/json", "User-Agent": "gptadmin-primary-reclaim/1"}
-    if auth_token:
-        headers["Authorization"] = "Bearer " + auth_token
+    headers = {"Content-Type": "application/json", "User-Agent": "gptadmin-primary-reclaim/1"}
+    bearer = authorization or auth_token
+    if bearer:
+        headers["Authorization"] = "Bearer " + bearer
     req = urllib.request.Request(url, data=data, headers=headers, method="POST")
     try:
         with urllib.request.urlopen(req, timeout=timeout) as r:  # noqa: S310 - admin configured URL

@@ -8,7 +8,7 @@
 управлять настройкой, устойчивостью, стоимостью контекста MCP и прогрессивной конфигурацией.
 
 **Сайт:** https://gptadmin.bezrabotnaya.com
-**Установите:** `curl -s https://became.bezrabotnyi.com/install.sh | bash`
+**Установите:** `curl -s https://raw.githubusercontent.com/megamen32/gptadmin_opensource/main/deploy/install.sh | bash`
 
 ## Содержание
 

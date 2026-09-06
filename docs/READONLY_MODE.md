@@ -36,7 +36,7 @@ subprocess or an operating-system API. PowerShell constrained mode, a denied
 `rm`, or a prompt instruction is not a read-only guarantee.
 
 GPTAdmin therefore does not expose a command interpreter to a read-only
-connection. `inspect_system` calls the typed ShellMCP `system_inspect` tool,
+connection. `inspect_system` calls the typed `system_inspect` tool on the paired `file:<host>` target (legacy ShellMCP agents may still expose it on `shell:<host>`),
 which currently supports:
 
 - `read_file`: read a bounded regular file;
@@ -47,7 +47,7 @@ No Bash, PowerShell or CMD process is started.
 
 ## Filesystem boundary
 
-ShellMCP limits inspection to `SHELLMCP_INSPECT_ROOTS`. The value is a
+The paired file surface limits inspection to `SHELLMCP_INSPECT_ROOTS`. The value is a
 platform path list (`:` on Unix, `;` on Windows). A normal installation uses
 `SHELLMCP_DEFAULT_CWD` as the default root.
 

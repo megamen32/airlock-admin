@@ -47,12 +47,14 @@ Do not assume any fixed inventory. Call `discover` to list available targets and
 ```text
 hub
 shell:<server>
+file:<server>
 mcp:<...>
 ```
 
 - `hub`: registry tasks, servers, pending servers, approve/reject.
 - `AgentMemory` (when present): project memory. Resolve its current target via discover, then load its schema. Query it when project context, architecture or history matters. Store significant verified results after work. Store secret locations and ownership, not raw secret values.
-- `shell:<server>`: Linux/macOS/Windows commands, files, configs, systemd, nginx, logs, diagnostics. Deployment-specific Russian aliases may exist; they are configured by the hub administrator, not by this document.
+- `shell:<server>`: commands, processes, services, logs, diagnostics and child-MCP management. Do not use shell/sed/python as a text editor when the paired file target is available.
+- `file:<server>`: paired filesystem surface for bounded reads, atomic edits and durable checkpoints. On system installations it may run through a privileged filesystem boundary while ordinary `shell_exec` still defaults to the configured non-root operator. A file target is advertised only when its backing ShellMCP build supports the file contract.
 
 No default MCP target exists. Never use `target: "default"`.
 
@@ -78,36 +80,22 @@ Work order:
 2. query `AgentMemory` when project context matters
 3. select explicit agent
 4. `schema` when needed
-5. before file edits, use `file_backup` if available
-6. apply changes
+5. use the paired `file:<server>` target for file reads/edits; create `file_checkpoint` only at a meaningful rollback boundary (dangerous config change, migration, deploy, large refactor), not before every edit
+6. apply changes with `file_editor`; its success/error output contains fresh context/line IDs for the next edit, so do not reread unless needed
 7. validate with real command output
 8. poll background jobs if returned
-9. briefly report the actual change, validation result and any remaining problem; give a backup handle when useful, without dumping full logs
+9. briefly report the actual change, validation result and any remaining problem; give a checkpoint/rollback handle when useful, without dumping full logs
 
 If API/auth/tool fails, say it directly and show the actual error.
 
-## Managed backups
+## File editing and checkpoints
 
-Prefer `file_backup` before edits. Do not create ad-hoc `file.bak.$date` when `file_backup` is available.
+Prefer `file_editor` on the paired `file:<server>` target for text changes. `str_replace` and `batch_edit` are designed to return current context and fresh `N:hhhh` line IDs on both success and recoverable mismatch, so use that feedback instead of falling back to `sed`, ad-hoc Python rewrites, or an unnecessary reread.
 
-Actions: `backup`, `list`, `cleanup`, `restore`.
+`file_checkpoint` is an explicit durable restore-point system, not an undo record for every edit. Use `create`, `list`, `diff`, `restore`, `delete`, `cleanup`, and `gc` according to the live schema. A restore automatically creates a safety checkpoint of the current live state before applying the requested checkpoint; retain that safety checkpoint ID until the restored state is validated.
 
-Default storage on target host:
+`file_backup` is a legacy compatibility fallback for older agents/clients or environments where `file_checkpoint` is unavailable. Do not create ad-hoc `.bak`/timestamped copies and do not run `file_backup` before every normal edit.
 
-```text
-~/.gptadmin/file-backups/
-```
-
-Default retention: `ttl_days=30`.
-
-TTL guide:
-
-- small temporary edits: `ttl_days=7`
-- normal code/config edits: `ttl_days=30`
-- critical nginx/systemd/networking/GPTAdmin/firewall/db/env: `ttl_days=90`
-- migrations: `ttl_days=180`
-
-Save backup_id and artifact so the change can be compared or restored. Use file_backup according to its live schema, only when that tool is available. Otherwise make a scoped recoverable copy following the project's instructions; do not scatter ad-hoc backup files across the repository.
 
 ## Config changes
 
@@ -123,15 +111,9 @@ nginx -T
 ip addr; ip route; ip rule
 ```
 
-2. Create `file_backup`.
-3. Edit safely.
-4. Re-read and show diff:
-
-```bash
-diff -u <artifact_from_file_backup> /path/file || true
-```
-
-For git repos also show:
+2. If this is a meaningful rollback boundary, create `file_checkpoint` for the exact files/directories being changed.
+3. Edit with `file_editor`; preserve and use its returned diff/fresh line IDs.
+4. For git repos, inspect the integrated diff:
 
 ```bash
 git diff -- /path/file
@@ -171,7 +153,11 @@ tail -n 120 /path/to/spilled.stderr
 
 ## Old backups
 
-Do not delete unrelated backups during another task. For requested cleanup, inspect ownership and current use first. Remove managed backups only via `file_backup action=cleanup`; do not scan the whole disk unless needed.
+Do not delete unrelated checkpoints/backups during another task. For requested cleanup, inspect ownership and current use first. Use `file_checkpoint cleanup/gc` for the new store; use `file_backup action=cleanup` only for the legacy backup store.
+
+## Single-history completion rule
+
+For GPTAdmin repository work, completion means the whole current integrated tree, not only changes authored in the current turn. Before declaring completion: review the full dirty/history state, identify and validate pre-existing/other-agent changes, run the relevant integrated test suites, commit the agreed complete tree, push it, deploy that complete commit, and validate the live product. If some existing change is unsafe or cannot be validated, stop and report it instead of silently excluding it from history.
 
 ## Compact output
 

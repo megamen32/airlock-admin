@@ -23,7 +23,8 @@ def test_frp_watchdog_templates_are_bounded_and_restart_existing_units() -> None
     assert 'run("systemctl", "restart", args.unit)' in script
     assert "cooldown" in script
     assert "ExecStart=/usr/local/bin/gptadmin-frp-watchdog" in service
-    assert "OnUnitActiveSec=30s" in timer
+    assert "OnCalendar=*-*-* *:*:00/15" in timer
+    assert "AccuracySec=1s" in timer
 
 
 def test_watchdog_restarts_inactive_unit_and_records_reason(monkeypatch, tmp_path, capsys) -> None:
@@ -49,6 +50,6 @@ def test_watchdog_cooldown_suppresses_restart_storm(monkeypatch, tmp_path, capsy
     monkeypatch.setattr(watchdog, "active", lambda _unit: False)
     monkeypatch.setattr(watchdog, "run", lambda *args: calls.append(args) or subprocess.CompletedProcess(args, 0, "", ""))
 
-    assert watchdog.main(["--unit", "frps.service", "--state", str(state)]) == 2
+    assert watchdog.main(["--unit", "frps.service", "--state", str(state)]) == 0
     assert ("systemctl", "restart", "frps.service") not in calls
     assert '"result": "restart_suppressed"' in capsys.readouterr().out

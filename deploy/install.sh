@@ -135,12 +135,22 @@ fi
 if [ "$ACTION" = "update" ]; then
   "$CLI_PATH" update --$INSTALL_MODE --pkg-all "$PKG_ALL_URL" --pkg-hub "$PKG_HUB_URL" --pkg-shellmcp "$PKG_SHELLMCP_URL" || err "update failed"
 elif [ "$ACTION" = "setup" ]; then
-  if [ -t 0 ]; then
+  if [ "${GPTADMIN_INSTALL_SILENT:-0}" = "1" ] || [ "${GPTADMIN_INSTALL_SILENT:-}" = "true" ]; then
+    _setup_tunnel="${GPTADMIN_SETUP_TUNNEL:-frp}"
+    _setup_args=(setup --$INSTALL_MODE --silent --tunnel "$_setup_tunnel" --pkg-all "$PKG_ALL_URL" --pkg-hub "$PKG_HUB_URL" --pkg-shellmcp "$PKG_SHELLMCP_URL")
+    if [ -n "${GPTADMIN_SETUP_HUB_URL:-}" ]; then
+      _setup_args+=(--hub-url "$GPTADMIN_SETUP_HUB_URL")
+    fi
+    case "${GPTADMIN_SETUP_GREPMESH:-1}" in
+      0|false|FALSE|no|NO|off|OFF) _setup_args+=(--no-grepmesh) ;;
+    esac
+    "$CLI_PATH" "${_setup_args[@]}" || err "setup failed"
+  elif [ -t 0 ]; then
     "$CLI_PATH" setup --$INSTALL_MODE --pkg-all "$PKG_ALL_URL" --pkg-hub "$PKG_HUB_URL" --pkg-shellmcp "$PKG_SHELLMCP_URL" || err "setup failed"
   elif [ -r /dev/tty ]; then
     "$CLI_PATH" setup --$INSTALL_MODE --pkg-all "$PKG_ALL_URL" --pkg-hub "$PKG_HUB_URL" --pkg-shellmcp "$PKG_SHELLMCP_URL" < /dev/tty || err "setup failed"
   else
-    err "no TTY available for interactive setup. Run: bash <(curl -fsSL https://raw.githubusercontent.com/megamen32/gptadmin_opensource/main/deploy/install.sh)"
+    err "no TTY available for interactive setup. For unattended install set GPTADMIN_INSTALL_SILENT=1."
   fi
 else
   err "unknown GPTADMIN_INSTALL_ACTION=$ACTION (use update or setup)"

@@ -10,4 +10,7 @@ def test_private_instruction_tree_is_excluded_from_both_public_mirrors():
     build_sync = (ROOT / ".github" / "workflows" / "build-and-sync.yml").read_text()
 
     assert "private/" in gitpublic_ignore
-    assert "--exclude='private'" in build_sync
+    assert "Sanitize tree for public bundles" in build_sync
+    assert "scripts/publicize_sanitize.sh" in build_sync
+    assert "Checkout opensource (public) repo" in build_sync
+    assert "must NOT rsync the raw private tree" in build_sync

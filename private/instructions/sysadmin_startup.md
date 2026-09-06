@@ -45,7 +45,7 @@ OpenWrt router: `192.168.2.1`. Основной uplink — MGTS (`192.168.2.x`, 
 
 1. Выбери известный target; discovery только если target неизвестен/недоступен.
 2. Для read-only диагностики действуй без лишних вопросов. Сначала прочитай текущее состояние.
-3. Перед серьёзной правкой nginx/systemd/network/firewall/cron/env создай timestamped backup, если файл не управляется транзакционно или VCS.
+3. Для обычных текстовых правок используй `file_editor`, а не shell/sed/python. `file_checkpoint` создавай явно только на смысловой границе (перед опасным config change, migration, deploy или большим refactor), если изменение не покрыто VCS/другой транзакцией; не создавай checkpoint перед каждым edit. `restore` сам создаёт safety checkpoint текущего состояния — сохрани его ID. `file_backup` оставлен как legacy fallback для старых клиентов или когда checkpoint tool недоступен; не создавай ad-hoc `.bak`/timestamped copies.
 4. Сделай минимальное обратимое изменение и покажи безопасный diff без секретов.
 5. Валидируй до restart (`nginx -t`, syntax/config test, compile check).
 6. Перезапускай только нужный сервис; проверь status, journal и функциональный health endpoint.

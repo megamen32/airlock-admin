@@ -271,6 +271,38 @@ func (s *Server) mcpTools() []map[string]any {
 			},
 		},
 		{
+			"name":        "file_editor",
+			"description": "View and edit text files without shell/sed. view returns current N:hhhh line ids; str_replace changes exact text (or a unique whitespace-equivalent match); on no/multiple match it returns current candidate text with fresh line ids so retry needs no reread. batch_edit applies several line-id edits atomically and rejects all changes if any id is stale; successful edits return a compact diff with fresh ids for the next edit. create creates a new file; delete removes one file. Line ids are N:hhhh and come from editor results (and compatible readers).",
+			"inputSchema": map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"action":      map[string]any{"type": "string", "enum": []string{"view", "create", "str_replace", "batch_edit", "delete"}},
+					"path":        map[string]any{"type": "string"},
+					"content":     map[string]any{"type": []string{"string", "null"}, "description": "create content; for batch_edit content lives on each operation"},
+					"old_text":    map[string]any{"type": []string{"string", "null"}, "description": "str_replace: raw current file text, without line-id prefixes"},
+					"new_text":    map[string]any{"type": []string{"string", "null"}, "description": "str_replace replacement text"},
+					"replace_all": map[string]any{"type": "boolean", "default": false},
+					"start_line":  map[string]any{"type": []string{"integer", "null"}, "minimum": 1, "description": "view: first line, default 1"},
+					"end_line":    map[string]any{"type": []string{"integer", "null"}, "minimum": 1, "description": "view: inclusive last line, default start+199"},
+					"max_bytes":   map[string]any{"type": []string{"integer", "null"}, "minimum": 1, "maximum": 262144, "description": "view response byte cap, default 65536"},
+					"operations": map[string]any{
+						"type": []string{"array", "null"}, "maxItems": 50,
+						"items": map[string]any{
+							"type": "object",
+							"properties": map[string]any{
+								"action":  map[string]any{"type": "string", "enum": []string{"replace", "insert"}},
+								"start":   map[string]any{"description": "replace: N:hhhh line id; insert: N:hhhh anchor, 0=file start, -1=file end"},
+								"end":     map[string]any{"description": "optional inclusive N:hhhh end id for replace"},
+								"content": map[string]any{"type": "string"},
+							},
+							"required": []string{"action", "start", "content"}, "additionalProperties": false,
+						},
+					},
+				},
+				"required": []string{"action", "path"}, "additionalProperties": false,
+			},
+		},
+		{
 			"name":        "shell_exec",
 			"description": "Execute a shell command on this ShellMCP host; use background=true for local async jobs.",
 			"inputSchema": map[string]any{
@@ -288,8 +320,26 @@ func (s *Server) mcpTools() []map[string]any {
 			},
 		},
 		{
+			"name":        "file_checkpoint",
+			"description": "Explicit durable filesystem checkpoints, separate from normal editing. create snapshots one or more files/directories into a SHA-256 content-addressed gzip store (unchanged content is deduplicated). diff compares a checkpoint to live files. restore is destructive but first automatically saves the current state as a restore-safety checkpoint and returns its id, so the restore itself is reversible. list/delete/cleanup/gc manage history. Do NOT create a checkpoint before every file_editor call; create one at meaningful boundaries such as before a refactor, migration, deploy, or config change.",
+			"inputSchema": map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"action":        map[string]any{"type": "string", "enum": []string{"create", "list", "diff", "restore", "delete", "cleanup", "gc"}, "default": "create"},
+					"path":          map[string]any{"type": []string{"string", "null"}, "description": "Single path shorthand for create"},
+					"paths":         map[string]any{"type": []string{"array", "null"}, "items": map[string]any{"type": "string"}, "description": "Files or directory roots to checkpoint"},
+					"checkpoint_id": map[string]any{"type": []string{"string", "null"}, "description": "Required for diff/restore/delete"},
+					"name":          map[string]any{"type": []string{"string", "null"}, "description": "Human-readable unique name for a manual checkpoint"},
+					"ttl_days":      map[string]any{"type": []string{"integer", "null"}, "minimum": 0, "default": 30},
+					"limit":         map[string]any{"type": []string{"integer", "null"}, "minimum": 1},
+					"max_age_days":  map[string]any{"type": []string{"integer", "null"}, "minimum": 0, "description": "cleanup: additionally remove checkpoints this old or older"},
+				},
+				"additionalProperties": false,
+			},
+		},
+		{
 			"name":        "file_backup",
-			"description": "Create, list, cleanup, or restore managed file backups under ~/.gptadmin/file-backups before edits.",
+			"description": "Legacy compatibility backup tool for older clients. Prefer file_editor for normal text changes and file_checkpoint for explicit durable restore points at meaningful boundaries; do not create a backup before every edit.",
 			"inputSchema": map[string]any{
 				"type": "object",
 				"properties": map[string]any{
@@ -337,6 +387,10 @@ func (s *Server) callMCPTool(ctx context.Context, name string, args map[string]a
 		return s.mcpShellExec(ctx, args)
 	case "system_inspect":
 		return s.mcpSystemInspect(args)
+	case "file_editor":
+		return s.mcpFileEditor(args)
+	case "file_checkpoint":
+		return s.mcpFileCheckpoint(args)
 	case "file_backup":
 		return s.mcpFileBackup(args)
 	case "tasks":

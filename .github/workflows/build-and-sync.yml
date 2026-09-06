@@ -36,7 +36,8 @@ jobs:
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 22
-
+          cache: npm
+          cache-dependency-path: admin-ui/package-lock.json
       - name: Install admin UI dependencies
         working-directory: admin-ui
         timeout-minutes: 8
@@ -120,10 +121,16 @@ jobs:
         with:
           node-version: 22
 
-      - name: Build Hub candidate artifact
+      - name: Build Hub + ShellMCP candidate artifacts
         run: |
           chmod +x tools/build.sh
-          ./tools/build.sh hub
+          ./tools/build.sh hub shellmcp
+          tar -C build -czf build/gptadmin-ci-full.tar.gz \
+            shellmcp grepmesh gptadmin_hub cli hub_source client public
+
+      - name: Clean-install lifecycle with real execution
+        run: |
+          tests/e2e/systemd/run-lifecycle.sh build/gptadmin-ci-full.tar.gz
 
       - name: Black-box candidate as Custom GPT and native MCP client
         run: |
@@ -217,6 +224,10 @@ jobs:
           python3 scripts/ci_candidate_contract.py \
             --package build/gptadmin-hub.tar.gz \
             --client-origin https://u-f1102930.t.gptadmin.bezrabotnyi.com
+
+      - name: Gate exact Ubuntu release through full lifecycle
+        run: |
+          tests/e2e/systemd/run-lifecycle.sh build/gptadmin-ubuntu-x64-full.tar.gz
 
       - name: Verify user-facing release matrix
         run: |

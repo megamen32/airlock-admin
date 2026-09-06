@@ -8,7 +8,7 @@
 管理设置、弹性、MCP 上下文成本和渐进式配置。
 
 **网站：** https://gptadmin.bezrabotnyi.com
-**安装：** `curl -s https://became.bezrabotnyi.com/install.sh | bash`
+**安装：** `curl -s https://raw.githubusercontent.com/megamen32/gptadmin_opensource/main/deploy/install.sh | bash`
 
 ## 目录
 

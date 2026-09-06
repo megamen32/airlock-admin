@@ -927,7 +927,7 @@ func TestReadonlyManagedTokenCannotCallShellExec(t *testing.T) {
 		ConfigDir: t.TempDir(), DefaultTimeout: 20 * time.Millisecond, PollMaxTimeout: 20 * time.Millisecond,
 	})
 	h := s.Handler()
-	register := httptest.NewRequest(http.MethodPost, "/mcp-relay/register", bytes.NewBufferString(`{"agent_id":"shell:test","name":"Test shell","kind":"virtual_shell","transport":"long_poll","capabilities":["shell"]}`))
+	register := httptest.NewRequest(http.MethodPost, "/mcp-relay/register", bytes.NewBufferString(`{"agent_id":"shell:test","name":"Test shell","kind":"virtual_shell","transport":"long_poll","capabilities":["shell"],"meta":{"build_version":194}}`))
 	register.Header.Set("Authorization", "Bearer "+s.cfg.RelayAgentToken)
 	register.Header.Set("Content-Type", "application/json")
 	registered := httptest.NewRecorder()
@@ -959,7 +959,7 @@ func TestReadonlyManagedTokenCannotCallShellExec(t *testing.T) {
 		t.Fatalf("readonly token reached admin API: status=%d body=%s", adminCalled.Code, adminCalled.Body.String())
 	}
 
-	tools := httptest.NewRequest(http.MethodPost, "/mcp-relay/tools", bytes.NewBufferString(`{"target":"shell:test"}`))
+	tools := httptest.NewRequest(http.MethodPost, "/mcp-relay/tools", bytes.NewBufferString(`{"target":"file:test"}`))
 	tools.Header.Set("Authorization", "Bearer "+token)
 	tools.Header.Set("Content-Type", "application/json")
 	listed := httptest.NewRecorder()
@@ -986,7 +986,7 @@ func TestReadonlyManagedTokenCannotCallShellExec(t *testing.T) {
 		t.Fatalf("global readonly tool list is unsafe: status=%d body=%s", globalListed.Code, globalListed.Body.String())
 	}
 
-	inspectCall := httptest.NewRequest(http.MethodPost, "/mcp", bytes.NewBufferString(`{"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"inspect_system","arguments":{"target":"shell:test","action":"list_directory","path":"/tmp"}}}`))
+	inspectCall := httptest.NewRequest(http.MethodPost, "/mcp", bytes.NewBufferString(`{"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"inspect_system","arguments":{"target":"file:test","action":"list_directory","path":"/tmp"}}}`))
 	inspectCall.Header.Set("Authorization", "Bearer "+token)
 	inspectCall.Header.Set("Content-Type", "application/json")
 	inspectCalled := httptest.NewRecorder()
@@ -1015,7 +1015,7 @@ func TestReadonlyManagedTokenCannotCallShellExec(t *testing.T) {
 		t.Fatalf("readonly facade shell_exec was not denied: status=%d body=%s", facadeRec.Code, facadeRec.Body.String())
 	}
 
-	pinnedList := httptest.NewRequest(http.MethodPost, "/server/shell-test/mcp", bytes.NewBufferString(`{"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}}`))
+	pinnedList := httptest.NewRequest(http.MethodPost, "/server/file-test/mcp", bytes.NewBufferString(`{"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}}`))
 	pinnedList.Header.Set("Authorization", "Bearer "+token)
 	pinnedList.Header.Set("Content-Type", "application/json")
 	pinnedListed := httptest.NewRecorder()
@@ -1669,7 +1669,7 @@ func TestCompatibilityEndpoints(t *testing.T) {
 	w := httptest.NewRecorder()
 	h.ServeHTTP(w, req)
 	body := w.Body.String()
-	for _, want := range []string{"openapi: 3.1.0", "version: \"1.0.0\"", "additionalProperties: true", "cmd:", "query:", "cwd:", "arguments:", "args:", "operationId: execute", "Tool name from schema."} {
+	for _, want := range []string{"openapi: 3.1.0", "version: \"1.0.0\"", "additionalProperties: true", "cmd:", "query:", "cwd:", "arguments:", "args:", "args_json:", "operationId: execute", "Tool name from schema."} {
 		if !strings.Contains(body, want) {
 			t.Fatalf("/actions/openapi.yaml missing %q in %s", want, body)
 		}
@@ -1763,6 +1763,42 @@ func TestCallMcpToolAcceptsTopLevelShellArgs(t *testing.T) {
 	}
 	if strings.Contains(w.Body.String(), "missing cmd") {
 		t.Fatalf("callMcpTool did not forward top-level cmd: %s", w.Body.String())
+	}
+}
+
+func TestCallMcpToolAcceptsArgsJSON(t *testing.T) {
+	s := New(Config{CtlToken: "ctl", DefaultTimeout: time.Second, PollMaxTimeout: time.Second})
+	s.mu.Lock()
+	s.agents["shell:roomhacker-server-100"] = &Agent{AgentID: "shell:roomhacker-server-100", Name: "Shell: roomhacker-server-100", Kind: "virtual_shell", Status: "online"}
+	s.mu.Unlock()
+	h := s.Handler()
+
+	req := httptest.NewRequest(http.MethodPost, "/mcp-relay/call", bytes.NewReader([]byte(`{"target":"shell:roomhacker-server-100","tool_name":"shell_exec","args_json":"{\"cmd\":\"printf args-json-ok\"}"}`)))
+	req.Header.Set("Authorization", "Bearer ctl")
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("args_json status=%d body=%s", w.Code, w.Body.String())
+	}
+	var response map[string]any
+	if err := json.Unmarshal(w.Body.Bytes(), &response); err != nil {
+		t.Fatal(err)
+	}
+	jobID := firstString(response, "job_id")
+	s.mu.Lock()
+	queued := s.shellJobs[jobID]
+	valid := queued != nil && queued.Cmd == "printf args-json-ok"
+	s.mu.Unlock()
+	if !valid {
+		t.Fatalf("args_json did not decode into child arguments: %s", w.Body.String())
+	}
+
+	bad := httptest.NewRequest(http.MethodPost, "/mcp-relay/call", strings.NewReader(`{"target":"shell:roomhacker-server-100","tool_name":"shell_exec","args_json":"not-json"}`))
+	bad.Header.Set("Authorization", "Bearer ctl")
+	badW := httptest.NewRecorder()
+	h.ServeHTTP(badW, bad)
+	if badW.Code != http.StatusBadRequest || !strings.Contains(badW.Body.String(), "args_json must be a JSON object") {
+		t.Fatalf("invalid args_json status=%d body=%s", badW.Code, badW.Body.String())
 	}
 }
 
@@ -3202,6 +3238,68 @@ func TestShellToolsAdvertiseChildMCPDiscoveryAndCall(t *testing.T) {
 		if !seen[name] {
 			t.Fatalf("missing %s in %#v", name, tools)
 		}
+	}
+}
+
+func TestFileToolsAreSplitFromShellTools(t *testing.T) {
+	shellSeen := map[string]bool{}
+	for _, tool := range shellTools() {
+		shellSeen[firstString(tool, "name")] = true
+	}
+	fileSeen := map[string]bool{}
+	for _, tool := range fileTools() {
+		fileSeen[firstString(tool, "name")] = true
+	}
+	for _, name := range []string{"file_editor", "file_checkpoint", "file_backup", "system_inspect"} {
+		if !fileSeen[name] {
+			t.Fatalf("file target missing %s", name)
+		}
+		if shellSeen[name] {
+			t.Fatalf("file tool %s leaked into shell target", name)
+		}
+	}
+}
+
+func TestPublicAgentsExposePairedFileTargetForEveryShell(t *testing.T) {
+	s := New(Config{})
+	s.agents["shell:test-host"] = &Agent{AgentID: "shell:test-host", Name: "Shell: test-host", Kind: "virtual_shell", Status: "online", Transport: "long_poll", LastSeen: 123, Meta: map[string]any{"build_version": 194}}
+	agents := s.publicAgentsLocked(nil)
+	found := false
+	for _, agent := range agents {
+		if agent.AgentID != "file:test-host" {
+			continue
+		}
+		found = true
+		if agent.Kind != "virtual_file" || agent.Status != "online" || firstString(agent.Meta, "backing_server_id") != "shell:test-host" {
+			t.Fatalf("unexpected file agent: %#v", agent)
+		}
+	}
+	if !found {
+		t.Fatalf("paired file target missing from %#v", agents)
+	}
+}
+
+func TestSelectFileTargetRequiresBackingShell(t *testing.T) {
+	s := New(Config{})
+	s.agents["shell:test-host"] = &Agent{AgentID: "shell:test-host", Kind: "virtual_shell", Status: "online", Meta: map[string]any{"build_version": 194}}
+	if target, status, detail := s.selectMCPRelayTarget("file:test-host"); target != "file:test-host" || status != http.StatusOK || detail != "" {
+		t.Fatalf("file target selection = %q %d %q", target, status, detail)
+	}
+	if _, status, _ := s.selectMCPRelayTarget("file:missing"); status != http.StatusNotFound {
+		t.Fatalf("missing file target status=%d", status)
+	}
+}
+
+func TestOldShellBuildDoesNotAdvertisePairedFileTarget(t *testing.T) {
+	s := New(Config{})
+	s.agents["shell:old"] = &Agent{AgentID: "shell:old", Kind: "virtual_shell", Status: "online", Meta: map[string]any{"build_version": 193}}
+	for _, agent := range s.publicAgentsLocked(nil) {
+		if agent.AgentID == "file:old" {
+			t.Fatalf("old shell build exposed dead paired file target: %#v", agent)
+		}
+	}
+	if _, status, _ := s.selectMCPRelayTarget("file:old"); status != http.StatusNotFound {
+		t.Fatalf("old shell build file target status=%d", status)
 	}
 }
 

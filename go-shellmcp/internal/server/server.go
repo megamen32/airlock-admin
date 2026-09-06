@@ -86,12 +86,12 @@ func FromEnv() Config {
 	baseURL := env("SHELL_URL", env("SHELLMCP_URL", "http://127.0.0.1:"+port))
 	hbInt, _ := strconv.Atoi(env("HB_INTERVAL_S", "30"))
 	qTimeout, _ := strconv.Atoi(env("QUEUE_LONG_POLL_TIMEOUT_S", "55"))
-	mode := env("SHELL_MODE", env("SHELLMCP_MODE", ""))
+	mode := env("SHELLMCP_MODE", env("SHELL_MODE", ""))
 	queueDefault := "1"
 	if mode == "webhook" {
 		queueDefault = "0"
 	}
-	queueEnabled := truthy(env("SHELL_QUEUE", env("SHELLMCP_QUEUE", queueDefault)))
+	queueEnabled := truthy(env("SHELLMCP_QUEUE", env("SHELL_QUEUE", queueDefault)))
 	if mode == "" {
 		if queueEnabled {
 			mode = "long_poll"
@@ -385,6 +385,9 @@ func (s *Server) storageRoots() []string {
 	if s.cfg.DefaultHome != "" || os.Getenv("SHELLMCP_FILE_BACKUP_ROOT") != "" || os.Getenv("GPTADMIN_FILE_BACKUP_ROOT") != "" {
 		roots = append(roots, s.fileBackupRoot())
 	}
+	if s.cfg.DefaultHome != "" || os.Getenv("SHELLMCP_FILE_CHECKPOINT_ROOT") != "" || os.Getenv("GPTADMIN_FILE_CHECKPOINT_ROOT") != "" {
+		roots = append(roots, s.fileCheckpointRoot())
+	}
 	return roots
 }
 
@@ -540,7 +543,7 @@ func (s *Server) authorized(r *http.Request, body []byte) bool {
 	return true
 }
 func (s *Server) version(w http.ResponseWriter, _ *http.Request) {
-	writeJSON(w, 200, map[string]any{"component": "shellmcp-go", "build_version": parseBuildVersion(BuildVersion), "git_commit": GitCommit, "status": "ready", "features": []string{"exec", "exec_live", "jobs", "file", "file_backup", "heartbeat", "queue", "real_mcp", "mcp_transport_http", "mcp_transport_stdio"}})
+	writeJSON(w, 200, map[string]any{"component": "shellmcp-go", "build_version": parseBuildVersion(BuildVersion), "git_commit": GitCommit, "status": "ready", "features": []string{"exec", "exec_live", "jobs", "file", "file_editor", "file_checkpoint", "file_backup", "heartbeat", "queue", "real_mcp", "mcp_transport_http", "mcp_transport_stdio"}})
 }
 func (s *Server) systemInfo(w http.ResponseWriter, _ *http.Request) { writeJSON(w, 200, system.Get()) }
 func (s *Server) health(w http.ResponseWriter, _ *http.Request) {
@@ -615,17 +618,19 @@ func (s *Server) metrics(w http.ResponseWriter, _ *http.Request) {
 }
 func (s *Server) capabilities(w http.ResponseWriter, _ *http.Request) {
 	writeJSON(w, 200, map[string]any{
-		"shell":          true,
-		"system":         true,
-		"tasks":          true,
-		"logs":           true,
-		"file_backup":    true,
-		"go_shellmcp":    true,
-		"real_mcp":       true,
-		"mcp_transports": []string{"stdio", "streamable-http"},
-		"build_version":  parseBuildVersion(BuildVersion),
-		"git_commit":     GitCommit,
-		"mcp_agents":     s.mcpAgentsForCapabilities(),
+		"shell":           true,
+		"system":          true,
+		"tasks":           true,
+		"logs":            true,
+		"file_editor":     true,
+		"file_checkpoint": true,
+		"file_backup":     true,
+		"go_shellmcp":     true,
+		"real_mcp":        true,
+		"mcp_transports":  []string{"stdio", "streamable-http"},
+		"build_version":   parseBuildVersion(BuildVersion),
+		"git_commit":      GitCommit,
+		"mcp_agents":      s.mcpAgentsForCapabilities(),
 	})
 }
 

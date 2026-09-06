@@ -1,7 +1,7 @@
 use crate::{
     backend::{
-        dedup_hits, LocalBackend, MatchLine, PerHostStatus, ReadResponse, SearchHit,
-        SearchMatchRange, SearchMode, SearchRangeMatch, SearchResponse, StatusResponse,
+        dedup_hits, stable_line_id, LocalBackend, MatchLine, PerHostStatus, ReadResponse,
+        SearchHit, SearchMatchRange, SearchMode, SearchRangeMatch, SearchResponse, StatusResponse,
     },
     topology::Topology,
 };
@@ -239,6 +239,7 @@ fn compact_search_hits(hits: Vec<SearchHit>) -> Vec<SearchMatchRange> {
         {
             range.lines.push(MatchLine {
                 line_number: hit.line_number,
+                line_id: stable_line_id(hit.line_number, &hit.text),
                 text: hit.text,
             });
         }

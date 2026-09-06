@@ -19,7 +19,19 @@ use tokio::{
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct MatchLine {
     pub line_number: usize,
+    #[serde(default)]
+    pub line_id: String,
     pub text: String,
+}
+
+pub fn stable_line_id(line_number: usize, text: &str) -> String {
+    let mut hash: u32 = 2_166_136_261;
+    for byte in text.as_bytes() {
+        hash ^= *byte as u32;
+        hash = hash.wrapping_mul(16_777_619);
+    }
+    let folded = ((hash >> 16) ^ (hash & 0xffff)) as u16;
+    format!("{line_number}:{folded:04x}")
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -514,6 +526,7 @@ impl LocalBackend {
             }
             chunk.push(MatchLine {
                 line_number: idx,
+                line_id: stable_line_id(idx, lines[idx - 1]),
                 text: lines[idx - 1].to_string(),
             });
         }
@@ -996,6 +1009,7 @@ async fn read_context(
     for idx in start..=end {
         out.push(MatchLine {
             line_number: idx,
+            line_id: stable_line_id(idx, lines[idx - 1]),
             text: lines[idx - 1].to_string(),
         });
     }
@@ -1028,4 +1042,14 @@ where
         }
     }
     out
+}
+
+#[cfg(test)]
+mod line_id_contract_tests {
+    use super::stable_line_id;
+
+    #[test]
+    fn line_id_matches_gptadmin_editor_contract() {
+        assert_eq!(stable_line_id(2, "beta"), "2:4b46");
+    }
 }

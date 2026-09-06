@@ -154,7 +154,7 @@ func authorizeToolCall(r *http.Request, target, toolName string) error {
 	if toolName == "resources/list" || toolName == "resources/read" {
 		return nil
 	}
-	if strings.HasPrefix(target, "shell:") && toolName == "system_inspect" {
+	if strings.HasPrefix(target, "file:") && toolName == "system_inspect" {
 		return nil
 	}
 	return errors.New("read-only client cannot call this tool")

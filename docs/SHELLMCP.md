@@ -54,27 +54,21 @@ credential into a terminal or chat.
 
 ## Operations exposed
 
-The hub proxies these to the agent. Available to all 3 adapters:
+One installed ShellMCP transport is projected by the Hub as two logical MCP targets when the agent build supports the paired-file contract:
 
-| Operation | Example |
-|-----------|---------|
-| `shell_exec` | run a shell command, return stdout/stderr |
-| `file_read` | read a file |
-| `file_write` | write a file (with backup) |
-| `file_backup` | create a managed backup before edits |
-| `systemd_*` | status / start / stop / restart / enable units |
-| `system_info` | CPU, RAM, disk, uptime |
-| `system_health` | quick health check |
-| `venv_*` | manage Python virtualenvs |
-| `dir` | list directory |
+- `shell:<host>` — command execution and child-MCP management (`shell_exec`, `mcp_manage`, `mcp_tools`, `mcp_call`).
+- `file:<host>` — typed filesystem operations (`system_inspect`, `file_editor`, `file_checkpoint`, legacy `file_backup`).
 
-See [API Reference](./API_REFERENCE.md) for the exact schema.
+`file_editor` performs atomic text edits and returns fresh `N:hhhh` line IDs/context on successful edits and recoverable stale/no-match failures. `file_checkpoint` stores explicit durable restore points in a content-addressed store; restore first creates a safety checkpoint of the live state. A checkpoint is a meaningful rollback boundary, not an automatic pre-edit backup.
+
+On a system installation the ShellMCP runtime may run privileged so `file:<host>` can edit root-owned configuration while preserving owner/group/mode. Ordinary `shell_exec` still defaults to the configured `SHELLMCP_DEFAULT_USER`; root shell execution remains explicit.
+
+GrepMesh is provisioned as a companion capability by default when the package contains a native GrepMesh binary. Use `--no-grepmesh` (or `GPTADMIN_SETUP_GREPMESH=0` for unattended bootstrap) to opt out. Existing operator-managed GrepMesh definitions are preserved.
 
 ## Security
 
 - The agent accepts only its managed device connection
-- By default runs as the installing user (not root) — system-mode with sudo
-  is opt-in
+- User installs run as the installing user. System installs may run the transport as root to provide the paired privileged file boundary; `shell_exec` still drops to `SHELLMCP_DEFAULT_USER` unless root is explicitly requested
 - IP allowlist and command allowlist can be configured
 - Secrets are masked in logs
 

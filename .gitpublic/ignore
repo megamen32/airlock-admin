@@ -26,3 +26,8 @@ tests/fixtures/private/macinstall.sh
 
 # GitHub token used by public mirror has no workflow scope; keep workflows private.
 .github/workflows/
+
+# compiled binaries do not belong in a source mirror
+go-shellmcp/bin/
+website/
+.playwright-mcp/

@@ -8,7 +8,7 @@ On the machine that will run the hub (your PC, a VPS, or a server):
 
 ```bash
 # Linux / macOS — auto-detects user/system mode
-curl -s https://became.bezrabotnyi.com/install.sh | bash
+curl -s https://raw.githubusercontent.com/megamen32/gptadmin_opensource/main/deploy/install.sh | bash
 ```
 
 ```powershell
@@ -27,7 +27,7 @@ The installer creates the Hub, starts a Tunnel when needed, and prints one
 On each server you want to manage:
 
 ```bash
-curl -s https://became.bezrabotnyi.com/install.sh | bash
+curl -s https://raw.githubusercontent.com/megamen32/gptadmin_opensource/main/deploy/install.sh | bash
 ```
 
 Pick "agent only" when prompted. The agent registers with your hub automatically.

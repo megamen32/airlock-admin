@@ -21,6 +21,8 @@
   --accent-bright: #a78bfa;
   --accent-glow: rgba(139,92,246,0.15);
   --side: #080b14;
+  --code-bg: #06080f;
+  --response-bg: #080b14;
   --radius: 12px;
   --radius-sm: 8px;
   --shadow: 0 4px 24px rgba(0,0,0,0.3);
@@ -155,7 +157,7 @@
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath fill='%2364748b' d='M0 0l5 6 5-6z'/%3E%3C/svg%3E");
   background-repeat: no-repeat; background-position: right 8px center;
 }
-.operations-console textarea { font-size: 12px; line-height: 1.4; border-radius: var(--radius-sm); border: 1px solid var(--line-bright); background: #06080f; padding: 8px; transition: var(--transition); width: 100%; min-height: 120px; font-family: ui-monospace, 'SF Mono', Consolas, monospace; }
+.operations-console textarea { font-size: 12px; line-height: 1.4; border-radius: var(--radius-sm); border: 1px solid var(--line-bright); background: var(--code-bg); padding: 8px; transition: var(--transition); width: 100%; min-height: 120px; font-family: ui-monospace, 'SF Mono', Consolas, monospace; }
 .operations-console button { height: 32px; padding: 0 12px; font-size: 13px; border-radius: var(--radius-sm); display: inline-flex; align-items: center; justify-content: center; gap: 4px; cursor: pointer; transition: var(--transition); background: var(--panel-hover); border: 1px solid var(--line-bright); color: var(--text); }
 .operations-console button:hover { border-color: var(--accent); color: var(--accent-bright); }
 .operations-console button:active { transform: scale(0.96); }
@@ -167,7 +169,7 @@
 .operations-console .split { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 
 /* ── Code blocks ── */
-.operations-console pre { white-space: pre-wrap; overflow: auto; max-height: 480px; background: #06080f; border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 12px; max-width: 100%; overflow-wrap: anywhere; word-break: break-word; font-size: 12px; line-height: 1.5; font-family: ui-monospace, 'SF Mono', Consolas, monospace; }
+.operations-console pre { white-space: pre-wrap; overflow: auto; max-height: 480px; background: var(--code-bg); border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 12px; max-width: 100%; overflow-wrap: anywhere; word-break: break-word; font-size: 12px; line-height: 1.5; font-family: ui-monospace, 'SF Mono', Consolas, monospace; }
 .operations-console .logbox { max-height: calc(100vh - 250px); min-height: 400px; }
 
 /* ── Job/audit entry cards ── */
@@ -179,8 +181,8 @@
 .operations-console .entryStatus { flex: 0 0 auto; font-size: 10px; line-height: 1.2; padding: 3px 8px; border: 1px solid var(--line-bright); border-radius: 999px; text-transform: uppercase; letter-spacing: 0.08em; background: var(--panel-solid); font-weight: 600; min-width: 70px; text-align: center; }
 .operations-console .entryMain { min-width: 0; display: grid; gap: 6px; flex: 1; }
 .operations-console .entryTitle { display: flex; gap: 8px; align-items: center; min-width: 0; flex-wrap: wrap; }
-.operations-console .entryCommand { font-size: 12px; line-height: 1.5; padding: 8px 10px; border-radius: var(--radius-sm); background: #06080f; border: 1px solid var(--line); max-height: 60px; overflow: hidden; transition: max-height 0.2s ease; position: relative; cursor: pointer; }
-.operations-console .entryCommand::after { content: ''; position: absolute; bottom: 0; left: 0; right: 0; height: 16px; background: linear-gradient(transparent, #06080f); pointer-events: none; }
+.operations-console .entryCommand { font-size: 12px; line-height: 1.5; padding: 8px 10px; border-radius: var(--radius-sm); background: var(--code-bg); border: 1px solid var(--line); max-height: 60px; overflow: hidden; transition: max-height 0.2s ease; position: relative; cursor: pointer; }
+.operations-console .entryCommand::after { content: ''; position: absolute; bottom: 0; left: 0; right: 0; height: 16px; background: linear-gradient(transparent, var(--code-bg)); pointer-events: none; }
 .operations-console .entryCommand:hover { border-color: var(--accent); }
 .operations-console .entryMeta { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; color: var(--muted); font-size: 11px; }
 .operations-console .entryMetaInfo { display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px; border: 1px solid var(--line-bright); border-radius: 999px; color: var(--muted); background: var(--panel-solid); font-size: 11px; transition: var(--transition); }
@@ -190,7 +192,7 @@
 .operations-console .entryError { color: var(--bad); }
 
 /* ── Response blocks ── */
-.operations-console .entryResponse details { border: 1px solid var(--line); border-radius: var(--radius-sm); background: #080b14; overflow: hidden; }
+.operations-console .entryResponse details { border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--response-bg); overflow: hidden; }
 .operations-console .entryResponse summary { cursor: pointer; list-style: none; padding: 6px 12px; color: var(--muted-bright); display: flex; align-items: center; justify-content: space-between; gap: 10px; font-size: 11px; transition: var(--transition); }
 .operations-console .entryResponse summary::-webkit-details-marker { display: none; }
 .operations-console .entryResponse summary:hover { background: var(--panel-hover); }
@@ -203,7 +205,7 @@
 .operations-console .recentMiniItem[onclick] { cursor: pointer; }
 .operations-console .recentMiniItem[onclick]:hover { border-color: var(--accent); }
 .operations-console .recentMiniTop { display: flex; gap: 8px; align-items: center; justify-content: space-between; }
-.operations-console .recentMiniCmd { font-size: 11px; padding: 6px 8px; border-radius: 6px; background: #06080f; border: 1px solid var(--line); font-family: ui-monospace, monospace; max-height: 40px; overflow: hidden; }
+.operations-console .recentMiniCmd { font-size: 11px; padding: 6px 8px; border-radius: 6px; background: var(--code-bg); border: 1px solid var(--line); font-family: ui-monospace, monospace; max-height: 40px; overflow: hidden; }
 
 /* ── JSON syntax highlighting ── */
 .operations-console .json-key { color: #79c0ff; } .operations-console .json-str { color: #7ee787; }
@@ -239,7 +241,7 @@
 @media (max-width: 900px) { .operations-console .split { grid-template-columns: 1fr; } }
 
 /* One host shell and the same palette as the settings screens. */
-.operations-console{--bg:#f5f1e8;--panel:#fffdf8;--panel-solid:#fffdf8;--panel-hover:#eee9de;--text:#24323a;--text-bright:#20383b;--muted:#687776;--muted-bright:#586b68;--line:#e0ded4;--line-bright:#d0d7cf;--accent:#24766b;--accent-bright:#1e645b;--accent-glow:#e2efea;--shadow:0 3px 15px #20383b08;--shadow-hover:0 6px 20px #20383b12;color-scheme:light;height:auto;overflow:visible;min-height:100vh;width:100%;background:var(--bg)}
+.operations-console{--bg:#f5f1e8;--panel:#fffdf8;--panel-solid:#fffdf8;--panel-hover:#eee9de;--text:#24323a;--text-bright:#20383b;--muted:#687776;--muted-bright:#586b68;--line:#e0ded4;--line-bright:#d0d7cf;--accent:#24766b;--accent-bright:#1e645b;--accent-glow:#e2efea;--shadow:0 3px 15px #20383b08;--shadow-hover:0 6px 20px #20383b12;--code-bg:#f3f5f2;--response-bg:#f7f8f5;color-scheme:light;height:auto;overflow:visible;min-height:100vh;width:100%;background:var(--bg)}
 .operations-console .app{display:block;height:auto;min-height:100vh}
 .operations-console #sidebar{display:none!important}
 .operations-console .content{overflow:visible;margin:0;width:100%}

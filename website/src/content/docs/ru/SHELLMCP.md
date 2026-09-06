@@ -24,7 +24,7 @@ ShellMCP — это агент, который работает на каждо�
 
 ```bash
 # Linux / macOS (installs the Go binary in user-mode by default)
-curl -s https://became.bezrabotnyi.com/install.sh | bash
+curl -s https://raw.githubusercontent.com/megamen32/gptadmin_opensource/main/deploy/install.sh | bash
 ```
 
 Установщик:
@@ -52,23 +52,16 @@ curl -s https://became.bezrabotnyi.com/install.sh | bash
 
 `LOG_LIMIT_B` — для каждого агента ShellMCP. Он контролирует локальный хвост результата `/exec` и не заменяет бюджеты ответов концентратора/клиента; концентратор по-прежнему может применять разные бюджеты ответов для действий ChatGPT, Claude или других клиентов MCP.
 
-## Операции раскрыты
+## Доступные операции
 
-Хаб передает их агенту. Доступно для всех 3 адаптеров:
+Одна установка ShellMCP публикуется Hub как два логических MCP target-а, если версия агента поддерживает файловый контракт:
 
-| Операция | Пример |
-|-----------|---------|
-| `shell_exec` | запустите команду оболочки, верните stdout/stderr |
-| `file_read` | прочитать файл |
-| `file_write` | записать файл (с резервной копией) |
-| `file_backup` | создать управляемую резервную копию перед редактированием |
-| `systemd_*` | статус/старт/стоп/перезапуск/включение агрегатов |
-| `system_info` | ЦП, ОЗУ, диск, время безотказной работы |
-| `system_health` | быстрая проверка здоровья |
-| `venv_*` | управлять виртуальными средами Python |
-| `dir` | список каталогов |
+- `shell:<host>` — команды и управление дочерними MCP (`shell_exec`, `mcp_manage`, `mcp_tools`, `mcp_call`).
+- `file:<host>` — файловые операции (`system_inspect`, `file_editor`, `file_checkpoint`, legacy `file_backup`).
 
-Точную схему см. в [Справочнике API](./API_REFERENCE.md)].
+`file_editor` умеет `view/create/str_replace/batch_edit/delete`, делает атомарные текстовые правки и возвращает свежие `N:hhhh` line-id. `file_checkpoint` создаёт явные CAS-точки восстановления; `restore` сначала автоматически сохраняет safety checkpoint. На system-install файловый target работает через привилегированный runtime, при этом обычный `shell_exec` по умолчанию запускается от `SHELLMCP_DEFAULT_USER`.
+
+GrepMesh устанавливается как companion capability по умолчанию; `--no-grepmesh` отключает встроенную конфигурацию.
 
 ## Безопасность
 

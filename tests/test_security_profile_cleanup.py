@@ -16,10 +16,8 @@ def test_cleanup_removes_only_legacy_shellmcp_home_hardening(tmp_path: Path, mon
     monkeypatch.setattr(cli, "SYSTEMD_DIR", tmp_path)
     monkeypatch.setattr(cli, "SYSTEMD_SHELLMCP", "shellmcp.service")
     monkeypatch.setattr(cli, "IS_MACOS", False)
+    monkeypatch.setattr(cli, "IS_USER_INSTALL", False)
 
     cli._cleanup_obsolete_runtime_files()
 
-    result = dropin.read_text(encoding="utf-8")
-    assert "ProtectHome" not in result
-    assert "User=roomhacker" in result
-    assert "Group=roomhacker" in result
+    assert not dropin.exists()

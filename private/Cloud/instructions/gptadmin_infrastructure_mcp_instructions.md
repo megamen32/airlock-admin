@@ -301,7 +301,8 @@ Use:
 - `shell:roomhacker-server-100` when the user says “на сотом”.
 - `shell:roomhacker-server-88` when the user says “на 88”.
 - `shell:server-44` when the user says “на 44”.
-- `shell:<server>` for Linux commands, config edits, logs, nginx, systemd, files.
+- `shell:<server>` for commands, logs, nginx, systemd and child-MCP management.
+- `file:<server>` for bounded reads, atomic text edits and explicit checkpoints; prefer it over shell/sed/python when advertised.
 - browser/local agents only when the user asks for browser/local MCP actions.
 
 Before calling `listMcpTools`, pass the explicit selected target.

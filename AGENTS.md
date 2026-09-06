@@ -62,6 +62,10 @@ perfect atomicity, broad compatibility, visual polish, or exhaustive review.
 Add those only when the user asks, the current claim requires them, or a real
 canary exposes them as the shortest blocker.
 
+## Single-history completion
+
+A GPTAdmin change is complete only as one reviewed history. Before declaring a task done, inspect the whole current dirty tree and relevant recent history, including changes left by other agents or earlier work. Test the integrated state, then commit the agreed complete tree, push that commit, deploy that same commit, and validate the live product. Do not silently leave files uncommitted merely because the current agent did not author them. If an existing change cannot be understood or safely validated, stop and report that blocker instead of creating a partial history.
+
 ## Reality-first testing
 
 Mocks, fakes, stubs, simulated services, fake health responses, and monkeypatched

@@ -93,6 +93,7 @@ def test_mcp_add_install_requires_native_shellmcp(monkeypatch: pytest.MonkeyPatc
     monkeypatch.setattr(cli, "MCP_TOKEN_FILE", token_file)
     monkeypatch.setattr(cli, "env_read", lambda: {"MCP_RELAY_AGENT_TOKEN": "hub-relay-key"})
     monkeypatch.setattr(cli, "run", lambda command, check=True: commands.append((command[-1], check)))
+    monkeypatch.setattr(cli, "_mcp_go_supervisor_enabled", lambda: False)
     args = argparse.Namespace(
         name="chrome-mac",
         command="npx",
@@ -113,9 +114,9 @@ def test_mcp_add_install_requires_native_shellmcp(monkeypatch: pytest.MonkeyPatc
     with pytest.raises(SystemExit):
         cli.cmd_mcp_add(args)
 
-    saved = cli._json_read(config_file, {})["mcpServers"]["chrome-mac"]
-    assert saved["command"] == "npx"
-    assert saved["args"] == ["-y", "chrome-devtools-mcp@latest", "--autoConnect"]
+    # A failed --install must be transactional: do not persist a definition that
+    # cannot be supervised on this host.
+    assert cli._json_read(config_file, {}).get("mcpServers", {}).get("chrome-mac") is None
     assert not token_file.exists()
     assert commands == []
 

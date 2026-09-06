@@ -293,13 +293,15 @@ dd { display: flex; align-items: center; gap: 7px; margin: 0; color: #344441; fo
   .button-row .button { flex: 1; }
 }
 
-.webhook-layout { display: grid; grid-template-columns: minmax(230px, .75fr) minmax(0, 1.6fr); gap: 18px; align-items: start; }
+.webhook-layout { display: grid; grid-template-columns: minmax(300px, 360px) minmax(0, 1fr); gap: 22px; align-items: start; }
 .route-list { overflow: hidden; }
 .route-empty { display: grid; gap: 7px; padding: 24px 20px; color: #687572; font-size: 12px; }
 .route-empty strong { color: #344441; font: 600 17px/1.2 Georgia, serif; }
-.route-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 12px; border-bottom: 1px solid #eee8dc; padding: 16px 20px; }
+.route-row { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; border-bottom: 1px solid #eee8dc; padding: 16px 20px; }
 .route-row.selected { border-left: 4px solid #9b4f2f; padding-left: 16px; background: #f9ead0; }
-.route-row strong, .route-row span, .route-row small { display: block; overflow-wrap: anywhere; }
+.route-row strong, .route-row span, .route-row small { display: block; overflow-wrap: anywhere; word-break: normal; }
+.route-row > div { min-width: 0; }
+.route-row .text-button { justify-self: start; max-width: 100%; text-align: left; }
 .route-row strong { color: #30413e; font-size: 13px; }
 .route-row span { margin-top: 5px; color: #687572; font-size: 11px; }
 .route-row small { margin-top: 7px; color: #8f552e; font-size: 9px; font-weight: 800; letter-spacing: .05em; }
@@ -335,7 +337,7 @@ dd { display: flex; align-items: center; gap: 7px; margin: 0; color: #344441; fo
 .safe-result > strong { color: #344441; font: 600 17px/1.2 Georgia, serif; }
 .safe-result dl { margin-top: 12px; }
 
-@media (max-width: 900px) {
+@media (max-width: 1100px) {
   .webhook-layout { grid-template-columns: 1fr; }
   .job-inspector { grid-column: auto; }
 }

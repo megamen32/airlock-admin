@@ -326,7 +326,7 @@ func TestMCPHTTPEndpointToolsAndShellExec(t *testing.T) {
 		name := tool["name"].(string)
 		names[name] = true
 	}
-	if !names["shell_exec"] || !names["system_inspect"] || !names["file_backup"] || !names["tasks"] || !names["system_info"] || !names["mcp_manage"] {
+	if !names["shell_exec"] || !names["system_inspect"] || !names["file_editor"] || !names["file_checkpoint"] || !names["file_backup"] || !names["tasks"] || !names["system_info"] || !names["mcp_manage"] {
 		t.Fatalf("tools/list missing expected tools: names=%v body=%s", names, toolsRec.Body.String())
 	}
 	for _, raw := range result["tools"].([]any) {

@@ -1,0 +1,4 @@
+# test fixtures that intentionally contain fake secret-shaped literals
+go-shellmcp/internal/inspect/inspect_test.go
+go-shellmcp/internal/redact/redact_test.go
+go-shellmcp/internal/server/server_test.go

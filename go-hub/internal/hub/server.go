@@ -2435,6 +2435,9 @@ components:
           type: object
           additionalProperties: true
           default: {}
+        args_json:
+          type: string
+          description: JSON object encoded as a string; universal fallback for Actions clients that cannot expose free-form object fields.
         cmd:
           type: string
           nullable: true
@@ -2591,6 +2594,7 @@ paths:
                 tool_name: {type: string}
                 args: {type: object, additionalProperties: true}
                 arguments: {type: object, additionalProperties: true}
+                args_json: {type: string, description: "JSON object string fallback for arbitrary tool arguments."}
                 cmd: {type: string}
                 query: {type: string}
                 cwd: {type: string}
@@ -3794,6 +3798,10 @@ func (s *Server) publicAgentsLocked(r *http.Request) []Agent {
 		cp := *a
 		parents = append(parents, cp)
 		agents = append(agents, s.withExposeMetaLocked(cp, r))
+		if strings.HasPrefix(cp.AgentID, "shell:") && supportsPairedFileTarget(cp) {
+			fileAgent := fileAgentForShell(cp)
+			agents = append(agents, s.withExposeMetaLocked(fileAgent, r))
+		}
 	}
 	usedSlugs := map[string]bool{}
 	for _, a := range agents {
@@ -3954,6 +3962,17 @@ func (s *Server) selectMCPRelayTarget(target string) (string, int, string) {
 	if target == "hub" {
 		return target, http.StatusOK, ""
 	}
+	if strings.HasPrefix(target, "file:") {
+		backing := "shell:" + strings.TrimPrefix(target, "file:")
+		s.mu.Lock()
+		agent, exists := s.agents[backing]
+		supported := exists && agent != nil && supportsPairedFileTarget(*agent)
+		s.mu.Unlock()
+		if supported {
+			return target, http.StatusOK, ""
+		}
+		return "", http.StatusNotFound, fmt.Sprintf("unknown file server %s", strings.TrimPrefix(target, "file:"))
+	}
 
 	s.mu.Lock()
 	_, exists := s.agents[target]
@@ -4013,6 +4032,10 @@ func (s *Server) mcpRelayTools(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, withActionToolHints(s.withSchemaContractMetadata(map[string]any{"server_id": target, "status": "completed", "response": map[string]any{"tools": toolsForRequest(r, target, shellTools())}}), target))
 		return
 	}
+	if strings.HasPrefix(target, "file:") {
+		writeJSON(w, http.StatusOK, withActionToolHints(s.withSchemaContractMetadata(map[string]any{"server_id": target, "status": "completed", "response": map[string]any{"tools": toolsForRequest(r, target, fileTools())}}), target))
+		return
+	}
 	s.mu.Lock()
 	child, isChild := s.exposedAgentByIDLocked(target)
 	s.mu.Unlock()
@@ -4062,6 +4085,14 @@ func (s *Server) mcpRelayCall(w http.ResponseWriter, r *http.Request) {
 	args := mapValue(req["arguments"])
 	if len(args) == 0 {
 		args = mapValue(req["args"])
+	}
+	if len(args) == 0 && firstString(req, "args_json") != "" {
+		var err error
+		args, err = toolArgsFromJSON(firstString(req, "args_json"))
+		if err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]any{"detail": err.Error()})
+			return
+		}
 	}
 	if len(args) == 0 {
 		args = toolArgsFromTopLevel(req)
@@ -4133,6 +4164,15 @@ func (s *Server) executeMCPTool(r *http.Request, target, toolName string, args m
 		}
 		if strings.HasPrefix(target, "shell:") {
 			return s.callShellToolWithTraceParentAndSecrets(target, toolName, args, background, timeout, requestTraceID(r), requestTraceParent(r), secretValues, durableRequestKey), http.StatusOK
+		}
+		if strings.HasPrefix(target, "file:") {
+			if !fileToolAllowed(toolName) {
+				return map[string]any{"server_id": target, "status": "failed", "error": "tool is not exposed by file target"}, http.StatusBadRequest
+			}
+			backing := "shell:" + strings.TrimPrefix(target, "file:")
+			resp := s.callShellToolWithTraceParentAndSecrets(backing, toolName, args, background, timeout, requestTraceID(r), requestTraceParent(r), secretValues, durableRequestKey)
+			resp["server_id"] = target
+			return resp, http.StatusOK
 		}
 		s.mu.Lock()
 		child, isChild := s.exposedAgentByIDLocked(target)
@@ -4432,11 +4472,22 @@ func (s *Server) auditToolDecision(r *http.Request, target, toolName string, arg
 	s.mu.Unlock()
 }
 
+func toolArgsFromJSON(raw string) (map[string]any, error) {
+	var args map[string]any
+	if err := json.Unmarshal([]byte(raw), &args); err != nil {
+		return nil, fmt.Errorf("args_json must be a JSON object: %w", err)
+	}
+	if args == nil {
+		return nil, fmt.Errorf("args_json must be a JSON object")
+	}
+	return args, nil
+}
+
 func toolArgsFromTopLevel(req map[string]any) map[string]any {
 	reserved := map[string]bool{
 		"target": true, "server_id": true, "agent_id": true,
 		"tool": true, "tool_name": true, "name": true,
-		"arguments": true, "args": true,
+		"arguments": true, "args": true, "args_json": true,
 		"background":           true,
 		"detail":               true,
 		"idempotency_key":      true,
@@ -5006,12 +5057,44 @@ func hubTools() []map[string]any {
 
 func shellTools() []map[string]any {
 	return []map[string]any{
-		{"name": "system_inspect", "description": "Read bounded redacted files/directories; no commands", "inputSchema": map[string]any{"type": "object", "properties": map[string]any{"action": map[string]any{"type": "string", "enum": []string{"read_file", "list_directory"}}, "path": map[string]any{"type": "string"}, "max_bytes": map[string]any{"type": []string{"integer", "null"}, "minimum": 1, "maximum": 1048576}}, "required": []string{"action", "path"}, "additionalProperties": false}},
-		{"name": "shell_exec", "description": "Run one command as the default non-root user; secret_env references are resolved by the Hub and never returned", "inputSchema": map[string]any{"type": "object", "properties": map[string]any{"cmd": map[string]any{"type": "string"}, "cwd": map[string]any{"type": []string{"string", "null"}}, "timeout": map[string]any{"type": []string{"integer", "null"}}, "run_as_user": map[string]any{"type": []string{"string", "null"}, "description": "Use root only when intentional"}, "secret_env": map[string]any{"type": "object", "additionalProperties": map[string]any{"type": "string"}, "description": "Map environment names to opaque secret_ref values"}}, "required": []string{"cmd"}}},
-		{"name": "mcp_manage", "description": "Manage child MCP definitions on this selected ShellMCP host. Use list/status/config to inspect; upsert/remove/enable/disable/restart to change or run them. GPTAdmin Hub only routes the call and does not start the child elsewhere. To manage another machine, select that machine's ShellMCP target. A remote URL is reached from this host; no SSH tunnel is implied.", "inputSchema": map[string]any{"type": "object", "properties": map[string]any{"action": map[string]any{"type": "string", "enum": []string{"list", "upsert", "remove", "enable", "disable", "restart", "status", "config"}}, "ref": map[string]any{"type": []string{"string", "null"}}, "config": map[string]any{"type": []string{"object", "null"}, "additionalProperties": true}}, "required": []string{"action"}, "additionalProperties": false}},
-		{"name": "mcp_tools", "description": "Run MCP tools/list for one configured child MCP on this host. This checks the child's protocol/tools, not just whether its process exists. Use the ref returned by mcp_manage list or status.", "inputSchema": map[string]any{"type": "object", "properties": map[string]any{"ref": map[string]any{"type": "string"}}, "required": []string{"ref"}, "additionalProperties": false}},
-		{"name": "mcp_call", "description": "Call one named tool on a child MCP running or connected through this ShellMCP host. Use mcp_tools first; arguments are passed to the child. A remote endpoint is reached from this host and no SSH tunnel is implied.", "inputSchema": map[string]any{"type": "object", "properties": map[string]any{"ref": map[string]any{"type": "string"}, "name": map[string]any{"type": "string"}, "arguments": map[string]any{"type": []string{"object", "null"}, "additionalProperties": true}}, "required": []string{"ref", "name"}, "additionalProperties": false}},
+		{"name": "shell_exec", "description": "Run one command as the configured default non-root user; use run_as_user=root only when privileged shell execution is intentional. File reads/edits/checkpoints live on the paired file:<host> target.", "inputSchema": map[string]any{"type": "object", "properties": map[string]any{"cmd": map[string]any{"type": "string"}, "cwd": map[string]any{"type": []string{"string", "null"}}, "timeout": map[string]any{"type": []string{"integer", "null"}}, "run_as_user": map[string]any{"type": []string{"string", "null"}, "description": "Use root only when intentional"}, "secret_env": map[string]any{"type": "object", "additionalProperties": map[string]any{"type": "string"}, "description": "Map environment names to opaque secret_ref values"}}, "required": []string{"cmd"}}},
+		{"name": "mcp_manage", "description": "Manage child MCP definitions on this selected ShellMCP host. Use list/status/config to inspect; upsert/remove/enable/disable/restart to change or run them. GPTAdmin Hub only routes the call and does not start the child elsewhere. To manage another machine, select that machine's ShellMCP target.", "inputSchema": map[string]any{"type": "object", "properties": map[string]any{"action": map[string]any{"type": "string", "enum": []string{"list", "upsert", "remove", "enable", "disable", "restart", "status", "config"}}, "ref": map[string]any{"type": []string{"string", "null"}}, "config": map[string]any{"type": []string{"object", "null"}, "additionalProperties": true}}, "required": []string{"action"}, "additionalProperties": false}},
+		{"name": "mcp_tools", "description": "Run MCP tools/list for one configured child MCP on this host. Use the ref returned by mcp_manage list or status.", "inputSchema": map[string]any{"type": "object", "properties": map[string]any{"ref": map[string]any{"type": "string"}}, "required": []string{"ref"}, "additionalProperties": false}},
+		{"name": "mcp_call", "description": "Call one named tool on a child MCP running or connected through this ShellMCP host. Use mcp_tools first; arguments are passed to the child.", "inputSchema": map[string]any{"type": "object", "properties": map[string]any{"ref": map[string]any{"type": "string"}, "name": map[string]any{"type": "string"}, "arguments": map[string]any{"type": []string{"object", "null"}, "additionalProperties": true}}, "required": []string{"ref", "name"}, "additionalProperties": false}},
 	}
+}
+
+func fileTools() []map[string]any {
+	return []map[string]any{
+		{"name": "system_inspect", "description": "Read bounded redacted files/directories without shell commands. On a system-mode installation this paired file target runs through the privileged ShellMCP runtime and can inspect root-owned configuration while preserving redaction boundaries.", "inputSchema": map[string]any{"type": "object", "properties": map[string]any{"action": map[string]any{"type": "string", "enum": []string{"read_file", "list_directory"}}, "path": map[string]any{"type": "string"}, "max_bytes": map[string]any{"type": []string{"integer", "null"}, "minimum": 1, "maximum": 1048576}}, "required": []string{"action", "path"}, "additionalProperties": false}},
+		{"name": "file_editor", "description": "Primary text file tool. view returns bounded current text with N:hhhh line ids; str_replace changes exact text and on no/multiple match returns current candidate text with fresh N:hhhh line ids so retry needs no reread. batch_edit applies several line-id edits atomically and rejects the whole batch if any id is stale. Successful edits return a compact diff with fresh ids. create/delete are supported. Existing ownership/mode are preserved; privileged system-mode file targets can edit root-owned files without shell/sed/python.", "inputSchema": map[string]any{"type": "object", "properties": map[string]any{"action": map[string]any{"type": "string", "enum": []string{"view", "create", "str_replace", "batch_edit", "delete"}}, "path": map[string]any{"type": "string"}, "content": map[string]any{"type": []string{"string", "null"}}, "old_text": map[string]any{"type": []string{"string", "null"}}, "new_text": map[string]any{"type": []string{"string", "null"}}, "replace_all": map[string]any{"type": "boolean", "default": false}, "start_line": map[string]any{"type": []string{"integer", "null"}, "minimum": 1}, "end_line": map[string]any{"type": []string{"integer", "null"}, "minimum": 1}, "max_bytes": map[string]any{"type": []string{"integer", "null"}, "minimum": 1, "maximum": 262144}, "operations": map[string]any{"type": []string{"array", "null"}, "maxItems": 50, "items": map[string]any{"type": "object", "properties": map[string]any{"action": map[string]any{"type": "string", "enum": []string{"replace", "insert"}}, "start": map[string]any{}, "end": map[string]any{}, "content": map[string]any{"type": "string"}}, "required": []string{"action", "start", "content"}, "additionalProperties": false}}}, "required": []string{"action", "path"}, "additionalProperties": false}},
+		{"name": "file_checkpoint", "description": "Explicit durable filesystem checkpoints using SHA-256 content-addressed gzip storage and manifests. create snapshots files/directories; diff compares to live state; restore automatically creates a restore-safety checkpoint first, so rollback is itself reversible. Use checkpoints at meaningful boundaries, not before every edit. Privileged system-mode file targets preserve owner/group/mode for system files.", "inputSchema": map[string]any{"type": "object", "properties": map[string]any{"action": map[string]any{"type": "string", "enum": []string{"create", "list", "diff", "restore", "delete", "cleanup", "gc"}, "default": "create"}, "path": map[string]any{"type": []string{"string", "null"}}, "paths": map[string]any{"type": []string{"array", "null"}, "items": map[string]any{"type": "string"}}, "checkpoint_id": map[string]any{"type": []string{"string", "null"}}, "name": map[string]any{"type": []string{"string", "null"}}, "ttl_days": map[string]any{"type": []string{"integer", "null"}, "minimum": 0, "default": 30}, "limit": map[string]any{"type": []string{"integer", "null"}, "minimum": 1}, "max_age_days": map[string]any{"type": []string{"integer", "null"}, "minimum": 0}}, "additionalProperties": false}},
+		{"name": "file_backup", "description": "Legacy compatibility backup/restore tool. Prefer file_checkpoint for durable restore points and file_editor for normal edits; do not create a backup before every edit.", "inputSchema": map[string]any{"type": "object", "properties": map[string]any{"action": map[string]any{"type": "string", "enum": []string{"backup", "list", "cleanup", "restore"}, "default": "backup"}, "path": map[string]any{"type": []string{"string", "null"}}, "backup_id": map[string]any{"type": []string{"string", "null"}}, "ttl_days": map[string]any{"type": []string{"integer", "null"}, "default": 30}, "label": map[string]any{"type": []string{"string", "null"}}, "use_sudo": map[string]any{"type": "boolean", "default": false}, "overwrite": map[string]any{"type": "boolean", "default": false}, "limit": map[string]any{"type": []string{"integer", "null"}}, "max_age_days": map[string]any{"type": []string{"integer", "null"}}}, "additionalProperties": false}},
+	}
+}
+
+func fileToolAllowed(name string) bool {
+	switch name {
+	case "system_inspect", "file_editor", "file_checkpoint", "file_backup":
+		return true
+	default:
+		return false
+	}
+}
+
+func supportsPairedFileTarget(shell Agent) bool {
+	if !strings.HasPrefix(shell.AgentID, "shell:") {
+		return false
+	}
+	// Build 194 introduced the paired file contract. Keep the virtual target
+	// absent for older transports so discovery never advertises dead tools.
+	return intFromAny(shell.Meta["build_version"]) >= 194
+}
+
+func fileAgentForShell(shell Agent) Agent {
+	host := strings.TrimPrefix(shell.AgentID, "shell:")
+	meta := map[string]any{"backing_server_id": shell.AgentID, "paired": true}
+	return Agent{AgentID: "file:" + host, Name: "Files: " + host, Kind: "virtual_file", Transport: shell.Transport, Status: shell.Status, LastSeen: shell.LastSeen, Capabilities: []string{"files", "checkpoints"}, Meta: meta}
 }
 
 func (s *Server) tasksEndpoint(w http.ResponseWriter, r *http.Request) {
@@ -7434,7 +7517,7 @@ func (s *Server) agentMCPJSONRPC(r *http.Request, agent Agent, body map[string]a
 	params := mapValue(body["params"])
 	switch method {
 	case "server/discover":
-		if agent.AgentID == "hub" || strings.HasPrefix(agent.AgentID, "shell:") || isVirtualMCPAgent(agent) || isChildMCPAgent(agent) {
+		if agent.AgentID == "hub" || strings.HasPrefix(agent.AgentID, "shell:") || strings.HasPrefix(agent.AgentID, "file:") || isVirtualMCPAgent(agent) || isChildMCPAgent(agent) {
 			return mcpDiscoverResult("gptadmin-server-"+exposedAgentSlug(agent), BuildVersion), nil, false
 		}
 		jobID := s.enqueueRelay(agent.AgentID, method, params)
@@ -7442,7 +7525,7 @@ func (s *Server) agentMCPJSONRPC(r *http.Request, agent Agent, body map[string]a
 		return result, rpcErr, false
 	case "initialize":
 		// Legacy compatibility shim for pre-2026-07-28 MCP clients.
-		if agent.AgentID == "hub" || strings.HasPrefix(agent.AgentID, "shell:") || isVirtualMCPAgent(agent) || isChildMCPAgent(agent) {
+		if agent.AgentID == "hub" || strings.HasPrefix(agent.AgentID, "shell:") || strings.HasPrefix(agent.AgentID, "file:") || isVirtualMCPAgent(agent) || isChildMCPAgent(agent) {
 			return map[string]any{"protocolVersion": mcpProtocolVersion, "capabilities": map[string]any{"tools": map[string]any{}, "resources": map[string]any{}, "prompts": map[string]any{}}, "serverInfo": map[string]any{"name": "gptadmin-server-" + exposedAgentSlug(agent), "version": BuildVersion}, "instructions": s.startupInstructionsTextForRequest(r)}, nil, false
 		}
 		jobID := s.enqueueRelay(agent.AgentID, method, params)
@@ -7570,6 +7653,9 @@ func (s *Server) agentToolsList(agent Agent) (any, any) {
 	if strings.HasPrefix(agent.AgentID, "shell:") {
 		return map[string]any{"tools": shellTools()}, nil
 	}
+	if strings.HasPrefix(agent.AgentID, "file:") {
+		return map[string]any{"tools": fileTools()}, nil
+	}
 	if isChildMCPAgent(agent) {
 		parent := firstString(agent.Meta, "parent_server_id")
 		ref := firstString(agent.Meta, "child_ref")
@@ -7596,6 +7682,9 @@ func (s *Server) agentToolsListForRequest(r *http.Request, agent Agent) (any, an
 	if strings.HasPrefix(agent.AgentID, "shell:") {
 		return map[string]any{"tools": toolsForRequest(r, agent.AgentID, shellTools())}, nil
 	}
+	if strings.HasPrefix(agent.AgentID, "file:") {
+		return map[string]any{"tools": toolsForRequest(r, agent.AgentID, fileTools())}, nil
+	}
 	if isChildMCPAgent(agent) {
 		result, err := s.agentToolsList(agent)
 		if err != nil {
@@ -7618,6 +7707,15 @@ func (s *Server) agentToolCall(r *http.Request, agent Agent, name string, args m
 	}
 	if strings.HasPrefix(agent.AgentID, "shell:") {
 		return unwrapMCPUpstream(s.callShellToolWithTraceParent(agent.AgentID, name, args, false, s.cfg.DefaultTimeout, requestTraceID(r), requestTraceParent(r)))
+	}
+	if strings.HasPrefix(agent.AgentID, "file:") {
+		if !fileToolAllowed(name) {
+			return nil, map[string]any{"code": -32601, "message": "tool is not exposed by file target"}
+		}
+		backing := "shell:" + strings.TrimPrefix(agent.AgentID, "file:")
+		raw := s.callShellToolWithTraceParent(backing, name, args, false, s.cfg.DefaultTimeout, requestTraceID(r), requestTraceParent(r))
+		raw["server_id"] = agent.AgentID
+		return unwrapMCPUpstream(raw)
 	}
 	if isChildMCPAgent(agent) {
 		parent := firstString(agent.Meta, "parent_server_id")
@@ -8556,6 +8654,9 @@ func (s *Server) appsSDKCall(name string, args map[string]any) any {
 		if strings.HasPrefix(target, "shell:") {
 			return s.withSchemaContractMetadata(map[string]any{"server_id": target, "status": "completed", "response": map[string]any{"tools": shellTools()}})
 		}
+		if strings.HasPrefix(target, "file:") {
+			return s.withSchemaContractMetadata(map[string]any{"server_id": target, "status": "completed", "response": map[string]any{"tools": fileTools()}})
+		}
 		jobID := s.enqueueRelay(target, "tools/list", map[string]any{})
 		return s.withSchemaContractMetadata(s.waitRelay(jobID, s.cfg.DefaultTimeout))
 	case "inspect", "inspect_system", "inspectSystem":
@@ -8564,8 +8665,14 @@ func (s *Server) appsSDKCall(name string, args map[string]any) any {
 		if status != http.StatusOK {
 			return map[string]any{"server_id": target, "status": "failed", "error": map[string]any{"status_code": status, "message": detail}}
 		}
+		if strings.HasPrefix(selectedTarget, "file:") {
+			backing := "shell:" + strings.TrimPrefix(selectedTarget, "file:")
+			resp := s.callShellTool(backing, "system_inspect", toolArgsFromTopLevel(args), false, s.cfg.DefaultTimeout)
+			resp["server_id"] = selectedTarget
+			return resp
+		}
 		if !strings.HasPrefix(selectedTarget, "shell:") {
-			return map[string]any{"server_id": selectedTarget, "status": "failed", "error": "system inspection requires a shell:* target"}
+			return map[string]any{"server_id": selectedTarget, "status": "failed", "error": "system inspection requires a file:* target (shell:* remains accepted for legacy agents)"}
 		}
 		return s.callShellTool(selectedTarget, "system_inspect", toolArgsFromTopLevel(args), false, s.cfg.DefaultTimeout)
 	case "execute", "call_mcp_tool", "callMcpTool":
@@ -8616,7 +8723,7 @@ func (s *Server) appsSDKCallForRequest(r *http.Request, name string, args map[st
 			return map[string]any{"server_id": firstString(args, "target", "server_id", "agent_id"), "status": "failed", "error": err.Error()}
 		}
 		requestedTarget := firstString(args, "target", "server_id", "agent_id")
-		if requestAccessMode(r) == accessModeReadonly && requestedTarget != "hub" && !strings.HasPrefix(requestedTarget, "shell:") {
+		if requestAccessMode(r) == accessModeReadonly && requestedTarget != "hub" && !strings.HasPrefix(requestedTarget, "shell:") && !strings.HasPrefix(requestedTarget, "file:") {
 			return map[string]any{"server_id": requestedTarget, "status": "completed", "response": map[string]any{"tools": []map[string]any{}}}
 		}
 		return s.appsSDKSchemaForRequest(r, args)
@@ -8630,8 +8737,8 @@ func (s *Server) appsSDKCallForRequest(r *http.Request, name string, args map[st
 		if status != http.StatusOK {
 			return map[string]any{"server_id": target, "status": "failed", "error": map[string]any{"status_code": status, "message": detail}}
 		}
-		if !strings.HasPrefix(selectedTarget, "shell:") {
-			return map[string]any{"server_id": selectedTarget, "status": "failed", "error": "system inspection requires a shell:* target"}
+		if !strings.HasPrefix(selectedTarget, "shell:") && !strings.HasPrefix(selectedTarget, "file:") {
+			return map[string]any{"server_id": selectedTarget, "status": "failed", "error": "system inspection requires a file:* target (shell:* remains accepted for legacy agents)"}
 		}
 		response, responseStatus := s.executeMCPTool(r, selectedTarget, "system_inspect", toolArgsFromTopLevel(args), false, s.cfg.DefaultTimeout, "")
 		if responseStatus >= http.StatusBadRequest {
@@ -8641,7 +8748,7 @@ func (s *Server) appsSDKCallForRequest(r *http.Request, name string, args map[st
 	}
 	if requestAccessMode(r) == accessModeReadonly && (name == "schema" || name == "list_mcp_tools" || name == "listMcpTools") {
 		target := firstString(args, "target", "server_id", "agent_id")
-		if target != "hub" && !strings.HasPrefix(target, "shell:") {
+		if target != "hub" && !strings.HasPrefix(target, "shell:") && !strings.HasPrefix(target, "file:") {
 			return map[string]any{"server_id": target, "status": "completed", "response": map[string]any{"tools": []map[string]any{}}}
 		}
 	}
@@ -8685,6 +8792,8 @@ func (s *Server) appsSDKSchemaForRequest(r *http.Request, args map[string]any) a
 		result = map[string]any{"server_id": target, "status": "completed", "response": map[string]any{"tools": s.virtualMCPToolsForRequest(r, virtual)}}
 	} else if strings.HasPrefix(target, "shell:") {
 		result = map[string]any{"server_id": target, "status": "completed", "response": map[string]any{"tools": shellTools()}}
+	} else if strings.HasPrefix(target, "file:") {
+		result = map[string]any{"server_id": target, "status": "completed", "response": map[string]any{"tools": fileTools()}}
 	} else {
 		jobID := s.enqueueRelay(target, "tools/list", map[string]any{})
 		result = s.waitRelay(jobID, s.cfg.DefaultTimeout)
@@ -8709,6 +8818,13 @@ func (s *Server) appsSDKCallMCP(r *http.Request, name string, args map[string]an
 	callArgs := mapValue(args["arguments"])
 	if len(callArgs) == 0 {
 		callArgs = mapValue(args["args"])
+	}
+	if len(callArgs) == 0 && firstString(args, "args_json") != "" {
+		var err error
+		callArgs, err = toolArgsFromJSON(firstString(args, "args_json"))
+		if err != nil {
+			return map[string]any{"server_id": target, "status": "failed", "error": err.Error()}
+		}
 	}
 	if len(callArgs) == 0 {
 		callArgs = toolArgsFromTopLevel(args)
