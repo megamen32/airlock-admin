@@ -1,4 +1,5 @@
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { ErrorNotice, PageHeader, StatusBadge } from "./ui/Primitives";
 
 type AuditEvent = { time?: string; name?: string; fields?: Record<string, unknown> };
 type AuditResponse = { events?: AuditEvent[]; total?: number; next_offset?: number };
@@ -48,16 +49,13 @@ export default function AuditScreen() {
   const shownFields = useMemo(() => events.map((event) => Object.entries(event.fields ?? {}).slice(0, 6)), [events]);
 
   return <div className="page-shell native-operation-page">
-    <header className="page-header compact-page-header">
-      <div><p className="section-kicker">AUDIT</p><h1>Журнал</h1><p className="lede">События доступа, политик и операций без сырого шума интерфейса.</p></div>
-      <span className={`data-badge ${error ? "state-error" : "state-ready"}`} role="status">{loading ? "Загрузка…" : `${events.length} / ${total}`}</span>
-    </header>
+    <PageHeader eyebrow="ЖУРНАЛ" title="Журнал" description="События доступа, политик и операций без сырого шума интерфейса." actions={<StatusBadge state={error ? "error" : "ready"}>{loading ? "Загрузка…" : `${events.length} / ${total}`}</StatusBadge>} />
     <form className="audit-toolbar card" onSubmit={submit}>
       <label><span>Поиск</span><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="событие, actor, target…" /></label>
       <button className="button primary" type="submit">Найти</button>
       <button className="button secondary" type="button" onClick={() => { setQuery(""); setAppliedQuery(""); }}>Сбросить</button>
     </form>
-    {error && <div className="state-panel card standalone-state state-error" role="alert">{error}</div>}
+    <ErrorNotice message={error} />
     <section className="card audit-native-list">
       {events.length === 0 && !loading ? <div className="compact-empty"><strong>Событий нет</strong><span>По текущему фильтру ничего не найдено.</span></div> : events.map((event, index) => <article className="audit-native-row" key={`${event.time}-${event.name}-${index}`}>
         <div className="audit-native-head"><span className="job-state">{event.name || "event"}</span><time>{event.time || "—"}</time></div>

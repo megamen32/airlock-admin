@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { ErrorNotice, PageHeader } from "./ui/Primitives";
 
 type Server = { server_id?: string; status?: string };
 type NodeConfig = { server_id: string; enabled: boolean; rank: number; hub_url: string; local_hub_port?: number };
@@ -60,8 +61,8 @@ export default function FailoverScreen() {
   };
 
   return <div className="page-shell native-operation-page">
-    <header className="page-header compact-page-header"><div><p className="section-kicker">FAILOVER</p><h1>Резервирование</h1><p className="lede">Расширенная настройка автоматического переключения на резервный сервер.</p></div><div className="overview-header-actions"><button className="button secondary" type="button" disabled={busy} onClick={() => void load()}>Обновить</button><button className="button primary" type="button" disabled={busy} onClick={() => void save()}>Сохранить</button></div></header>
-    {error && <div className="state-panel card standalone-state state-error" role="alert">{error}</div>}
+    <PageHeader eyebrow="РАСШИРЕННЫЙ РЕЖИМ" title="Резервирование" description="Автоматическое переключение на резервный сервер при сбое." actions={<><button className="button secondary" type="button" disabled={busy} onClick={() => void load()}>Обновить</button><button className="button primary" type="button" disabled={busy} onClick={() => void save()}>Сохранить</button></>} />
+    <ErrorNotice message={error} />
     <section className="card failover-main-card">
       <div className="failover-main-settings"><label className="switch-line"><input type="checkbox" checked={enabled} onChange={(event) => setEnabled(event.target.checked)} /><span><strong>Автоматическое резервирование</strong><small>Разрешить переход на резервный сервер при сбое</small></span></label><label><span>Основной адрес системы</span><input value={primary} onChange={(event) => setPrimary(event.target.value)} placeholder="https://..." /></label><label><span>Ошибок до переключения</span><input type="number" min={1} value={base} onChange={(event) => setBase(Number(event.target.value) || 3)} /></label></div>
       <div className="failover-node-list">{servers.length === 0 ? <div className="compact-empty"><strong>Резервных серверов нет</strong><span>Настройка станет доступна после подключения дополнительного сервера.</span></div> : servers.map((server) => { const id = server.server_id || ""; const node = nodes[id] ?? { server_id: id, enabled: false, rank: 1, hub_url: "" }; return <article className="failover-node-row" key={id}><label className="switch-line"><input type="checkbox" checked={node.enabled} onChange={(event) => updateNode(id, { enabled: event.target.checked })} /><span><strong>{id}</strong><small>{server.status || "unknown"}</small></span></label><label><span>Приоритет</span><input type="number" min={1} value={node.rank} onChange={(event) => updateNode(id, { rank: Number(event.target.value) || 1 })} /></label><label className="hub-url-field"><span>Адрес резервного сервера</span><input value={node.hub_url} onChange={(event) => updateNode(id, { hub_url: event.target.value })} placeholder="http://192.168.2.x:9001" /></label></article>; })}</div>

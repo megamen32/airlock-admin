@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { ErrorNotice, PageHeader } from "./ui/Primitives";
 
 type Server = { server_id?: string; status?: string };
 
@@ -47,8 +48,8 @@ export default function ResourcesScreen() {
   };
 
   return <div className="page-shell native-operation-page">
-    <header className="page-header compact-page-header"><div><p className="section-kicker">MCP RESOURCES</p><h1>Ресурсы</h1><p className="lede">Расширенный просмотр ресурсов, которые предоставляет выбранный сервис.</p></div></header>
-    {error && <div className="state-panel card standalone-state state-error" role="alert">{error}</div>}
+    <PageHeader eyebrow="РАСШИРЕННЫЙ РЕЖИМ" title="Ресурсы" description="Просмотр ресурсов, которые предоставляет выбранный сервис." />
+    <ErrorNotice message={error} />
     <section className="card resource-native-card">
       <div className="resource-native-controls"><select value={target} onChange={(event) => setTarget(event.target.value)}>{servers.map((server) => <option value={server.server_id} key={server.server_id}>{server.server_id} ({server.status || "—"})</option>)}</select><button className="button secondary" type="button" disabled={busy || !target} onClick={() => void run("list")}>Показать ресурсы</button><input value={uri} onChange={(event) => setUri(event.target.value)} placeholder="resource://..." /><button className="button primary" type="button" disabled={busy || !uri.trim()} onClick={() => void run("read")}>Открыть ресурс</button></div>
       <pre className="raw-native-box">{result === null ? "—" : JSON.stringify(result, null, 2)}</pre>

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { friendlyActionName, friendlyServerName, jobStatusLabel, serverStatusLabel } from "./ui/format";
 
 type Server = {
   server_id?: string;
@@ -97,7 +98,7 @@ export default function OverviewScreen() {
     <div className="page-shell overview-page">
       <header className="page-header overview-header">
         <div>
-          <p className="section-kicker">SYSTEM STATUS</p>
+          <p className="section-kicker">СОСТОЯНИЕ СИСТЕМЫ</p>
           <h1>Обзор</h1>
           <p className="lede">Коротко о состоянии системы, серверах и последних задачах.</p>
         </div>
@@ -118,18 +119,18 @@ export default function OverviewScreen() {
 
       <section className="overview-columns">
         <article className="card overview-panel">
-          <div className="card-heading"><div><p className="section-kicker">ATTENTION</p><h2>Проблемные серверы</h2></div><span className="count-pill">{problems.length}</span></div>
-          {problems.length === 0 ? <div className="compact-empty"><strong>Все серверы онлайн</strong><span>Сейчас вмешательство не требуется.</span></div> : <div className="compact-list">{problems.map((server) => <a className="compact-row" href="#agents" key={server.server_id ?? server.name}><span className={`status-dot status-${server.status ?? "unknown"}`} /><span><strong>{server.name || server.server_id || "Без имени"}</strong><small>{server.server_id} · {server.status || "unknown"}{server.last_seen ? ` · ${server.last_seen}` : ""}</small></span></a>)}</div>}
+          <div className="card-heading"><div><p className="section-kicker">ТРЕБУЕТ ВНИМАНИЯ</p><h2>Проблемные серверы</h2></div><span className="count-pill">{problems.length}</span></div>
+          {problems.length === 0 ? <div className="compact-empty"><strong>Все серверы работают</strong><span>Сейчас вмешательство не требуется.</span></div> : <div className="compact-list">{problems.map((server) => <a className="compact-row" href="#agents" key={server.server_id ?? server.name}><span className={`status-dot status-${server.status ?? "unknown"}`} /><span><strong>{friendlyServerName(server.server_id, server.name)}</strong><small>{serverStatusLabel(server.status)}{server.last_seen ? ` · ${server.last_seen}` : ""}</small></span></a>)}</div>}
         </article>
 
         <article className="card overview-panel">
-          <div className="card-heading"><div><p className="section-kicker">RECENT</p><h2>Последние задачи</h2></div><a className="text-button" href="#jobs">Все задачи</a></div>
-          {recentJobs.length === 0 ? <div className="compact-empty"><strong>Задач пока нет</strong><span>Последние операции появятся здесь.</span></div> : <div className="compact-list">{recentJobs.map((job) => <a className="compact-row" href="#jobs" key={job.job_id}><span className={`job-state job-${job.status ?? "unknown"}`}>{job.status || "—"}</span><span><strong>{job.tool_name || "operation"}</strong><small>{job.command || job.arguments_preview || job.result_preview || job.error_preview || job.job_id || "—"} · {compactTime(job.created_at)}</small></span></a>)}</div>}
+          <div className="card-heading"><div><p className="section-kicker">ПОСЛЕДНИЕ</p><h2>Последние задачи</h2></div><a className="text-button" href="#jobs">Все задачи</a></div>
+          {recentJobs.length === 0 ? <div className="compact-empty"><strong>Задач пока нет</strong><span>Последние операции появятся здесь.</span></div> : <div className="compact-list">{recentJobs.map((job) => <a className="compact-row" href="#jobs" key={job.job_id}><span className={`job-state job-${job.status ?? "unknown"}`}>{jobStatusLabel(job.status)}</span><span><strong>{friendlyActionName(job.tool_name)}</strong><small>{job.command || job.arguments_preview || job.result_preview || job.error_preview || job.job_id || "—"} · {compactTime(job.created_at)}</small></span></a>)}</div>}
         </article>
       </section>
 
       <details className="card overview-system-card overview-tech-details"><summary>Техническая информация</summary>
-        <div className="card-heading"><div><p className="section-kicker">SYSTEM</p><h2>Версии и обновление</h2></div><button className="button primary" type="button" onClick={() => void triggerUpdate()} disabled={updateRunning}>{updateRunning ? "Обновляем…" : "Обновить этот узел"}</button></div>
+        <div className="card-heading"><div><p className="section-kicker">ТЕХНИЧЕСКАЯ ИНФОРМАЦИЯ</p><h2>Версии и обновление</h2></div><button className="button primary" type="button" onClick={() => void triggerUpdate()} disabled={updateRunning}>{updateRunning ? "Обновляем…" : "Обновить этот узел"}</button></div>
         <div className="system-facts">
           <div><span>Главный сервис</span><strong>версия {overview?.build?.build_version ?? "—"}</strong><small>{overview?.build?.git_commit?.slice(0, 7) || "версия кода —"}</small></div>
           <div><span>Агенты</span><strong>{shellVersions}</strong><small>версии агентов</small></div>

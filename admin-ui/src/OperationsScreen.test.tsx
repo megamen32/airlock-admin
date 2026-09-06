@@ -22,7 +22,7 @@ it("uses native React MCP and failover screens without the legacy runtime", asyn
   });
 
   render(<StrictMode><App /></StrictMode>);
-  expect(await screen.findByRole("heading", { name: "MCP" })).toBeInTheDocument();
+  expect(await screen.findByRole("heading", { name: "Сервисы MCP" })).toBeInTheDocument();
   expect(document.querySelector("#view-mcpmanage")).toBeNull();
   expect(document.querySelector(".operations-console")).toBeNull();
   await userEvent.click(screen.getByRole("button", { name: "Список" }));

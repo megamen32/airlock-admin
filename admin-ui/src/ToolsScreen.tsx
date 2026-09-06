@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { ErrorNotice, PageHeader } from "./ui/Primitives";
 
 type ToolDef = { name?: string; description?: string };
 type Server = { server_id?: string; status?: string };
@@ -66,8 +67,8 @@ export default function ToolsScreen() {
   };
 
   return <div className="page-shell native-operation-page">
-    <header className="page-header compact-page-header"><div><p className="section-kicker">MANUAL RUN</p><h1>Выполнить вручную</h1><p className="lede">Расширенный режим: вручную запустить действие на выбранном сервере.</p></div></header>
-    {error && <div className="state-panel card standalone-state state-error" role="alert">{error}</div>}
+    <PageHeader eyebrow="РАСШИРЕННЫЙ РЕЖИМ" title="Выполнить вручную" description="Вручную запустить действие на выбранном сервере." />
+    <ErrorNotice message={error} />
     <section className="card tool-native-card">
       <div className="tool-native-controls">
         <label><span>Сервер</span><select value={target} onChange={(event) => setTarget(event.target.value)}>{servers.map((server) => <option value={server.server_id} key={server.server_id}>{server.server_id} ({server.status || "—"})</option>)}</select></label>
