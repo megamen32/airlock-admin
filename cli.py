@@ -360,7 +360,9 @@ def env_set_many(upd: dict):
     tmp = ENV_FILE.with_name(f'.{ENV_FILE.name}.{os.getpid()}.tmp')
     try:
         tmp.write_text('\n'.join(lines) + '\n')
-        os.chmod(tmp, 0o640)
+        # gptadmin.env contains bearer/OAuth/admin secrets.  Keep it private in
+        # both user and system installs; doctor deliberately rejects group-read.
+        os.chmod(tmp, 0o600)
         os.replace(tmp, ENV_FILE)
     finally:
         tmp.unlink(missing_ok=True)

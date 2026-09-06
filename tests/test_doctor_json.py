@@ -216,3 +216,13 @@ def test_doctor_probes_authenticated_hub_readiness_without_echoing_token(monkeyp
         ("https://hub.example/admin/api/overview", "Bearer doctor-token"),
     ]
     assert "doctor-token" not in json.dumps(report)
+
+
+def test_env_set_many_keeps_secret_env_private(monkeypatch, tmp_path):
+    env_file = tmp_path / "gptadmin.env"
+    monkeypatch.setattr(cli, "ENV_FILE", env_file)
+
+    cli.env_set_many({"ADMIN_PASSWORD": "secret", "HUB_PORT": "9001"})
+
+    assert (env_file.stat().st_mode & 0o777) == 0o600
+    assert "ADMIN_PASSWORD=secret" in env_file.read_text(encoding="utf-8")
