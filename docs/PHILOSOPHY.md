@@ -115,6 +115,24 @@ Every new capability must define:
 - compatibility scope and removal conditions;
 - runtime or black-box acceptance evidence.
 
+## Reality is the acceptance boundary
+
+GPTAdmin prefers real systems over test doubles. Mocks, fakes, stubs, synthetic
+health endpoints and monkeypatched transports are useful for narrow unit tests,
+but they are not acceptance evidence. They must never be used to turn an
+unverified runtime, integration, installation, update, failover, deployment or
+release into a green product claim.
+
+When the claim crosses a process or protocol boundary, the proof should cross the
+same boundary: use the actual candidate artifact, installer, service manager,
+processes, authentication path and protocol, then perform a harmless real action
+and verify the real output or side effect. `active`, `online`, HTTP `200`,
+registration, discovery and schema visibility are intermediate observations, not
+substitutes for successful execution.
+
+If reality is unavailable, fail closed or record the lane as unverified. A fake is
+never a fallback definition of done for an acceptance or release gate.
+
 ## Models use capabilities without receiving secrets
 
 Read-only is a real execution profile, not a prompt or a list of supposedly

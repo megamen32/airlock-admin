@@ -62,6 +62,27 @@ perfect atomicity, broad compatibility, visual polish, or exhaustive review.
 Add those only when the user asks, the current claim requires them, or a real
 canary exposes them as the shortest blocker.
 
+## Reality-first testing
+
+Mocks, fakes, stubs, simulated services, fake health responses, and monkeypatched
+process/network boundaries are allowed only for narrow unit tests where the claim
+is explicitly limited to local logic. They are never acceptable evidence that a
+runtime, integration, installation, update, failover, deployment, or release
+works.
+
+For every user-visible or cross-component claim, prefer the real executable path:
+real candidate artifacts, real installer, real service manager, real processes,
+real protocol/authentication flow, and a harmless real operation whose output or
+side effect is verified. A green status, HTTP 200, process existence, schema
+listing, mocked response, or fake transport is not proof of end-to-end behavior
+when a real execution can be performed.
+
+Acceptance and release gates must fail closed when the real path cannot be
+exercised. Never replace an unavailable real dependency with a fake and then
+report the corresponding integration as verified; report the gap instead. Use a
+test double only when exercising the real dependency is impossible or would be
+destructive, and keep that test explicitly below the acceptance/release layer.
+
 ## Minimal path first
 
 Every implementation begins with a three-line minimal path recorded in the task

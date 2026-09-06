@@ -142,3 +142,20 @@ def test_public_custom_gpt_instructions_stay_in_sync_with_prompt_source() -> Non
     assert (ROOT / "public" / "custom-gpt-instructions.md").read_text(
         encoding="utf-8"
     ) == (ROOT / "GPTADMIN_PROMPT.md").read_text(encoding="utf-8")
+
+
+def test_reality_first_acceptance_policy_is_canonical() -> None:
+    """Project policy must not regress to mocks/fakes as release evidence."""
+
+    agents = (ROOT / "AGENTS.md").read_text(encoding="utf-8").lower()
+    contributing = (ROOT / "CONTRIBUTING.md").read_text(encoding="utf-8").lower()
+    philosophy = (ROOT / "docs" / "PHILOSOPHY.md").read_text(encoding="utf-8").lower()
+    philosophy_compact = " ".join(philosophy.split())
+
+    assert "## reality-first testing" in agents
+    assert "acceptance and release gates must fail closed" in agents
+    assert "## testing policy: reality first" in contributing
+    assert "unit-test tools only" in contributing
+    assert "do not silently replace it with a fake" in contributing
+    assert "## reality is the acceptance boundary" in philosophy
+    assert "a fake is never a fallback definition of done" in philosophy_compact
