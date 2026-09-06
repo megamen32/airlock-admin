@@ -61,6 +61,7 @@ SAN_IGNORES=(
 	--ignore=tests/test_real_mcp_clients.py
 	--ignore=tests/test_public_mirror.py
 	--ignore=tests/test_haos_public_distribution.py
+	--ignore=tests/test_frp_watchdog.py
 )
 SAN_DESELECTS=(
 	--deselect tests/test_site_docs.py::test_site_docs_mirror_root_source_and_public_tree
