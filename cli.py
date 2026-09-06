@@ -212,7 +212,7 @@ else:
     SYSTEMD_HUB   = 'gptadmin-hub.service'
     SYSTEMD_HUB_STANDBY = 'gptadmin-hub-standby.service'
     SYSTEMD_SHELLMCP = 'shellmcp.service'
-    SYSTEMD_GREPMESH = 'grepmesh-mcp.service'
+    SYSTEMD_GREPMESH = 'gptadmin-grepmesh-mcp.service'
     SYSTEMD_FRPC  = 'gptadmin-tunnel-frpc.service'
     SYSTEMD_CLOUDFLARED = 'gptadmin-cloudflared.service'
     SYSTEMD_AUTO_UPDATE = 'gptadmin-auto-update.service'

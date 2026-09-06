@@ -61,7 +61,7 @@ cleanup(){
   status=$?
   if [ "$status" -ne 0 ]; then
     echo "=== lifecycle failure diagnostics ===" >&2
-    docker exec "$name" systemctl status gptadmin-hub.service shellmcp.service grepmesh-mcp.service --no-pager -l >&2 || true
+    docker exec "$name" systemctl status gptadmin-hub.service shellmcp.service gptadmin-grepmesh-mcp.service --no-pager -l >&2 || true
     echo "=== shellmcp journal ===" >&2
     docker exec "$name" journalctl -u shellmcp.service -n 120 --no-pager >&2 || true
     echo "=== hub journal ===" >&2
@@ -97,7 +97,7 @@ docker exec "$name" env \
 
 docker exec "$name" systemctl is-active --quiet gptadmin-hub.service
 docker exec "$name" systemctl is-active --quiet shellmcp.service
-docker exec "$name" systemctl is-active --quiet grepmesh-mcp.service
+docker exec "$name" systemctl is-active --quiet gptadmin-grepmesh-mcp.service
 docker exec "$name" test -s /etc/gptadmin/gptadmin.env
 docker exec "$name" test -x /opt/gptadmin/bin/gptadmin_hub
 docker exec "$name" test -x /opt/gptadmin/bin/shellmcp
@@ -118,7 +118,7 @@ docker exec "$name" env \
 
 docker exec "$name" systemctl is-active --quiet gptadmin-hub.service
 docker exec "$name" systemctl is-active --quiet shellmcp.service
-docker exec "$name" systemctl is-active --quiet grepmesh-mcp.service
+docker exec "$name" systemctl is-active --quiet gptadmin-grepmesh-mcp.service
 docker exec "$name" env GPTADMIN_ACCEPTANCE_MARKER=gptadmin-post-update python3 /work/tests/e2e/systemd/runtime_acceptance.py
 
 echo "ok: clean install + autoconfigure + real Custom GPT/MCP execution + update + real execution"
