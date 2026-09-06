@@ -397,6 +397,24 @@ def _restore_persistent_auth_material(env: dict, saved: dict[str, str]) -> None:
     env.update(saved)
 
 
+def normalize_bundled_shellmcp_hub_url(env: dict, install_hub: bool, install_shellmcp: bool) -> None:
+    """Keep same-host ShellMCP on the local Hub even when public ingress fails over.
+
+    HUB_PUBLIC_URL/PUBLIC_ORIGIN/MCP_RESOURCE are the external identity. HUB_URL is
+    the durable transport used by ShellMCP. A bundled Hub+ShellMCP install must
+    never poll its own public failover URL: during a Hub handover that can point
+    at standby and strand jobs created on the restarted primary.
+    """
+    if not (install_hub and install_shellmcp):
+        return
+    local_hub = f"http://127.0.0.1:{env.get('HUB_PORT') or '9001'}"
+    env['HUB_URL'] = local_hub
+    transport = str(env.get('SHELLMCP_TRANSPORT') or 'polling').strip().lower()
+    queue_enabled = str(env.get('SHELLMCP_QUEUE') or env.get('SHELL_QUEUE') or '1').strip().lower()
+    if transport in {'polling', 'long_poll', 'long-poll'} or queue_enabled in {'1', 'true', 'yes', 'on'}:
+        env['QUEUE_URL'] = local_hub + '/queue'
+
+
 def ensure_shellmcp_default_user(env: dict) -> None:
     """Persist the invoking non-root account for ordinary ShellMCP commands."""
     if env.get('SHELL_DEFAULT_USER') or env.get('SHELLMCP_DEFAULT_USER'):
@@ -2428,6 +2446,7 @@ def setup_interactive(args):
             if enrollment_password:
                 env['MCP_RELAY_ENROLLMENT_PASSWORD'] = enrollment_password
 
+    normalize_bundled_shellmcp_hub_url(env, install_hub, install_shellmcp)
     if install_shellmcp:
         if silent:
             configure_shellmcp_transport_noninteractive(
@@ -5482,6 +5501,7 @@ def cmd_update(args):
     env.setdefault('GPTADMIN_SECURITY_MODE', 'normal')
     env['INSTALL_HUB'] = 'true' if install_hub else 'false'
     env['INSTALL_SHELLMCP'] = 'true' if install_shellmcp else 'false'
+    normalize_bundled_shellmcp_hub_url(env, install_hub, install_shellmcp)
     env.setdefault('GPTADMIN_AUTO_UPDATE', 'true')
     env.setdefault('GPTADMIN_AUTO_UPDATE_INTERVAL_SEC', '21600')
     if getattr(args, 'auto', False) and not auto_update_enabled(env):

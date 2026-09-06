@@ -196,6 +196,40 @@ def test_sync_oauth_origin_preserves_explicit_public_origin_over_loopback_hub():
     assert env["MCP_RESOURCE"] == expected
 
 
+
+def test_bundled_shellmcp_normalizes_legacy_public_hub_url_to_loopback():
+    env = {
+        "HUB_PORT": "9001",
+        "HUB_PUBLIC_URL": "https://u-example.t.gptadmin.bezrabotnyi.com",
+        "PUBLIC_ORIGIN": "https://u-example.t.gptadmin.bezrabotnyi.com",
+        "MCP_RESOURCE": "https://u-example.t.gptadmin.bezrabotnyi.com",
+        "HUB_URL": "https://u-example.t.gptadmin.bezrabotnyi.com",
+        "SHELLMCP_TRANSPORT": "polling",
+        "SHELLMCP_QUEUE": "1",
+        "QUEUE_URL": "https://u-example.t.gptadmin.bezrabotnyi.com/queue",
+    }
+
+    cli.normalize_bundled_shellmcp_hub_url(env, True, True)
+
+    assert env["HUB_URL"] == "http://127.0.0.1:9001"
+    assert env["QUEUE_URL"] == "http://127.0.0.1:9001/queue"
+    assert env["HUB_PUBLIC_URL"] == "https://u-example.t.gptadmin.bezrabotnyi.com"
+    assert env["PUBLIC_ORIGIN"] == "https://u-example.t.gptadmin.bezrabotnyi.com"
+    assert env["MCP_RESOURCE"] == "https://u-example.t.gptadmin.bezrabotnyi.com"
+
+
+def test_shell_only_install_keeps_remote_hub_url():
+    env = {
+        "HUB_URL": "https://remote-hub.example",
+        "SHELLMCP_TRANSPORT": "polling",
+        "QUEUE_URL": "https://remote-hub.example/queue",
+    }
+
+    cli.normalize_bundled_shellmcp_hub_url(env, False, True)
+
+    assert env["HUB_URL"] == "https://remote-hub.example"
+    assert env["QUEUE_URL"] == "https://remote-hub.example/queue"
+
 def test_cleanup_removes_obsolete_shellmcp_primary_override(monkeypatch, tmp_path):
     """Updates must stop an old drop-in from splitting Hub and Shell credentials."""
     systemd_dir = tmp_path / "systemd"
