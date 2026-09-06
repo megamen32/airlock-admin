@@ -99,10 +99,10 @@ export default function OverviewScreen() {
         <div>
           <p className="section-kicker">SYSTEM STATUS</p>
           <h1>Обзор</h1>
-          <p className="lede">Только то, что требует внимания: состояние Hub, серверов и последних задач.</p>
+          <p className="lede">Коротко о состоянии системы, серверах и последних задачах.</p>
         </div>
         <div className="overview-header-actions">
-          <span className={`data-badge ${error ? "state-error" : "state-ready"}`} role="status">{refreshing ? "Обновляем…" : error ? "Нет связи" : "● online"}</span>
+          <span className={`data-badge ${error ? "state-error" : "state-ready"}`} role="status">{refreshing ? "Обновляем…" : error ? "Нет связи" : "● работает"}</span>
           <button className="button secondary" type="button" onClick={() => void refresh()} disabled={refreshing}>Обновить</button>
         </div>
       </header>
@@ -110,7 +110,7 @@ export default function OverviewScreen() {
       {error && <div className="state-panel card standalone-state state-error" role="alert">{error}</div>}
 
       <section className="overview-metrics" aria-label="Ключевые показатели">
-        <article className="card metric-tile"><span>Серверы</span><strong><b className="ok-text">{counts.online ?? 0}</b> / <b className="bad-text">{counts.offline ?? 0}</b> / <b className="warn-text">{counts.stale ?? 0}</b></strong><small>online / offline / stale</small></article>
+        <article className="card metric-tile"><span>Серверы</span><strong><b className="ok-text">{counts.online ?? 0}</b> / <b className="bad-text">{counts.offline ?? 0}</b> / <b className="warn-text">{counts.stale ?? 0}</b></strong><small>работают / недоступны / давно не отвечали</small></article>
         <article className="card metric-tile"><span>Клиенты</span><strong>{overview?.client_count ?? 0}</strong><small>активные записи доступа</small></article>
         <article className="card metric-tile"><span>Очередь</span><strong>{overview?.jobs?.queued?.length ?? 0}</strong><small>ожидают выполнения</small></article>
         <article className="card metric-tile"><span>В фоне</span><strong>{overview?.jobs?.background?.length ?? 0}</strong><small>выполняются сейчас</small></article>
@@ -128,15 +128,15 @@ export default function OverviewScreen() {
         </article>
       </section>
 
-      <section className="card overview-system-card">
+      <details className="card overview-system-card overview-tech-details"><summary>Техническая информация</summary>
         <div className="card-heading"><div><p className="section-kicker">SYSTEM</p><h2>Версии и обновление</h2></div><button className="button primary" type="button" onClick={() => void triggerUpdate()} disabled={updateRunning}>{updateRunning ? "Обновляем…" : "Обновить этот узел"}</button></div>
         <div className="system-facts">
-          <div><span>Hub</span><strong>build {overview?.build?.build_version ?? "—"}</strong><small>{overview?.build?.git_commit?.slice(0, 7) || "commit —"}</small></div>
-          <div><span>Shells</span><strong>{shellVersions}</strong><small>версии агентов</small></div>
-          <div><span>Hub URL</span><strong>{publicUrl ? <a href={publicUrl} target="_blank" rel="noreferrer">{publicUrl}</a> : "—"}</strong><small>{overview?.now_fmt || "auto refresh 15s"}</small></div>
+          <div><span>Главный сервис</span><strong>версия {overview?.build?.build_version ?? "—"}</strong><small>{overview?.build?.git_commit?.slice(0, 7) || "версия кода —"}</small></div>
+          <div><span>Агенты</span><strong>{shellVersions}</strong><small>версии агентов</small></div>
+          <div><span>Адрес системы</span><strong>{publicUrl ? <a href={publicUrl} target="_blank" rel="noreferrer">{publicUrl}</a> : "—"}</strong><small>{overview?.now_fmt || "обновление каждые 15 секунд"}</small></div>
         </div>
         {update?.last_result?.message && <div className={`inline-note ${update.last_result.status === "error" ? "danger-note" : ""}`}>{update.last_result.message}</div>}
-      </section>
+      </details>
     </div>
   );
 }

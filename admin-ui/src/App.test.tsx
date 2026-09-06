@@ -126,12 +126,12 @@ describe("Profiles / Instructions", () => {
     await screen.findByRole("textbox");
     expect(screen.getByRole("link", { name: "Настройки" })).toHaveClass("active");
     expect(screen.getByRole("link", { name: "Обзор" })).toHaveAttribute("href", "#overview");
-    expect(screen.getByRole("link", { name: "Инфраструктура" })).toHaveAttribute("href", "#agents");
+    expect(screen.getByRole("link", { name: "Серверы" })).toHaveAttribute("href", "#agents");
     expect(screen.getByRole("link", { name: "Задачи" })).toHaveAttribute("href", "#jobs");
     expect(screen.getByRole("link", { name: "Доступ" })).toHaveAttribute("href", "#clients");
     expect(screen.getByRole("link", { name: "Автоматизация" })).toHaveAttribute("href", "#webhooks");
     expect(screen.getByRole("link", { name: "Журнал" })).toHaveAttribute("href", "#audit");
-    expect(screen.getByRole("navigation", { name: "Настройки: подразделы" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Для администратора" })).toHaveAttribute("aria-pressed", "false");
   });
 });
 

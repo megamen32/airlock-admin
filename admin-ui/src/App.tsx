@@ -69,7 +69,7 @@ type ContextLink = { id: View; label: string };
 
 const primaryNavigation: NavigationSection[] = [
   { id: "overview", label: "Обзор", target: "overview", views: ["overview"] },
-  { id: "infrastructure", label: "Инфраструктура", target: "agents", views: ["agents", "mcpmanage", "resources", "failover"] },
+  { id: "infrastructure", label: "Серверы", target: "agents", views: ["agents", "mcpmanage", "resources", "failover"] },
   { id: "access", label: "Доступ", target: "clients", views: ["clients", "profiles", "auth"] },
   { id: "automation", label: "Автоматизация", target: "webhooks", views: ["webhooks"] },
   { id: "jobs", label: "Задачи", target: "jobs", views: ["jobs", "tools"] },
@@ -78,9 +78,9 @@ const primaryNavigation: NavigationSection[] = [
 
 const contextualNavigation: Partial<Record<string, ContextLink[]>> = {
   infrastructure: [
-    { id: "agents", label: "Серверы" },
-    { id: "mcpmanage", label: "MCP" },
-    { id: "resources", label: "Ресурсы" },
+    { id: "agents", label: "Состояние" },
+    { id: "mcpmanage", label: "Сервисы MCP" },
+    { id: "resources", label: "Ресурсы MCP" },
     { id: "failover", label: "Резервирование" },
   ],
   access: [
@@ -90,26 +90,33 @@ const contextualNavigation: Partial<Record<string, ContextLink[]>> = {
   ],
   jobs: [
     { id: "jobs", label: "Очередь" },
-    { id: "tools", label: "Выполнить вручную" },
+    { id: "tools", label: "Ручной запуск" },
   ],
   journal: [
     { id: "audit", label: "События" },
     { id: "operations", label: "Изменения доступа" },
-    { id: "raw", label: "Raw JSON" },
+    { id: "raw", label: "Технические данные" },
   ],
   settings: [
-    { id: "capabilities", label: "Hub" },
-    { id: "security", label: "Безопасность" },
     { id: "instructions", label: "Инструкции" },
+    { id: "capabilities", label: "Системные настройки" },
+    { id: "security", label: "Безопасность" },
   ],
 };
 
 const settingsSection: NavigationSection = {
   id: "settings",
   label: "Настройки",
-  target: "capabilities",
+  target: "instructions",
   views: ["capabilities", "security", "instructions"],
 };
+
+
+const advancedViews = new Set<View>(["mcpmanage", "resources", "failover", "tools", "raw", "capabilities", "security"]);
+
+function isAdvancedView(view: View): boolean {
+  return advancedViews.has(view);
+}
 
 const allViews: readonly View[] = [
   "overview", "agents", "jobs", "operations", "mcpmanage", "tools", "resources",
@@ -1266,6 +1273,7 @@ function CapabilitiesScreen() {
 export default function App() {
   const [issuedToken, setIssuedToken] = useState<TokenResponse | null>(null);
   const [view, setView] = useState<View>(viewFromHash);
+  const [adminMode, setAdminMode] = useState(() => localStorage.getItem("gptadmin:advanced") === "1" || isAdvancedView(viewFromHash()));
 
   useEffect(() => {
     const onHashChange = () => {
@@ -1276,8 +1284,12 @@ export default function App() {
     return () => window.removeEventListener("hashchange", onHashChange);
   }, []);
 
+  useEffect(() => {
+    localStorage.setItem("gptadmin:advanced", adminMode ? "1" : "0");
+  }, [adminMode]);
+
   const activeSection = primaryNavigation.find((section) => section.views.includes(view)) ?? (settingsSection.views.includes(view) ? settingsSection : undefined);
-  const contextLinks = activeSection ? contextualNavigation[activeSection.id] ?? [] : [];
+  const contextLinks = activeSection ? (contextualNavigation[activeSection.id] ?? []).filter((item) => adminMode || !isAdvancedView(item.id)) : [];
   const navigate = (next: View) => {
     setView(next);
     const href = `#${next}`;
@@ -1296,13 +1308,23 @@ export default function App() {
           })}
         </nav>
         <div className="sidebar-footer">
-          <a className={`sidebar-utility ${settingsSection.views.includes(view) ? "active" : ""}`} href="#capabilities" onClick={(event) => { event.preventDefault(); navigate("capabilities"); }}>Настройки</a>
+          <a className={`sidebar-utility ${settingsSection.views.includes(view) ? "active" : ""}`} href="#instructions" onClick={(event) => { event.preventDefault(); navigate("instructions"); }}>Настройки</a>
+          <button className={`advanced-mode-toggle ${adminMode ? "active" : ""}`} type="button" aria-pressed={adminMode} onClick={() => {
+            const next = !adminMode;
+            setAdminMode(next);
+            if (!next && isAdvancedView(view)) {
+              if (["mcpmanage", "resources", "failover"].includes(view)) navigate("agents");
+              else if (view === "tools") navigate("jobs");
+              else if (view === "raw") navigate("audit");
+              else navigate("instructions");
+            }
+          }}>{adminMode ? "Скрыть расширенные" : "Для администратора"}</button>
           <a className="sidebar-utility" href="/cloudos/">CloudOS</a>
           <a className="logout-link" href="/admin/logout">Выйти</a>
         </div>
       </aside>
       <main className="main-content">
-        {contextLinks.length > 0 && <nav className="context-nav" aria-label={`${activeSection?.label ?? "Раздел"}: подразделы`}>{contextLinks.map((item) => <a key={item.id} href={`#${item.id}`} className={view === item.id ? "active" : ""} aria-current={view === item.id ? "page" : undefined} onClick={(event) => { event.preventDefault(); navigate(item.id); }}>{item.label}</a>)}</nav>}
+        {contextLinks.length > 1 && <nav className="context-nav" aria-label={`${activeSection?.label ?? "Раздел"}: подразделы`}>{contextLinks.map((item) => <a key={item.id} href={`#${item.id}`} className={view === item.id ? "active" : ""} aria-current={view === item.id ? "page" : undefined} onClick={(event) => { event.preventDefault(); navigate(item.id); }}>{item.label}</a>)}</nav>}
         {view === "overview" ? <OverviewScreen /> : view === "audit" ? <AuditScreen /> : view === "raw" ? <RawScreen /> : view === "tools" ? <ToolsScreen /> : view === "resources" ? <ResourcesScreen /> : view === "agents" ? <AgentsScreen /> : view === "jobs" ? <JobsScreen /> : view === "mcpmanage" ? <McpManageScreen /> : view === "failover" ? <FailoverScreen /> : view === "security" ? <SecurityScreen /> : view === "operations" ? <AccessOperations /> : view === "instructions" ? <InstructionsScreen /> : view === "profiles" ? <ProfilesScreen /> : view === "clients" ? <ClientsScreen token={issuedToken} setToken={setIssuedToken} /> : view === "webhooks" ? <WebhooksScreen /> : view === "capabilities" ? <CapabilitiesScreen /> : <AuthScreen token={issuedToken} />}
       </main>
     </div>

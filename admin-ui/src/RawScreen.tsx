@@ -16,7 +16,7 @@ export default function RawScreen() {
   }, []);
   useEffect(() => { const controller = new AbortController(); void load(controller.signal); return () => controller.abort(); }, [load]);
   return <div className="page-shell native-operation-page">
-    <header className="page-header compact-page-header"><div><p className="section-kicker">DIAGNOSTICS</p><h1>Raw JSON</h1><p className="lede">Технический снимок Hub. Используйте его только для диагностики.</p></div><button className="button secondary" type="button" onClick={() => void load()} disabled={loading}>{loading ? "Обновляем…" : "Обновить"}</button></header>
+    <header className="page-header compact-page-header"><div><p className="section-kicker">DIAGNOSTICS</p><h1>Технические данные</h1><p className="lede">Сырой снимок состояния системы для диагностики. Обычно этот экран не нужен.</p></div><button className="button secondary" type="button" onClick={() => void load()} disabled={loading}>{loading ? "Обновляем…" : "Обновить"}</button></header>
     {error && <div className="state-panel card standalone-state state-error" role="alert">{error}</div>}
     <pre className="card raw-native-box">{data === null ? "—" : JSON.stringify(data, null, 2)}</pre>
   </div>;

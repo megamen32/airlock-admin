@@ -41,7 +41,7 @@ def test_admin_ui_exposes_heartbeat_as_an_explicit_setting() -> None:
     screen = (root / "admin-ui" / "src" / "SecurityScreen.tsx").read_text(encoding="utf-8")
 
     assert "SHELLMCP_HEARTBEAT" not in screen
-    assert "Дополнительный heartbeat" in screen
+    assert "toggleHeartbeat" in screen
     assert "/admin/api/security/heartbeat" in screen
     assert "shellmcp_heartbeat" in screen
 

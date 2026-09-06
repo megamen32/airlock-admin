@@ -66,24 +66,24 @@ export default function ToolsScreen() {
   };
 
   return <div className="page-shell native-operation-page">
-    <header className="page-header compact-page-header"><div><p className="section-kicker">MANUAL RUN</p><h1>Выполнить вручную</h1><p className="lede">Диагностический вызов MCP без отдельного длинного legacy-интерфейса.</p></div></header>
+    <header className="page-header compact-page-header"><div><p className="section-kicker">MANUAL RUN</p><h1>Выполнить вручную</h1><p className="lede">Расширенный режим: вручную запустить действие на выбранном сервере.</p></div></header>
     {error && <div className="state-panel card standalone-state state-error" role="alert">{error}</div>}
     <section className="card tool-native-card">
       <div className="tool-native-controls">
-        <label><span>Target</span><select value={target} onChange={(event) => setTarget(event.target.value)}>{servers.map((server) => <option value={server.server_id} key={server.server_id}>{server.server_id} ({server.status || "—"})</option>)}</select></label>
-        <label><span>Timeout</span><input type="number" min={1} max={3600} value={timeout} onChange={(event) => setTimeoutValue(Number(event.target.value) || 30)} /></label>
-        <label className="checkbox-line"><input type="checkbox" checked={background} onChange={(event) => setBackground(event.target.checked)} /> background</label>
-        <button className="button secondary" type="button" disabled={busy || !target} onClick={() => void run("list")}>tools/list</button>
+        <label><span>Сервер</span><select value={target} onChange={(event) => setTarget(event.target.value)}>{servers.map((server) => <option value={server.server_id} key={server.server_id}>{server.server_id} ({server.status || "—"})</option>)}</select></label>
+        <label><span>Ждать не более, сек.</span><input type="number" min={1} max={3600} value={timeout} onChange={(event) => setTimeoutValue(Number(event.target.value) || 30)} /></label>
+        <label className="checkbox-line"><input type="checkbox" checked={background} onChange={(event) => setBackground(event.target.checked)} /> Выполнять в фоне</label>
+        <button className="button secondary" type="button" disabled={busy || !target} onClick={() => void run("list")}>Получить список действий</button>
       </div>
       <div className="tool-native-grid">
         <div className="tool-editor-pane">
-          <label><span>Tool</span><select value={toolName} onChange={(event) => setToolName(event.target.value)}><option value="">Выберите tool</option>{tools.map((tool) => <option value={tool.name} key={tool.name}>{tool.name}</option>)}</select></label>
+          <label><span>Действие</span><select value={toolName} onChange={(event) => setToolName(event.target.value)}><option value="">Выберите tool</option>{tools.map((tool) => <option value={tool.name} key={tool.name}>{tool.name}</option>)}</select></label>
           {selectedTool?.description && <p className="muted-help">{selectedTool.description}</p>}
-          <label><span>Arguments (JSON)</span><textarea value={args} onChange={(event) => setArgs(event.target.value)} rows={12} /></label>
+          <label><span>Параметры действия (JSON)</span><textarea value={args} onChange={(event) => setArgs(event.target.value)} rows={12} /></label>
           <div className="route-actions"><button className="button secondary" type="button" onClick={() => { try { setArgs(JSON.stringify(JSON.parse(args || "{}"), null, 2)); } catch { setError("Некорректный JSON"); } }}>Форматировать</button><button className="button primary" type="button" disabled={busy || !toolName} onClick={() => void run("call")}>Вызвать</button></div>
         </div>
         <div className="tool-result-pane">
-          <div className="job-inline-control"><input value={jobId} onChange={(event) => setJobId(event.target.value)} placeholder="job_id" /><button className="button secondary" type="button" disabled={busy || !jobId.trim()} onClick={() => void run("job")}>Получить job</button></div>
+          <div className="job-inline-control"><input value={jobId} onChange={(event) => setJobId(event.target.value)} placeholder="ID задачи" /><button className="button secondary" type="button" disabled={busy || !jobId.trim()} onClick={() => void run("job")}>Показать задачу</button></div>
           <pre className="raw-native-box tool-result-box">{result === null ? "—" : JSON.stringify(result, null, 2)}</pre>
         </div>
       </div>

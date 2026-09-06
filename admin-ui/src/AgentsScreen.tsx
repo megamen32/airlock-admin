@@ -13,6 +13,20 @@ type Server = {
 
 type Overview = { servers?: Server[] };
 
+
+function friendlyServerName(server: Server): string {
+  const id = server.server_id || "";
+  const raw = server.name || id.replace(/^shell:/, "");
+  const match = raw.match(/(?:roomhacker-server-|server-)(\d+)$/);
+  return match ? `Сервер ${match[1]}` : raw || "Без имени";
+}
+function statusLabel(status?: string): string {
+  if (status === "online") return "Работает";
+  if (status === "offline") return "Недоступен";
+  if (status === "stale") return "Давно не отвечает";
+  return status || "Неизвестно";
+}
+
 function textValue(value: unknown): string {
   if (value === null || value === undefined) return "—";
   if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") return String(value);
@@ -55,18 +69,18 @@ export default function AgentsScreen() {
   const selected = servers.find((server) => server.server_id === selectedId) ?? null;
 
   return <div className="page-shell native-operation-page">
-    <header className="page-header compact-page-header"><div><p className="section-kicker">INFRASTRUCTURE</p><h1>Серверы</h1><p className="lede">Состояние агентов и MCP-узлов без раскрытия всей технической метаинформации сразу.</p></div><div className="overview-header-actions"><span className={`data-badge ${error ? "state-error" : "state-ready"}`} role="status">{loading ? "Обновляем…" : `${filtered.length} узлов`}</span><button className="button secondary" type="button" disabled={loading} onClick={() => void load()}>Обновить</button></div></header>
+    <header className="page-header compact-page-header"><div><p className="section-kicker">INFRASTRUCTURE</p><h1>Серверы</h1><p className="lede">Какие серверы работают, какие недоступны и когда они отвечали в последний раз.</p></div><div className="overview-header-actions"><span className={`data-badge ${error ? "state-error" : "state-ready"}`} role="status">{loading ? "Обновляем…" : `${filtered.length} узлов`}</span><button className="button secondary" type="button" disabled={loading} onClick={() => void load()}>Обновить</button></div></header>
     {error && <div className="state-panel card standalone-state state-error" role="alert">{error}</div>}
     <section className={`agent-native-layout ${selected ? "has-detail" : ""}`}>
       <article className="card agent-native-list">
-        <div className="list-toolbar"><input className="search" value={filter} onChange={(event) => setFilter(event.target.value)} placeholder="Фильтр серверов" /><select value={status} onChange={(event) => setStatus(event.target.value)}><option value="all">Все статусы</option><option value="online">online</option><option value="offline">offline</option><option value="stale">stale</option></select></div>
-        {filtered.length === 0 && !loading ? <div className="compact-empty"><strong>Серверов не найдено</strong><span>Измените фильтр или обновите данные.</span></div> : <div className="compact-list">{filtered.map((server) => <button type="button" className={`server-native-row ${selectedId === server.server_id ? "selected" : ""}`} key={server.server_id || server.name} onClick={() => setSelectedId(server.server_id || null)}><span className={`status-dot status-${server.status || "unknown"}`} /><span className="server-native-main"><strong>{server.name || server.server_id || "Без имени"}</strong><small>{server.server_id || "—"} · {server.kind || "unknown"}{server.transport ? ` · ${server.transport}` : ""}</small></span><span className="server-native-status">{server.status || "—"}</span></button>)}</div>}
+        <div className="list-toolbar"><input className="search" value={filter} onChange={(event) => setFilter(event.target.value)} placeholder="Фильтр серверов" /><select value={status} onChange={(event) => setStatus(event.target.value)}><option value="all">Все статусы</option><option value="online">Работают</option><option value="offline">Недоступны</option><option value="stale">Давно не отвечают</option></select></div>
+        {filtered.length === 0 && !loading ? <div className="compact-empty"><strong>Серверов не найдено</strong><span>Измените фильтр или обновите данные.</span></div> : <div className="compact-list">{filtered.map((server) => <button type="button" className={`server-native-row ${selectedId === server.server_id ? "selected" : ""}`} key={server.server_id || server.name} onClick={() => setSelectedId(server.server_id || null)}><span className={`status-dot status-${server.status || "unknown"}`} /><span className="server-native-main"><strong>{friendlyServerName(server)}</strong><small>{server.server_id || "—"} · {server.kind || "unknown"}{server.transport ? ` · ${server.transport}` : ""}</small></span><span className="server-native-status">{statusLabel(server.status)}</span></button>)}</div>}
       </article>
       {selected && <aside className="card agent-detail-pane">
-        <div className="card-heading"><div><p className="section-kicker">DETAIL</p><h2>{selected.name || selected.server_id}</h2></div><button className="text-button" type="button" onClick={() => setSelectedId(null)}>Закрыть</button></div>
-        <dl className="detail-facts"><div><dt>ID</dt><dd>{selected.server_id || "—"}</dd></div><div><dt>Статус</dt><dd>{selected.status || "—"}</dd></div><div><dt>Тип</dt><dd>{selected.kind || "—"}</dd></div><div><dt>Transport</dt><dd>{selected.transport || "—"}</dd></div><div><dt>Last seen</dt><dd>{selected.last_seen || "—"}</dd></div></dl>
-        <div className="detail-section"><h3>Возможности</h3><div className="pill-wrap">{selected.capabilities?.length ? selected.capabilities.map((cap) => <span className="small-pill" key={cap}>{cap}</span>) : <span className="muted-help">Не переданы</span>}</div></div>
-        <div className="detail-section"><h3>Метаданные</h3>{Object.keys(selected.meta ?? {}).length ? <dl className="meta-grid">{Object.entries(selected.meta ?? {}).map(([key, value]) => <div key={key}><dt>{key}</dt><dd>{textValue(value)}</dd></div>)}</dl> : <p className="muted-help">Нет метаданных.</p>}</div>
+        <div className="card-heading"><div><p className="section-kicker">DETAIL</p><h2>{friendlyServerName(selected)}</h2></div><button className="text-button" type="button" onClick={() => setSelectedId(null)}>Закрыть</button></div>
+        <dl className="detail-facts"><div><dt>Технический ID</dt><dd>{selected.server_id || "—"}</dd></div><div><dt>Состояние</dt><dd>{statusLabel(selected.status)}</dd></div><div><dt>Тип подключения</dt><dd>{selected.kind || "—"}</dd></div><div><dt>Транспорт</dt><dd>{selected.transport || "—"}</dd></div><div><dt>Последний ответ</dt><dd>{selected.last_seen || "—"}</dd></div></dl>
+        <details className="detail-section technical-details"><summary>Технические возможности</summary><div className="pill-wrap">{selected.capabilities?.length ? selected.capabilities.map((cap) => <span className="small-pill" key={cap}>{cap}</span>) : <span className="muted-help">Не переданы</span>}</div></details>
+        <details className="detail-section technical-details"><summary>Метаданные</summary>{Object.keys(selected.meta ?? {}).length ? <dl className="meta-grid">{Object.entries(selected.meta ?? {}).map(([key, value]) => <div key={key}><dt>{key}</dt><dd>{textValue(value)}</dd></div>)}</dl> : <p className="muted-help">Нет метаданных.</p>}</details>
       </aside>}
     </section>
   </div>;

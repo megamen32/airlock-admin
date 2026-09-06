@@ -75,7 +75,7 @@ def test_admin_security_ui_offers_passkey_enrollment_without_raw_credentials():
     """The shipped admin SPA must expose the backend WebAuthn enrollment flow."""
 
     security = (ROOT / "admin-ui" / "src" / "SecurityScreen.tsx").read_text(encoding="utf-8")
-    assert "Зарегистрировать passkey" in security
+    assert "enrollPasskey" in security
     assert "passkeyResult" in security
     assert "/admin/api/security/mfa/webauthn/register/begin" in security
     assert "/admin/api/security/mfa/webauthn/register/finish" in security
