@@ -79,8 +79,13 @@ function Download-And-InstallArtifact {
     New-Item -ItemType Directory -Force -Path $tmp | Out-Null
     $archive = Join-Path $tmp 'gptadmin-win.zip'
 
-    Write-Host "Downloading $PackageUrl"
-    Invoke-WebRequest -UseBasicParsing -Uri $PackageUrl -OutFile $archive
+    if (Test-Path -LiteralPath $PackageUrl) {
+        Write-Host "Installing local package $PackageUrl"
+        Copy-Item -LiteralPath $PackageUrl -Destination $archive -Force
+    } else {
+        Write-Host "Downloading $PackageUrl"
+        Invoke-WebRequest -UseBasicParsing -Uri $PackageUrl -OutFile $archive
+    }
     Expand-Archive -LiteralPath $archive -DestinationPath $tmp -Force
 
     $exe = Get-ChildItem -Path $tmp -Recurse -File -Include 'shellmcp.exe','shellmcp_win.exe' | Select-Object -First 1

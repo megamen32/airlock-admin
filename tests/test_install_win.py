@@ -28,3 +28,9 @@ def test_windows_user_install_is_task_scheduler_independent() -> None:
     assert "if ($UserMode) {\n        Install-UserStartup\n        return 'startup'" in source
     assert "Per-user startup is deliberately Task-Scheduler-free" in source
     assert "if ($UserMode) {\n        # User installs must not depend on Task Scheduler access" in source
+
+
+def test_windows_installer_accepts_exact_local_candidate_artifact() -> None:
+    source = (ROOT / "deploy" / "install_win.ps1").read_text(encoding="utf-8")
+    assert "Test-Path -LiteralPath $PackageUrl" in source
+    assert "Copy-Item -LiteralPath $PackageUrl -Destination $archive -Force" in source
