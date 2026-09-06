@@ -1766,6 +1766,34 @@ func TestCallMcpToolAcceptsTopLevelShellArgs(t *testing.T) {
 	}
 }
 
+func TestCallMcpToolAcceptsQueryJSONObjectFallback(t *testing.T) {
+	s := New(Config{CtlToken: "ctl", DefaultTimeout: time.Second, PollMaxTimeout: time.Second})
+	s.mu.Lock()
+	s.agents["shell:roomhacker-server-100"] = &Agent{AgentID: "shell:roomhacker-server-100", Name: "Shell: roomhacker-server-100", Kind: "virtual_shell", Status: "online"}
+	s.mu.Unlock()
+	h := s.Handler()
+
+	req := httptest.NewRequest(http.MethodPost, "/mcp-relay/call", strings.NewReader(`{"target":"shell:roomhacker-server-100","tool_name":"shell_exec","query":"{\"cmd\":\"printf query-json-ok\"}"}`))
+	req.Header.Set("Authorization", "Bearer ctl")
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("query JSON status=%d body=%s", w.Code, w.Body.String())
+	}
+	var response map[string]any
+	if err := json.Unmarshal(w.Body.Bytes(), &response); err != nil {
+		t.Fatal(err)
+	}
+	jobID := firstString(response, "job_id")
+	s.mu.Lock()
+	queued := s.shellJobs[jobID]
+	valid := queued != nil && queued.Cmd == "printf query-json-ok"
+	s.mu.Unlock()
+	if !valid {
+		t.Fatalf("query JSON did not decode into child arguments: %s", w.Body.String())
+	}
+}
+
 func TestCallMcpToolAcceptsArgsJSON(t *testing.T) {
 	s := New(Config{CtlToken: "ctl", DefaultTimeout: time.Second, PollMaxTimeout: time.Second})
 	s.mu.Lock()

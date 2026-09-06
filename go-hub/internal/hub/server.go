@@ -4096,6 +4096,13 @@ func (s *Server) mcpRelayCall(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if len(args) == 0 {
+		if rawQuery := firstString(req, "query"); rawQuery != "" && strings.HasPrefix(strings.TrimSpace(rawQuery), "{") {
+			if parsed, err := toolArgsFromJSON(rawQuery); err == nil {
+				args = parsed
+			}
+		}
+	}
+	if len(args) == 0 {
 		args = toolArgsFromTopLevel(req)
 	}
 	if toolName == "" {
