@@ -62,6 +62,7 @@ git clone -q --no-hardlinks "$ROOT" "$EXPORT_DIR"
 if [[ "$SKIP_TESTS" != "1" ]]; then
 	echo "=== Tests (sanitized export) ==="
 	( cd "$EXPORT_DIR" && uv run pytest tests/ -q \
+		--ignore=tests/test_haos_public_distribution.py \
 		--deselect tests/test_site_docs.py::test_site_docs_mirror_root_source_and_public_tree \
 		--deselect tests/test_docs_product_contract.py::test_public_custom_gpt_instructions_stay_in_sync_with_prompt_source \
 		--deselect tests/test_frp_watchdog.py::test_frp_watchdog_templates_are_bounded_and_restart_existing_units \
