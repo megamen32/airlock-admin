@@ -1,59 +1,54 @@
 import { StrictMode } from "react";
 import { afterEach, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import App from "./App";
 
-type Actions = { listManagedMcp(): Promise<void>; refreshAll(): Promise<void>; openJobDetail(id: string): Promise<void> };
-const actions = () => window as unknown as Actions;
 afterEach(() => { cleanup(); vi.restoreAllMocks(); window.history.replaceState(null, "", "#instructions"); });
 
-it("mounts operations natively, renders a nonempty MCP list, preserves drafts, and cleans up", async () => {
-  window.history.replaceState(null, "", "#overview");
-  const signals: AbortSignal[] = [];
-  const timers = vi.spyOn(globalThis, "setInterval");
-  const clear = vi.spyOn(globalThis, "clearInterval");
-  vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
-    if (init?.signal) signals.push(init.signal);
+function response(body: object) {
+  return new Response(JSON.stringify(body), { status: 200, headers: { "Content-Type": "application/json" } });
+}
+
+it("uses native React MCP and failover screens without the legacy runtime", async () => {
+  window.history.replaceState(null, "", "#mcpmanage");
+  vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
     const path = String(input);
-    let body: object;
-    if (path.startsWith("/admin/api/overview")) body = {
-      servers: [{ server_id: "shell:fixture", name: "Fixture", status: "online", kind: "virtual_shell", meta: {}, capabilities: ["shell"] }],
-      server_counts: { online: 1 }, clients: [], audit: [], jobs: { recent: [{ job_id: "fixture-job", status: "completed", tool_name: "shell_exec", command: "printf fixture", result_preview: "readable-result-marker", created_at: 1788610000 }], queued: [], background: [] },
-      build: { build_version: "test", git_commit: "fixture" }, failover_config: { enabled: false, primary_public_url: "https://saved.example", nodes: [] },
-    };
-    else if (path.startsWith("/mcp-relay/job/fixture-job")) {
-      expect(path).toContain("detail=full");
-      body = { status: "completed", server_id: "shell:fixture", job_id: "fixture-job", response: { structuredContent: { result: { stdout: "full-result-marker" } } } };
-    }
-    else if (path === "/admin/api/mcp/manage") body = { servers: [{ name: "fixture-mcp", command: "python3", args: ["example.py"], env: { MODE: "test" }, enabled: true }] };
-    else if (path === "/admin/api/failover") body = { config: { enabled: false, primary_public_url: "https://saved.example", nodes: [] }, state: {} };
-    else throw new Error(`Unexpected request ${path}`);
-    return new Response(JSON.stringify(body), { status: 200, headers: { "Content-Type": "application/json" } });
+    if (path.startsWith("/admin/api/overview")) return response({ servers: [{ server_id: "shell:fixture", status: "online", meta: {} }] });
+    if (path === "/admin/api/settings") return response({ settings: { stale_mcp_retention_days: 30 } });
+    if (path === "/admin/api/mcp/manage") return response({ servers: [{ name: "fixture-mcp", command: "python3", args: ["example.py"], env: { MODE: "test" }, enabled: true }] });
+    if (path === "/admin/api/failover") return response({ config: { enabled: false, primary_public_url: "https://saved.example", fail_count_base: 3, nodes: [] }, state: { role: "primary" } });
+    throw new Error(`Unexpected request ${path}`);
   });
-  const mounted = render(<StrictMode><App /></StrictMode>);
-  await screen.findByText("● online");
-  expect(screen.getByRole("button", { name: "Обновить этот узел" })).toBeInTheDocument();
-  expect(document.querySelector("iframe")).toBeNull();
-  expect(screen.getAllByRole("navigation")).toHaveLength(1);
-  expect(document.querySelector("#recentJobsCompact")).toHaveTextContent("readable-result-marker");
-  await actions().openJobDetail("fixture-job");
-  expect(await screen.findByText("full-result-marker")).toBeInTheDocument();
-  expect(screen.getByRole("heading", { name: "Stdout" })).toBeInTheDocument();
-  expect(document.querySelector("#jobDetailBody .entryStatus")).toHaveTextContent("completed");
-  await userEvent.click(screen.getByRole("link", { name: "Инфраструктура" }));
-  await userEvent.click(screen.getByRole("link", { name: "MCP" }));
-  expect(document.getElementById("view-mcpmanage")).toHaveClass("active");
-  await actions().listManagedMcp();
-  expect(screen.getByText("fixture-mcp")).toBeInTheDocument();
-  expect(screen.getByText("example.py")).toBeInTheDocument();
+
+  render(<StrictMode><App /></StrictMode>);
+  expect(await screen.findByRole("heading", { name: "MCP" })).toBeInTheDocument();
+  expect(document.querySelector("#view-mcpmanage")).toBeNull();
+  expect(document.querySelector(".operations-console")).toBeNull();
+  await userEvent.click(screen.getByRole("button", { name: "Список" }));
+  expect(await screen.findByText("fixture-mcp")).toBeInTheDocument();
+  expect(screen.getAllByText(/python3/).length).toBeGreaterThan(0);
+
   await userEvent.click(screen.getByRole("link", { name: "Резервирование" }));
-  await waitFor(() => expect(document.getElementById("foPrimary")).toHaveValue("https://saved.example"));
-  fireEvent.input(document.getElementById("foPrimary")!, { target: { value: "https://draft.example" } });
-  await actions().refreshAll();
-  expect(document.getElementById("foPrimary")).toHaveValue("https://draft.example");
-  mounted.unmount();
-  expect(signals.every((signal) => signal.aborted)).toBe(true);
-  expect(clear.mock.calls.length).toBe(timers.mock.calls.length);
-  expect((window as unknown as Partial<Actions>).listManagedMcp).toBeUndefined();
+  expect(await screen.findByRole("heading", { name: "Резервирование" })).toBeInTheDocument();
+  await waitFor(() => expect(screen.getByDisplayValue("https://saved.example")).toBeInTheDocument());
+  expect(screen.getByText("shell:fixture")).toBeInTheDocument();
+});
+
+it("renders advanced security as a native Settings screen", async () => {
+  window.history.replaceState(null, "", "#security");
+  vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+    const path = String(input);
+    if (path === "/admin/api/security/preset") return response({ preset: "working_default", mfa_enrolled: false });
+    if (path === "/admin/api/security/env") return response({ shellmcp_heartbeat: false });
+    if (path === "/admin/api/telemetry") return response({ enabled: false, local_only: true, counters: {} });
+    if (path === "/admin/api/approvals") return response({ approvals: [] });
+    throw new Error(`Unexpected request ${path}`);
+  });
+
+  render(<StrictMode><App /></StrictMode>);
+  expect(await screen.findByRole("heading", { name: "Безопасность" })).toBeInTheDocument();
+  expect(screen.getByRole("navigation", { name: "Настройки: подразделы" })).toBeInTheDocument();
+  expect(screen.getByText("Запросов нет")).toBeInTheDocument();
+  expect(document.querySelector(".operations-console")).toBeNull();
 });

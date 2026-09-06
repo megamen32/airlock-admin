@@ -1,6 +1,15 @@
 import { logicalConnections, shortId } from "./connections";
+import JobsScreen from "./JobsScreen";
+import AgentsScreen from "./AgentsScreen";
+import ResourcesScreen from "./ResourcesScreen";
+import ToolsScreen from "./ToolsScreen";
+import RawScreen from "./RawScreen";
+import AuditScreen from "./AuditScreen";
+import OverviewScreen from "./OverviewScreen";
 import AccessOperations from "./AccessOperations";
-import OperationsScreen, { isOperationView, type OperationView } from "./OperationsScreen";
+import McpManageScreen from "./McpManageScreen";
+import FailoverScreen from "./FailoverScreen";
+import SecurityScreen from "./SecurityScreen";
 import { useEffect, useRef, useState } from "react";
 import {
   ApiError,
@@ -46,7 +55,7 @@ import {
 } from "./api";
 import "./styles.css";
 
-type View = "operations" | OperationView | "instructions" | "profiles" | "clients" | "webhooks" | "auth" | "capabilities";
+type View = "overview" | "audit" | "raw" | "tools" | "resources" | "agents" | "jobs" | "mcpmanage" | "failover" | "security" | "operations" | "instructions" | "profiles" | "clients" | "webhooks" | "auth" | "capabilities";
 type LoadState = "loading" | "ready" | "empty" | "error" | "stale";
 
 type NavigationSection = {
@@ -1294,7 +1303,7 @@ export default function App() {
       </aside>
       <main className="main-content">
         {contextLinks.length > 0 && <nav className="context-nav" aria-label={`${activeSection?.label ?? "Раздел"}: подразделы`}>{contextLinks.map((item) => <a key={item.id} href={`#${item.id}`} className={view === item.id ? "active" : ""} aria-current={view === item.id ? "page" : undefined} onClick={(event) => { event.preventDefault(); navigate(item.id); }}>{item.label}</a>)}</nav>}
-        {view === "operations" ? <AccessOperations /> : isOperationView(view) ? <OperationsScreen view={view} onNavigate={navigate} /> : view === "instructions" ? <InstructionsScreen /> : view === "profiles" ? <ProfilesScreen /> : view === "clients" ? <ClientsScreen token={issuedToken} setToken={setIssuedToken} /> : view === "webhooks" ? <WebhooksScreen /> : view === "capabilities" ? <CapabilitiesScreen /> : <AuthScreen token={issuedToken} />}
+        {view === "overview" ? <OverviewScreen /> : view === "audit" ? <AuditScreen /> : view === "raw" ? <RawScreen /> : view === "tools" ? <ToolsScreen /> : view === "resources" ? <ResourcesScreen /> : view === "agents" ? <AgentsScreen /> : view === "jobs" ? <JobsScreen /> : view === "mcpmanage" ? <McpManageScreen /> : view === "failover" ? <FailoverScreen /> : view === "security" ? <SecurityScreen /> : view === "operations" ? <AccessOperations /> : view === "instructions" ? <InstructionsScreen /> : view === "profiles" ? <ProfilesScreen /> : view === "clients" ? <ClientsScreen token={issuedToken} setToken={setIssuedToken} /> : view === "webhooks" ? <WebhooksScreen /> : view === "capabilities" ? <CapabilitiesScreen /> : <AuthScreen token={issuedToken} />}
       </main>
     </div>
   );
