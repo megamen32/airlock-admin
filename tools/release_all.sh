@@ -50,7 +50,12 @@ echo "=== Go tests (raw tree) ==="
 ( cd go-hub && go test ./... )
 ( cd go-shellmcp && go test ./... )
 
-git tag "$TAG_NAME"
+if git rev-parse -q --verify "refs/tags/$TAG_NAME" >/dev/null; then
+	tag_commit="$(git rev-parse "refs/tags/$TAG_NAME^{commit}")"
+	[[ "$tag_commit" == "$(git rev-parse HEAD)" ]] || { echo "ERROR: tag $TAG_NAME points at another commit" >&2; exit 64; }
+else
+	git tag "$TAG_NAME"
+fi
 
 # --- 2. Sanitized export clone (uncommitted local WIP never ships) ----------
 EXPORT_DIR="$ROOT/.tmp/release-$TAG_NAME"
