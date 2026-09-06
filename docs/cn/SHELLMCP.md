@@ -50,6 +50,8 @@ curl -s https://raw.githubusercontent.com/megamen32/gptadmin_opensource/main/dep
 | `EXEC_TIMEOUT` |没有| 120 | 120最大命令执行时间（秒）|
 | `LOG_LIMIT_B` |没有| 65536 |在将完整流假脱机到磁盘之前此 ShellMCP 代理返回的最大内联 stdout/stderr 尾部（字节） |
 
+对于同机安装的 Hub + ShellMCP，installer 会把内部 `HUB_URL` 规范化为 `http://127.0.0.1:<HUB_PORT>`，并把 `QUEUE_URL` 设为对应的本地 `/queue`。因此即使公共入口发生 failover，同机 polling 仍固定连接 primary Hub。`HUB_PUBLIC_URL`、`PUBLIC_ORIGIN` 和 `MCP_RESOURCE` 继续表示外部 identity。仅安装 ShellMCP 时会保留远程 `HUB_URL`。
+
 `LOG_LIMIT_B` 是每个 ShellMCP 代理。它控制本地 `/exec` 结果尾部，并且不会替换集线器/客户端响应预算；中心仍可能对 ChatGPT Actions、Claude 或其他 MCP 客户端应用不同的响应预算。
 
 ## 暴露的操作
@@ -66,8 +68,7 @@ GrepMesh 默认作为 companion capability 安装；使用 `--no-grepmesh` 可�
 ## 安全
 
 - 代理仅接受其托管设备连接
-- 默认情况下以安装用户（而不是 root）身份运行 — 使用 sudo 的系统模式
-  是选择加入
+- 在 system-install 中，transport 可以以 root 运行，从而为 `file:<host>` 提供特权文件边界；普通 `shell_exec` 仍以 `SHELLMCP_DEFAULT_USER` 执行，除非显式请求 root
 - 可以配置IP白名单和命令白名单
 - 秘密被隐藏在日志中
 

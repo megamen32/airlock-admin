@@ -50,6 +50,8 @@ credential into a terminal or chat.
 | `EXEC_TIMEOUT` | no | 120 | Max command execution time (seconds) |
 | `LOG_LIMIT_B` | no | 65536 | Max inline stdout/stderr tail returned by this ShellMCP agent before the full stream is spooled to disk (bytes) |
 
+For a bundled Hub + ShellMCP installation, the installer normalizes the internal `HUB_URL` to `http://127.0.0.1:<HUB_PORT>` and `QUEUE_URL` to the matching local `/queue`. This keeps same-host polling pinned to the primary Hub even while public ingress fails over. `HUB_PUBLIC_URL`, `PUBLIC_ORIGIN`, and `MCP_RESOURCE` remain the external identity. Agent-only installs preserve their remote `HUB_URL`.
+
 `LOG_LIMIT_B` is per ShellMCP agent. It controls the local `/exec` result tail and does not replace hub/client response budgets; the hub may still apply different response budgets for ChatGPT Actions, Claude, or other MCP clients.
 
 ## Operations exposed
