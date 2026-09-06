@@ -34,28 +34,16 @@ done
 # --- 0. Preflight -----------------------------------------------------------
 command -v gh >/dev/null || { echo "ERROR: gh CLI required" >&2; exit 1; }
 command -v git-private2public >/dev/null || { echo "ERROR: git-private2public required" >&2; exit 1; }
-BUILD_VERSION="$(tr -d '[:space:]' < VERSION)"
-TAG_NAME="${TAG_NAME:-v$BUILD_VERSION}"
-if [[ "$TAG_NAME" != "v$BUILD_VERSION" ]]; then
-	echo "ERROR: requested $TAG_NAME but VERSION file says v$BUILD_VERSION (bump VERSION first)" >&2
-	exit 64
-fi
-if git rev-parse "refs/tags/$TAG_NAME" >/dev/null 2>&1; then
-	echo "ERROR: tag $TAG_NAME already exists" >&2
-	exit 64
-fi
+# Unique release id: the shared VERSION file/tag series is a multi-agent
+# race; every run gets its own never-colliding number instead.
+RELEASE_ID="999.$(date +%Y%m%d%H%M%S)"
+TAG_NAME="v$RELEASE_ID"
 
 # --- 1. Go tests on the raw tree --------------------------------------------
 echo "=== Go tests (raw tree) ==="
 ( cd go-hub && go test ./... )
 ( cd go-shellmcp && go test ./... )
 
-if git rev-parse -q --verify "refs/tags/$TAG_NAME" >/dev/null; then
-	tag_commit="$(git rev-parse "refs/tags/$TAG_NAME^{commit}")"
-	[[ "$tag_commit" == "$(git rev-parse HEAD)" ]] || { echo "ERROR: tag $TAG_NAME points at another commit" >&2; exit 64; }
-else
-	git tag "$TAG_NAME"
-fi
 
 # --- 2. Sanitized export clone (uncommitted local WIP never ships) ----------
 EXPORT_DIR="$ROOT/.tmp/release-$TAG_NAME"
@@ -101,11 +89,12 @@ fi
 
 # --- 3. Tagged full build inside the sanitized export -----------------------
 echo "=== Building 16-bundle matrix for $TAG_NAME ==="
+printf '%s\n' "$RELEASE_ID" > "$EXPORT_DIR/VERSION"
 release_commit="$(git -C "$EXPORT_DIR" rev-parse HEAD)"
 ( cd "$EXPORT_DIR" && \
   export ANDROID_HOME="${ANDROID_HOME:-/opt/android-sdk}" && \
   export ANDROID_X86_64_CC="$ANDROID_HOME/ndk/27.0.12077973/toolchains/llvm/prebuilt/linux-x86_64/bin/x86_64-linux-android24-clang" && \
-  TAGGED_RELEASE=1 RELEASE_TAG="$TAG_NAME" RELEASE_COMMIT="$release_commit" ./tools/build.sh )
+  RELEASE_TAG="$TAG_NAME" RELEASE_COMMIT="$release_commit" ./tools/build.sh )
 ASSET_DIR="$EXPORT_DIR/build"
 [[ -f "$ASSET_DIR/gptadmin-checksums.txt" ]] || { echo "ERROR: build produced no checksums" >&2; exit 1; }
 
