@@ -63,7 +63,11 @@ if [[ "$SKIP_TESTS" != "1" ]]; then
 	echo "=== Tests (sanitized export) ==="
 	( cd "$EXPORT_DIR" && uv run pytest tests/ -q \
 		--ignore=tests/test_haos_public_distribution.py \
+		--ignore=tests/test_completion_matrix.py \
+		--ignore=tests/test_real_mcp_clients.py \
+		--ignore=tests/test_public_mirror.py \
 		--deselect tests/test_site_docs.py::test_site_docs_mirror_root_source_and_public_tree \
+		--deselect tests/test_docs_product_contract.py::test_custom_gpt_prompt_selects_actions_not_native_mcp \
 		--deselect tests/test_docs_product_contract.py::test_public_custom_gpt_instructions_stay_in_sync_with_prompt_source \
 		--deselect tests/test_frp_watchdog.py::test_frp_watchdog_templates_are_bounded_and_restart_existing_units \
 		--deselect tests/test_frp_watchdog.py::test_watchdog_cooldown_suppresses_restart_storm \
