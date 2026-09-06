@@ -70,7 +70,7 @@ SAN_DESELECTS=(
 )
 collect_failures() {
 	( cd "$1" && shift && uv run pytest tests/ -q --tb=no "$@" 2>&1 || true ) \
-		| grep -E "^(FAILED|ERROR) " | sed 's/ - .*//' | sort
+		| grep -E "^(FAILED|ERROR) " | sed 's/ - .*//' | sort || true
 }
 if [[ "$SKIP_TESTS" != "1" ]]; then
 	echo "=== Test gate: raw baseline ==="
