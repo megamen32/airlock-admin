@@ -264,7 +264,10 @@ async def mcp_help_page():
         return Response(html_path.read_text(encoding="utf-8"), media_type="text/html")
     return Response("<h1>MCP Bridge</h1><a href=/mcp-bridge.user.js>Install</a>", media_type="text/html")
 
-app.mount("/", StaticFiles(directory=WEBSITE_DIR, html=True), name="website")
+# The sanitized public source intentionally omits the private website tree.
+# Installer/API endpoints must still be importable and usable without it.
+if WEBSITE_DIR.is_dir():
+    app.mount("/", StaticFiles(directory=WEBSITE_DIR, html=True), name="website")
 
 
 if __name__ == "__main__":
