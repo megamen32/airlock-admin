@@ -603,6 +603,13 @@ emit_release_bundle() {
   tmp="$(mktemp -d)"
   mkdir -p "$tmp/bin"
   cp -f "$shell" "$tmp/bin/shellmcp$suffix"
+  # Native Ubuntu x64 releases carry the GrepMesh companion next to ShellMCP.
+  # The installer enables it by default unless --no-grepmesh is requested.
+  if [[ "$platform" == ubuntu && "$arch" == x64 ]]; then
+    local grepmesh="$ART_DIR/grepmesh/linux_amd64/grepmesh-mcp"
+    [[ -x "$grepmesh" ]] || { echo "ERROR: missing bundled GrepMesh for $platform/$arch" >&2; exit 1; }
+    cp -f "$grepmesh" "$tmp/bin/grepmesh-mcp"
+  fi
   if [[ "$edition" == full ]]; then
     cp -f "$hub" "$tmp/bin/gptadmin-hub$suffix"
     mkdir -p "$tmp/cli"

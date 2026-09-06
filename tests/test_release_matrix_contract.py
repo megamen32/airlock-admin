@@ -33,3 +33,11 @@ def test_public_release_uploads_only_the_concise_matrix() -> None:
     assert 'build/gptadmin-checksums.txt' in workflow
     assert 'build/gptadmin-release-matrix.json' in workflow
     assert 'ANDROID_X86_64_CC=' in workflow
+
+
+def test_ubuntu_x64_release_bundle_carries_grepmesh_companion():
+    source = (ROOT / "tools" / "build.sh").read_text(encoding="utf-8")
+    assert '[[ "$platform" == ubuntu && "$arch" == x64 ]]' in source
+    assert '"$ART_DIR/grepmesh/linux_amd64/grepmesh-mcp"' in source
+    assert 'cp -f "$grepmesh" "$tmp/bin/grepmesh-mcp"' in source
+    assert 'ERROR: missing bundled GrepMesh for $platform/$arch' in source

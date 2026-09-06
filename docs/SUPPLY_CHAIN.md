@@ -32,7 +32,9 @@ also accepts an ordinary filesystem path (for example
 updater reads `gptadmin-release-matrix.json` from the package's directory and
 applies the same required size/SHA-256 verification as a network update. A local
 path without a valid sibling matrix is rejected unless the diagnostic-only
-`GPTADMIN_UPDATE_SKIP_MANIFEST=1` escape is explicitly set.
+`GPTADMIN_UPDATE_SKIP_MANIFEST=1` escape is explicitly set. The Ubuntu x64
+release bundles also carry the native `grepmesh-mcp` companion; system installs
+enable it with ShellMCP by default unless `--no-grepmesh` is requested.
 
 ## Runtime release gate
 
