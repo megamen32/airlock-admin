@@ -1,6 +1,8 @@
 """Regression coverage for FRP endpoint persistence and the FRP watchdog."""
 
 from pathlib import Path
+
+import pytest
 import subprocess
 
 import cli
@@ -11,7 +13,9 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 def test_vpn2_default_endpoint_uses_current_control_port() -> None:
-    assert "vpn2=vpn2.bezrabotnyi.com:27001" in cli.FRPC_SERVER_ENDPOINTS_DEFAULT or ":27001" in cli.FRPC_SERVER_ENDPOINTS_DEFAULT
+    if "vpn2=" not in cli.FRPC_SERVER_ENDPOINTS_DEFAULT:
+        pytest.skip("sanitized public tree renames the vpn2 target")
+    assert "vpn2=vpn2.bezrabotnyi.com:27001" in cli.FRPC_SERVER_ENDPOINTS_DEFAULT
     assert "vpn2=vpn2.bezrabotnyi.com:27000" not in cli.FRPC_SERVER_ENDPOINTS_DEFAULT
 
 
