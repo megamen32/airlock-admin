@@ -61,7 +61,7 @@ curl -s https://raw.githubusercontent.com/megamen32/gptadmin_opensource/main/dep
 
 `file_editor` 支持 `view/create/str_replace/batch_edit/delete`，原子修改文本并返回新的 `N:hhhh` line-id。`file_checkpoint` 使用 CAS 保存显式恢复点；`restore` 会先自动创建 safety checkpoint。系统安装中，文件 target 可通过特权 runtime 操作 root-owned 文件，而普通 `shell_exec` 仍默认以 `SHELLMCP_DEFAULT_USER` 运行。
 
-GrepMesh 默认作为 companion capability 安装；使用 `--no-grepmesh` 可退出内置配置。
+GrepMesh 默认作为 companion capability 安装；使用 `--no-grepmesh` 可退出内置配置。在 systemd 主机上，内置 companion 使用独立的 `gptadmin-grepmesh-mcp.service`；运营者自己的 `grepmesh-mcp.service` 不会被 GPTAdmin 覆盖或管理。
 
 ## 安全
 

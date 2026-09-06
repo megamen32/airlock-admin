@@ -61,7 +61,7 @@ curl -s https://raw.githubusercontent.com/megamen32/gptadmin_opensource/main/dep
 
 `file_editor` умеет `view/create/str_replace/batch_edit/delete`, делает атомарные текстовые правки и возвращает свежие `N:hhhh` line-id. `file_checkpoint` создаёт явные CAS-точки восстановления; `restore` сначала автоматически сохраняет safety checkpoint. На system-install файловый target работает через привилегированный runtime, при этом обычный `shell_exec` по умолчанию запускается от `SHELLMCP_DEFAULT_USER`.
 
-GrepMesh устанавливается как companion capability по умолчанию; `--no-grepmesh` отключает встроенную конфигурацию.
+GrepMesh устанавливается как companion capability по умолчанию; `--no-grepmesh` отключает встроенную конфигурацию. На systemd встроенный companion использует отдельный `gptadmin-grepmesh-mcp.service`; операторский `grepmesh-mcp.service` не перезаписывается и не управляется GPTAdmin.
 
 ## Безопасность
 
