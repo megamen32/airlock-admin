@@ -101,16 +101,66 @@ ASSET_DIR="$EXPORT_DIR/build"
 
 # --- 4. Public source snapshot (git-private2public) -------------------------
 echo "=== Publishing sanitized source snapshot ==="
-( cd "$ROOT" && git-private2public publish )
-public_sha="$(git ls-remote "https://github.com/$PUBLIC_REPO.git" refs/heads/main | awk '{print $1}')"
+RUNTIME_GITPUBLIC="$ROOT/.tmp/gitpublic-$TAG_NAME"
+rm -rf "$RUNTIME_GITPUBLIC"
+mkdir -p "$RUNTIME_GITPUBLIC"
+cp -a "$ROOT/.gitpublic/." "$RUNTIME_GITPUBLIC/"
+python3 - "$RUNTIME_GITPUBLIC/config" "$ROOT" <<'PYCFG'
+from pathlib import Path
+import sys
+p = Path(sys.argv[1])
+root = sys.argv[2]
+lines = []
+seen = False
+for raw in p.read_text().splitlines():
+    if raw.strip().startswith("source") and "=" in raw:
+        lines.append(f"source = {root}")
+        seen = True
+    else:
+        lines.append(raw)
+if not seen:
+    lines.append(f"source = {root}")
+p.write_text("\n".join(lines) + "\n")
+PYCFG
+( cd "$ROOT" && git-private2public publish -c "$RUNTIME_GITPUBLIC" )
+public_sha="$(git ls-remote "git@github.com:$PUBLIC_REPO.git" refs/heads/main | awk '{print $1}')"
 [[ -n "$public_sha" ]] || { echo "ERROR: public main ref missing after publish" >&2; exit 1; }
+
+# The private/local VERSION lane (1000+) is intentionally independent from the
+# timestamped public release id. Stamp the public snapshot with the actual
+# release id and install the one public self-hosted workflow that needs a
+# short-lived GITHUB_TOKEN with packages:write for GHCR. Private Actions stay
+# disabled and no GitHub-hosted runner is used.
+PUBLIC_DIR="$ROOT/.tmp/public-$TAG_NAME"
+rm -rf "$PUBLIC_DIR"
+git clone -q --no-hardlinks "git@github.com:$PUBLIC_REPO.git" "$PUBLIC_DIR"
+(
+  cd "$PUBLIC_DIR"
+  rm -rf .github/workflows
+  mkdir -p .github/workflows
+  cp "$ROOT/.github/workflows/publish-haos-addon.yml" .github/workflows/publish-haos-addon.yml
+  printf '%s\n' "$RELEASE_ID" > VERSION
+  git config user.name "GPTAdmin local release"
+  git config user.email "gptadmin@bezrabotnyi.com"
+  git add VERSION .github/workflows/publish-haos-addon.yml
+  if ! git diff --cached --quiet; then
+    git commit -m "release: prepare public $TAG_NAME"
+    git push origin HEAD:main
+  fi
+)
+public_sha="$(git -C "$PUBLIC_DIR" rev-parse HEAD)"
+remote_public_sha="$(git ls-remote "git@github.com:$PUBLIC_REPO.git" refs/heads/main | awk '{print $1}')"
+[[ "$remote_public_sha" == "$public_sha" ]] || { echo "ERROR: public main verification failed" >&2; exit 1; }
+public_version="$(git -C "$PUBLIC_DIR" show "$public_sha:VERSION" | tr -d '[:space:]')"
+[[ "$public_version" == "$RELEASE_ID" ]] || { echo "ERROR: public VERSION mismatch: $public_version != $RELEASE_ID" >&2; exit 1; }
 
 # --- 5. Public tag + GitHub release with all assets -------------------------
 echo "=== Publishing $TAG_NAME to $PUBLIC_REPO ==="
-git clone -q --no-hardlinks "git@github.com:$PUBLIC_REPO.git" "$ROOT/.tmp/public-$TAG_NAME"
-( cd "$ROOT/.tmp/public-$TAG_NAME" \
-  && git tag "$TAG_NAME" "$public_sha" \
-  && git push origin "$TAG_NAME" )
+(
+  cd "$PUBLIC_DIR"
+  git tag "$TAG_NAME" "$public_sha"
+  git push origin "$TAG_NAME"
+)
 release_assets=()
 while IFS= read -r asset_name; do
 	asset="$ASSET_DIR/$asset_name"
