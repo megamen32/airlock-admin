@@ -4,6 +4,11 @@
 reachable Hub. It uses an existing short-lived scoped connection and never
 prints the bearer value or response bodies.
 
+This runner is a **live smoke**, not the release definition of done. The full
+install/update/runtime contract is documented in
+[Release acceptance](./RELEASE_ACCEPTANCE.md). A live `healthz`, discovery or
+`demo` result must not be used as a substitute for the real execution lifecycle.
+
 ```bash
 GPTADMIN_LIVE_BASE_URL="$HUB_URL" \
 GPTADMIN_LIVE_BEARER="$SCOPED_JWT" \

@@ -26,6 +26,20 @@ also rejects any size or SHA-256 mismatch after download. The explicit
 known private mirror; it must not be used for normal releases or production
 updates.
 
+## Runtime release gate
+
+Artifact integrity is necessary but not sufficient. Before an Ubuntu release
+archive can be published, the exact candidate archive must also pass the real
+install/update/runtime lifecycle defined in
+[Release acceptance](./RELEASE_ACCEPTANCE.md). That gate uses the real installer,
+real systemd services, real Custom GPT and native MCP protocol paths, real
+`uptime` execution and tmpfs file create/read/edit/delete probes.
+
+A successful checksum, service health check, discovery response or mocked
+integration does not replace this runtime proof. The artifact tested by the
+lifecycle gate must match the release-matrix digest and size for the file that
+will be published.
+
 ## CI gates
 
 The release job runs `govulncheck` for the Go modules and `npm audit` for the

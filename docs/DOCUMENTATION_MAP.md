@@ -21,6 +21,7 @@ must update the relevant section here and the [Changelog](../CHANGELOG.md).
 | Feedback and roadmap evidence | [Feedback loop](./FEEDBACK_LOOP.md) | Design-partner intake, support/incident signals and quarterly review |
 | Open-core boundary | [Open-core plan](./OPEN_CORE_PLAN.md) | Self-hosted core, optional hosted/support convenience and portability guarantees |
 | Release and updates | [Supply chain](./SUPPLY_CHAIN.md) and [Failover](./FAILOVER.md) | Manifest, SBOM, provenance, canary and rollback evidence |
+| Release runtime acceptance | [Release acceptance](./RELEASE_ACCEPTANCE.md) | Clean install, real Custom GPT/MCP execution, tmpfs file roundtrip, update, reconnect and rollback definition of done |
 | Safe delivery canary | [Canary acceptance](./CANARY_ACCEPTANCE.md) | Disposable real-Hub version swap, reconnect and bad-candidate rollback |
 | Live deployment acceptance | [Live acceptance runner](./LIVE_ACCEPTANCE.md) | Secret-safe endpoint, OAuth, OpenAPI and MCP smoke before deeper host/client gates |
 
