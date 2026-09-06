@@ -51,7 +51,7 @@ cat > "$OUTPUT/SOURCE.json" <<EOF
   "source_ref": "$(printf '%s' "$SOURCE_REF" | sed 's/[\\"]//g')",
   "app_version": "1.0.5",
   "architecture": "aarch64",
-  "image": "ghcr.io/megamen32/gptadmin-haos-hub-standby"
+  "image": "ghcr.io/megamen32/gptadmin-opensource-haos-hub-standby"
 }
 EOF
 
