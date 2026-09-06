@@ -41,3 +41,10 @@ def test_ubuntu_x64_release_bundle_carries_grepmesh_companion():
     assert '"$ART_DIR/grepmesh/linux_amd64/grepmesh-mcp"' in source
     assert 'cp -f "$grepmesh" "$tmp/bin/grepmesh-mcp"' in source
     assert 'ERROR: missing bundled GrepMesh for $platform/$arch' in source
+
+
+def test_full_release_bundle_carries_hub_public_payload():
+    source = (ROOT / "tools" / "build.sh").read_text(encoding="utf-8")
+    assert 'cp -a "$ART_DIR/public" "$tmp/public"' in source
+    assert '[[ -f "$tmp/public/openapi.yaml" ]]' in source
+    assert 'ERROR: full release public payload has no openapi.yaml' in source

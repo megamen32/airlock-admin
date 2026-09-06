@@ -615,6 +615,9 @@ emit_release_bundle() {
     mkdir -p "$tmp/cli"
     cp -f cli.py "$tmp/cli/gptadmin.py"
     chmod 0755 "$tmp/cli/gptadmin.py"
+    [[ -d "$ART_DIR/public" ]] || { echo "ERROR: missing public payload for $platform/$arch full release" >&2; exit 1; }
+    cp -a "$ART_DIR/public" "$tmp/public"
+    [[ -f "$tmp/public/openapi.yaml" ]] || { echo "ERROR: full release public payload has no openapi.yaml" >&2; exit 1; }
   fi
   printf 'GPTAdmin %s for %s/%s (%s)\n' "$BUILD_VERSION" "$platform" "$arch" "$edition" > "$tmp/README.txt"
   if [[ "$extension" == zip ]]; then
