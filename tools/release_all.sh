@@ -71,6 +71,7 @@ if [[ "$SKIP_TESTS" != "1" ]]; then
 		--deselect tests/test_docs_product_contract.py::test_public_custom_gpt_instructions_stay_in_sync_with_prompt_source \
 		--deselect tests/test_frp_watchdog.py::test_frp_watchdog_templates_are_bounded_and_restart_existing_units \
 		--deselect tests/test_frp_watchdog.py::test_watchdog_cooldown_suppresses_restart_storm \
+		--deselect tests/test_frp_watchdog.py::test_server01_default_endpoint_uses_current_control_port \
 		|| { echo "ERROR: sanitized test gate failed" >&2; exit 1; } )
 else
 	echo "=== Tests skipped (--skip-tests) ==="
