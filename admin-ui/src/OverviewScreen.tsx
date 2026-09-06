@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { ErrorNotice, PageHeader, StatusBadge } from "./ui/Primitives";
 import { friendlyActionName, friendlyServerName, jobStatusLabel, serverStatusLabel } from "./ui/format";
 
 type Server = {
@@ -37,12 +38,12 @@ function compactTime(value: number | string | undefined): string {
   if (value === undefined || value === "") return "—";
   const numeric = typeof value === "number" ? value : Number(value);
   const date = Number.isFinite(numeric) ? new Date(numeric < 1e12 ? numeric * 1000 : numeric) : new Date(value);
-  return Number.isNaN(date.getTime()) ? String(value) : date.toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+  return Number.isNaN(date.getTime()) ? String(value) : date.toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" });
 }
 
 async function requestOverview(signal?: AbortSignal): Promise<Overview> {
   const response = await fetch("/admin/api/overview?limit=24", { credentials: "same-origin", signal, headers: { Accept: "application/json" } });
-  if (!response.ok) throw new Error(`Hub вернул HTTP ${response.status}`);
+  if (!response.ok) throw new Error(`Не удалось получить состояние системы (HTTP ${response.status})`);
   return response.json() as Promise<Overview>;
 }
 
@@ -72,20 +73,33 @@ export default function OverviewScreen() {
     return () => { controller.abort(); window.clearInterval(timer); };
   }, [refresh]);
 
-  const problems = useMemo(() => (overview?.servers ?? []).filter((server) => server.status !== "online").slice(0, 8), [overview]);
-  const recentJobs = (overview?.jobs?.recent ?? []).slice(0, 8);
+  const servers = overview?.servers ?? [];
+  const recentJobs = overview?.jobs?.recent ?? [];
+  const problems = useMemo(() => servers.filter((server) => server.status !== "online").slice(0, 6), [servers]);
+  const failedJobs = useMemo(() => recentJobs.filter((job) => job.status === "failed" || job.status === "error").slice(0, 6), [recentJobs]);
+  const activeJobs = useMemo(() => recentJobs.filter((job) => job.status === "running" || String(job.status || "").startsWith("queued")).slice(0, 4), [recentJobs]);
   const counts = overview?.server_counts ?? {};
+  const queuedCount = overview?.jobs?.queued?.length ?? 0;
+  const backgroundCount = overview?.jobs?.background?.length ?? 0;
   const update = overview?.update;
   const updateRunning = updating || update?.current?.status === "running";
   const publicUrl = overview?.hub_public_url || overview?.public_origin;
   const shellVersions = Object.entries(overview?.shell_builds?.versions ?? {}).map(([version, count]) => `${version}×${count}`).join(", ") || "—";
+
+  const health = error ? "error" : problems.length > 0 || failedJobs.length > 0 ? "warning" : "healthy";
+  const healthTitle = health === "error" ? "Не удалось проверить систему" : health === "warning" ? "Есть то, что требует внимания" : "Всё работает нормально";
+  const healthText = health === "error"
+    ? "Связь с системой временно недоступна. Попробуйте обновить страницу."
+    : health === "warning"
+      ? `${problems.length ? `${problems.length} сервер${problems.length === 1 ? " требует" : "а требуют"} внимания. ` : ""}${failedJobs.length ? `${failedJobs.length} последн${failedJobs.length === 1 ? "яя задача завершилась" : "их задач завершились"} с ошибкой.` : ""}`
+      : "Серверы отвечают, критических ошибок в последних задачах нет.";
 
   const triggerUpdate = async () => {
     setUpdating(true);
     setError(null);
     try {
       const response = await fetch("/admin/api/update", { method: "POST", credentials: "same-origin", headers: { Accept: "application/json", "Content-Type": "application/json" }, body: "{}" });
-      if (!response.ok) throw new Error(`Обновление не запущено: HTTP ${response.status}`);
+      if (!response.ok) throw new Error(`Обновление не запущено (HTTP ${response.status})`);
       await refresh();
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Не удалось запустить обновление");
@@ -96,38 +110,43 @@ export default function OverviewScreen() {
 
   return (
     <div className="page-shell overview-page">
-      <header className="page-header overview-header">
-        <div>
-          <p className="section-kicker">СОСТОЯНИЕ СИСТЕМЫ</p>
-          <h1>Обзор</h1>
-          <p className="lede">Коротко о состоянии системы, серверах и последних задачах.</p>
-        </div>
-        <div className="overview-header-actions">
-          <span className={`data-badge ${error ? "state-error" : "state-ready"}`} role="status">{refreshing ? "Обновляем…" : error ? "Нет связи" : "● работает"}</span>
-          <button className="button secondary" type="button" onClick={() => void refresh()} disabled={refreshing}>Обновить</button>
-        </div>
-      </header>
+      <PageHeader
+        eyebrow="СОСТОЯНИЕ СИСТЕМЫ"
+        title="Обзор"
+        description="Здесь показано только то, что важно прямо сейчас."
+        actions={<><StatusBadge state={error ? "error" : "ready"}>{refreshing ? "Обновляем…" : error ? "Нет связи" : "Данные актуальны"}</StatusBadge><button className="button secondary" type="button" onClick={() => void refresh()} disabled={refreshing}>Обновить</button></>}
+      />
 
-      {error && <div className="state-panel card standalone-state state-error" role="alert">{error}</div>}
+      <ErrorNotice message={error} />
 
-      <section className="overview-metrics" aria-label="Ключевые показатели">
-        <article className="card metric-tile"><span>Серверы</span><strong><b className="ok-text">{counts.online ?? 0}</b> / <b className="bad-text">{counts.offline ?? 0}</b> / <b className="warn-text">{counts.stale ?? 0}</b></strong><small>работают / недоступны / давно не отвечали</small></article>
-        <article className="card metric-tile"><span>Клиенты</span><strong>{overview?.client_count ?? 0}</strong><small>активные записи доступа</small></article>
-        <article className="card metric-tile"><span>Очередь</span><strong>{overview?.jobs?.queued?.length ?? 0}</strong><small>ожидают выполнения</small></article>
-        <article className="card metric-tile"><span>В фоне</span><strong>{overview?.jobs?.background?.length ?? 0}</strong><small>выполняются сейчас</small></article>
+      <section className={`health-hero health-${health}`} aria-live="polite">
+        <div className="health-icon" aria-hidden="true">{health === "healthy" ? "✓" : health === "warning" ? "!" : "×"}</div>
+        <div className="health-copy"><p className="section-kicker">СЕЙЧАС</p><h2>{healthTitle}</h2><p>{healthText}</p></div>
+        {health === "warning" && <div className="health-actions">{problems.length > 0 && <a className="button secondary" href="#agents">Проверить серверы</a>}{failedJobs.length > 0 && <a className="button secondary" href="#jobs">Посмотреть ошибки</a>}</div>}
       </section>
 
-      <section className="overview-columns">
-        <article className="card overview-panel">
-          <div className="card-heading"><div><p className="section-kicker">ТРЕБУЕТ ВНИМАНИЯ</p><h2>Проблемные серверы</h2></div><span className="count-pill">{problems.length}</span></div>
-          {problems.length === 0 ? <div className="compact-empty"><strong>Все серверы работают</strong><span>Сейчас вмешательство не требуется.</span></div> : <div className="compact-list">{problems.map((server) => <a className="compact-row" href="#agents" key={server.server_id ?? server.name}><span className={`status-dot status-${server.status ?? "unknown"}`} /><span><strong>{friendlyServerName(server.server_id, server.name)}</strong><small>{serverStatusLabel(server.status)}{server.last_seen ? ` · ${server.last_seen}` : ""}</small></span></a>)}</div>}
-        </article>
-
-        <article className="card overview-panel">
-          <div className="card-heading"><div><p className="section-kicker">ПОСЛЕДНИЕ</p><h2>Последние задачи</h2></div><a className="text-button" href="#jobs">Все задачи</a></div>
-          {recentJobs.length === 0 ? <div className="compact-empty"><strong>Задач пока нет</strong><span>Последние операции появятся здесь.</span></div> : <div className="compact-list">{recentJobs.map((job) => <a className="compact-row" href="#jobs" key={job.job_id}><span className={`job-state job-${job.status ?? "unknown"}`}>{jobStatusLabel(job.status)}</span><span><strong>{friendlyActionName(job.tool_name)}</strong><small>{job.command || job.arguments_preview || job.result_preview || job.error_preview || job.job_id || "—"} · {compactTime(job.created_at)}</small></span></a>)}</div>}
-        </article>
+      <section className="overview-summary-strip" aria-label="Краткое состояние">
+        <a href="#agents"><span>Серверы</span><strong>{counts.online ?? 0} работают</strong><small>{(counts.offline ?? 0) + (counts.stale ?? 0) > 0 ? `${(counts.offline ?? 0) + (counts.stale ?? 0)} требуют внимания` : "проблем нет"}</small></a>
+        <a href="#jobs"><span>Задачи</span><strong>{backgroundCount} выполняются</strong><small>{queuedCount > 0 ? `${queuedCount} ожидают запуска` : "очередь свободна"}</small></a>
+        <a href="#clients"><span>Доступ</span><strong>{overview?.client_count ?? 0} клиентов</strong><small>управление доступом</small></a>
       </section>
+
+      {(problems.length > 0 || failedJobs.length > 0) && <section className="attention-stack" aria-label="Требует внимания">
+        {problems.length > 0 && <article className="card overview-panel attention-panel">
+          <div className="card-heading"><div><p className="section-kicker">ТРЕБУЕТ ВНИМАНИЯ</p><h2>Серверы</h2></div><span className="count-pill">{problems.length}</span></div>
+          <div className="compact-list">{problems.map((server) => <a className="compact-row" href="#agents" key={server.server_id ?? server.name}><span className={`status-dot status-${server.status ?? "unknown"}`} /><span><strong>{friendlyServerName(server.server_id, server.name)}</strong><small>{serverStatusLabel(server.status)}{server.last_seen ? ` · последний ответ ${server.last_seen}` : ""}</small></span></a>)}</div>
+        </article>}
+
+        {failedJobs.length > 0 && <article className="card overview-panel attention-panel">
+          <div className="card-heading"><div><p className="section-kicker">ОШИБКИ</p><h2>Последние задачи</h2></div><a className="text-button" href="#jobs">Все задачи</a></div>
+          <div className="compact-list">{failedJobs.map((job) => <a className="compact-row" href="#jobs" key={job.job_id}><span className={`job-state job-${job.status ?? "unknown"}`}>{jobStatusLabel(job.status)}</span><span><strong>{friendlyActionName(job.tool_name)}</strong><small>{job.error_preview || job.command || job.arguments_preview || "Подробности доступны в задачах"} · {compactTime(job.created_at)}</small></span></a>)}</div>
+        </article>}
+      </section>}
+
+      {activeJobs.length > 0 && <section className="card overview-panel current-work-panel">
+        <div className="card-heading"><div><p className="section-kicker">СЕЙЧАС В РАБОТЕ</p><h2>Активные задачи</h2></div><a className="text-button" href="#jobs">Все задачи</a></div>
+        <div className="compact-list">{activeJobs.map((job) => <a className="compact-row" href="#jobs" key={job.job_id}><span className={`job-state job-${job.status ?? "unknown"}`}>{jobStatusLabel(job.status)}</span><span><strong>{friendlyActionName(job.tool_name)}</strong><small>{compactTime(job.created_at)}</small></span></a>)}</div>
+      </section>}
 
       <details className="card overview-system-card overview-tech-details"><summary>Техническая информация</summary>
         <div className="card-heading"><div><p className="section-kicker">ТЕХНИЧЕСКАЯ ИНФОРМАЦИЯ</p><h2>Версии и обновление</h2></div><button className="button primary" type="button" onClick={() => void triggerUpdate()} disabled={updateRunning}>{updateRunning ? "Обновляем…" : "Обновить этот узел"}</button></div>

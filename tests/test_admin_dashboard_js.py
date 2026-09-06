@@ -31,8 +31,8 @@ def test_removed_max_active_ips_helpers_leave_no_stale_bootstrap_call():
 def test_split_admin_problem_servers_id_matches_render_target():
     """Problem-server rendering is a React list, not a fragile DOM id target."""
     source = OVERVIEW_SCREEN.read_text(encoding="utf-8")
-    assert "Проблемные серверы" in source
     assert "problems.map" in source
+    assert 'href="#agents"' in source
     assert "problemAgents" not in source
     assert "problemServers" not in source
 
