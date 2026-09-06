@@ -58,6 +58,70 @@ def test_update_reads_canonical_release_manifest_artifact_list(monkeypatch):
     assert info["git_commit"] == "b" * 40
 
 
+
+def test_download_accepts_plain_local_package_path(tmp_path: Path):
+    source = tmp_path / "candidate.tar.gz"
+    destination = tmp_path / "downloaded.tar.gz"
+    source.write_bytes(b"local package bytes")
+
+    cli.download(str(source), destination)
+
+    assert destination.read_bytes() == source.read_bytes()
+
+
+def test_update_reads_sibling_matrix_for_plain_local_package(monkeypatch, tmp_path: Path):
+    package = tmp_path / "gptadmin-linux-amd64.tar.gz"
+    payload = b"exact local artifact"
+    package.write_bytes(payload)
+    matrix = {
+        "schema": "gptadmin.release-matrix/v2",
+        "build_version": 1002,
+        "build_ts": "2026-09-06T00:00:00Z",
+        "git_commit": "c" * 40,
+        "artifacts": [
+            {
+                "file": package.name,
+                "sha256": hashlib.sha256(payload).hexdigest(),
+                "size": len(payload),
+                "build_version": 1002,
+                "git_commit": "c" * 40,
+            }
+        ],
+    }
+    (tmp_path / "gptadmin-release-matrix.json").write_text(json.dumps(matrix))
+    monkeypatch.delenv("GPTADMIN_RELEASE_MATRIX_URL", raising=False)
+    monkeypatch.delenv("GPTADMIN_UPDATE_SKIP_MANIFEST", raising=False)
+
+    info = cli._remote_artifact_build_info(str(package))
+
+    assert info["sha256"] == hashlib.sha256(payload).hexdigest()
+    assert info["size"] == len(payload)
+    assert info["build_version"] == 1002
+    assert info["git_commit"] == "c" * 40
+
+
+def test_update_reads_sibling_matrix_for_file_url(monkeypatch, tmp_path: Path):
+    package = tmp_path / "gptadmin-linux-amd64.tar.gz"
+    payload = b"file url artifact"
+    package.write_bytes(payload)
+    (tmp_path / "gptadmin-release-matrix.json").write_text(json.dumps({
+        "schema": "gptadmin.release-matrix/v2",
+        "build_version": 1003,
+        "artifacts": [{
+            "file": package.name,
+            "sha256": hashlib.sha256(payload).hexdigest(),
+            "size": len(payload),
+        }],
+    }))
+    monkeypatch.delenv("GPTADMIN_RELEASE_MATRIX_URL", raising=False)
+    monkeypatch.delenv("GPTADMIN_UPDATE_SKIP_MANIFEST", raising=False)
+
+    info = cli._remote_artifact_build_info(package.as_uri())
+
+    assert info["sha256"] == hashlib.sha256(payload).hexdigest()
+    assert info["size"] == len(payload)
+    assert info["build_version"] == 1003
+
 def test_update_rejects_download_that_does_not_match_manifest(tmp_path: Path):
     package = tmp_path / "package.tar.gz"
     package.write_bytes(b"actual bytes")

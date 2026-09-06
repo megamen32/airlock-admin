@@ -26,6 +26,14 @@ also rejects any size or SHA-256 mismatch after download. The explicit
 known private mirror; it must not be used for normal releases or production
 updates.
 
+For local candidate installation or operator-controlled rollback, `gptadmin update`
+also accepts an ordinary filesystem path (for example
+`--pkg-all /srv/releases/gptadmin-linux-amd64.tar.gz`) or a `file://` URL. The
+updater reads `gptadmin-release-matrix.json` from the package's directory and
+applies the same required size/SHA-256 verification as a network update. A local
+path without a valid sibling matrix is rejected unless the diagnostic-only
+`GPTADMIN_UPDATE_SKIP_MANIFEST=1` escape is explicitly set.
+
 ## Runtime release gate
 
 Artifact integrity is necessary but not sufficient. Before an Ubuntu release

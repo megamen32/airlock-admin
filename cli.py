@@ -527,20 +527,47 @@ def ensure_https(url: str):
 
 # download & extract
 
-def download(url: str, dest: Path):
-    """Download a file with curl's progress meter visible.
+def _local_source_path(source: str) -> Path | None:
+    """Resolve a package/matrix source to a local path when applicable.
 
-    curl's default meter shows total size, received bytes, average speed,
-    elapsed time, estimated time left and current speed when Content-Length is
-    available. Set GPTADMIN_DOWNLOAD_QUIET=1 to keep the old silent behavior.
+    Plain filesystem paths and file:// URLs are supported. HTTP(S) and other
+    schemes remain remote sources. Relative paths are resolved against cwd.
     """
-    quiet = os.environ.get('GPTADMIN_DOWNLOAD_QUIET', '').strip().lower() in {'1', 'true', 'yes', 'on'}
-    if quiet:
-        cmd = ['curl', '-fsSL', url, '-o', str(dest)]
+    value = str(source or '').strip()
+    if not value:
+        return None
+    parsed = urllib.parse.urlparse(value)
+    if parsed.scheme == 'file':
+        if parsed.netloc not in {'', 'localhost'}:
+            return None
+        return Path(urllib.request.url2pathname(parsed.path)).expanduser().resolve()
+    if parsed.scheme:
+        return None
+    return Path(value).expanduser().resolve()
+
+
+def download(url: str, dest: Path):
+    """Download or copy one release artifact into ``dest``.
+
+    Local filesystem paths and file:// URLs are copied directly; HTTP(S) uses
+    curl with its progress meter visible. Set GPTADMIN_DOWNLOAD_QUIET=1 to keep
+    the old silent network-download behavior.
+    """
+    local = _local_source_path(url)
+    if local is not None:
+        if not local.is_file():
+            raise subprocess.CalledProcessError(1, ['local-copy', str(local)])
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(local, dest)
+        print(f'  Локальный файл: {local}', flush=True)
     else:
-        print(f'  URL: {url}', flush=True)
-        cmd = ['curl', '-fL', url, '-o', str(dest)]
-    run(cmd)
+        quiet = os.environ.get('GPTADMIN_DOWNLOAD_QUIET', '').strip().lower() in {'1', 'true', 'yes', 'on'}
+        if quiet:
+            cmd = ['curl', '-fsSL', url, '-o', str(dest)]
+        else:
+            print(f'  URL: {url}', flush=True)
+            cmd = ['curl', '-fL', url, '-o', str(dest)]
+        run(cmd)
     try:
         size = dest.stat().st_size
     except OSError:
@@ -4781,7 +4808,23 @@ def _installed_build_info(env: dict, install_hub: bool) -> dict:
 
 
 def _artifact_name_from_url(url: str) -> str:
-    return url.rstrip('/').rsplit('/', 1)[-1]
+    local = _local_source_path(url)
+    if local is not None:
+        return local.name
+    parsed = urllib.parse.urlparse(str(url))
+    return Path(urllib.parse.unquote(parsed.path)).name
+
+
+def _read_release_matrix_source(source: str) -> tuple[dict, str]:
+    """Read a release matrix from a local path/file URL or HTTP(S) URL."""
+    local = _local_source_path(source)
+    if local is not None:
+        matrix = json.loads(local.read_text(encoding='utf-8'))
+        return matrix, str(local)
+    with urllib.request.urlopen(source, timeout=8) as response:
+        matrix = json.loads(response.read().decode('utf-8', 'replace'))
+        final_url = getattr(response, 'url', source)
+    return matrix, str(final_url)
 
 
 def _release_manifest_bypass_enabled() -> bool:
@@ -4792,13 +4835,18 @@ def _release_manifest_bypass_enabled() -> bool:
 def _remote_artifact_build_info(pkg_url: str) -> dict:
     if _release_manifest_bypass_enabled():
         return {}
-    base = pkg_url.rsplit('/', 1)[0]
-    matrix_url = os.environ.get('GPTADMIN_RELEASE_MATRIX_URL') or (base.rstrip('/') + '/gptadmin-release-matrix.json')
+    local_pkg = _local_source_path(pkg_url)
+    explicit_matrix = os.environ.get('GPTADMIN_RELEASE_MATRIX_URL')
+    if explicit_matrix:
+        matrix_url = explicit_matrix
+    elif local_pkg is not None:
+        matrix_url = str(local_pkg.with_name('gptadmin-release-matrix.json'))
+    else:
+        base = pkg_url.rsplit('/', 1)[0]
+        matrix_url = base.rstrip('/') + '/gptadmin-release-matrix.json'
     name = _artifact_name_from_url(pkg_url)
     try:
-        with urllib.request.urlopen(matrix_url, timeout=8) as r:
-            matrix = json.loads(r.read().decode('utf-8', 'replace'))
-            final_url = getattr(r, 'url', matrix_url)
+        matrix, final_url = _read_release_matrix_source(matrix_url)
     except Exception as exc:
         print(f'WARNING: release matrix unavailable: {exc}', file=sys.stderr)
         return {}
@@ -5557,7 +5605,7 @@ def cmd_update(args):
     target_pkg = pkg_all if (install_hub and install_shellmcp) else (pkg_hub if install_hub else pkg_shellmcp)
     remote_info = _remote_artifact_build_info(target_pkg)
     if not _release_manifest_bypass_enabled() and (not remote_info.get('sha256') or remote_info.get('size') is None):
-        die(f'Проверка релиза не пройдена: manifest недоступен или не содержит полный digest/size ({Path(target_pkg).name})')
+        die(f'Проверка релиза не пройдена: manifest недоступен или не содержит полный digest/size ({_artifact_name_from_url(target_pkg)})')
     if not getattr(args, 'force', False):
         installed_info = _installed_build_info(env, install_hub)
         if _should_skip_update(installed_info, remote_info):
