@@ -5432,39 +5432,66 @@ def _require_real_local_shell_exec(env: dict, timeout_s: int = 90) -> dict:
     if not selected:
         raise RuntimeError('local ShellMCP did not become online for execution verification')
 
-    expected = 'gptadmin-runtime-' + secrets.token_hex(8)
-    result = _candidate_http(
-        base, 'POST', '/mcp-relay/call', token=token,
-        payload={
-            'target': selected,
-            'tool': 'shell_exec',
-            'arguments': {'cmd': f"printf '{expected}'", 'run_as_user': 'root'},
-            'background': True,
-        },
-        timeout=10.0,
-    )
-    if not isinstance(result, dict):
-        raise RuntimeError('local ShellMCP execution verifier returned an invalid response')
-    job_id = str(result.get('job_id') or result.get('task_id') or '')
-    if not job_id:
-        if expected in json.dumps(result, ensure_ascii=False):
-            return {'status': 'passed', 'target': selected, 'mode': 'inline'}
-        raise RuntimeError(f'local ShellMCP execution verifier returned no job id: {result}')
-
-    while time.monotonic() < deadline:
-        current = _candidate_http(
-            base, 'GET', '/mcp-relay/job/' + urllib.parse.quote(job_id, safe=''),
-            token=token, timeout=5.0,
+    # A Hub restart can strand one already-dispatched queue job in ``running``
+    # even though the new ShellMCP is healthy.  Do not let one stale verifier
+    # job consume the whole update deadline: issue a few independent harmless
+    # probes, while still requiring one *real* Hub -> ShellMCP round-trip to
+    # return its unique marker before the update is accepted.
+    max_attempts = 3
+    last_job_id = ''
+    last_status = ''
+    attempts = 0
+    while attempts < max_attempts and time.monotonic() < deadline:
+        attempts += 1
+        expected = 'gptadmin-runtime-' + secrets.token_hex(8)
+        result = _candidate_http(
+            base, 'POST', '/mcp-relay/call', token=token,
+            payload={
+                'target': selected,
+                'tool': 'shell_exec',
+                'arguments': {'cmd': f"printf '{expected}'", 'run_as_user': 'root'},
+                'background': True,
+            },
+            timeout=10.0,
         )
-        status = str(current.get('status') or '') if isinstance(current, dict) else ''
-        if status in {'completed', 'success'}:
-            if expected not in json.dumps(current, ensure_ascii=False):
-                raise RuntimeError(f'local ShellMCP execution completed without expected output: {current}')
-            return {'status': 'passed', 'target': selected, 'job_id': job_id, 'mode': 'job'}
-        if status in {'failed', 'error', 'cancelled'}:
-            raise RuntimeError(f'local ShellMCP execution failed: {current}')
-        time.sleep(0.25)
-    raise RuntimeError(f'local ShellMCP execution did not complete within {timeout_s}s (job {job_id})')
+        if not isinstance(result, dict):
+            raise RuntimeError('local ShellMCP execution verifier returned an invalid response')
+        job_id = str(result.get('job_id') or result.get('task_id') or '')
+        last_job_id = job_id
+        if not job_id:
+            if expected in json.dumps(result, ensure_ascii=False):
+                return {'status': 'passed', 'target': selected, 'mode': 'inline', 'attempts': attempts}
+            raise RuntimeError(f'local ShellMCP execution verifier returned no job id: {result}')
+
+        # Give each probe a bounded slice of the total deadline.  This is long
+        # enough for a healthy local queue but short enough to recover from a
+        # single job stranded across Hub/ShellMCP restart.
+        remaining = max(0.0, deadline - time.monotonic())
+        per_attempt = min(15.0, max(3.0, float(timeout_s) / max_attempts), remaining)
+        attempt_deadline = time.monotonic() + per_attempt
+        while time.monotonic() < attempt_deadline and time.monotonic() < deadline:
+            current = _candidate_http(
+                base, 'GET', '/mcp-relay/job/' + urllib.parse.quote(job_id, safe=''),
+                token=token, timeout=5.0,
+            )
+            status = str(current.get('status') or '') if isinstance(current, dict) else ''
+            last_status = status
+            if status in {'completed', 'success'}:
+                if expected not in json.dumps(current, ensure_ascii=False):
+                    raise RuntimeError(f'local ShellMCP execution completed without expected output: {current}')
+                return {
+                    'status': 'passed', 'target': selected, 'job_id': job_id,
+                    'mode': 'job', 'attempts': attempts,
+                }
+            if status in {'failed', 'error', 'cancelled'}:
+                break
+            time.sleep(0.25)
+
+    detail = f'last job {last_job_id or "none"} status {last_status or "unknown"}'
+    raise RuntimeError(
+        f'local ShellMCP execution did not complete within {timeout_s}s '
+        f'after {attempts} attempt(s) ({detail})'
+    )
 
 
 @_transactional_update

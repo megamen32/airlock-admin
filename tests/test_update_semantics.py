@@ -268,6 +268,69 @@ def test_cleanup_removes_obsolete_shellmcp_primary_override(monkeypatch, tmp_pat
     assert not legacy_zz.exists()
 
 
+
+def test_local_shell_exec_verifier_retries_a_stranded_job(monkeypatch):
+    clock = [0.0]
+    posted: list[tuple[str, str]] = []
+
+    monkeypatch.setattr(cli.time, "monotonic", lambda: clock[0])
+    monkeypatch.setattr(cli.time, "sleep", lambda seconds: clock.__setitem__(0, clock[0] + seconds))
+    monkeypatch.setattr(cli, "_load_local_shellmcp_identity", lambda *_args, **_kwargs: {"public_key": "pk"})
+    monkeypatch.setattr(cli, "_normalize_local_shell_identity", lambda identity: identity)
+    monkeypatch.setattr(cli, "_server_matches_local_shell_identity", lambda *_args, **_kwargs: True)
+    monkeypatch.setattr(cli, "make_mcp_bearer_token", lambda *_args, **_kwargs: "token")
+
+    def fake_http(_base, method, path, **kwargs):
+        if method == "GET" and path.startswith("/mcp-relay/servers"):
+            return {"servers": [{"server_id": "shell:local", "status": "online"}]}
+        if method == "POST" and path == "/mcp-relay/call":
+            marker = kwargs["payload"]["arguments"]["cmd"].split("'")[1]
+            job_id = f"job-{len(posted) + 1}"
+            posted.append((job_id, marker))
+            return {"status": "running", "job_id": job_id}
+        if method == "GET" and path.endswith("job-1"):
+            return {"status": "running", "job_id": "job-1"}
+        if method == "GET" and path.endswith("job-2"):
+            return {"status": "completed", "job_id": "job-2", "result": posted[1][1]}
+        raise AssertionError((method, path, kwargs))
+
+    monkeypatch.setattr(cli, "_candidate_http", fake_http)
+
+    result = cli._require_real_local_shell_exec({"HUB_PORT": "9001"}, timeout_s=9)
+
+    assert result["status"] == "passed"
+    assert result["job_id"] == "job-2"
+    assert result["attempts"] == 2
+
+
+def test_local_shell_exec_verifier_fails_when_all_probe_jobs_stall(monkeypatch):
+    clock = [0.0]
+    posted: list[str] = []
+
+    monkeypatch.setattr(cli.time, "monotonic", lambda: clock[0])
+    monkeypatch.setattr(cli.time, "sleep", lambda seconds: clock.__setitem__(0, clock[0] + seconds))
+    monkeypatch.setattr(cli, "_load_local_shellmcp_identity", lambda *_args, **_kwargs: {"public_key": "pk"})
+    monkeypatch.setattr(cli, "_normalize_local_shell_identity", lambda identity: identity)
+    monkeypatch.setattr(cli, "_server_matches_local_shell_identity", lambda *_args, **_kwargs: True)
+    monkeypatch.setattr(cli, "make_mcp_bearer_token", lambda *_args, **_kwargs: "token")
+
+    def fake_http(_base, method, path, **kwargs):
+        if method == "GET" and path.startswith("/mcp-relay/servers"):
+            return {"servers": [{"server_id": "shell:local", "status": "online"}]}
+        if method == "POST" and path == "/mcp-relay/call":
+            job_id = f"job-{len(posted) + 1}"
+            posted.append(job_id)
+            return {"status": "running", "job_id": job_id}
+        if method == "GET" and path.startswith("/mcp-relay/job/"):
+            return {"status": "running", "job_id": path.rsplit("/", 1)[-1]}
+        raise AssertionError((method, path, kwargs))
+
+    monkeypatch.setattr(cli, "_candidate_http", fake_http)
+
+    with pytest.raises(RuntimeError, match=r"after 3 attempt\(s\).+status running"):
+        cli._require_real_local_shell_exec({"HUB_PORT": "9001"}, timeout_s=9)
+    assert posted == ["job-1", "job-2", "job-3"]
+
 def test_update_requires_fresh_local_shell_registration_before_success():
     text = CLI.read_text()
     start = text.index("def cmd_update(args):")
