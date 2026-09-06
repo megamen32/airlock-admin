@@ -261,7 +261,11 @@ build_cli() {
 
 build_admin_ui() {
   step "Build React admin UI"
-  (cd admin-ui && npm ci && npm run build -- --base=/admin/)
+  if [[ "${GPTADMIN_ADMIN_UI_DEPS_READY:-0}" == "1" ]]; then
+    (cd admin-ui && npm run build -- --base=/admin/)
+  else
+    (cd admin-ui && npm ci --prefer-offline --no-audit --no-fund && npm run build -- --base=/admin/)
+  fi
   [[ -s admin-ui/dist/index.html ]] || { echo "ERROR: missing admin-ui/dist/index.html"; exit 1; }
   grep -q '/admin/assets/' admin-ui/dist/index.html || {
     echo "ERROR: React admin UI was built without the /admin/ asset base" >&2
