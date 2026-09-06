@@ -33,16 +33,11 @@ def test_server_card_constants_are_initialized_before_rendering_servers():
         f"(const line {meta_line}, call line {call_line})"
     )
 
-def test_max_active_ips_helpers_are_top_level_before_render_all():
-    """Regression for ReferenceError: initMaxActiveIpsInput is not defined."""
-    html = ADMIN_HTML.read_text(encoding="utf-8")
-    render_all_line = _line_no(html, "function renderAll()")
-    bootstrap_line = _line_no(html, "initMaxActiveIpsInput();showView")
-
+def test_removed_max_active_ips_helpers_leave_no_stale_bootstrap_call():
+    """The retired max-active-IPs control must not leave a ReferenceError behind."""
+    script = ADMIN_HTML.read_text(encoding="utf-8")
     for name in ("getMaxActiveIps", "onMaxActiveIpsChange", "initMaxActiveIpsInput"):
-        line = _line_no(html, f"function {name}")
-        assert line < render_all_line, f"{name} must be top-level before renderAll (line {line})"
-        assert line < bootstrap_line, f"{name} must be initialized before bootstrap (line {line})"
+        assert name not in script
 
 
 

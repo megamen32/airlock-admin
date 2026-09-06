@@ -10,35 +10,40 @@ def test_authenticated_admin_page_has_no_topbar_password_field():
     assert 'placeholder="optional CTL_TOKEN"' not in html
 
 
-def test_authenticated_admin_page_explains_the_simple_mcp_auth_choice():
-    html = (ROOT / "admin-ui" / "src" / "operations" / "template.html").read_text()
-    assert "PUBLIC_ORIGIN" in html
-    assert "Большинство клиентов подключаются сами через OAuth" in html
+def test_react_admin_explains_the_current_mcp_auth_choice():
+    app = (ROOT / "admin-ui" / "src" / "App.tsx").read_text()
+    assert "Авторизация" in app
+    assert "Токены подключения и управление OAuth" in app
+    assert "Выдать managed token" in app
 
 
-def test_authenticated_admin_page_links_to_live_docs_without_protocol_jargon():
-    html = (ROOT / "admin-ui" / "src" / "operations" / "template.html").read_text()
-    assert "https://became.bezrabotnyi.com/#/docs" in html
-    assert "JWT для клиента без OAuth" in html
+def test_react_admin_uses_user_facing_auth_labels():
+    app = (ROOT / "admin-ui" / "src" / "App.tsx").read_text()
+    assert "OAuth secret" in app
+    assert "Выдать managed token" in app
+    assert "Режим доступа" in app
 
 
-def test_admin_page_offers_simple_jwt_issue_and_rotation_for_non_oauth_clients():
-    """Clients without OAuth need an obvious one-click JWT fallback path."""
-    html = (ROOT / "admin-ui" / "src" / "operations" / "template.html").read_text()
-    script = (ROOT / "admin-ui" / "src" / "operations" / "runtime.js").read_text()
-    assert "JWT для клиента без OAuth" in html
-    assert "rotateClient" in script
-    assert "/admin/api/mcp/tokens/" in script
-    assert 'secMcpAccessMode' in html
-    assert 'value="readonly" selected' in html
-    assert 'access_mode:accessMode' in script
-    assert "r.access_mode === 'readonly'" in script
+def test_react_admin_offers_managed_token_issue_and_rotation_for_non_oauth_clients():
+    """Clients without OAuth keep an explicit managed-token fallback path."""
+    app = (ROOT / "admin-ui" / "src" / "App.tsx").read_text()
+    api = (ROOT / "admin-ui" / "src" / "api.ts").read_text()
+    assert "Выдать managed token" in app
+    assert "Режим доступа" in app
+    assert '<option value="readonly">Только чтение</option>' in app
+    assert "issueMcpToken" in api
+    assert "rotateMcpToken" in api
+    assert "/admin/api/mcp/issue-token" in api
+    assert "/admin/api/mcp/tokens/" in api
 
 
 def test_admin_oauth_rotation_uses_hub_endpoint_without_client_side_secret_generation():
-    script = (ROOT / "admin-ui" / "src" / "operations" / "runtime.js").read_text()
-    assert "/admin/api/auth/rotate-oauth" in script
-    assert "crypto.getRandomValues" not in script[script.index("async function rotateOAuth") : script.index("async function issueMcpTokenFromPanel")]
+    api = (ROOT / "admin-ui" / "src" / "api.ts").read_text()
+    app = (ROOT / "admin-ui" / "src" / "App.tsx").read_text()
+    assert "/admin/api/auth/rotate-oauth" in api
+    assert "export async function rotateOAuth" in api
+    assert "crypto.getRandomValues" not in api
+    assert "Ротировать OAuth secret" in app
 
 
 def test_admin_ui_does_not_offer_legacy_ctl_bearer_controls():
@@ -85,14 +90,10 @@ def test_admin_security_ui_offers_passkey_enrollment_without_raw_credentials():
     assert "CTL_TOKEN" not in security
 
 
-def test_both_admin_surfaces_manage_optional_virtual_mcps_through_one_typed_endpoint():
-    legacy_html = (ROOT / "admin-ui" / "src" / "operations" / "template.html").read_text(encoding="utf-8")
-    legacy_script = (ROOT / "admin-ui" / "src" / "operations" / "runtime.js").read_text(encoding="utf-8")
+def test_react_admin_manages_optional_virtual_mcps_through_the_typed_endpoint():
     react_api = (ROOT / "admin-ui" / "src" / "api.ts").read_text(encoding="utf-8")
     react_app = (ROOT / "admin-ui" / "src" / "App.tsx").read_text(encoding="utf-8")
 
-    assert "Виртуальные MCP" in legacy_html
-    assert "loadVirtualMcps" in legacy_script
-    assert "/admin/api/virtual-mcps" in legacy_script
     assert "getVirtualMCPs" in react_api and "setVirtualMCP" in react_api
+    assert "/admin/api/virtual-mcps" in react_api
     assert "Виртуальные MCP" in react_app
