@@ -67,11 +67,8 @@ if [[ -z "${SHELLMCP_TOKEN:-}" ]]; then
   SHELLMCP_TOKEN=$(read_existing_env SHELLMCP_TOKEN)
 fi
 if [[ -z "${SHELLMCP_TOKEN:-}" ]]; then
-  if command -v openssl >/dev/null 2>&1; then
-    SHELLMCP_TOKEN=$(openssl rand -hex 16)
-  else
-    SHELLMCP_TOKEN=$(date +%s%N | sha256sum | awk '{print $1}' | cut -c1-32)
-  fi
+  echo "ERROR: SHELLMCP_TOKEN is required for a remote Hub; refusing to install an agent with an unregistered random credential." >&2
+  exit 2
 fi
 
 if [[ -z "${SHELLMCP_NAME:-}" ]]; then

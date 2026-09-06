@@ -49,7 +49,7 @@ if (-not $InstallDir) {
     else { $InstallDir = Join-Path $env:ProgramData 'gptadmin' }
 }
 if (-not $HubUrl) { $HubUrl = 'https://gptadmin.bezrabotnyi.com' }
-if (-not $ShellmcpToken) { $ShellmcpToken = ([System.Guid]::NewGuid().ToString('n')) }
+if (-not $ShellmcpToken) { throw 'SHELLMCP_TOKEN is required for a remote Hub; refusing to install an agent with an unregistered random credential.' }
 if (-not $ShellmcpName) { $ShellmcpName = $env:COMPUTERNAME }
 if (-not $ShellmcpUrl) { $ShellmcpUrl = "http://$ShellmcpName`:$ShellmcpPort" }
 if (-not $TaskName) {

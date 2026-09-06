@@ -41,7 +41,8 @@ it("mounts operations natively, renders a nonempty MCP list, preserves drafts, a
   expect(await screen.findByText("full-result-marker")).toBeInTheDocument();
   expect(screen.getByRole("heading", { name: "Stdout" })).toBeInTheDocument();
   expect(document.querySelector("#jobDetailBody .entryStatus")).toHaveTextContent("completed");
-  await userEvent.click(screen.getByRole("link", { name: "MCP-менеджер" }));
+  await userEvent.click(screen.getByRole("link", { name: "Инфраструктура" }));
+  await userEvent.click(screen.getByRole("link", { name: "MCP" }));
   expect(document.getElementById("view-mcpmanage")).toHaveClass("active");
   await actions().listManagedMcp();
   expect(screen.getByText("fixture-mcp")).toBeInTheDocument();

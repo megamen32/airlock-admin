@@ -34,3 +34,9 @@ def test_windows_installer_accepts_exact_local_candidate_artifact() -> None:
     source = (ROOT / "deploy" / "install_win.ps1").read_text(encoding="utf-8")
     assert "Test-Path -LiteralPath $PackageUrl" in source
     assert "Copy-Item -LiteralPath $PackageUrl -Destination $archive -Force" in source
+
+
+def test_windows_installer_fails_closed_without_hub_agent_credential() -> None:
+    source = (ROOT / "deploy" / "install_win.ps1").read_text(encoding="utf-8")
+    assert "unregistered random credential" in source
+    assert "if (-not $ShellmcpToken) { $ShellmcpToken =" not in source

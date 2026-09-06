@@ -181,3 +181,9 @@ def test_linux_cli_materializes_handover_helper_and_standby(tmp_path):
     standby = g["UNIT_PATH_HUB_STANDBY"].read_text()
     assert "ExecStart=/usr/bin/env GPTADMIN_HUB_HOST=127.0.0.1 GPTADMIN_HUB_PORT=19001 HUB_PORT=19001" in standby
     assert "DRAIN_SECONDS=${GPTADMIN_HANDOVER_DRAIN_SECONDS:-65}" in helper.read_text()
+
+
+def test_android_installer_fails_closed_without_registered_hub_credential():
+    source = (DEPLOY / "install_android.sh").read_text(encoding="utf-8")
+    assert "unregistered random credential" in source
+    assert "openssl rand -hex 16" not in source

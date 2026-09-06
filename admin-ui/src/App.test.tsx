@@ -82,7 +82,9 @@ describe("Profiles / Instructions", () => {
 
     await waitFor(() => expect(screen.getByText("Опубликовано только что")).toBeInTheDocument());
     expect(screen.getByRole("textbox")).toHaveValue(updatedContent);
-    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock).toHaveBeenCalledWith("/actions/instructions.md");
+    const putCalls = fetchMock.mock.calls.filter(([, init]) => init?.method === "PUT");
+    expect(putCalls).toHaveLength(1);
   });
 
   it("shows a warning and blocks content above 16 KiB", async () => {
@@ -122,15 +124,14 @@ describe("Profiles / Instructions", () => {
     mockInstructionFetch();
     render(<App />);
     await screen.findByRole("textbox");
-    expect(screen.getByRole("link", { name: "Инструкции" })).toHaveAttribute("aria-current", "page");
+    expect(screen.getByRole("link", { name: "Настройки" })).toHaveClass("active");
     expect(screen.getByRole("link", { name: "Обзор" })).toHaveAttribute("href", "#overview");
-    expect(screen.getByRole("link", { name: "Серверы" })).toHaveAttribute("href", "#agents");
+    expect(screen.getByRole("link", { name: "Инфраструктура" })).toHaveAttribute("href", "#agents");
     expect(screen.getByRole("link", { name: "Задачи" })).toHaveAttribute("href", "#jobs");
-    expect(screen.queryByRole("link", { name: "Операции и MCP" })).not.toBeInTheDocument();
-    for (const link of document.querySelectorAll("nav a")) {
-      await userEvent.tab();
-      expect(link).toHaveFocus();
-    }
+    expect(screen.getByRole("link", { name: "Доступ" })).toHaveAttribute("href", "#clients");
+    expect(screen.getByRole("link", { name: "Автоматизация" })).toHaveAttribute("href", "#webhooks");
+    expect(screen.getByRole("link", { name: "Журнал" })).toHaveAttribute("href", "#audit");
+    expect(screen.getByRole("navigation", { name: "Настройки: подразделы" })).toBeInTheDocument();
   });
 });
 
@@ -201,6 +202,7 @@ describe("Profiles", () => {
     render(<App />);
     await screen.findByRole("textbox", { name: "Текст инструкций" });
 
+    await userEvent.click(screen.getByRole("link", { name: "Доступ" }));
     await userEvent.click(screen.getByRole("link", { name: "Профили" }));
     expect(await screen.findByRole("button", { name: /Операционный профиль/ })).toBeInTheDocument();
     expect(screen.getByLabelText("Режим доступа")).toHaveValue("readonly");
@@ -220,6 +222,7 @@ describe("Profiles", () => {
     mockProfileFetch({ profiles: [] });
     render(<App />);
     await screen.findByRole("textbox", { name: "Текст инструкций" });
+    await userEvent.click(screen.getByRole("link", { name: "Доступ" }));
     await userEvent.click(screen.getByRole("link", { name: "Профили" }));
     expect(await screen.findByText("Профилей пока нет")).toBeInTheDocument();
 
@@ -234,6 +237,7 @@ describe("Profiles", () => {
     mockProfileFetch({ putStatus: 412 });
     render(<App />);
     await screen.findByRole("textbox", { name: "Текст инструкций" });
+    await userEvent.click(screen.getByRole("link", { name: "Доступ" }));
     await userEvent.click(screen.getByRole("link", { name: "Профили" }));
     const name = await screen.findByLabelText("Название профиля");
     await userEvent.clear(name);
@@ -249,11 +253,12 @@ describe("Profiles", () => {
     mockProfileFetch({ failList: true });
     render(<App />);
     await screen.findByRole("textbox", { name: "Текст инструкций" });
+    await userEvent.click(screen.getByRole("link", { name: "Доступ" }));
     await userEvent.click(screen.getByRole("link", { name: "Профили" }));
 
     expect(await screen.findByRole("alert")).toHaveTextContent("Не удалось загрузить профили");
     expect(screen.getByRole("button", { name: "Повторить" })).toBeEnabled();
-    expect(screen.getByRole("link", { name: "Инструкции" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Настройки" })).toBeInTheDocument();
   });
 });
 
@@ -287,7 +292,7 @@ describe("Clients / Auth", () => {
     expect(screen.getByRole("button", { name: "Скопировать bearer" })).toBeInTheDocument();
     expect(fetchMock).toHaveBeenCalledWith("/admin/api/mcp/issue-token", expect.objectContaining({ method: "POST" }));
 
-    await userEvent.click(screen.getByRole("link", { name: "Токены и подключение" }));
+    await userEvent.click(screen.getByRole("link", { name: "Подключение" }));
     expect(await screen.findByRole("heading", { name: "Авторизация" })).toBeInTheDocument();
     expect(screen.getByDisplayValue("bearer-once")).toBeInTheDocument();
     await userEvent.click(screen.getByRole("link", { name: "Клиенты" }));
@@ -381,6 +386,7 @@ describe("Вебхуки и агенты", () => {
 
     render(<App />);
     expect(await screen.findByText("Маршрутов пока нет")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Новый маршрут" }));
     await userEvent.type(screen.getByLabelText("Идентификатор маршрута"), "repair-100");
     await userEvent.type(screen.getByLabelText("Секрет маршрута"), "write-only-secret");
     await userEvent.selectOptions(screen.getByLabelText("Тип действия"), "shell");
@@ -420,6 +426,7 @@ describe("Вебхуки и агенты", () => {
 
     render(<App />);
     await screen.findByText("Маршрутов пока нет");
+    await userEvent.click(screen.getByRole("button", { name: "Новый маршрут" }));
     await userEvent.type(screen.getByLabelText("Идентификатор маршрута"), "ordered-100");
     await userEvent.type(screen.getByLabelText("Секрет маршрута"), "ordered-secret");
     await userEvent.clear(screen.getByLabelText("Цель"));

@@ -49,30 +49,69 @@ import "./styles.css";
 type View = "operations" | OperationView | "instructions" | "profiles" | "clients" | "webhooks" | "auth" | "capabilities";
 type LoadState = "loading" | "ready" | "empty" | "error" | "stale";
 
-const navigation: Array<{ id: View; label: string; href: string }> = [
-  { id: "overview", label: "Обзор", href: "#overview" },
-  { id: "agents", label: "Серверы", href: "#agents" },
-  { id: "jobs", label: "Задачи", href: "#jobs" },
-  { id: "operations", label: "Операции доступа", href: "#operations" },
-  { id: "mcpmanage", label: "MCP-менеджер", href: "#mcpmanage" },
-  { id: "tools", label: "Вызов инструментов", href: "#tools" },
-  { id: "resources", label: "Ресурсы", href: "#resources" },
-  { id: "instructions", label: "Инструкции", href: "#instructions" },
-  { id: "profiles", label: "Профили", href: "#profiles" },
-  { id: "clients", label: "Клиенты", href: "#clients" },
-  { id: "webhooks", label: "Вебхуки и агенты", href: "#webhooks" },
-  { id: "auth", label: "Токены и подключение", href: "#auth" },
-  { id: "capabilities", label: "Виртуальные MCP", href: "#capabilities" },
-  { id: "failover", label: "Резервирование", href: "#failover" },
-  { id: "security", label: "Безопасность · opt-in", href: "#security" },
-  { id: "audit", label: "Аудит", href: "#audit" },
-  { id: "activity", label: "Активность клиентов", href: "#activity" },
-  { id: "raw", label: "Диагностика JSON", href: "#raw" },
+type NavigationSection = {
+  id: string;
+  label: string;
+  target: View;
+  views: readonly View[];
+};
+
+type ContextLink = { id: View; label: string };
+
+const primaryNavigation: NavigationSection[] = [
+  { id: "overview", label: "Обзор", target: "overview", views: ["overview"] },
+  { id: "infrastructure", label: "Инфраструктура", target: "agents", views: ["agents", "mcpmanage", "resources", "failover"] },
+  { id: "access", label: "Доступ", target: "clients", views: ["clients", "profiles", "auth"] },
+  { id: "automation", label: "Автоматизация", target: "webhooks", views: ["webhooks"] },
+  { id: "jobs", label: "Задачи", target: "jobs", views: ["jobs", "tools"] },
+  { id: "journal", label: "Журнал", target: "audit", views: ["audit", "activity", "operations", "raw"] },
+];
+
+const contextualNavigation: Partial<Record<string, ContextLink[]>> = {
+  infrastructure: [
+    { id: "agents", label: "Серверы" },
+    { id: "mcpmanage", label: "MCP" },
+    { id: "resources", label: "Ресурсы" },
+    { id: "failover", label: "Резервирование" },
+  ],
+  access: [
+    { id: "clients", label: "Клиенты" },
+    { id: "profiles", label: "Профили" },
+    { id: "auth", label: "Подключение" },
+  ],
+  jobs: [
+    { id: "jobs", label: "Очередь" },
+    { id: "tools", label: "Выполнить вручную" },
+  ],
+  journal: [
+    { id: "audit", label: "События" },
+    { id: "activity", label: "Клиенты" },
+    { id: "operations", label: "Изменения доступа" },
+    { id: "raw", label: "Raw JSON" },
+  ],
+  settings: [
+    { id: "capabilities", label: "Hub" },
+    { id: "instructions", label: "Инструкции" },
+  ],
+};
+
+const settingsSection: NavigationSection = {
+  id: "settings",
+  label: "Настройки",
+  target: "capabilities",
+  views: ["capabilities", "instructions"],
+};
+
+const allViews: readonly View[] = [
+  "overview", "agents", "jobs", "operations", "mcpmanage", "tools", "resources",
+  "instructions", "profiles", "clients", "webhooks", "auth", "capabilities",
+  "failover", "security", "audit", "activity", "raw",
 ];
 
 function viewFromHash(): View {
-  const view = window.location.hash.slice(1).split("?")[0];
-  return navigation.some((item) => item.id === view) ? view as View : "overview";
+  const view = window.location.hash.slice(1).split("?")[0] as View;
+  if (view === "security") return "auth";
+  return allViews.includes(view) ? view : "overview";
 }
 
 const emptyWorkspace = (): ExternalWorkspaceRef => ({
@@ -780,6 +819,7 @@ function WebhooksScreen() {
   const [routes, setRoutes] = useState<WebhookRouteSummary[]>([]);
   const [draft, setDraft] = useState<WebhookRouteDraft>(emptyWebhookRoute);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [editorOpen, setEditorOpen] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [mutating, setMutating] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -805,6 +845,7 @@ function WebhooksScreen() {
   useEffect(() => { void loadRoutes(); }, []);
 
   function startCreate(): void {
+    setEditorOpen(true);
     setEditingId(null);
     setDraft(emptyWebhookRoute());
     setConfirmDelete(false);
@@ -812,6 +853,7 @@ function WebhooksScreen() {
   }
 
   function startEdit(route: WebhookRouteSummary): void {
+    setEditorOpen(true);
     setEditingId(route.id);
     setDraft({
       ...emptyWebhookRoute(),
@@ -943,6 +985,7 @@ function WebhooksScreen() {
       setLoadState(remaining.length ? "ready" : "empty");
       setDraft(emptyWebhookRoute());
       setEditingId(null);
+      setEditorOpen(false);
       setConfirmDelete(false);
       setMessage("Маршрут удалён");
     } catch (error) {
@@ -976,16 +1019,18 @@ function WebhooksScreen() {
       <div className="content-wrap">
         <section className="intro"><div><p className="section-kicker">SIGNED ROUTES / AGENT JOBS</p><h2>Управление маршрутами Hub</h2><p className="lede">Маршрут фиксирует авторизацию и разрешённое действие. Секреты принимаются только при записи и никогда не показываются из ответа Hub.</p></div><div className={`data-badge state-${loadState}`} role="status"><span className="state-dot" aria-hidden="true" />{loadState === "loading" ? "Загрузка маршрутов" : stateLabel(loadState)}</div></section>
 
+        {message && !editorOpen && loadState !== "error" && <div className={message.includes("создан") || message.includes("заменён") || message.includes("удалён") ? "state-panel card standalone-state" : "state-panel card standalone-state state-error"} role="status">{message}</div>}
+
         {loadState === "loading" && <div className="state-panel card standalone-state" role="status"><span className="loader" aria-hidden="true" />Загрузка маршрутов</div>}
         {loadState === "error" && <div className="state-panel card standalone-state state-error" role="alert"><strong>Не удалось загрузить маршруты</strong><span>{message}</span><button className="button secondary" type="button" onClick={() => void loadRoutes()}>Повторить</button></div>}
-        {loadState !== "loading" && loadState !== "error" && <section className="webhook-layout">
+        {loadState !== "loading" && loadState !== "error" && <section className={`webhook-layout ${editorOpen ? "editor-open" : "compact"}`}>
           <aside className="route-list card" aria-label="Список webhook-маршрутов">
             <div className="list-heading"><div><p className="section-kicker">МАРШРУТЫ</p><h3>Разрешённые действия</h3></div><button className="text-button" type="button" onClick={startCreate}>+ Новый</button></div>
             {routes.length === 0 && <div className="route-empty"><strong>Маршрутов пока нет</strong><span>Создайте первый подписанный маршрут.</span></div>}
             {routes.map((route) => <article className={`route-row ${editingId === route.id ? "selected" : ""}`} key={route.id}><div><strong>{route.id}</strong><span>{route.target}</span><small>{route.action_count} действий · {route.kind.toUpperCase()} · {route.auth_mode === "hmac" ? "HMAC" : "Bearer"}{route.callback_configured ? " · callback" : ""}</small></div><button className="text-button" type="button" aria-label={`Изменить ${route.id}`} onClick={() => startEdit(route)}>Изменить</button></article>)}
           </aside>
 
-          <section className="card route-editor" aria-labelledby="route-editor-title">
+          {editorOpen && <section className="card route-editor" aria-labelledby="route-editor-title">
             <div className="card-heading"><div><p className="section-kicker">{editingId ? "REPLACE ROUTE" : "CREATE ROUTE"}</p><h3 id="route-editor-title">{editingId ? `Заменить ${editingId}` : "Новый маршрут"}</h3></div><span className="chip">Секрет: только запись</span></div>
             {message && <div className={message.includes("создан") || message.includes("заменён") || message.includes("удалён") ? "form-message success-text" : "form-message warning-text"} role="status">{message}</div>}
             <form className="route-form" onSubmit={(event) => { event.preventDefault(); void saveRoute(); }}>
@@ -1015,10 +1060,10 @@ function WebhooksScreen() {
                 </article>)}
               </section>
               <fieldset className="callback-fieldset"><legend>Callback (необязательно)</legend><div className="form-grid"><label>URL callback<input type="url" value={draft.callbackUrl} onChange={(event) => setDraft({ ...draft, callbackUrl: event.target.value })} /></label><label>Авторизация callback<select value={draft.callbackAuthMode} onChange={(event) => setDraft({ ...draft, callbackAuthMode: event.target.value as WebhookRouteDraft["callbackAuthMode"] })}><option value="none">Без авторизации</option><option value="hmac">HMAC</option><option value="token">Bearer token</option></select></label>{draft.callbackAuthMode !== "none" && <label>Секрет callback<input type="password" autoComplete="new-password" value={draft.callbackSecret} onChange={(event) => setDraft({ ...draft, callbackSecret: event.target.value })} /></label>}</div>{editingRoute?.callback_configured && <p className="field-help">Текущий callback скрыт. Чтобы сохранить его при замене, повторно заполните URL и авторизацию.</p>}</fieldset>
-              <div className="route-actions"><button className="button primary" type="submit" disabled={mutating}>{mutating ? "Сохраняем…" : editingId ? "Заменить маршрут" : "Создать маршрут"}</button>{editingId && <button className="button danger" type="button" onClick={() => setConfirmDelete(true)} disabled={mutating}>Удалить маршрут</button>}</div>
+              <div className="route-actions"><button className="button secondary" type="button" onClick={() => { setEditorOpen(false); setEditingId(null); setConfirmDelete(false); setMessage(null); }}>Закрыть</button><button className="button primary" type="submit" disabled={mutating}>{mutating ? "Сохраняем…" : editingId ? "Заменить маршрут" : "Создать маршрут"}</button>{editingId && <button className="button danger" type="button" onClick={() => setConfirmDelete(true)} disabled={mutating}>Удалить маршрут</button>}</div>
             </form>
             {confirmDelete && editingId && <div className="delete-confirmation" role="alertdialog" aria-modal="true" aria-labelledby="delete-route-title" onKeyDown={(event) => { if (event.key === "Escape") setConfirmDelete(false); }}><strong id="delete-route-title">Удалить маршрут {editingId}?</strong><p>Маршрут перестанет принимать новые события. Это действие требует явного подтверждения.</p><div className="button-row"><button className="button secondary" type="button" onClick={() => setConfirmDelete(false)}>Отмена</button><button className="button danger" type="button" autoFocus onClick={() => void deleteRoute()} disabled={mutating}>Подтвердить удаление</button></div></div>}
-          </section>
+          </section>}
 
           <section className="card job-inspector" aria-labelledby="job-inspector-title">
             <div><p className="section-kicker">DURABLE JOB STATUS</p><h3 id="job-inspector-title">Проверить webhook-задание</h3><p className="muted">Укажите один ID задания. Интерфейс показывает статус и безопасные поля результата.</p></div>
@@ -1223,10 +1268,35 @@ export default function App() {
     return () => window.removeEventListener("hashchange", onHashChange);
   }, []);
 
+  const activeSection = primaryNavigation.find((section) => section.views.includes(view)) ?? (settingsSection.views.includes(view) ? settingsSection : undefined);
+  const contextLinks = activeSection ? contextualNavigation[activeSection.id] ?? [] : [];
+  const navigate = (next: View) => {
+    setView(next);
+    const href = `#${next}`;
+    if (window.location.hash !== href) window.history.pushState(null, "", href);
+  };
+
   return (
     <div className="app-shell">
-      <aside className="sidebar"><div className="brand"><span className="brand-mark" aria-hidden="true">G</span><span>GPTAdmin</span></div><div className="workspace-label">ОПЕРАЦИОННАЯ КОНСОЛЬ</div><nav aria-label="Основная навигация">{navigation.map((item) => <a className={`nav-item ${view === item.id ? "active" : ""}`} href={item.href} aria-current={view === item.id ? "page" : undefined} key={item.id} onClick={(event) => { event.preventDefault(); setView(item.id); window.history.pushState(null, "", item.href); }}>{<><span className="nav-dot" aria-hidden="true" /><span>{item.label}</span></>}</a>)}<a className="nav-item" href="/cloudos/"><span className="nav-dot" aria-hidden="true" /><span>Открыть CloudOS</span></a></nav><div className="sidebar-footer"><span className="profile-state">{view === "profiles" ? "Профильный доступ" : "Рабочий контекст"}</span><a className="logout-link" href="/admin/logout">Выйти</a></div></aside>
-      <main className="main-content">{view === "operations" ? <AccessOperations /> : isOperationView(view) ? <OperationsScreen view={view} onNavigate={(next) => { setView(next); if (window.location.hash !== `#${next}`) window.history.pushState(null, "", `#${next}`); }} /> : view === "instructions" ? <InstructionsScreen /> : view === "profiles" ? <ProfilesScreen /> : view === "clients" ? <ClientsScreen token={issuedToken} setToken={setIssuedToken} /> : view === "webhooks" ? <WebhooksScreen /> : view === "capabilities" ? <CapabilitiesScreen /> : <AuthScreen token={issuedToken} />}</main>
+      <aside className="sidebar">
+        <div className="brand"><span className="brand-mark" aria-hidden="true">G</span><span>GPTAdmin</span></div>
+        <div className="workspace-label">ОПЕРАЦИОННАЯ КОНСОЛЬ</div>
+        <nav aria-label="Основная навигация">
+          {primaryNavigation.map((item) => {
+            const active = item.views.includes(view);
+            return <a className={`nav-item ${active ? "active" : ""}`} href={`#${item.target}`} aria-current={active ? "page" : undefined} key={item.id} onClick={(event) => { event.preventDefault(); navigate(item.target); }}><span className="nav-dot" aria-hidden="true" /><span>{item.label}</span></a>;
+          })}
+        </nav>
+        <div className="sidebar-footer">
+          <a className={`sidebar-utility ${settingsSection.views.includes(view) ? "active" : ""}`} href="#capabilities" onClick={(event) => { event.preventDefault(); navigate("capabilities"); }}>Настройки</a>
+          <a className="sidebar-utility" href="/cloudos/">CloudOS</a>
+          <a className="logout-link" href="/admin/logout">Выйти</a>
+        </div>
+      </aside>
+      <main className="main-content">
+        {contextLinks.length > 0 && <nav className="context-nav" aria-label={`${activeSection?.label ?? "Раздел"}: подразделы`}>{contextLinks.map((item) => <a key={item.id} href={`#${item.id}`} className={view === item.id ? "active" : ""} aria-current={view === item.id ? "page" : undefined} onClick={(event) => { event.preventDefault(); navigate(item.id); }}>{item.label}</a>)}</nav>}
+        {view === "operations" ? <AccessOperations /> : isOperationView(view) ? <OperationsScreen view={view} onNavigate={navigate} /> : view === "instructions" ? <InstructionsScreen /> : view === "profiles" ? <ProfilesScreen /> : view === "clients" ? <ClientsScreen token={issuedToken} setToken={setIssuedToken} /> : view === "webhooks" ? <WebhooksScreen /> : view === "capabilities" ? <CapabilitiesScreen /> : <AuthScreen token={issuedToken} />}
+      </main>
     </div>
   );
 }

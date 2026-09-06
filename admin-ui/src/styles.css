@@ -85,6 +85,37 @@ nav { display: grid; gap: 3px; }
 .logout-link { width: fit-content; color: #fff5df; font-weight: 800; text-underline-offset: 3px; }
 
 .main-content { flex: 1; min-width: 0; }
+
+.sidebar-utility {
+  color: #d4ded9;
+  text-decoration: none;
+  font-weight: 700;
+  line-height: 1.4;
+}
+.sidebar-utility:hover, .sidebar-utility.active { color: #fff5df; text-decoration: underline; text-underline-offset: 3px; }
+.context-nav {
+  position: sticky;
+  top: 0;
+  z-index: 12;
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  padding: 10px clamp(24px, 5vw, 72px);
+  border-bottom: 1px solid #d8d1c2;
+  background: rgba(247,244,237,.96);
+  backdrop-filter: blur(8px);
+}
+.context-nav a {
+  flex: 0 0 auto;
+  padding: 8px 11px;
+  border-radius: 999px;
+  color: #596966;
+  text-decoration: none;
+  font-size: 12px;
+  font-weight: 800;
+}
+.context-nav a:hover { background: #ece8de; color: #20383b; }
+.context-nav a.active { background: #20383b; color: #fffaf0; }
 .topbar {
   display: flex;
   justify-content: space-between;
@@ -294,6 +325,8 @@ dd { display: flex; align-items: center; gap: 7px; margin: 0; color: #344441; fo
 }
 
 .webhook-layout { display: grid; grid-template-columns: minmax(300px, 360px) minmax(0, 1fr); gap: 22px; align-items: start; }
+.webhook-layout.compact { grid-template-columns: minmax(300px, 420px) minmax(0, 1fr); }
+.webhook-layout.compact .job-inspector { grid-column: 2; }
 .route-list { overflow: hidden; }
 .route-empty { display: grid; gap: 7px; padding: 24px 20px; color: #687572; font-size: 12px; }
 .route-empty strong { color: #344441; font: 600 17px/1.2 Georgia, serif; }
@@ -338,7 +371,8 @@ dd { display: flex; align-items: center; gap: 7px; margin: 0; color: #344441; fo
 .safe-result dl { margin-top: 12px; }
 
 @media (max-width: 1100px) {
-  .webhook-layout { grid-template-columns: 1fr; }
+  .webhook-layout, .webhook-layout.compact { grid-template-columns: 1fr; }
+  .webhook-layout.compact .job-inspector { grid-column: auto; }
   .job-inspector { grid-column: auto; }
 }
 
