@@ -40,3 +40,17 @@ def test_windows_installer_fails_closed_without_hub_agent_credential() -> None:
     source = (ROOT / "deploy" / "install_win.ps1").read_text(encoding="utf-8")
     assert "unregistered random credential" in source
     assert "if (-not $ShellmcpToken) { $ShellmcpToken =" not in source
+
+
+def test_windows_installer_rejects_multiline_or_html_credentials() -> None:
+    source = (ROOT / "deploy" / "install_win.ps1").read_text(encoding="utf-8")
+    assert "must be one non-whitespace line" in source
+    assert "$ShellmcpToken.Length -lt 16" in source
+    assert "$ShellmcpToken -match '\\s|[<>]'" in source
+
+
+def test_windows_installer_requires_real_process_after_start() -> None:
+    source = (ROOT / "deploy" / "install_win.ps1").read_text(encoding="utf-8")
+    check = "ShellMCP did not remain running after install"
+    assert check in source
+    assert source.index("Start-Sleep -Seconds 3") < source.index(check) < source.index('Write-Host "Installed GPT Admin shellmcp"')

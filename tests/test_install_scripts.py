@@ -187,3 +187,23 @@ def test_android_installer_fails_closed_without_registered_hub_credential():
     source = (DEPLOY / "install_android.sh").read_text(encoding="utf-8")
     assert "unregistered random credential" in source
     assert "openssl rand -hex 16" not in source
+
+
+def test_android_installer_recreates_termux_service_parent_before_autostart():
+    source = (DEPLOY / "install_android.sh").read_text(encoding="utf-8")
+    marker = 'if command -v sv-enable >/dev/null 2>&1; then\n  mkdir -p "${PREFIX:-/data/data/com.termux/files/usr}/var/service"'
+    assert marker in source
+    assert source.index(marker) < source.index('sv-enable "$SERVICE_NAME"')
+
+
+def test_android_installer_rejects_malformed_multiline_credentials():
+    source = (DEPLOY / "install_android.sh").read_text(encoding="utf-8")
+    assert "must be one non-whitespace line" in source
+    assert '[[ "$SHELLMCP_TOKEN" =~ [[:space:]] ]]' in source
+
+
+def test_android_installer_requires_real_autostart_process():
+    source = (DEPLOY / "install_android.sh").read_text(encoding="utf-8")
+    assert 'sv status "$SERVICE_NAME"' in source
+    assert "did not remain running after install" in source
+    assert 'kill -0 "$shellmcp_pid"' in source

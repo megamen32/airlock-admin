@@ -70,6 +70,10 @@ if [[ -z "${SHELLMCP_TOKEN:-}" ]]; then
   echo "ERROR: SHELLMCP_TOKEN is required for a remote Hub; refusing to install an agent with an unregistered random credential." >&2
   exit 2
 fi
+if (( ${#SHELLMCP_TOKEN} < 16 || ${#SHELLMCP_TOKEN} > 4096 )) || [[ "$SHELLMCP_TOKEN" =~ [[:space:]] ]] || [[ "$SHELLMCP_TOKEN" == *'<'* || "$SHELLMCP_TOKEN" == *'>'* ]]; then
+  echo "ERROR: SHELLMCP_TOKEN must be one non-whitespace line; refusing malformed credential material." >&2
+  exit 2
+fi
 
 if [[ -z "${SHELLMCP_NAME:-}" ]]; then
   SHELLMCP_NAME=$(read_existing_env SHELLMCP_NAME)
@@ -171,6 +175,12 @@ RUN
 chmod 755 "$RUN_FILE"
 
 installed_service=0
+# termux-services can leave runsvdir alive while its service directory has been
+# removed by a previous uninstall/clean-install. Recreate the parent instead
+# of silently falling back to a fragile nohup child tied to the invoking shell.
+if command -v sv-enable >/dev/null 2>&1; then
+  mkdir -p "${PREFIX:-/data/data/com.termux/files/usr}/var/service"
+fi
 if command -v sv-enable >/dev/null 2>&1 && [[ -d "${PREFIX:-}/var/service" ]]; then
   mkdir -p "$SERVICE_DIR"
   cat > "$SERVICE_DIR/run" <<RUN
@@ -181,10 +191,30 @@ RUN
   if [[ "$SHELLMCP_AUTO_START" == "1" ]]; then
     sv-enable "$SERVICE_NAME" >/dev/null 2>&1 || true
     sv up "$SERVICE_NAME" >/dev/null 2>&1 || true
+    service_ready=0
+    for _ in $(seq 1 25); do
+      if sv status "$SERVICE_NAME" 2>/dev/null | grep -q '^run:'; then
+        service_ready=1
+        break
+      fi
+      sleep 0.2
+    done
+    if [[ "$service_ready" != "1" ]]; then
+      echo "ERROR: Termux service $SERVICE_NAME did not remain running after install." >&2
+      [[ -r "$LOG_DIR/shellmcp.log" ]] && tail -n 40 "$LOG_DIR/shellmcp.log" >&2 || true
+      exit 1
+    fi
   fi
   installed_service=1
 elif [[ "$SHELLMCP_AUTO_START" == "1" ]]; then
   nohup "$RUN_FILE" >/dev/null 2>&1 &
+  shellmcp_pid=$!
+  sleep 1
+  if ! kill -0 "$shellmcp_pid" 2>/dev/null; then
+    echo "ERROR: Android ShellMCP did not remain running after install." >&2
+    [[ -r "$LOG_DIR/shellmcp.log" ]] && tail -n 40 "$LOG_DIR/shellmcp.log" >&2 || true
+    exit 1
+  fi
 fi
 
 cat <<EOF

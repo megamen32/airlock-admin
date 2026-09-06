@@ -50,6 +50,9 @@ if (-not $InstallDir) {
 }
 if (-not $HubUrl) { $HubUrl = 'https://gptadmin.bezrabotnyi.com' }
 if (-not $ShellmcpToken) { throw 'SHELLMCP_TOKEN is required for a remote Hub; refusing to install an agent with an unregistered random credential.' }
+if ($ShellmcpToken.Length -lt 16 -or $ShellmcpToken.Length -gt 4096 -or $ShellmcpToken -match '\s|[<>]') {
+    throw 'SHELLMCP_TOKEN must be one non-whitespace line; refusing malformed credential material.'
+}
 if (-not $ShellmcpName) { $ShellmcpName = $env:COMPUTERNAME }
 if (-not $ShellmcpUrl) { $ShellmcpUrl = "http://$ShellmcpName`:$ShellmcpPort" }
 if (-not $TaskName) {
@@ -209,6 +212,14 @@ if (-not $NoStart -and $LaunchBackend -eq 'startup') {
     Start-Process -FilePath 'powershell.exe' -WindowStyle Hidden -ArgumentList @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', $RunScript)
 }
 Start-Sleep -Seconds 3
+if (-not $NoStart) {
+    $live = @(Get-Process -Name 'shellmcp' -ErrorAction SilentlyContinue | Where-Object {
+        try { $_.Path -and ([System.IO.Path]::GetFullPath($_.Path) -eq [System.IO.Path]::GetFullPath($CurrentExe)) } catch { $false }
+    })
+    if ($live.Count -lt 1) {
+        throw "ShellMCP did not remain running after install. Check $LogDir\shellmcp.task.log"
+    }
+}
 
 Write-Host "Installed GPT Admin shellmcp"
 Write-Host "InstallMode: $(if ($UserMode) { 'user' } else { 'system' })"
