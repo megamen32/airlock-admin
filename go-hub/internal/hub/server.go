@@ -1464,6 +1464,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/webhook-jobs/", s.webhookJobEndpoint)
 	mux.HandleFunc("/webhook-routes", s.requireCtl(s.webhookRoutesEndpoint))
 	mux.HandleFunc("/webhook-routes/", s.requireCtl(s.webhookRoutesEndpoint))
+	mux.HandleFunc("/admin/api/webhook-jobs", s.requireCtl(s.adminWebhookJobEndpoint))
 	mux.HandleFunc("/admin/api/webhook-jobs/", s.requireCtl(s.adminWebhookJobEndpoint))
 	mux.HandleFunc("/.well-known/oauth-protected-resource", s.oauthProtectedResource)
 	mux.HandleFunc("/.well-known/oauth-authorization-server", s.oauthAuthorizationServer)

@@ -733,6 +733,33 @@ type WebhookJob = {
   result?: Record<string, unknown>;
 };
 
+type WebhookJobSummary = Omit<WebhookJob, "started_at" | "result">;
+
+type WebhookJobOverview = {
+  jobs?: WebhookJobSummary[];
+  latest_by_route?: Record<string, WebhookJobSummary>;
+};
+
+function webhookStatusLabel(status?: string): string {
+  if (status === "completed") return "Готово";
+  if (status === "failed") return "Ошибка";
+  if (status === "running") return "Выполняется";
+  if (status === "accepted" || status === "queued") return "Принято";
+  return status || "Не запускался";
+}
+
+function webhookActionLabel(kind: WebhookRouteSummary["kind"]): string {
+  if (kind === "shell") return "Команда на сервере";
+  if (kind === "prompt") return "AI-запрос";
+  return "Действие MCP";
+}
+
+function formatWebhookTime(value?: string): string {
+  if (!value) return "—";
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? value : date.toLocaleString("ru-RU", { dateStyle: "short", timeStyle: "short" });
+}
+
 const emptyWebhookRoute = (): WebhookRouteDraft => ({
   id: "",
   authMode: "hmac",
@@ -842,6 +869,9 @@ function WebhooksScreen() {
   const [job, setJob] = useState<WebhookJob | null>(null);
   const [jobMessage, setJobMessage] = useState<string | null>(null);
   const [checkingJob, setCheckingJob] = useState(false);
+  const [recentJobs, setRecentJobs] = useState<WebhookJobSummary[]>([]);
+  const [latestByRoute, setLatestByRoute] = useState<Record<string, WebhookJobSummary>>({});
+  const [showHowItWorks, setShowHowItWorks] = useState(false);
 
   async function loadRoutes(): Promise<void> {
     setLoadState("loading");
@@ -857,7 +887,17 @@ function WebhooksScreen() {
     }
   }
 
-  useEffect(() => { void loadRoutes(); }, []);
+  async function loadJobOverview(): Promise<void> {
+    try {
+      const response = await webhookRequest<WebhookJobOverview>("/admin/api/webhook-jobs");
+      setRecentJobs(response.jobs ?? []);
+      setLatestByRoute(response.latest_by_route ?? {});
+    } catch {
+      // Route management still works if historical job summaries are unavailable.
+    }
+  }
+
+  useEffect(() => { void loadRoutes(); void loadJobOverview(); }, []);
 
   function startCreate(): void {
     setEditorOpen(true);
@@ -1018,10 +1058,39 @@ function WebhooksScreen() {
     setJobMessage(null);
     try {
       setJob(await webhookRequest<WebhookJob>(`/admin/api/webhook-jobs/${encodeURIComponent(id)}`));
+      void loadJobOverview();
     } catch (error) {
       setJobMessage(error instanceof Error ? error.message : "Не удалось получить задание.");
     } finally {
       setCheckingJob(false);
+    }
+  }
+
+  function startPreset(kind: "notify" | "shell"): void {
+    setEditorOpen(true);
+    setEditingId(null);
+    setConfirmDelete(false);
+    setMessage(null);
+    if (kind === "notify") {
+      setDraft({
+        ...emptyWebhookRoute(),
+        kind: "mcp",
+        target: "mcp:shell:roomhacker-server-100:Notify",
+        tool: "send_message",
+        argumentsJson: JSON.stringify({ title: "Событие", message: "{{event.message}}" }, null, 2),
+      });
+      return;
+    }
+    setDraft({ ...emptyWebhookRoute(), kind: "shell", target: "shell:roomhacker-server-100", approvalMode: "ask_before_write" });
+  }
+
+  async function copyEndpoint(routeID: string): Promise<void> {
+    const endpoint = `${window.location.origin}/webhooks/v1/${routeID}`;
+    try {
+      await navigator.clipboard.writeText(endpoint);
+      setMessage("Адрес автоматизации скопирован");
+    } catch {
+      setMessage(endpoint);
     }
   }
 
@@ -1030,9 +1099,16 @@ function WebhooksScreen() {
 
   return (
     <>
-      <header className="topbar"><div><span className="eyebrow">WEBHOOK AUTOMATION / 04</span><h1>Вебхуки и агенты</h1></div><button className="button primary topbar-action" type="button" onClick={startCreate}>Новый маршрут</button></header>
+      <header className="topbar"><div><span className="eyebrow">АВТОМАТИЗАЦИЯ</span><h1>Автоматизация</h1></div><button className="button primary topbar-action" type="button" onClick={startCreate}>Создать автоматизацию</button></header>
       <div className="content-wrap">
-        <section className="intro"><div><p className="section-kicker">SIGNED ROUTES / AGENT JOBS</p><h2>Управление маршрутами Hub</h2><p className="lede">Маршрут фиксирует авторизацию и разрешённое действие. Секреты принимаются только при записи и никогда не показываются из ответа Hub.</p></div><div className={`data-badge state-${loadState}`} role="status"><span className="state-dot" aria-hidden="true" />{loadState === "loading" ? "Загрузка маршрутов" : stateLabel(loadState)}</div></section>
+        <section className="automation-intro card">
+          <div className="automation-intro-copy"><p className="section-kicker">КАК ЭТО РАБОТАЕТ</p><h2>Событие приходит — GPTAdmin выполняет заранее выбранное действие</h2><p>Например: мониторинг сообщает о проблеме → GPTAdmin отправляет уведомление или запускает проверку на сервере. Внешний сервис не может сам выбрать произвольную команду: действие закреплено в автоматизации заранее.</p></div>
+          <div className="automation-flow" aria-label="Схема автоматизации"><span>1. Событие</span><b>→</b><span>2. Проверка секрета</span><b>→</b><span>3. Действие</span><b>→</b><span>4. Результат</span></div>
+          <div className="automation-quick-actions"><button className="button secondary" type="button" onClick={() => startPreset("notify")}>Шаблон: отправить сообщение</button><button className="button secondary" type="button" onClick={() => startPreset("shell")}>Шаблон: команда на сервере</button><button className="text-button" type="button" onClick={() => setShowHowItWorks((value) => !value)}>{showHowItWorks ? "Скрыть подсказки" : "Показать подробную подсказку"}</button></div>
+          {showHowItWorks && <div className="automation-help"><p><strong>Адрес.</strong> После создания получится URL вида <code>/webhooks/v1/имя</code>. Его вызывает внешний сервис методом POST.</p><p><strong>Секрет.</strong> Он нужен, чтобы посторонний человек не смог запустить автоматизацию. Для простых интеграций можно использовать Bearer token; HMAC подходит системам, которые умеют подписывать запросы.</p><p><strong>Действие.</strong> MCP вызывает один заранее выбранный инструмент; AI-запрос передаёт событие в выбранный инструмент; команда на сервере запускает фиксированную команду.</p><p><strong>Проверка.</strong> Ниже рядом с каждой автоматизацией показан последний запуск и его результат.</p></div>}
+        </section>
+
+        <section className="intro automation-summary"><div><p className="section-kicker">АКТИВНЫЕ ПРАВИЛА</p><h2>{routes.length ? `${routes.length} автоматизаций настроено` : "Автоматизаций пока нет"}</h2><p className="lede">Создание правила ничего не запускает само по себе: оно ждёт входящее событие по своему адресу.</p></div><div className={`data-badge state-${loadState}`} role="status"><span className="state-dot" aria-hidden="true" />{loadState === "loading" ? "Загрузка" : stateLabel(loadState)}</div></section>
 
         {message && !editorOpen && loadState !== "error" && <div className={message.includes("создан") || message.includes("заменён") || message.includes("удалён") ? "state-panel card standalone-state" : "state-panel card standalone-state state-error"} role="status">{message}</div>}
 
@@ -1040,24 +1116,24 @@ function WebhooksScreen() {
         {loadState === "error" && <div className="state-panel card standalone-state state-error" role="alert"><strong>Не удалось загрузить маршруты</strong><span>{message}</span><button className="button secondary" type="button" onClick={() => void loadRoutes()}>Повторить</button></div>}
         {loadState !== "loading" && loadState !== "error" && <section className={`webhook-layout ${editorOpen ? "editor-open" : "compact"}`}>
           <aside className="route-list card" aria-label="Список webhook-маршрутов">
-            <div className="list-heading"><div><p className="section-kicker">МАРШРУТЫ</p><h3>Разрешённые действия</h3></div><button className="text-button" type="button" onClick={startCreate}>+ Новый</button></div>
-            {routes.length === 0 && <div className="route-empty"><strong>Маршрутов пока нет</strong><span>Создайте первый подписанный маршрут.</span></div>}
-            {routes.map((route) => <article className={`route-row ${editingId === route.id ? "selected" : ""}`} key={route.id}><div><strong>{route.id}</strong><span>{route.target}</span><small>{route.action_count} действий · {route.kind.toUpperCase()} · {route.auth_mode === "hmac" ? "HMAC" : "Bearer"}{route.callback_configured ? " · callback" : ""}</small></div><button className="text-button" type="button" aria-label={`Изменить ${route.id}`} onClick={() => startEdit(route)}>Изменить</button></article>)}
+            <div className="list-heading"><div><p className="section-kicker">АВТОМАТИЗАЦИИ</p><h3>Настроенные правила</h3></div><button className="text-button" type="button" onClick={startCreate}>+ Новый</button></div>
+            {routes.length === 0 && <div className="route-empty"><strong>Автоматизаций пока нет</strong><span>Начните с готового шаблона выше или создайте правило вручную.</span></div>}
+            {routes.map((route) => { const latest = latestByRoute[route.id]; return <article className={`route-row automation-route-row ${editingId === route.id ? "selected" : ""}`} key={route.id}><div className="automation-route-main"><div className="automation-route-title"><strong>{route.id}</strong>{latest ? <span className={`automation-run-state state-${latest.status}`}>{webhookStatusLabel(latest.status)}</span> : <span className="automation-run-state state-never">Не запускалась</span>}</div><span>{webhookActionLabel(route.kind)} · {route.action_count === 1 ? "1 шаг" : `${route.action_count} шага`}</span><small>{route.target}</small>{latest && <small>Последний запуск: {formatWebhookTime(latest.created_at)}{latest.error ? ` · ${latest.error}` : ""}</small>}</div><div className="automation-route-actions"><button className="text-button" type="button" onClick={() => void copyEndpoint(route.id)}>Скопировать адрес</button><button className="text-button" type="button" aria-label={`Изменить ${route.id}`} onClick={() => startEdit(route)}>Изменить</button></div></article>; })}
           </aside>
 
           {editorOpen && <section className="card route-editor" aria-labelledby="route-editor-title">
-            <div className="card-heading"><div><p className="section-kicker">{editingId ? "REPLACE ROUTE" : "CREATE ROUTE"}</p><h3 id="route-editor-title">{editingId ? `Заменить ${editingId}` : "Новый маршрут"}</h3></div><span className="chip">Секрет: только запись</span></div>
+            <div className="card-heading"><div><p className="section-kicker">{editingId ? "РЕДАКТИРОВАНИЕ" : "НОВАЯ АВТОМАТИЗАЦИЯ"}</p><h3 id="route-editor-title">{editingId ? `Изменить ${editingId}` : "Новая автоматизация"}</h3></div><span className="chip">Секрет не показывается после сохранения</span></div>
             {message && <div className={message.includes("создан") || message.includes("заменён") || message.includes("удалён") ? "form-message success-text" : "form-message warning-text"} role="status">{message}</div>}
             <form className="route-form" onSubmit={(event) => { event.preventDefault(); void saveRoute(); }}>
               <div className="form-grid">
-                <label>Идентификатор маршрута<input value={draft.id} disabled={editingId !== null} onChange={(event) => setDraft({ ...draft, id: event.target.value })} /></label>
-                <label>Режим авторизации<select value={draft.authMode} onChange={(event) => setDraft({ ...draft, authMode: event.target.value as WebhookRouteDraft["authMode"] })}><option value="hmac">HMAC</option><option value="token">Bearer token</option></select></label>
-                <label>Секрет маршрута<input aria-label="Секрет маршрута" type="password" autoComplete="new-password" value={draft.secret} onChange={(event) => setDraft({ ...draft, secret: event.target.value })} /><small>Не загружается из Hub и очищается после записи.</small></label>
+                <label>Короткое имя<input value={draft.id} disabled={editingId !== null} onChange={(event) => setDraft({ ...draft, id: event.target.value })} /></label>
+                <label>Защита входящего события<select value={draft.authMode} onChange={(event) => setDraft({ ...draft, authMode: event.target.value as WebhookRouteDraft["authMode"] })}><option value="hmac">Подпись HMAC (надёжнее)</option><option value="token">Секретный токен (проще)</option></select></label>
+                <label>Секрет для входящего запроса<input aria-label="Секрет для входящего запроса" type="password" autoComplete="new-password" value={draft.secret} onChange={(event) => setDraft({ ...draft, secret: event.target.value })} /><small>Сохраните его во внешней системе: GPTAdmin больше не покажет это значение.</small></label>
                 {draft.authMode === "hmac" && <label>Версия подписи<select value={draft.signatureVersion} onChange={(event) => setDraft({ ...draft, signatureVersion: event.target.value as WebhookRouteDraft["signatureVersion"] })}><option value="v2">v2</option><option value="v1">v1</option></select></label>}
                 {draft.authMode === "hmac" && <label>Допустимое отклонение, секунд<input type="number" min="1" value={draft.maxSkewSeconds} onChange={(event) => setDraft({ ...draft, maxSkewSeconds: event.target.value })} /></label>}
-                <label>Тип действия<select value={draft.kind} onChange={(event) => { const kind = event.target.value as WebhookRouteDraft["kind"]; setDraft({ ...draft, kind, target: kind !== draft.kind ? "" : draft.target }); }}><option value="mcp">MCP</option><option value="prompt">Prompt</option><option value="shell">Shell</option></select></label>
-                <label>Цель<input value={draft.target} onChange={(event) => setDraft({ ...draft, target: event.target.value })} placeholder="hub или shell:machine" /></label>
-                <label>Режим подтверждения<select value={draft.approvalMode} onChange={(event) => setDraft({ ...draft, approvalMode: event.target.value as WebhookRouteDraft["approvalMode"] })}><option value="">По умолчанию</option><option value="ask_before_write">Запрос перед записью</option><option value="bounded_autonomous">Ограниченно автономный</option></select></label>
+                <label>Что сделать<select value={draft.kind} onChange={(event) => { const kind = event.target.value as WebhookRouteDraft["kind"]; setDraft({ ...draft, kind, target: kind !== draft.kind ? "" : draft.target }); }}><option value="mcp">Вызвать действие MCP</option><option value="prompt">Передать событие AI-инструменту</option><option value="shell">Запустить фиксированную команду</option></select></label>
+                <label>Где выполнить<input value={draft.target} onChange={(event) => setDraft({ ...draft, target: event.target.value })} placeholder="например: mcp:shell:roomhacker-server-100:Notify" /></label>
+                <label>Подтверждение опасных действий<select value={draft.approvalMode} onChange={(event) => setDraft({ ...draft, approvalMode: event.target.value as WebhookRouteDraft["approvalMode"] })}><option value="">Обычные правила безопасности</option><option value="ask_before_write">Спросить перед изменением</option><option value="bounded_autonomous">Разрешить ограниченно автоматически</option></select></label>
               </div>
               {draft.kind === "shell" ? <div className="form-grid"><label>Команда<input value={draft.command} onChange={(event) => setDraft({ ...draft, command: event.target.value })} /></label><label>Рабочий каталог<input value={draft.cwd} onChange={(event) => setDraft({ ...draft, cwd: event.target.value })} /></label></div> : <><div className="form-grid"><label>Инструмент<input value={draft.tool} onChange={(event) => setDraft({ ...draft, tool: event.target.value })} /></label>{draft.kind === "prompt" && <label>Аргумент prompt<input value={draft.promptArg} onChange={(event) => setDraft({ ...draft, promptArg: event.target.value })} placeholder="message" /></label>}</div><label>Аргументы JSON<textarea className="short-textarea" value={draft.argumentsJson} onChange={(event) => setDraft({ ...draft, argumentsJson: event.target.value })} spellCheck="false" /></label>{draft.kind === "prompt" && <label>Шаблон сообщения<textarea className="short-textarea" value={draft.prompt} onChange={(event) => setDraft({ ...draft, prompt: event.target.value })} /></label>}</>}
               <section className="action-builder" aria-label="Последовательность действий">
@@ -1066,10 +1142,10 @@ function WebhooksScreen() {
                 {draft.additionalActions.map((action, index) => <article className="action-card" key={index}>
                   <div className="action-card-heading"><strong>Шаг {index + 2}</strong><button className="text-button" type="button" onClick={() => setDraft({ ...draft, additionalActions: draft.additionalActions.filter((_, actionIndex) => actionIndex !== index) })}>Удалить шаг</button></div>
                   <div className="form-grid">
-                    <label>Тип действия<select value={action.kind} onChange={(event) => { const next = event.target.value as WebhookActionDraft["kind"]; setDraft({ ...draft, additionalActions: draft.additionalActions.map((item, actionIndex) => actionIndex === index ? { ...item, kind: next } : item) }); }}><option value="mcp">MCP</option><option value="prompt">Prompt</option><option value="shell">Shell</option></select></label>
+                    <label>Что сделать<select value={action.kind} onChange={(event) => { const next = event.target.value as WebhookActionDraft["kind"]; setDraft({ ...draft, additionalActions: draft.additionalActions.map((item, actionIndex) => actionIndex === index ? { ...item, kind: next } : item) }); }}><option value="mcp">Вызвать действие MCP</option><option value="prompt">Передать событие AI-инструменту</option><option value="shell">Запустить фиксированную команду</option></select></label>
                     <label>Пауза перед шагом, секунд<input type="number" min="0" step="0.1" value={action.delaySeconds} onChange={(event) => setDraft({ ...draft, additionalActions: draft.additionalActions.map((item, actionIndex) => actionIndex === index ? { ...item, delaySeconds: event.target.value } : item) })} /></label>
-                    <label>Цель<input value={action.target} onChange={(event) => setDraft({ ...draft, additionalActions: draft.additionalActions.map((item, actionIndex) => actionIndex === index ? { ...item, target: event.target.value } : item) })} placeholder="mcp:shell:...:Notify" /></label>
-                    <label>Режим подтверждения<select value={action.approvalMode} onChange={(event) => setDraft({ ...draft, additionalActions: draft.additionalActions.map((item, actionIndex) => actionIndex === index ? { ...item, approvalMode: event.target.value as WebhookActionDraft["approvalMode"] } : item) })}><option value="">По умолчанию</option><option value="ask_before_write">Запрос перед записью</option><option value="bounded_autonomous">Ограниченно автономный</option></select></label>
+                    <label>Где выполнить<input value={action.target} onChange={(event) => setDraft({ ...draft, additionalActions: draft.additionalActions.map((item, actionIndex) => actionIndex === index ? { ...item, target: event.target.value } : item) })} placeholder="mcp:shell:...:Notify" /></label>
+                    <label>Подтверждение опасных действий<select value={action.approvalMode} onChange={(event) => setDraft({ ...draft, additionalActions: draft.additionalActions.map((item, actionIndex) => actionIndex === index ? { ...item, approvalMode: event.target.value as WebhookActionDraft["approvalMode"] } : item) })}><option value="">Обычные правила безопасности</option><option value="ask_before_write">Спросить перед изменением</option><option value="bounded_autonomous">Разрешить ограниченно автоматически</option></select></label>
                   </div>
                   {action.kind === "shell" ? <div className="form-grid"><label>Команда<input value={action.command} onChange={(event) => setDraft({ ...draft, additionalActions: draft.additionalActions.map((item, actionIndex) => actionIndex === index ? { ...item, command: event.target.value } : item) })} /></label><label>Рабочий каталог<input value={action.cwd} onChange={(event) => setDraft({ ...draft, additionalActions: draft.additionalActions.map((item, actionIndex) => actionIndex === index ? { ...item, cwd: event.target.value } : item) })} /></label></div> : <><div className="form-grid"><label>Инструмент<input value={action.tool} onChange={(event) => setDraft({ ...draft, additionalActions: draft.additionalActions.map((item, actionIndex) => actionIndex === index ? { ...item, tool: event.target.value } : item) })} /></label>{action.kind === "prompt" && <label>Аргумент prompt<input value={action.promptArg} onChange={(event) => setDraft({ ...draft, additionalActions: draft.additionalActions.map((item, actionIndex) => actionIndex === index ? { ...item, promptArg: event.target.value } : item) })} /></label>}</div><label>Аргументы JSON<textarea className="short-textarea" value={action.argumentsJson} onChange={(event) => setDraft({ ...draft, additionalActions: draft.additionalActions.map((item, actionIndex) => actionIndex === index ? { ...item, argumentsJson: event.target.value } : item) })} spellCheck="false" /></label>{action.kind === "prompt" && <label>Шаблон сообщения<textarea className="short-textarea" value={action.prompt} onChange={(event) => setDraft({ ...draft, additionalActions: draft.additionalActions.map((item, actionIndex) => actionIndex === index ? { ...item, prompt: event.target.value } : item) })} /></label>}</>}
                 </article>)}
@@ -1081,10 +1157,11 @@ function WebhooksScreen() {
           </section>}
 
           <section className="card job-inspector" aria-labelledby="job-inspector-title">
-            <div><p className="section-kicker">DURABLE JOB STATUS</p><h3 id="job-inspector-title">Проверить webhook-задание</h3><p className="muted">Укажите один ID задания. Интерфейс показывает статус и безопасные поля результата.</p></div>
-            <form className="job-search" onSubmit={(event) => { event.preventDefault(); void inspectJob(); }}><label>ID задания<input value={jobId} onChange={(event) => setJobId(event.target.value)} /></label><button className="button secondary" type="submit" disabled={!jobId.trim() || checkingJob}>{checkingJob ? "Проверяем…" : "Проверить задание"}</button></form>
+            <div><p className="section-kicker">ИСТОРИЯ</p><h3 id="job-inspector-title">Последние запуски</h3><p className="muted">Здесь видно, срабатывают ли автоматизации на практике. Для подробностей можно открыть запуск по его ID.</p></div>
+            {recentJobs.length > 0 ? <div className="automation-recent-jobs">{recentJobs.slice(0, 8).map((item) => <button type="button" className="automation-job-row" key={item.job_id} onClick={() => { setJobId(item.job_id); setJob(null); }}><span className={`automation-run-state state-${item.status}`}>{webhookStatusLabel(item.status)}</span><span><strong>{item.route_id}</strong><small>{formatWebhookTime(item.created_at)}{item.error ? ` · ${item.error}` : ""}</small></span></button>)}</div> : <div className="route-empty"><strong>Запусков пока нет</strong><span>Когда внешний сервис вызовет автоматизацию, результат появится здесь.</span></div>}
+            <details className="automation-job-lookup"><summary>Открыть запуск по ID</summary><form className="job-search" onSubmit={(event) => { event.preventDefault(); void inspectJob(); }}><label>ID запуска<input value={jobId} onChange={(event) => setJobId(event.target.value)} /></label><button className="button secondary" type="submit" disabled={!jobId.trim() || checkingJob}>{checkingJob ? "Проверяем…" : "Открыть"}</button></form></details>
             {jobMessage && <div className="state-panel state-error compact" role="alert"><strong>Не удалось получить задание</strong><span>{jobMessage}</span><button className="button secondary" type="button" onClick={() => void inspectJob()}>Повторить</button></div>}
-            {job && <div className="job-result" role="status"><dl><div><dt>ID</dt><dd>{job.job_id}</dd></div><div><dt>Маршрут</dt><dd>{job.route_id}</dd></div><div><dt>Статус</dt><dd>{job.status}</dd></div>{job.created_at && <div><dt>Создано</dt><dd>{formatUpdated(job.created_at)}</dd></div>}{job.started_at && <div><dt>Запущено</dt><dd>{formatUpdated(job.started_at)}</dd></div>}{job.completed_at && <div><dt>Завершено</dt><dd>{formatUpdated(job.completed_at)}</dd></div>}{job.callback_status && <div><dt>Callback</dt><dd>{job.callback_status}</dd></div>}{job.error && <div><dt>Ошибка</dt><dd>{job.error}</dd></div>}</dl>{resultEntries.length > 0 && <div className="safe-result"><strong>Результат</strong><dl>{resultEntries.map(([key, value]) => <div key={key}><dt>{key}</dt><dd>{value}</dd></div>)}</dl></div>}</div>}
+            {job && <div className="job-result" role="status"><dl><div><dt>ID</dt><dd>{job.job_id}</dd></div><div><dt>Маршрут</dt><dd>{job.route_id}</dd></div><div><dt>Состояние</dt><dd>{webhookStatusLabel(job.status)}</dd></div>{job.created_at && <div><dt>Создано</dt><dd>{formatUpdated(job.created_at)}</dd></div>}{job.started_at && <div><dt>Запущено</dt><dd>{formatUpdated(job.started_at)}</dd></div>}{job.completed_at && <div><dt>Завершено</dt><dd>{formatUpdated(job.completed_at)}</dd></div>}{job.callback_status && <div><dt>Callback</dt><dd>{job.callback_status}</dd></div>}{job.error && <div><dt>Ошибка</dt><dd>{job.error}</dd></div>}</dl>{resultEntries.length > 0 && <div className="safe-result"><strong>Результат</strong><dl>{resultEntries.map(([key, value]) => <div key={key}><dt>{key}</dt><dd>{value}</dd></div>)}</dl></div>}</div>}
           </section>
         </section>}
       </div>

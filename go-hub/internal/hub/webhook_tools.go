@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"sort"
 	"strings"
+	"time"
 )
 
 const (
@@ -288,15 +289,64 @@ func compactWebhookAppsInputSchema(name string, fallback any) any {
 	}
 }
 
+type webhookJobSummary struct {
+	ID             string    `json:"job_id"`
+	RouteID        string    `json:"route_id"`
+	Status         string    `json:"status"`
+	CreatedAt      time.Time `json:"created_at"`
+	CompletedAt    time.Time `json:"completed_at,omitempty"`
+	Error          string    `json:"error,omitempty"`
+	CallbackStatus string    `json:"callback_status,omitempty"`
+}
+
+func (s *Server) webhookJobOverview(limit int) ([]webhookJobSummary, map[string]webhookJobSummary) {
+	if limit <= 0 || limit > 100 {
+		limit = 50
+	}
+	s.mu.Lock()
+	items := make([]webhookJobSummary, 0, len(s.webhookJobs))
+	for _, job := range s.webhookJobs {
+		if job == nil {
+			continue
+		}
+		items = append(items, webhookJobSummary{
+			ID: job.ID, RouteID: job.RouteID, Status: job.Status, CreatedAt: job.CreatedAt,
+			CompletedAt: job.CompletedAt, Error: boundedString(job.Error, 240), CallbackStatus: job.CallbackStatus,
+		})
+	}
+	s.mu.Unlock()
+	sort.Slice(items, func(i, j int) bool { return items[i].CreatedAt.After(items[j].CreatedAt) })
+	latest := make(map[string]webhookJobSummary)
+	for _, item := range items {
+		if _, exists := latest[item.RouteID]; !exists {
+			latest[item.RouteID] = item
+		}
+	}
+	if len(items) > limit {
+		items = items[:limit]
+	}
+	return items, latest
+}
+
 func (s *Server) adminWebhookJobEndpoint(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-store")
 	if r.Method != http.MethodGet {
 		writeJSON(w, http.StatusMethodNotAllowed, map[string]any{"detail": "method not allowed"})
 		return
 	}
-	jobID := strings.Trim(strings.TrimPrefix(r.URL.Path, "/admin/api/webhook-jobs/"), "/")
-	if jobID == "" || strings.Contains(jobID, "/") {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"detail": "missing job_id"})
+	jobID := strings.Trim(strings.TrimPrefix(r.URL.Path, "/admin/api/webhook-jobs"), "/")
+	if jobID == "" {
+		if err := authorizeFacadeCall(r, webhookJobGetTool, nil); err != nil {
+			s.auditToolDecision(r, "hub", webhookJobGetTool, nil, "deny", err.Error(), nil, http.StatusForbidden)
+			writeJSON(w, http.StatusForbidden, map[string]any{"detail": err.Error()})
+			return
+		}
+		jobs, latest := s.webhookJobOverview(50)
+		writeJSON(w, http.StatusOK, map[string]any{"jobs": jobs, "latest_by_route": latest})
+		return
+	}
+	if strings.Contains(jobID, "/") {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"detail": "invalid job_id"})
 		return
 	}
 	if err := authorizeFacadeCall(r, webhookJobGetTool, map[string]any{"id": jobID}); err != nil {

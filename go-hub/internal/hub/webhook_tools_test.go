@@ -355,3 +355,29 @@ func toolListContains(tools []map[string]any, name string) bool {
 	}
 	return false
 }
+
+func TestAdminWebhookJobsListReturnsRecentSecretSafeSummaries(t *testing.T) {
+	s := New(Config{CtlToken: "ctl"})
+	s.mu.Lock()
+	s.webhookJobs["job-old"] = &webhookJob{ID: "job-old", RouteID: "route-a", Status: "completed", CreatedAt: time.Date(2026, 9, 1, 10, 0, 0, 0, time.UTC), Result: map[string]any{"token": "must-not-leak"}}
+	s.webhookJobs["job-new"] = &webhookJob{ID: "job-new", RouteID: "route-b", Status: "failed", CreatedAt: time.Date(2026, 9, 2, 10, 0, 0, 0, time.UTC), Error: strings.Repeat("x", 400)}
+	s.mu.Unlock()
+
+	request := httptest.NewRequest(http.MethodGet, "/admin/api/webhook-jobs", nil)
+	request.Header.Set("Authorization", "Bearer ctl")
+	record := httptest.NewRecorder()
+	s.Handler().ServeHTTP(record, request)
+	if record.Code != http.StatusOK {
+		t.Fatalf("list status=%d body=%s", record.Code, record.Body.String())
+	}
+	body := record.Body.String()
+	if !strings.Contains(body, `"job_id":"job-new"`) || !strings.Contains(body, `"route_id":"route-b"`) {
+		t.Fatalf("missing recent summary: %s", body)
+	}
+	if strings.Index(body, `"job_id":"job-new"`) > strings.Index(body, `"job_id":"job-old"`) {
+		t.Fatalf("jobs are not newest first: %s", body)
+	}
+	if strings.Contains(body, "must-not-leak") || strings.Contains(body, `"result"`) {
+		t.Fatalf("summary leaked result data: %s", body)
+	}
+}

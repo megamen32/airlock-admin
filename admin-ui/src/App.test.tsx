@@ -355,11 +355,17 @@ function webhookResponse(value: unknown, status = 200): Response {
 describe("Вебхуки и агенты", () => {
   it("lists secret-safe route summaries and retries a failed load", async () => {
     window.history.replaceState(null, "", "#webhooks");
-    const fetchMock = vi.spyOn(globalThis, "fetch")
-      .mockResolvedValueOnce(webhookResponse({ detail: "offline" }, 503))
-      .mockResolvedValueOnce(webhookResponse({
-        routes: [{ ...webhookRouteFixture, hmac_secret: "must-never-render", token: "must-never-render-either" }],
-      }));
+    let routeAttempts = 0;
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      const path = String(input);
+      if (path === "/webhook-routes") {
+        routeAttempts += 1;
+        if (routeAttempts === 1) return webhookResponse({ detail: "offline" }, 503);
+        return webhookResponse({ routes: [{ ...webhookRouteFixture, hmac_secret: "must-never-render", token: "must-never-render-either" }] });
+      }
+      if (path === "/admin/api/webhook-jobs") return webhookResponse({ jobs: [], latest_by_route: {} });
+      throw new Error(`Unexpected request: ${path}`);
+    });
 
     render(<App />);
 
@@ -381,22 +387,23 @@ describe("Вебхуки и агенты", () => {
         createdBody = JSON.parse(String(init.body)) as Record<string, unknown>;
         return webhookResponse(webhookRouteFixture, 201);
       }
+      if (String(input) === "/admin/api/webhook-jobs") return webhookResponse({ jobs: [], latest_by_route: {} });
       throw new Error(`Unexpected request: ${String(input)} ${init?.method ?? "GET"}`);
     });
 
     render(<App />);
-    expect(await screen.findByText("Маршрутов пока нет")).toBeInTheDocument();
-    await userEvent.click(screen.getByRole("button", { name: "Новый маршрут" }));
-    await userEvent.type(screen.getByLabelText("Идентификатор маршрута"), "repair-100");
-    await userEvent.type(screen.getByLabelText("Секрет маршрута"), "write-only-secret");
-    await userEvent.selectOptions(screen.getByLabelText("Тип действия"), "shell");
-    await userEvent.type(screen.getByLabelText("Цель"), "shell:roomhacker-server-100");
+    expect(await screen.findByText("Автоматизаций пока нет")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Создать автоматизацию" }));
+    await userEvent.type(screen.getByLabelText("Короткое имя"), "repair-100");
+    await userEvent.type(screen.getByLabelText("Секрет для входящего запроса"), "write-only-secret");
+    await userEvent.selectOptions(screen.getByLabelText("Что сделать"), "shell");
+    await userEvent.type(screen.getByLabelText("Где выполнить"), "shell:roomhacker-server-100");
     await userEvent.type(screen.getByLabelText("Команда"), "fixed-helper repair_100");
     await userEvent.type(screen.getByLabelText("Рабочий каталог"), "/opt/notify");
     await userEvent.click(screen.getByRole("button", { name: "Создать маршрут" }));
 
     expect(await screen.findByText("Маршрут создан")).toBeInTheDocument();
-    expect(screen.getByLabelText("Секрет маршрута")).toHaveValue("");
+    expect(screen.getByLabelText("Секрет для входящего запроса")).toHaveValue("");
     expect(screen.queryByText("write-only-secret")).not.toBeInTheDocument();
     expect(fetchMock).toHaveBeenCalledWith("/webhook-routes", expect.objectContaining({ method: "POST" }));
     expect(createdBody).toEqual(expect.objectContaining({
@@ -421,20 +428,21 @@ describe("Вебхуки и агенты", () => {
         createdBody = JSON.parse(String(init.body)) as Record<string, unknown>;
         return webhookResponse({ ...webhookRouteFixture, action_count: 2 }, 201);
       }
+      if (String(input) === "/admin/api/webhook-jobs") return webhookResponse({ jobs: [], latest_by_route: {} });
       throw new Error(`Unexpected request: ${String(input)} ${init?.method ?? "GET"}`);
     });
 
     render(<App />);
-    await screen.findByText("Маршрутов пока нет");
-    await userEvent.click(screen.getByRole("button", { name: "Новый маршрут" }));
-    await userEvent.type(screen.getByLabelText("Идентификатор маршрута"), "ordered-100");
-    await userEvent.type(screen.getByLabelText("Секрет маршрута"), "ordered-secret");
-    await userEvent.clear(screen.getByLabelText("Цель"));
-    await userEvent.type(screen.getByLabelText("Цель"), "mcp:shell:roomhacker-server-100:Notify");
+    await screen.findByText("Автоматизаций пока нет");
+    await userEvent.click(screen.getByRole("button", { name: "Создать автоматизацию" }));
+    await userEvent.type(screen.getByLabelText("Короткое имя"), "ordered-100");
+    await userEvent.type(screen.getByLabelText("Секрет для входящего запроса"), "ordered-secret");
+    await userEvent.clear(screen.getByLabelText("Где выполнить"));
+    await userEvent.type(screen.getByLabelText("Где выполнить"), "mcp:shell:roomhacker-server-100:Notify");
     await userEvent.type(screen.getByLabelText("Инструмент"), "send_message");
     await userEvent.click(screen.getByRole("button", { name: "+ Добавить шаг" }));
     await userEvent.type(screen.getByLabelText("Пауза перед шагом, секунд"), "30");
-    const targets = screen.getAllByLabelText("Цель");
+    const targets = screen.getAllByLabelText("Где выполнить");
     await userEvent.type(targets[1], "mcp:shell:roomhacker-server-100:AgentHerder");
     const tools = screen.getAllByLabelText("Инструмент");
     await userEvent.type(tools[1], "new_or_resume");
@@ -457,15 +465,16 @@ describe("Вебхуки и агенты", () => {
       if (path === "/webhook-routes" && !init?.method) return webhookResponse({ routes: [webhookRouteFixture] });
       if (path === "/webhook-routes/repair-100" && init?.method === "PUT") return webhookResponse({ ...webhookRouteFixture, target: "shell:roomhacker-server-100-v2" });
       if (path === "/webhook-routes/repair-100" && init?.method === "DELETE") return webhookResponse(null, 204);
+      if (path === "/admin/api/webhook-jobs") return webhookResponse({ jobs: [], latest_by_route: {} });
       throw new Error(`Unexpected request: ${path} ${init?.method ?? "GET"}`);
     });
 
     render(<App />);
     await userEvent.click(await screen.findByRole("button", { name: "Изменить repair-100" }));
-    await userEvent.type(screen.getByLabelText("Секрет маршрута"), "replacement-secret");
+    await userEvent.type(screen.getByLabelText("Секрет для входящего запроса"), "replacement-secret");
     await userEvent.type(screen.getByLabelText("Команда"), "fixed-helper repair_100");
-    await userEvent.clear(screen.getByLabelText("Цель"));
-    await userEvent.type(screen.getByLabelText("Цель"), "shell:roomhacker-server-100-v2");
+    await userEvent.clear(screen.getByLabelText("Где выполнить"));
+    await userEvent.type(screen.getByLabelText("Где выполнить"), "shell:roomhacker-server-100-v2");
     await userEvent.click(screen.getByRole("button", { name: "Заменить маршрут" }));
     expect(await screen.findByText("Маршрут заменён")).toBeInTheDocument();
     expect(fetchMock).toHaveBeenCalledWith("/webhook-routes/repair-100", expect.objectContaining({ method: "PUT" }));
@@ -483,6 +492,7 @@ describe("Вебхуки и агенты", () => {
     vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
       const path = String(input);
       if (path === "/webhook-routes") return webhookResponse({ routes: [] });
+      if (path === "/admin/api/webhook-jobs") return webhookResponse({ jobs: [], latest_by_route: {} });
       if (path === "/admin/api/webhook-jobs/job-42") return webhookResponse({
         job_id: "job-42",
         route_id: "repair-100",
@@ -495,11 +505,12 @@ describe("Вебхуки и агенты", () => {
     });
 
     render(<App />);
-    await screen.findByText("Маршрутов пока нет");
-    await userEvent.type(screen.getByLabelText("ID задания"), "job-42");
-    await userEvent.click(screen.getByRole("button", { name: "Проверить задание" }));
+    await screen.findByText("Автоматизаций пока нет");
+    await userEvent.click(screen.getByText("Открыть запуск по ID"));
+    await userEvent.type(screen.getByLabelText("ID запуска"), "job-42");
+    await userEvent.click(screen.getByRole("button", { name: "Открыть" }));
 
-    expect(await screen.findByText("completed")).toBeInTheDocument();
+    expect(await screen.findByText("Готово")).toBeInTheDocument();
     expect(screen.getByText("session-7")).toBeInTheDocument();
     const jobResult = screen.getByText("session-7").closest(".job-result");
     expect(jobResult).not.toHaveTextContent("must-never-render");
