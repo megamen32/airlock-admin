@@ -2560,7 +2560,7 @@ def setup_interactive(args):
         env_set_many(env)
     if grepmesh_ready:
         svc_enable_start(svc_grepmesh_name(), UNIT_PATH_GREPMESH)
-    elif not install_grepmesh and UNIT_PATH_GREPMESH.exists():
+    elif UNIT_PATH_GREPMESH.exists():
         svc_disable_stop(svc_grepmesh_name(), UNIT_PATH_GREPMESH)
     if install_shellmcp:
         svc_enable_start(svc_shellmcp_name(), UNIT_PATH_SHELLMCP)
@@ -2818,6 +2818,31 @@ def _grepmesh_default_config(env: dict) -> dict:
     }
 
 
+def _grepmesh_matching_servers(servers: dict) -> list[tuple[str, dict]]:
+    """Find GrepMesh definitions regardless of config key/casing."""
+    matches: list[tuple[str, dict]] = []
+    for key, server in servers.items():
+        if not isinstance(server, dict):
+            continue
+        identities = {
+            str(key).strip().lower(),
+            str(server.get('name') or '').strip().lower(),
+            str(server.get('agent_id') or '').strip().lower(),
+        }
+        url = str(server.get('url') or '').rstrip('/').lower()
+        command_text = ' '.join([
+            str(server.get('command') or ''),
+            *[str(value) for value in (server.get('args') or [])],
+        ]).lower()
+        if (
+            'grepmesh' in identities
+            or url in {'http://127.0.0.1:9419/mcp', 'http://localhost:9419/mcp'}
+            or 'grepmesh-mcp' in command_text
+        ):
+            matches.append((str(key), server))
+    return matches
+
+
 def _configure_builtin_grepmesh(env: dict, enabled: bool) -> bool:
     """Provision the bundled GrepMesh service and native ShellMCP child entry.
 
@@ -2827,17 +2852,24 @@ def _configure_builtin_grepmesh(env: dict, enabled: bool) -> bool:
     """
     cfg = _mcp_config()
     servers = cfg.setdefault('mcpServers', {})
-    existing = servers.get('GrepMesh')
+    matches = _grepmesh_matching_servers(servers)
+    builtin = next(((key, spec) for key, spec in matches if spec.get('gptadmin_builtin') is True), None)
+    operator = next(((key, spec) for key, spec in matches if spec.get('gptadmin_builtin') is not True), None)
     if not enabled:
-        if isinstance(existing, dict) and existing.get('gptadmin_builtin') is True:
-            servers.pop('GrepMesh', None)
+        removed = False
+        for key, spec in list(matches):
+            if spec.get('gptadmin_builtin') is True:
+                servers.pop(key, None)
+                removed = True
+        if removed:
             _mcp_save(cfg)
             _mcp_refresh_generated_configs(cfg)
         return False
-    if isinstance(existing, dict) and existing.get('gptadmin_builtin') is not True:
-        # Respect an operator-managed GrepMesh definition and its service. The
-        # default-on companion must never create a second listener on :9419.
+    if operator is not None:
+        # Preserve an operator-managed GrepMesh regardless of config key/casing
+        # and never create a second child/listener for the same endpoint.
         return False
+    existing = builtin[1] if builtin is not None else None
     binary = BIN_DIR / 'grepmesh-mcp'
     if not binary.exists():
         print_warn('Bundled GrepMesh binary is unavailable for this package/platform; continuing without GrepMesh. Use --no-grepmesh to silence this capability on future installs.')
@@ -2845,8 +2877,24 @@ def _configure_builtin_grepmesh(env: dict, enabled: bool) -> bool:
     GREPMESH_CONFIG_FILE.parent.mkdir(parents=True, exist_ok=True)
     if not GREPMESH_CONFIG_FILE.exists():
         _json_write(GREPMESH_CONFIG_FILE, _grepmesh_default_config(env))
-        if not IS_USER_INSTALL and os.name != 'nt':
-            os.chmod(GREPMESH_CONFIG_FILE, 0o644)
+    if not IS_USER_INSTALL and os.name != 'nt':
+        # /etc/gptadmin also contains the secret 0600 gptadmin.env.  GrepMesh
+        # runs as the configured operator, so give only that operator's primary
+        # group traverse access to the directory and read access to the known
+        # non-secret grepmesh.json path.  0710 intentionally does not allow
+        # directory listing; gptadmin.env remains 0600 root:root.
+        grepmesh_user = env.get('SHELLMCP_DEFAULT_USER') or env.get('SHELL_DEFAULT_USER') or ''
+        if grepmesh_user:
+            try:
+                grepmesh_gid = pwd.getpwnam(grepmesh_user).pw_gid
+                os.chown(GREPMESH_CONFIG_FILE.parent, 0, grepmesh_gid)
+                os.chmod(GREPMESH_CONFIG_FILE.parent, 0o710)
+                os.chown(GREPMESH_CONFIG_FILE, 0, grepmesh_gid)
+                os.chmod(GREPMESH_CONFIG_FILE, 0o640)
+            except (KeyError, OSError) as exc:
+                print_warn(f'Could not grant GrepMesh config access to {grepmesh_user}: {exc}')
+        else:
+            os.chmod(GREPMESH_CONFIG_FILE, 0o600)
     if existing is None:
         servers['GrepMesh'] = {
             'name': 'grepmesh',
@@ -5567,7 +5615,7 @@ def cmd_update(args):
     if grepmesh_ready:
         if UNIT_PATH_GREPMESH.exists():
             svc_enable_start(svc_grepmesh_name(), UNIT_PATH_GREPMESH)
-    elif not install_grepmesh and UNIT_PATH_GREPMESH.exists():
+    elif UNIT_PATH_GREPMESH.exists():
         svc_disable_stop(svc_grepmesh_name(), UNIT_PATH_GREPMESH)
     if install_shellmcp:
         if UNIT_PATH_SHELLMCP.exists():

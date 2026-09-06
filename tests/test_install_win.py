@@ -21,3 +21,10 @@ def test_public_install_and_adapter_docs_use_oauth_product_language() -> None:
     assert "CTL_TOKEN" not in combined
     assert "SHELLMCP_TOKEN" not in combined
     assert "/connect" in combined or "OAuth" in combined
+
+
+def test_windows_user_install_is_task_scheduler_independent() -> None:
+    source = (ROOT / "deploy" / "install_win.ps1").read_text(encoding="utf-8")
+    assert "if ($UserMode) {\n        Install-UserStartup\n        return 'startup'" in source
+    assert "Per-user startup is deliberately Task-Scheduler-free" in source
+    assert "if ($UserMode) {\n        # User installs must not depend on Task Scheduler access" in source

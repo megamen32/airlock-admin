@@ -87,7 +87,15 @@ function Download-And-InstallArtifact {
     if (-not $exe) { throw 'shellmcp executable not found in package. Expected shellmcp.exe or shellmcp_win.exe.' }
 
     $stamp = Get-Date -Format 'yyyyMMdd_HHmmss'
-    if (Get-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue) {
+    if ($UserMode) {
+        # User installs must not depend on Task Scheduler access. Restricted
+        # SSH/UAC tokens can deny or stall ScheduledTasks cmdlets even for the
+        # same account. Stop only our own installed shell process by path.
+        Get-Process -Name 'shellmcp' -ErrorAction SilentlyContinue | Where-Object {
+            try { $_.Path -and ([System.IO.Path]::GetFullPath($_.Path) -eq [System.IO.Path]::GetFullPath($CurrentExe)) } catch { $false }
+        } | Stop-Process -Force -ErrorAction SilentlyContinue
+        Start-Sleep -Milliseconds 500
+    } elseif (Get-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue) {
         Stop-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue
         Start-Sleep -Seconds 3
     }
@@ -155,32 +163,36 @@ function Install-UserStartup {
 }
 
 function Install-Task {
-    $action = New-ScheduledTaskAction -Execute 'powershell.exe' -Argument "-NoProfile -ExecutionPolicy Bypass -File `"$RunScript`""
+    # Per-user startup is deliberately Task-Scheduler-free. This works from
+    # normal interactive shells and restricted SSH/UAC tokens alike. System
+    # installs still use a real machine Scheduled Task.
     if ($UserMode) {
-        $trigger = New-ScheduledTaskTrigger -AtLogOn -User $env:USERNAME
-        $principal = New-ScheduledTaskPrincipal -UserId $env:USERNAME -LogonType Interactive -RunLevel Limited
-    } else {
+        Install-UserStartup
+        return 'startup'
+    }
+    $action = New-ScheduledTaskAction -Execute 'powershell.exe' -Argument "-NoProfile -ExecutionPolicy Bypass -File `"$RunScript`""
+    if (-not $UserMode) {
         $trigger = New-ScheduledTaskTrigger -AtStartup
         $principal = New-ScheduledTaskPrincipal -UserId 'SYSTEM' -RunLevel Highest
     }
     $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -RestartCount 999 -RestartInterval (New-TimeSpan -Minutes 1) -ExecutionTimeLimit ([TimeSpan]::Zero)
-    try {
-        Register-ScheduledTask -TaskName $TaskName -Action $action -Trigger $trigger -Settings $settings -Principal $principal -Force -ErrorAction Stop | Out-Null
-        return 'task'
-    } catch {
-        if (-not $UserMode) { throw }
-        Write-Warning "Task Scheduler denied the user install; using the per-user Startup launcher instead."
-        Install-UserStartup
-        return 'startup'
-    }
+    Register-ScheduledTask -TaskName $TaskName -Action $action -Trigger $trigger -Settings $settings -Principal $principal -Force -ErrorAction Stop | Out-Null
+    return 'task'
 }
 
 if (-not $UserMode) { Require-Admin }
 
 if ($Uninstall) {
-    Unregister-ScheduledTask -TaskName $TaskName -Confirm:$false -ErrorAction SilentlyContinue
-    Remove-Item $StartupScript -Force -ErrorAction SilentlyContinue
-    Write-Host "Removed scheduled task: $TaskName"
+    if ($UserMode) {
+        Remove-Item $StartupScript -Force -ErrorAction SilentlyContinue
+        Get-Process -Name 'shellmcp' -ErrorAction SilentlyContinue | Where-Object {
+            try { $_.Path -and ([System.IO.Path]::GetFullPath($_.Path) -eq [System.IO.Path]::GetFullPath($CurrentExe)) } catch { $false }
+        } | Stop-Process -Force -ErrorAction SilentlyContinue
+        Write-Host "Removed per-user startup launcher: $StartupScript"
+    } else {
+        Unregister-ScheduledTask -TaskName $TaskName -Confirm:$false -ErrorAction SilentlyContinue
+        Write-Host "Removed scheduled task: $TaskName"
+    }
     exit 0
 }
 

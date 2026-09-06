@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 import inspect
 
 import pytest
@@ -51,3 +52,55 @@ def test_setup_wires_grepmesh_before_shellmcp_start() -> None:
     grep_started = source.index("svc_enable_start(svc_grepmesh_name(), UNIT_PATH_GREPMESH)")
     shell_started = source.index("svc_enable_start(svc_shellmcp_name(), UNIT_PATH_SHELLMCP)")
     assert configured < grep_started < shell_started
+
+
+def test_builtin_grepmesh_system_permissions_allow_operator_traverse_without_env_read(monkeypatch, tmp_path):
+    from types import SimpleNamespace
+
+    config = tmp_path / "etc" / "gptadmin" / "grepmesh.json"
+    mcp_config = {"mcpServers": {}}
+    chmod_calls = []
+    chown_calls = []
+
+    monkeypatch.setattr(cli, "IS_USER_INSTALL", False)
+    monkeypatch.setattr(cli, "BIN_DIR", tmp_path / "bin")
+    monkeypatch.setattr(cli, "GREPMESH_CONFIG_FILE", config)
+    monkeypatch.setattr(cli, "_mcp_config", lambda: mcp_config)
+    monkeypatch.setattr(cli, "_mcp_save", lambda _cfg: None)
+    monkeypatch.setattr(cli, "_mcp_refresh_generated_configs", lambda _cfg: None)
+    monkeypatch.setattr(cli.pwd, "getpwnam", lambda _name: SimpleNamespace(pw_gid=1234))
+    monkeypatch.setattr(cli.os, "chmod", lambda path, mode: chmod_calls.append((Path(path), mode)))
+    monkeypatch.setattr(cli.os, "chown", lambda path, uid, gid: chown_calls.append((Path(path), uid, gid)))
+    (tmp_path / "bin").mkdir()
+    (tmp_path / "bin" / "grepmesh-mcp").write_text("binary")
+
+    assert cli._configure_builtin_grepmesh({"SHELLMCP_DEFAULT_USER": "operator"}, True) is True
+    assert (config.parent, 0o710) in chmod_calls
+    assert (config, 0o640) in chmod_calls
+    assert (config.parent, 0, 1234) in chown_calls
+    assert (config, 0, 1234) in chown_calls
+
+
+def test_builtin_grepmesh_preserves_lowercase_operator_definition(monkeypatch, tmp_path):
+    operator = {
+        "command": "/usr/local/bin/npx",
+        "args": ["-y", "mcp-remote", "http://127.0.0.1:9419/mcp"],
+        "url": "http://127.0.0.1:9419/mcp",
+        "enabled": True,
+        "agent_id": "GrepMesh",
+    }
+    cfg = {"mcpServers": {"grepmesh": dict(operator)}}
+    saved = []
+    monkeypatch.setattr(cli, "_mcp_config", lambda: cfg)
+    monkeypatch.setattr(cli, "_mcp_save", lambda value: saved.append(value))
+    monkeypatch.setattr(cli, "BIN_DIR", tmp_path / "bin")
+
+    assert cli._configure_builtin_grepmesh({"SHELLMCP_DEFAULT_USER": "operator"}, True) is False
+    assert cfg["mcpServers"] == {"grepmesh": operator}
+    assert saved == []
+
+
+def test_setup_stops_bundled_grepmesh_when_operator_provider_is_selected() -> None:
+    source = inspect.getsource(cli.setup_interactive)
+    assert "elif UNIT_PATH_GREPMESH.exists():" in source
+    assert "svc_disable_stop(svc_grepmesh_name(), UNIT_PATH_GREPMESH)" in source
