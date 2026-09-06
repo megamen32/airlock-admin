@@ -63,7 +63,7 @@ One installed ShellMCP transport is projected by the Hub as two logical MCP targ
 
 On a system installation the ShellMCP runtime may run privileged so `file:<host>` can edit root-owned configuration while preserving owner/group/mode. Ordinary `shell_exec` still defaults to the configured `SHELLMCP_DEFAULT_USER`; root shell execution remains explicit.
 
-GrepMesh is provisioned as a companion capability by default when the package contains a native GrepMesh binary. Use `--no-grepmesh` (or `GPTADMIN_SETUP_GREPMESH=0` for unattended bootstrap) to opt out. Existing operator-managed GrepMesh definitions are preserved.
+GrepMesh is provisioned as a companion capability by default when the package contains a native GrepMesh binary. Use `--no-grepmesh` (or `GPTADMIN_SETUP_GREPMESH=0` for unattended bootstrap) to opt out. Existing operator-managed GrepMesh definitions are preserved. On systemd hosts the bundled companion uses its own `gptadmin-grepmesh-mcp.service`; an operator-owned `grepmesh-mcp.service` is not overwritten or managed.
 
 ## Security
 
