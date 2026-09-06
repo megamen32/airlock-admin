@@ -5,9 +5,9 @@ ROOT = Path(__file__).resolve().parent.parent
 
 
 def test_authenticated_admin_page_has_no_topbar_password_field():
-    html = (ROOT / "admin-ui" / "src" / "operations" / "template.html").read_text()
-    assert 'id="token"' not in html
-    assert 'placeholder="optional CTL_TOKEN"' not in html
+    app = (ROOT / "admin-ui" / "src" / "App.tsx").read_text(encoding="utf-8")
+    assert 'id="token"' not in app
+    assert 'placeholder="optional CTL_TOKEN"' not in app
 
 
 def test_react_admin_explains_the_current_mcp_auth_choice():
@@ -47,21 +47,17 @@ def test_admin_oauth_rotation_uses_hub_endpoint_without_client_side_secret_gener
 
 
 def test_admin_ui_does_not_offer_legacy_ctl_bearer_controls():
-    html = (ROOT / "admin-ui" / "src" / "operations" / "template.html").read_text()
-    script = (ROOT / "admin-ui" / "src" / "operations" / "runtime.js").read_text()
-    assert "CTL_TOKEN" not in html
-    assert "CTL_TOKEN" not in script
+    app = (ROOT / "admin-ui" / "src" / "App.tsx").read_text(encoding="utf-8")
+    security = (ROOT / "admin-ui" / "src" / "SecurityScreen.tsx").read_text(encoding="utf-8")
+    assert "CTL_TOKEN" not in app
+    assert "CTL_TOKEN" not in security
 
 
 def test_admin_security_controls_use_typed_hub_endpoints_without_shell_env_mutation():
-    html = (ROOT / "admin-ui" / "src" / "operations" / "template.html").read_text()
-    script = (ROOT / "admin-ui" / "src" / "operations" / "runtime.js").read_text()
-    security_start = script.index("// ===== Security management =====")
-    security = script[security_start:]
+    security = (ROOT / "admin-ui" / "src" / "SecurityScreen.tsx").read_text(encoding="utf-8")
     for internal_name in ("MCP_BRIDGE_KEY", "OAUTH_CLIENT_SECRET", "SHELLMCP_TOKEN", "CTL_TOKEN"):
-        assert internal_name not in html
         assert internal_name not in security
-    assert "setEnvVar" not in html
+    assert "setEnvVar" not in security
     assert "shell_exec" not in security
     for endpoint in (
         "/admin/api/security/preset",
@@ -72,18 +68,15 @@ def test_admin_security_controls_use_typed_hub_endpoints_without_shell_env_mutat
         "/admin/api/approvals",
     ):
         assert endpoint in security
-    assert "function ensureSecurityReauth" in security
+    assert "const reauth = async" in security
 
 
 def test_admin_security_ui_offers_passkey_enrollment_without_raw_credentials():
     """The shipped admin SPA must expose the backend WebAuthn enrollment flow."""
 
-    html = (ROOT / "admin-ui" / "src" / "operations" / "template.html").read_text(encoding="utf-8")
-    script = (ROOT / "admin-ui" / "src" / "operations" / "runtime.js").read_text(encoding="utf-8")
-    security_start = script.index("// ===== Security management =====")
-    security = script[security_start:]
-    assert "Зарегистрировать passkey" in html
-    assert "securityPasskeyResult" in html
+    security = (ROOT / "admin-ui" / "src" / "SecurityScreen.tsx").read_text(encoding="utf-8")
+    assert "Зарегистрировать passkey" in security
+    assert "passkeyResult" in security
     assert "/admin/api/security/mfa/webauthn/register/begin" in security
     assert "/admin/api/security/mfa/webauthn/register/finish" in security
     assert "navigator.credentials.create" in security

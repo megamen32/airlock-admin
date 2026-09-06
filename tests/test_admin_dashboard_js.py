@@ -1,57 +1,45 @@
 from pathlib import Path
 
 
-ADMIN_HTML = Path(__file__).resolve().parents[1] / "admin-ui" / "src" / "operations" / "runtime.js"
-ADMIN_INDEX = Path(__file__).resolve().parents[1] / "admin-ui" / "src" / "operations" / "template.html"
-ADMIN_APP_JS = Path(__file__).resolve().parents[1] / "admin-ui" / "src" / "operations" / "runtime.js"
-
-
-def _line_no(text: str, needle: str) -> int:
-    idx = text.find(needle)
-    assert idx != -1, f"missing {needle!r} in admin dashboard"
-    return text[:idx].count("\n") + 1
+ROOT = Path(__file__).resolve().parents[1]
+ADMIN_APP = ROOT / "admin-ui" / "src" / "App.tsx"
+AGENTS_SCREEN = ROOT / "admin-ui" / "src" / "AgentsScreen.tsx"
+OVERVIEW_SCREEN = ROOT / "admin-ui" / "src" / "OverviewScreen.tsx"
+FAILOVER_SCREEN = ROOT / "admin-ui" / "src" / "FailoverScreen.tsx"
 
 
 def test_server_card_constants_are_initialized_before_rendering_servers():
-    """Regression for ReferenceError: Cannot access SERVER_CARD_CAPS_SHOWN before initialization.
+    """Native React agent rendering must not depend on legacy initialization order."""
+    source = AGENTS_SCREEN.read_text(encoding="utf-8")
+    assert "selected.capabilities" in source
+    assert "Object.entries(selected.meta" in source
+    assert "SERVER_CARD_CAPS_SHOWN" not in source
+    assert "SERVER_CARD_META_KEYS_SHOWN" not in source
+    assert "renderServerCard" not in source
 
-    renderAll() immediately renders servers with renderServerCard(). Because renderServerCard()
-    reads SERVER_CARD_CAPS_SHOWN / SERVER_CARD_META_KEYS_SHOWN, those consts must be
-    initialized earlier in the script/function body than the first renderServerCard call.
-    """
-    html = ADMIN_HTML.read_text(encoding="utf-8")
-    call_line = _line_no(html, "map(renderServerCard)")
-    caps_line = _line_no(html, "const SERVER_CARD_CAPS_SHOWN")
-    meta_line = _line_no(html, "const SERVER_CARD_META_KEYS_SHOWN")
-
-    assert caps_line < call_line, (
-        "SERVER_CARD_CAPS_SHOWN must be initialized before renderAll calls renderServerCard "
-        f"(const line {caps_line}, call line {call_line})"
-    )
-    assert meta_line < call_line, (
-        "SERVER_CARD_META_KEYS_SHOWN must be initialized before renderAll calls renderServerCard "
-        f"(const line {meta_line}, call line {call_line})"
-    )
 
 def test_removed_max_active_ips_helpers_leave_no_stale_bootstrap_call():
-    """The retired max-active-IPs control must not leave a ReferenceError behind."""
-    script = ADMIN_HTML.read_text(encoding="utf-8")
+    """The retired max-active-IPs control must not survive in the native dashboard."""
+    source = "\n".join(
+        path.read_text(encoding="utf-8")
+        for path in (ADMIN_APP, AGENTS_SCREEN, OVERVIEW_SCREEN)
+    )
     for name in ("getMaxActiveIps", "onMaxActiveIpsChange", "initMaxActiveIpsInput"):
-        assert name not in script
-
-
+        assert name not in source
 
 
 def test_split_admin_problem_servers_id_matches_render_target():
-    """Regression for TypeError: Cannot set properties of null (setting 'innerHTML')."""
-    index = ADMIN_INDEX.read_text(encoding="utf-8")
-    js = ADMIN_APP_JS.read_text(encoding="utf-8")
-
-    assert 'id="problemServers"' in index
-    assert "$('problemServers').innerHTML" in js
-    assert "problemAgents" not in js
+    """Problem-server rendering is a React list, not a fragile DOM id target."""
+    source = OVERVIEW_SCREEN.read_text(encoding="utf-8")
+    assert "Проблемные серверы" in source
+    assert "problems.map" in source
+    assert "problemAgents" not in source
+    assert "problemServers" not in source
 
 
 def test_split_admin_show_view_knows_failover_title():
-    js = ADMIN_APP_JS.read_text(encoding="utf-8")
-    assert "failover:'Failover'" in js
+    app = ADMIN_APP.read_text(encoding="utf-8")
+    failover = FAILOVER_SCREEN.read_text(encoding="utf-8")
+    assert 'import FailoverScreen from "./FailoverScreen"' in app
+    assert 'view === "failover" ? <FailoverScreen />' in app
+    assert "Резервирование" in failover

@@ -39,10 +39,13 @@ def test_cli_install_keeps_secret_input_page_alongside_admin():
 
 def test_admin_runtime_is_the_single_react_application():
     html = (ROOT / "public" / "admin" / "index.html").read_text(encoding="utf-8")
-    component = (ROOT / "admin-ui" / "src" / "OperationsScreen.tsx").read_text(encoding="utf-8")
+    app = (ROOT / "admin-ui" / "src" / "App.tsx").read_text(encoding="utf-8")
     assert '<div id="root"></div>' in html
     assert '/admin/assets/' in html
     assert 'src="app.js"' not in html
-    assert './operations/runtime.js' in component
-    assert './operations/template.html?raw' in component
-    assert 'iframe' not in component
+    for native_screen in ("OverviewScreen", "AgentsScreen", "JobsScreen", "McpManageScreen", "SecurityScreen", "FailoverScreen"):
+        assert native_screen in app
+    assert "OperationsScreen" not in app
+    assert not (ROOT / "admin-ui" / "src" / "OperationsScreen.tsx").exists()
+    assert not (ROOT / "admin-ui" / "src" / "operations" / "runtime.js").exists()
+    assert "iframe" not in app

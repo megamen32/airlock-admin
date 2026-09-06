@@ -47,8 +47,8 @@ def test_unit_rendering_replaces_import_time_profile_without_prefix_corruption()
 
 def test_unified_admin_exposes_explicit_security_presets():
     root = Path(__file__).parents[1]
-    template = (root / "admin-ui/src/operations/template.html").read_text(encoding="utf-8")
-    runtime = (root / "admin-ui/src/operations/runtime.js").read_text(encoding="utf-8")
-    for marker in ("securityPreset", "working_default", "private_access", "locked_down"):
-        assert marker in template
-    assert "/admin/api/security/preset" in runtime
+    security = (root / "admin-ui/src/SecurityScreen.tsx").read_text(encoding="utf-8")
+    for marker in ("working_default", "private_access", "locked_down"):
+        assert marker in security
+    assert "Профиль безопасности" in security
+    assert "/admin/api/security/preset" in security
