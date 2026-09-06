@@ -8,7 +8,7 @@ export function mountOperations(root, initialView, onNavigate) {
 const $=(id)=>root.querySelector('[id="'+id+'"]');let state=null,currentView=initialView,updateStartedFromBuild=null;
 let olderJobs=[];
 const requests=new AbortController(); let disposed=false, failoverLoaded=false, failoverDirty=false;
-function hdr(){return {'Content-Type':'application/json'}}function esc(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}function cls(s){return String(s||'').replace(/[^a-zA-Z0-9_-]/g,'_')}function displayKind(kind){return kind==='virtual_hub'?'hub':kind}function toggleSidebar(){ $('sidebar').classList.toggle('open') }
+function hdr(){return {'Content-Type':'application/json'}}function esc(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}function cls(s){return String(s||'').replace(/[^a-zA-Z0-9_-]/g,'_')}function displayKind(kind){return kind==='virtual_hub'?'hub':kind}
 async function api(path,opts={}){const r=await fetch(path,{...opts,signal:requests.signal,headers:{...hdr(),...(opts.headers||{})}});const t=await r.text();let j;try{j=JSON.parse(t)}catch{j={text:t}}if(!r.ok)throw new Error((j&&j.detail)||j.error||t||r.status);return j}
 function asTable(rows,cols){if(!rows||!rows.length)return '<p class="muted">пусто</p>';return '<table><thead><tr>'+cols.map(c=>'<th>'+esc(c[0])+'</th>').join('')+'</tr></thead><tbody>'+rows.map(r=>'<tr>'+cols.map(c=>'<td>'+c[1](r)+'</td>').join('')+'</tr>').join('')+'</tbody></table>'}
 function compactTime(ts){if(!ts)return '—';const numeric=typeof ts==='number'?ts:Number(ts);const value=Number.isFinite(numeric)&&String(ts).trim()!==''?(numeric<1e12?numeric*1000:numeric):ts;const d=new Date(value);if(Number.isNaN(d.getTime()))return ts;return d.toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit',second:'2-digit'})}
@@ -131,31 +131,8 @@ function renderAuditCard(row){
   </article>`;
 }
 async function handleResponseToggle(details){if(!details.open||details.dataset.loaded||details.dataset.loading||!details.dataset.jobId)return;details.dataset.loading='1';const pre=details.querySelector('pre');const empty=details.querySelector('.responseEmpty');if(pre)pre.textContent='loading…';if(empty)empty.textContent='loading…';try{const j=await api('/mcp-relay/job/'+encodeURIComponent(details.dataset.jobId)+'?detail=full');const payload=j.error ?? taskResultPayload(j);const textHtml=prettyJsonHtml(payload);const next=`<pre class="responseBody mono">${textHtml||'—'}</pre>`;if(pre)pre.outerHTML=next;else if(empty)empty.outerHTML=next;else details.insertAdjacentHTML('beforeend',next);details.dataset.loaded='1'}catch(e){const next=`<pre class="responseBody mono entryError">${esc('ERR '+e.message)}</pre>`;if(pre)pre.outerHTML=next;else if(empty)empty.outerHTML=next;else details.insertAdjacentHTML('beforeend',next)}finally{delete details.dataset.loading}}
-function showView(v){if(disposed)return;currentView=v;localStorage.setItem('gptadmin_view',v);root.querySelectorAll('.view').forEach(x=>x.classList.remove('active'));root.querySelectorAll('.navbtn').forEach(x=>x.classList.toggle('active',x.dataset.view===v));$('view-'+v)?.classList.add('active');$('viewTitle').textContent=({overview:'Обзор',agents:'Серверы','agent-detail':'Детали сервера',clients:'Клиенты и Auth',jobs:'Jobs и очереди','job-detail':'Детали job',tools:'Tools тестер',resources:'Ресурсы',mcpmanage:'MCP менеджер',security:'Токены и Auth',failover:'Failover',audit:'Журнал аудита',raw:'Сырой JSON'}[v]||v);$('sidebar').classList.remove('open');renderAll();onNavigate(v);if(v==='failover'&&!failoverLoaded){failoverLoaded=true;void loadFailover()}if(v==='security'){void loadSecurityControls();void loadVirtualMcps()}}
+function showView(v){if(disposed)return;currentView=v;localStorage.setItem('gptadmin_view',v);root.querySelectorAll('.view').forEach(x=>x.classList.remove('active'));$('view-'+v)?.classList.add('active');$('viewTitle').textContent=({overview:'Обзор',agents:'Серверы','agent-detail':'Детали сервера',jobs:'Jobs и очереди','job-detail':'Детали job',tools:'Tools тестер',resources:'Ресурсы',mcpmanage:'MCP менеджер',security:'Безопасность',failover:'Failover',audit:'Журнал аудита',raw:'Сырой JSON'}[v]||v);renderAll();onNavigate(v);if(v==='failover'&&!failoverLoaded){failoverLoaded=true;void loadFailover()}if(v==='security'){void loadSecurityControls()}}
 function includesText(row,q){return !q||JSON.stringify(row).toLowerCase().includes(q.toLowerCase())}
-// getMaxActiveIps / onMaxActiveIpsChange — client-side tolerance for token IP count.
-// These helpers are used by renderClientCard(), inline onchange handlers and page bootstrap,
-// so they must live in the top-level script scope, not inside renderAll().
-function getMaxActiveIps() {
-  const v = parseInt(localStorage.getItem('gptadmin_max_active_ips') || '3', 10);
-  return Number.isFinite(v) && v > 0 ? v : 3;
-}
-function onMaxActiveIpsChange() {
-  const el = $('maxActiveIps');
-  if (!el) return;
-  const v = parseInt(el.value || '3', 10);
-  const safe = Number.isFinite(v) && v > 0 ? v : 3;
-  localStorage.setItem('gptadmin_max_active_ips', String(safe));
-  if (state) renderAll();
-}
-function initMaxActiveIpsInput() {
-  const el = $('maxActiveIps');
-  if (el) el.value = String(getMaxActiveIps());
-}
-// Card rendering limits must be initialized before renderAll() can render cards.
-// Regression guard: renderServerCard reads these during the first servers render.
-const CLIENT_CARD_UA_SHOWN = 2;
-const CLIENT_CARD_PATHS_SHOWN = 3;
 const SERVER_CARD_CAPS_SHOWN = 5;
 const SERVER_CARD_META_KEYS_SHOWN = 5;
 const MANAGEDMCP_CARD_ARGS_SHOWN = 4;
@@ -174,12 +151,12 @@ function metaValueForList(v) {
   }
   return String(v);
 }
-function renderAll(){if(!state)return;const data=state;const ac=data.server_counts||{};$('agentCounts').innerHTML=`<span class="ok">${ac.online||0}</span><span class="muted"> / </span><span class="bad">${ac.offline||0}</span><span class="muted"> / </span><span class="warn">${ac.stale||0}</span>`;$('agentSub').innerHTML=`<span class="ok">●</span> online · <span class="bad">●</span> offline · <span class="warn">●</span> stale`;$('clientCount').textContent=data.client_count||0;$('queuedCount').textContent=(data.jobs?.queued||[]).length;$('bgCount').textContent=(data.jobs?.background||[]).length;$('bOverview').textContent='live';$('bServers').textContent=(data.servers||[]).length;$('bClients').textContent=data.client_count||0;$('bJobs').textContent=data.jobs?.count||0;$('bAudit').textContent=(data.audit||[]).length;const foc=data.failover_config||{};if($('bFailover'))$('bFailover').textContent=foc.enabled?'on':'off';const hubPublic=data.hub_public_url||data.public_origin||'';const tunnel=data.tunnel||{};$('sideMeta').innerHTML=`<div>hub: ${esc(data.now_fmt||'')}</div>${hubPublic?`<div class="muted small">public: <a href="${esc(hubPublic)}" target="_blank" rel="noreferrer">${esc(hubPublic)}</a></div>`:''}${tunnel.mode?`<div class="muted small">tunnel: ${esc(tunnel.mode)}</div>`:''}<div class="muted">auto refresh 15s</div>`;
+function renderAll(){if(!state)return;const data=state;const ac=data.server_counts||{};$('agentCounts').innerHTML=`<span class="ok">${ac.online||0}</span><span class="muted"> / </span><span class="bad">${ac.offline||0}</span><span class="muted"> / </span><span class="warn">${ac.stale||0}</span>`;$('agentSub').innerHTML=`<span class="ok">●</span> online · <span class="bad">●</span> offline · <span class="warn">●</span> stale`;$('clientCount').textContent=data.client_count||0;$('queuedCount').textContent=(data.jobs?.queued||[]).length;$('bgCount').textContent=(data.jobs?.background||[]).length;const foc=data.failover_config||{};const hubPublic=data.hub_public_url||data.public_origin||'';const tunnel=data.tunnel||{};$('sideMeta').innerHTML=`<div>hub: ${esc(data.now_fmt||'')}</div>${hubPublic?`<div class="muted small">public: <a href="${esc(hubPublic)}" target="_blank" rel="noreferrer">${esc(hubPublic)}</a></div>`:''}${tunnel.mode?`<div class="muted small">tunnel: ${esc(tunnel.mode)}</div>`:''}<div class="muted">auto refresh 15s</div>`;
 const targets=(data.servers||[]);const targetHtml=targets.map(a=>`<option value="${esc(a.server_id)}">${esc(a.server_id)} (${esc(a.status)})</option>`).join('');if($('target').options.length!==targets.length)$('target').innerHTML=targetHtml;if($('resourceTarget').options.length!==targets.length)$('resourceTarget').innerHTML=targetHtml;const shellTargets=[{server_id:'hub',status:'local'}].concat(targets.filter(a=>String(a.server_id||'').startsWith('shell:')||a.meta?.transport_layer==='mcp_tunnel'));const shellHtml=shellTargets.map(a=>`<option value="${esc(a.server_id)}">${esc(a.server_id)} (${esc(a.status)})</option>`).join('');if($('mcpHost')&&$('mcpHost').options.length!==shellTargets.length)$('mcpHost').innerHTML=shellHtml;if($('failoverNodes')&&!failoverDirty)renderFailoverNodes(foc,targets);
 const problems=(data.servers||[]).filter(a=>a.status!=='online');const PROBLEM_SERVER_META_KEYS_SHOWN=3;$('problemServers').innerHTML=problems.length?`<div class="stackList">${topN(problems,12).map(r=>{const meta=(r.meta&&typeof r.meta==='object')?r.meta:{};const keys=topN(Object.keys(meta),PROBLEM_SERVER_META_KEYS_SHOWN);const more=Math.max(0,Object.keys(meta).length-PROBLEM_SERVER_META_KEYS_SHOWN);return `<article class="entryCard"><div class="entryHead"><span class="entryStatus ${cls(r.status)}">${esc(r.status)}</span><div class="entryMain"><div class="entryTitle"><span class="mono">${esc(r.server_id)}</span></div><div class="entrySub small">${keys.length?`<ul class="kvList">${keys.map(k=>`<li><span class="mono">${esc(k)}</span>: <span class="muted">${esc(metaValueForList(meta[k]))}</span></li>`).join('')}</ul>${more?`<span class="muted small">+${more} more keys</span>`:''}`:`<span class="muted small">—</span>`}</div></div></div></article>`}).join('')}</div>`:`<p class="muted">пусто</p>`;
 $('recentJobsCompact').className='';$('recentJobsCompact').innerHTML=renderRecentMini(topN(data.jobs?.recent||[],8));
 let servers=(data.servers||[]).filter(r=>includesText(r,$('agentFilter')?.value||''));const ast=$('agentStatus')?.value||'all';if(ast!=='all')servers=servers.filter(r=>r.status===ast);$('agents').innerHTML=servers.length?`<div class="stackList">${servers.map(renderServerCard).join('')}</div>`:`<p class="muted">пусто</p>`;
-// ===== Server card (mirror of renderClientCard pattern) =====
+// ===== Server card =====
 function renderServerCard(r) {
   const caps = Array.isArray(r.capabilities) ? r.capabilities : [];
   const meta = (r.meta && typeof r.meta === 'object') ? r.meta : {};
@@ -234,79 +211,6 @@ function renderServerCard(r) {
     '</article>'
   );
 }
-// ===== Authorized clients (card-style) =====
-// topN: array top-N helper (avoids the .slice0N pattern that the acceptance grep flags)
-function renderClientCard(r) {
-  const ua = Array.isArray(r.user_agents) ? r.user_agents : [];
-  const paths = Array.isArray(r.paths) ? r.paths : [];
-  const uaFirst = topN(ua, CLIENT_CARD_UA_SHOWN);
-  const pathsFirst = topN(paths, CLIENT_CARD_PATHS_SHOWN);
-  const uaMore = Math.max(0, ua.length - CLIENT_CARD_UA_SHOWN);
-  const pMore  = Math.max(0, paths.length - CLIENT_CARD_PATHS_SHOWN);
-  const uaId = 'uam_' + Math.random().toString(36).slice(2, 9);
-  const pId  = 'pm_'  + Math.random().toString(36).slice(2, 9);
-  // multiple_ips: client-side tolerance from localStorage (see block #8).
-  // Backend still sends multiple_ips: len(ips)>1; we ignore it and recompute.
-  const maxActiveIps = getMaxActiveIps();
-  const ipList = Array.isArray(r.ips) ? r.ips : [];
-  const tooManyIps = ipList.length > maxActiveIps;
-  return (
-    '<div class="entryCard">' +
-      '<div class="entryHead"><div class="entryMain">' +
-        '<div class="entryTitle">' +
-          '<span class="mono">' + esc(r.token_id || r.id || r.key || 'client') + '</span> ' +
-          (r.token_kind ? '<span class="pill">' + esc(r.token_kind) + '</span>' : '') +
-          (r.access_mode ? '<span class="pill">' + esc(r.access_mode === 'readonly' ? 'только просмотр' : 'полный доступ') + '</span>' : '') +
-          (r.client_id ? ' <span class="muted small">' + esc(r.client_id) + '</span>' : '') +
-        '</div>' +
-        (r.token_kind === 'legacy_ctl' ?
-          '<div class="entrySub warn small">Переходный CTL: значение не показывается и не ротируется как JWT. Выпустите новый JWT после проверки OAuth.</div>' :
-          '<div class="row" style="margin-top:6px">' +
-          '<button onclick="rotateClient(\'' + esc(r.id || r.key || r.token_id) + '\')">ротировать</button>' +
-          '<button class="bad" onclick="revokeClient(\'' + esc(r.id || r.key || r.token_id) + '\')">отозвать</button>' +
-          '</div>') +
-        '<div class="entrySub muted small">' +
-          'last seen <b>' + esc(r.last_seen_fmt || '') + '</b>' +
-          (r.seen_count != null ? ' · seen ' + esc(String(r.seen_count)) : '') +
-        '</div>' +
-        '<div class="entrySub">' +
-          (tooManyIps
-            ? '<span class="warn small" title="IP count (' + ipList.length + ') exceeds tolerance (' + maxActiveIps + ')">multiple IP</span> '
-            : '') +
-          ipList.map(x => '<span class="pill mono small">' + esc(x) + '</span>').join(' ') +
-        '</div>' +
-        '<div class="entrySub small">' +
-          '<b>UA:</b>' +
-          '<ul class="kvList">' +
-            uaFirst.map(x => '<li><span class="mono">' + esc(x) + '</span></li>').join('') +
-          '</ul>' +
-          (uaMore > 0
-            ? '<a class="muted small" onclick="document.getElementById(\'' + uaId + '\').hidden=false;this.hidden=true">+' + uaMore + ' more</a>' +
-              '<ul class="kvList" id="' + uaId + '" hidden>' +
-                ua.slice(CLIENT_CARD_UA_SHOWN).map(x => '<li><span class="mono">' + esc(x) + '</span></li>').join('') +
-              '</ul>'
-            : '') +
-        '</div>' +
-        '<div class="entrySub small">' +
-          '<b>Paths:</b>' +
-          '<ul class="kvList">' +
-            pathsFirst.map(x => '<li><span class="mono">' + esc(x) + '</span></li>').join('') +
-          '</ul>' +
-          (pMore > 0
-            ? '<a class="muted small" onclick="document.getElementById(\'' + pId + '\').hidden=false;this.hidden=true">+' + pMore + ' more</a>' +
-              '<ul class="kvList" id="' + pId + '" hidden>' +
-                paths.slice(CLIENT_CARD_PATHS_SHOWN).map(x => '<li><span class="mono">' + esc(x) + '</span></li>').join('') +
-              '</ul>'
-            : '') +
-        '</div>' +
-      '</div></div>' +
-    '</div>'
-  );
-}
-const _clients = data.clients || [];
-$('clients').innerHTML = _clients.length
-  ? '<div class="stackList">' + _clients.map(renderClientCard).join('') + '</div>'
-  : '<p class="muted">пусто</p>';
 let jobs=listedJobs().filter(r=>includesText(r,$('jobFilter')?.value||''));const jst=$('jobStatus')?.value||'all';if(jst==='queued')jobs=jobs.filter(r=>String(r.status||'').startsWith('queued'));else if(jst!=='all')jobs=jobs.filter(r=>r.status===jst);$('jobs').innerHTML=jobs.length?`<div class="stackList">${jobs.map(renderJobCard).join('')}</div>`:'<p class="muted">пусто</p>';
 if(listedJobs().length<(data.jobs?.count||0))$('jobs').insertAdjacentHTML('beforeend','<p class="muted">Загружено '+listedJobs().length+' из '+data.jobs.count+' задач</p><button id="loadMoreJobs" onclick="loadMoreJobs()">Показать ещё 200 задач</button>');
 let audit=(data.audit||[]).filter(r=>includesText(r,$('auditFilter')?.value||''));$('audit').innerHTML=audit.length?`<div class="stackList">${audit.map(renderAuditCard).join('')}</div>`:'<p class="muted">пусто</p>';$('rawJson').textContent=JSON.stringify(data,null,2);const hv=$('hubVersion'),sv=$('shellVersion');if(hv){const b=state.build||{};hv.textContent='build '+(b.build_version||'—')+' ('+(b.git_commit||'').slice(0,7)+')'}if(sv){const sb=state.shell_builds||{},vs=sb.versions||{},p=[];for(const[v,c]of Object.entries(vs))p.push(v+'×'+c);sv.textContent=p.length?p.join(', '):'—'}const upd=state.update||{},cur=upd.current||{},lr=upd.last_result,btn=$('btnUpdate'),bl=$('btnUpdateLabel'),sd=$('updateStatus'),st=$('updateStatusText'),rd=$('updateResult');if(cur.status==='running'){if(btn){btn.disabled=true;btn.classList.add('btn-disabled')}if(bl)bl.textContent='Обновляю…';if(sd)sd.style.display='block';if(st)st.textContent='Сервис перезапускается…'}else{if(btn){btn.disabled=false;btn.classList.remove('btn-disabled')}if(bl)bl.textContent='Обновить этот узел'}if(lr&&lr.status==='done'){if(sd)sd.style.display='block';if(st)st.textContent='';if(rd)rd.textContent=lr.message||'Обновление завершено'}else if(lr&&lr.status==='error'){if(sd)sd.style.display='block';if(rd){rd.textContent=lr.message||'Ошибка обновления';rd.style.color='var(--red,#e74c3c)'}}}
@@ -550,66 +454,6 @@ async function rotateOAuth(){
   }catch(e){alert('ERR '+e.message)}
 }
 
-async function loadVirtualMcps(){
-  const el=$('securityVirtualMcps');
-  const out=$('securityVirtualMcpResult');
-  if(!el)return;
-  try{
-    const j=await api('/admin/api/virtual-mcps');
-    const items=Array.isArray(j.virtual_mcps)?j.virtual_mcps:[];
-    el.innerHTML=items.length?items.map(item=>'<div class="recentMiniItem"><div class="recentMiniTop"><b>'+esc(item.name||item.id||'virtual MCP')+'</b><span class="pill '+(item.enabled?'ok':'warn')+'">'+(item.enabled?'on':'off')+'</span></div><div class="muted small mono">'+esc(item.mcp_path||'')+'</div><div class="row"><button onclick="setVirtualMcp(\''+esc(item.id)+'\','+(!item.enabled)+')">'+(item.enabled?'Выключить':'Включить')+'</button></div></div>').join(''):'<p class="muted">Нет capabilities</p>';
-    if(out)out.textContent='—';
-  }catch(e){el.innerHTML='<p class="bad">ERR '+esc(e.message)+'</p>'}
-}
-async function setVirtualMcp(id,enabled){
-  const out=$('securityVirtualMcpResult');
-  try{
-    const j=await api('/admin/api/virtual-mcps/'+encodeURIComponent(id),{method:'PUT',body:JSON.stringify({enabled:!!enabled})});
-    if(out)out.textContent=JSON.stringify(j,null,2);
-    await loadVirtualMcps();
-    refreshAll();
-  }catch(e){if(out)out.textContent='ERR '+e.message}
-}
-
-async function issueMcpTokenFromPanel(){
-  const name=$('secMcpTokenName').value.trim();
-  if(!name){alert('Введите client_id');return}
-  const accessMode=$('secMcpAccessMode').value||'readonly';
-  const el=$('secMcpTokenResult');
-  el.textContent='Выпускаю…';
-  try{
-    const j=await api('/admin/api/mcp/issue-token',{method:'POST',body:JSON.stringify({client_id:name,ttl_days:365,access_mode:accessMode})});
-    el.textContent=JSON.stringify(j,null,2);
-  }catch(e){el.textContent='ERR '+e.message}
-}
-
-async function revokeClient(key){
-  if(!confirm('Отозвать клиента '+key+'? Он больше не сможет использовать MCP.'))return;
-  try{
-    await api('/admin/api/clients/'+encodeURIComponent(key),{method:'DELETE'});
-    refreshAll();
-  }catch(e){alert('ERR '+e.message)}
-}
-async function rotateClient(key){
-  if(!confirm('Выпустить замену для этого JWT? Старый сразу перестанет работать.'))return;
-  try{
-    const j=await api('/admin/api/mcp/tokens/'+encodeURIComponent(key)+'/rotate',{method:'POST'});
-    const el=$('secMcpTokenResult');
-    if(el)el.textContent=JSON.stringify(j,null,2);
-    showView('security');
-    refreshAll();
-  }catch(e){alert('ERR '+e.message)}
-}
-async function revokeAllClients(){
-  if(!confirm('Отозвать ВСЕ управляемые JWT? Клиенты с этими токенами нужно будет подключить заново.'))return;
-  if(!confirm('Точно? Это действие необратимо.'))return;
-  try{
-    const j=await api('/admin/api/clients/revoke-all',{method:'POST'});
-    alert('Отозвано JWT: '+j.revoked_count);
-    refreshAll();
-  }catch(e){alert('ERR '+e.message)}
-}
-
 
 function openServerDetail(aid){
   showView('agent-detail');
@@ -663,7 +507,6 @@ for(const id of ['sideVersion','updateStatus','sideMeta']){
 }
 const actions = {
     loadMoreJobs,
-    toggleSidebar,
     hdr,
     api,
     asTable,
@@ -688,9 +531,6 @@ const actions = {
     handleResponseToggle,
     showView,
     includesText,
-    getMaxActiveIps,
-    onMaxActiveIpsChange,
-    initMaxActiveIpsInput,
     topN,
     metaValueForList,
     renderAll,
@@ -729,12 +569,6 @@ const actions = {
     loadApprovals,
     decideApproval,
     rotateOAuth,
-    loadVirtualMcps,
-    setVirtualMcp,
-    issueMcpTokenFromPanel,
-    revokeClient,
-    rotateClient,
-    revokeAllClients,
     openServerDetail,
     openJobDetail,
     toggleCmdExpand
@@ -743,7 +577,7 @@ const previous=new Map();
 for(const [name,fn] of Object.entries(actions)){previous.set(name,window[name]);window[name]=fn}
 const markDirty=()=>{failoverDirty=true};
 $('view-failover').addEventListener('input',markDirty);
-initMaxActiveIpsInput();showView(currentView);void refreshAll();
+showView(currentView);void refreshAll();
 const timer=setInterval(()=>{if(!disposed&&$('autoRefresh').checked)void refreshAll()},15000);
 return {
  setView(view){if(view!==currentView)showView(view)},

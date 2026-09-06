@@ -8,32 +8,12 @@
 </head>
 <body>
 <div class="app">
-  <aside class="sidebar" id="sidebar" hidden aria-hidden="true">
-    <div class="brand">GPTAdmin</div>
-    <div class="sidegroup"><h3>Мониторинг</h3>
-      <button class="navbtn active" data-view="overview" onclick="showView('overview')"><span>Обзор</span><span class="badge" id="bOverview">—</span></button>
-      <button class="navbtn" data-view="agents" onclick="showView('agents')"><span>Серверы</span><span class="badge" id="bServers">—</span></button>
-      <button class="navbtn" data-view="clients" onclick="showView('clients')"><span>Клиенты и Auth</span><span class="badge" id="bClients">—</span></button>
-      <button class="navbtn" data-view="jobs" onclick="showView('jobs')"><span>Jobs и очереди</span><span class="badge" id="bJobs">—</span></button>
-    </div>
-    <div class="sidegroup"><h3>MCP</h3>
-      <button class="navbtn" data-view="tools" onclick="showView('tools')"><span>Tools тестер</span><span class="badge">call</span></button>
-      <button class="navbtn" data-view="resources" onclick="showView('resources')"><span>Ресурсы</span><span class="badge">read</span></button>
-      <button class="navbtn" data-view="mcpmanage" onclick="showView('mcpmanage')"><span>MCP менеджер</span><span class="badge" id="bMcpManage">add</span></button>
-    </div>
-    <div class="sidegroup"><h3>Security</h3>
-      <button class="navbtn" data-view="security" onclick="showView('security')"><span>Токены и Auth</span><span class="badge">env</span></button>
-      <button class="navbtn" data-view="failover" onclick="showView('failover')"><span>Failover</span><span class="badge" id="bFailover">off</span></button>
-    </div>
-    <div class="sidegroup"><h3>Журналы</h3>
-      <button class="navbtn" data-view="audit" onclick="showView('audit')"><span>Журнал аудита</span><span class="badge" id="bAudit">—</span></button>
-      <button class="navbtn" data-view="raw" onclick="showView('raw')"><span>Сырой JSON</span><span class="badge">json</span></button>
-    </div>
+  <div id="operationsUtilityStash" hidden aria-hidden="true">
     <div class="sidegroup small muted" id="sideMeta">—</div>
     <div class="sidegroup" id="sideVersion">
       <div class="muted small">hub: <span id="hubVersion">—</span></div>
       <div class="muted small">shells: <span id="shellVersion">—</span></div>
-      <button class="navbtn" id="btnUpdate" onclick="triggerUpdate()" style="margin-top:6px;width:100%">
+      <button class="btn-secondary" id="btnUpdate" onclick="triggerUpdate()" style="margin-top:6px;width:100%">
         <span id="btnUpdateLabel">Обновить этот узел</span>
       </button>
       <div class="muted" id="updateHint" style="font-size:10px;margin-top:2px">
@@ -44,11 +24,10 @@
       <div class="muted small" id="updateStatusText"></div>
       <div class="muted" id="updateResult" style="font-size:11px;margin-top:4px"></div>
     </div>
-  </aside>
+  </div>
 
   <div class="content">
     <header class="topbar">
-      <button class="mobileMenu" onclick="toggleSidebar()">☰</button>
       <b id="viewTitle" class="topbar-title">Обзор</b>
       <a class="btn-secondary" href="https://became.bezrabotnyi.com/#/docs" target="_blank" rel="noreferrer">📖 Доки</a>
       <button class="btn-secondary" onclick="refreshAll()">Обновить</button>
@@ -78,13 +57,6 @@
       <section id="view-agents" class="view"><div class="card">
         <div class="row"><h2>Серверы</h2><input id="agentFilter" class="search" placeholder="фильтр" oninput="renderAll()"><select id="agentStatus" onchange="renderAll()"><option value="all">all</option><option value="online">online</option><option value="offline">offline</option><option value="stale">stale</option></select></div>
         <div id="agents"></div>
-      </div></section>
-
-      <!-- Clients -->
-      <section id="view-clients" class="view"><div class="card">
-        <h2>Клиенты и Auth</h2>
-        <div class="row" style="margin:10px 0"><button class="cancelBtn" onclick="revokeAllClients()">Отозвать ВСЕх + ротировать OAuth</button></div>
-        <div id="clients"></div>
       </div></section>
 
       <!-- Jobs -->
@@ -159,17 +131,6 @@
         </div>
         <div style="margin-top:16px"><h2 style="font-size:13px">Ожидающие подтверждения</h2>
           <div class="row"><button class="btn-secondary" onclick="loadApprovals()">↻ Обновить</button></div><div id="securityApprovals" class="stackList"><p class="muted">Нажмите «Обновить»</p></div>
-        </div>
-        <div style="margin-top:16px"><h2 style="font-size:13px">JWT для клиента без OAuth</h2>
-          <div class="row"><input id="secMcpTokenName" placeholder="client_id" style="min-width:200px"><select id="secMcpAccessMode"><option value="readonly" selected>Только просмотр (рекомендуется для ChatGPT)</option><option value="full">Полный доступ</option></select><button onclick="issueMcpTokenFromPanel()">Выпустить</button></div>
-          <p class="muted small">Большинство клиентов подключаются сами через OAuth. Для ChatGPT безопаснее начать с «Только просмотр»: команды и изменения недоступны, а найденные токены автоматически скрываются. Полный доступ используйте для Codex и других клиентов, которым действительно нужны изменения.</p>
-          <pre id="secMcpTokenResult" style="min-height:60px">—</pre>
-        </div>
-        <div style="margin-top:16px"><h2 style="font-size:13px">Виртуальные MCP</h2>
-          <p class="muted small">Proxy и webhooks выключены по умолчанию. Включённый capability становится отдельным MCP и отдельной Action schema.</p>
-          <div class="row"><button class="btn-secondary" onclick="loadVirtualMcps()">↻ Обновить</button></div>
-          <div id="securityVirtualMcps" class="stackList"><p class="muted">Нажмите «Обновить»</p></div>
-          <pre id="securityVirtualMcpResult" style="min-height:35px">—</pre>
         </div>
       </div></section>
 

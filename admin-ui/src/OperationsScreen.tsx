@@ -3,7 +3,7 @@ import { mountOperations, type OperationsController } from "./operations/runtime
 import template from "./operations/template.html?raw";
 import "./operations/styles.css";
 
-export const operationViews = ["overview", "agents", "jobs", "tools", "resources", "mcpmanage", "security", "failover", "audit", "raw", "activity"] as const;
+export const operationViews = ["overview", "agents", "jobs", "tools", "resources", "mcpmanage", "security", "failover", "audit", "raw"] as const;
 export type OperationView = typeof operationViews[number];
 export const isOperationView = (value: string): value is OperationView => (operationViews as readonly string[]).includes(value);
 
@@ -20,12 +20,11 @@ export default function OperationsScreen({ view, onNavigate }: { view: Operation
     const content = document.createElement("div");
     content.innerHTML = source.body.innerHTML;
     root.current.replaceChildren(content);
-    controller.current = mountOperations(content, initialView.current === "activity" ? "clients" : initialView.current, (next) => {
-      const route = next === "clients" ? "activity" : next;
-      if (isOperationView(route)) navigation.current(route);
+    controller.current = mountOperations(content, initialView.current, (next) => {
+      if (isOperationView(next)) navigation.current(next);
     });
     return () => { controller.current?.destroy(); controller.current = null; };
   }, []);
-  useEffect(() => { controller.current?.setView(view === "activity" ? "clients" : view); }, [view]);
+  useEffect(() => { controller.current?.setView(view); }, [view]);
   return <div ref={root} className="operations-console" aria-label="Операционная панель" />;
 }

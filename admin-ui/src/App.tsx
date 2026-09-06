@@ -64,7 +64,7 @@ const primaryNavigation: NavigationSection[] = [
   { id: "access", label: "Доступ", target: "clients", views: ["clients", "profiles", "auth"] },
   { id: "automation", label: "Автоматизация", target: "webhooks", views: ["webhooks"] },
   { id: "jobs", label: "Задачи", target: "jobs", views: ["jobs", "tools"] },
-  { id: "journal", label: "Журнал", target: "audit", views: ["audit", "activity", "operations", "raw"] },
+  { id: "journal", label: "Журнал", target: "audit", views: ["audit", "operations", "raw"] },
 ];
 
 const contextualNavigation: Partial<Record<string, ContextLink[]>> = {
@@ -85,12 +85,12 @@ const contextualNavigation: Partial<Record<string, ContextLink[]>> = {
   ],
   journal: [
     { id: "audit", label: "События" },
-    { id: "activity", label: "Клиенты" },
     { id: "operations", label: "Изменения доступа" },
     { id: "raw", label: "Raw JSON" },
   ],
   settings: [
     { id: "capabilities", label: "Hub" },
+    { id: "security", label: "Безопасность" },
     { id: "instructions", label: "Инструкции" },
   ],
 };
@@ -99,18 +99,17 @@ const settingsSection: NavigationSection = {
   id: "settings",
   label: "Настройки",
   target: "capabilities",
-  views: ["capabilities", "instructions"],
+  views: ["capabilities", "security", "instructions"],
 };
 
 const allViews: readonly View[] = [
   "overview", "agents", "jobs", "operations", "mcpmanage", "tools", "resources",
   "instructions", "profiles", "clients", "webhooks", "auth", "capabilities",
-  "failover", "security", "audit", "activity", "raw",
+  "failover", "security", "audit", "raw",
 ];
 
 function viewFromHash(): View {
   const view = window.location.hash.slice(1).split("?")[0] as View;
-  if (view === "security") return "auth";
   return allViews.includes(view) ? view : "overview";
 }
 
