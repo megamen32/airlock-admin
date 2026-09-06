@@ -201,6 +201,22 @@ fn spawn_server(config: &PathBuf) -> Child {
         .unwrap()
 }
 
+async fn wait_for_server(port: u16) {
+    let deadline = tokio::time::Instant::now() + Duration::from_secs(5);
+    loop {
+        if tokio::net::TcpStream::connect(("127.0.0.1", port))
+            .await
+            .is_ok()
+        {
+            return;
+        }
+        if tokio::time::Instant::now() >= deadline {
+            panic!("grepmesh test server on port {port} did not become ready within 5s");
+        }
+        tokio::time::sleep(Duration::from_millis(25)).await;
+    }
+}
+
 async fn rpc(url: &str, method: &str, params: serde_json::Value) -> serde_json::Value {
     let client = reqwest::Client::new();
     let mut request = client
@@ -539,7 +555,8 @@ async fn black_box_two_process_peer_fanout_and_partial_results() {
     }
     let mut child_b = spawn_server(&path_b);
     let mut child_a = spawn_server(&path_a);
-    tokio::time::sleep(Duration::from_millis(700)).await;
+    wait_for_server(port_b).await;
+    wait_for_server(port_a).await;
 
     let init = rpc(&url_a, "initialize", serde_json::json!({})).await;
     assert_eq!(init["jsonrpc"], "2.0");
@@ -733,7 +750,7 @@ async fn remote_partial_status_and_local_results_survive_fanout() {
     let path = temp.path().join("config.json");
     write_config(&path, &cfg);
     let mut child = spawn_server(&path);
-    tokio::time::sleep(Duration::from_millis(500)).await;
+    wait_for_server(port).await;
 
     let search = rpc(
         &url,
@@ -836,7 +853,7 @@ async fn stalled_peer_body_keeps_completed_local_results() {
     let path = temp.path().join("config.json");
     write_config(&path, &cfg);
     let mut child = spawn_server(&path);
-    tokio::time::sleep(Duration::from_millis(500)).await;
+    wait_for_server(port).await;
 
     let search = rpc(
         &url,
