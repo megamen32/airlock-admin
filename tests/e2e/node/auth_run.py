@@ -44,6 +44,7 @@ def main():
             node['env'] = dict(os.environ, GPTADMIN_CONFIG_DIR=str(directory), GPTADMIN_ROOT=str(directory),
                 GPTADMIN_ENV_FILE=str(directory / 'absent.env'), GPTADMIN_HUB_HOST='127.0.0.1', GPTADMIN_HUB_PORT=str(port),
                 CTL_TOKEN=node['owner'], SHELL_TOKEN=secrets.token_urlsafe(32), OAUTH_CLIENT_SECRET=signer,
+                MCP_RELAY_AGENT_TOKEN=secrets.token_urlsafe(32),
                 ADMIN_PASSWORD=password, PUBLIC_ORIGIN=issuer, MCP_RESOURCE=resource,
                 GPTADMIN_RELAX_AUTH_CHECKS='0', GPTADMIN_AUTH_MODE='writer' if name == 'nodeA' else 'reader',
                 GPTADMIN_AUTH_SOURCE_ID='', GPTADMIN_AUTH_SNAPSHOT_MAX_BYTES=str(256 << 10), GPTADMIN_NODE_PEERS='{}',
@@ -143,9 +144,44 @@ def main():
         nodes['nodeB']['env']['GPTADMIN_AUTH_SOURCE_ID'] = identity_a
         start('nodeB')
         assert request('nodeB', '/mcp')[0] == 503, 'unseeded reader accepted auth'
+        assert request('nodeB', '/mcp-relay/pollution')[0] == 503, 'poll exemption crossed path boundary'
         status, managed, _ = request('nodeA', '/admin/api/mcp/issue-token',
             {'client_id': 'ordinary-canary', 'role': 'client', 'access_mode': 'full', 'ttl_days': 7}, nodes['nodeA']['owner'])
         assert status == 200 and managed['role'] == 'client', 'ordinary managed issuance failed'
+        # A real authenticated idle relay poll must not retain the auth gate.
+        # Export waiting behind it used to also block subsequent ordinary MCP.
+        poll_path = '/mcp-relay/poll/idle-auth-canary?timeout=8'
+        assert request('nodeA', poll_path, token='incorrect-relay-token')[0] == 401
+        address = urllib.parse.urlparse(nodes['nodeA']['origin'])
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            poll = socket.create_connection((address.hostname, address.port), timeout=2)
+            try:
+                poll.sendall((f'GET {poll_path} HTTP/1.1\r\nHost: localhost\r\nAuthorization: Bearer '
+                    + nodes['nodeA']['env']['MCP_RELAY_AGENT_TOKEN'] + '\r\n\r\n').encode())
+                poll.settimeout(.2)
+                try:
+                    poll.recv(1, socket.MSG_PEEK)
+                    raise AssertionError('idle relay poll returned before export')
+                except socket.timeout:
+                    pass
+                began = time.monotonic()
+                export_pending = pool.submit(request, 'nodeA', '/admin/api/auth-snapshot/export', {}, nodes['nodeA']['owner'])
+                time.sleep(.05)
+                admission_pending = pool.submit(request, 'nodeA', '/mcp', {'jsonrpc': '2.0', 'id': 2,
+                    'method': 'initialize', 'params': {'protocolVersion': '2025-03-26', 'capabilities': {},
+                    'clientInfo': {'name': 'poll-admission-canary', 'version': '1'}}}, managed['access_token'])
+                assert export_pending.result(timeout=2)[0] == 200
+                admitted = admission_pending.result(timeout=2)
+                assert admitted[0] == 200 and 'result' in admitted[1]
+                poll_export_seconds = time.monotonic() - began
+                assert poll_export_seconds < 2
+                try:
+                    poll.recv(1, socket.MSG_PEEK)
+                    raise AssertionError('idle relay poll ended before parallel checks')
+                except socket.timeout:
+                    pass
+            finally:
+                poll.close()
         # Slow anonymous input must not hold the admission gate or queue an
         # exclusive export ahead of every authenticated request.
         address = urllib.parse.urlparse(nodes['nodeA']['origin'])
@@ -229,7 +265,8 @@ def main():
         slots = list((nodes['nodeB']['directory'] / 'auth-continuity').glob('slot-*'))
         assert len(slots) <= 2
         print(json.dumps({'ok': True, 'ordinary_role': 'client', 'oauth_pkce_basic_offline_access': True,
-            'reader_restart': True, 'incomplete_anonymous_body_isolated': True, 'inflight_revocation_seconds': round(admission_seconds, 3), 'managed_revocation_after_sync_restart': True,
+            'reader_restart': True, 'idle_relay_poll_export_admission_seconds': round(poll_export_seconds, 3),
+            'incomplete_anonymous_body_isolated': True, 'inflight_revocation_seconds': round(admission_seconds, 3), 'managed_revocation_after_sync_restart': True,
             'explicit_writer_handoff': True, 'basic_refresh_after_handoff': True, 'refresh_single_use_after_restart': True,
             'snapshot_bytes': size, 'generation_slots': len(slots), 'evidence_dir': str(root)}))
     finally:

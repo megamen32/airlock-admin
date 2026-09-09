@@ -10,7 +10,45 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
+
+type blockedAuthResponse struct {
+	http.ResponseWriter
+	entered chan struct{}
+	release chan struct{}
+}
+
+func (w *blockedAuthResponse) Write(body []byte) (int, error) {
+	close(w.entered)
+	<-w.release
+	return len(body), nil
+}
+
+// Local lock-boundary regression, not a network integration claim. The real
+// idle relay poll/admission regression is in tests/e2e/node/auth_run.py.
+func TestAuthSnapshotResponseDoesNotHoldLocks(t *testing.T) {
+	s := authContinuityNode(t, "writer", "")
+	w := &blockedAuthResponse{ResponseWriter: httptest.NewRecorder(), entered: make(chan struct{}), release: make(chan struct{})}
+	r := httptest.NewRequest("POST", "/admin/api/auth-snapshot/export", nil)
+	r.Header.Set("Authorization", "Bearer fixture-owner")
+	done := make(chan struct{})
+	go func() { s.Handler().ServeHTTP(w, r); close(done) }()
+	defer func() { close(w.release); <-done }()
+	select {
+	case <-w.entered:
+	case <-time.After(2 * time.Second):
+		t.Fatal("export did not reach response write")
+	}
+	if !s.authMu.TryLock() {
+		t.Fatal("export holds auth gate while response write is blocked")
+	}
+	s.authMu.Unlock()
+	if !s.mu.TryLock() {
+		t.Fatal("export holds hub mutex while response write is blocked")
+	}
+	s.mu.Unlock()
+}
 
 func authContinuityNode(t *testing.T, mode, source string) *Server {
 	t.Helper()

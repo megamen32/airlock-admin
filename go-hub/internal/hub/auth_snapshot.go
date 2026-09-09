@@ -244,7 +244,7 @@ func releaseAuthAdmission(r *http.Request) {
 // A one-shot release is shared by nested request contexts and the final defer.
 func (s *Server) authSnapshotGate(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if !s.authContinuityEnabled() || strings.HasPrefix(r.URL.Path, "/queue/") || r.URL.Path == "/heartbeat" || r.URL.Path == "/healthz" || r.URL.Path == "/version" || r.URL.Path == "/metrics" || r.URL.Path == "/mcp-relay/poll" {
+		if !s.authContinuityEnabled() || strings.HasPrefix(r.URL.Path, "/queue/") || r.URL.Path == "/heartbeat" || r.URL.Path == "/healthz" || r.URL.Path == "/version" || r.URL.Path == "/metrics" || strings.HasPrefix(r.URL.Path, "/mcp-relay/poll/") {
 			next.ServeHTTP(w, r)
 			return
 		}
@@ -498,64 +498,78 @@ func (s *Server) authSnapshotHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.authMu.Lock()
-	defer s.authMu.Unlock()
 	s.mu.Lock()
-	defer s.mu.Unlock()
+	var releaseOnce sync.Once
+	release := func() {
+		releaseOnce.Do(func() { s.mu.Unlock(); s.authMu.Unlock() })
+	}
+	defer release()
+	respond := func(status int, value any) {
+		// Detach response bytes while state is coherent, then release both
+		// locks before any potentially slow network write (including errors).
+		body, err := json.Marshal(value)
+		if err != nil {
+			status = http.StatusInternalServerError
+			body = []byte(`{"error":"json encode failed"}`)
+		}
+		release()
+		writeJSON(w, status, json.RawMessage(body))
+	}
 	if !s.authInitialized {
-		writeJSON(w, 503, map[string]any{"detail": "auth continuity is not initialized"})
+		respond(503, map[string]any{"detail": "auth continuity is not initialized"})
 		return
 	}
 	switch r.URL.Path {
 	case "/admin/api/auth-snapshot/export":
 		if err := s.authWriteErrorLocked(); err != nil {
-			writeJSON(w, 409, map[string]any{"detail": err.Error()})
+			respond(409, map[string]any{"detail": err.Error()})
 			return
 		}
 		bundle, err := s.readAuthSlot(s.authState)
 		if err != nil {
-			writeJSON(w, 503, map[string]any{"detail": err.Error()})
+			respond(503, map[string]any{"detail": err.Error()})
 			return
 		}
 		bundle.WriterID = s.authLocalID
 		bundle.Generation++
 		s.excludeSnapshotControlCredentials(&bundle)
 		if err := s.commitAuthSnapshotLocked(bundle, false); err != nil {
-			writeJSON(w, 409, map[string]any{"detail": err.Error()})
+			respond(409, map[string]any{"detail": err.Error()})
 			return
 		}
-		writeJSON(w, 200, bundle)
+		respond(200, bundle)
 	case "/admin/api/auth-snapshot/apply":
 		if s.cfg.AuthMode != "reader" {
-			writeJSON(w, 409, map[string]any{"detail": "only an explicit reader can apply snapshots"})
+			respond(409, map[string]any{"detail": "only an explicit reader can apply snapshots"})
 			return
 		}
 		raw, err := io.ReadAll(io.LimitReader(r.Body, int64(s.cfg.AuthSnapshotBudget)+1))
 		if err != nil || len(raw) > s.cfg.AuthSnapshotBudget {
-			writeJSON(w, 413, map[string]any{"detail": "auth snapshot exceeds configured budget"})
+			respond(413, map[string]any{"detail": "auth snapshot exceeds configured budget"})
 			return
 		}
 		var manifest map[string]json.RawMessage
 		if json.Unmarshal(raw, &manifest) != nil || manifest["profiles"] == nil {
-			writeJSON(w, 400, map[string]any{"detail": "explicit profiles manifest required"})
+			respond(400, map[string]any{"detail": "explicit profiles manifest required"})
 			return
 		}
 		var bundle authSnapshot
 		decoder := json.NewDecoder(bytes.NewReader(raw))
 		decoder.DisallowUnknownFields()
 		if err := decoder.Decode(&bundle); err != nil {
-			writeJSON(w, 400, map[string]any{"detail": "invalid auth snapshot"})
+			respond(400, map[string]any{"detail": "invalid auth snapshot"})
 			return
 		}
 		if bundle.WriterID != s.cfg.AuthSourceID || bundle.Generation <= s.authState.Generation {
-			writeJSON(w, 409, map[string]any{"detail": "foreign or stale auth snapshot"})
+			respond(409, map[string]any{"detail": "foreign or stale auth snapshot"})
 			return
 		}
 		if err := s.commitAuthSnapshotLocked(bundle, true); err != nil {
-			writeJSON(w, 409, map[string]any{"detail": err.Error()})
+			respond(409, map[string]any{"detail": err.Error()})
 			return
 		}
-		writeJSON(w, 200, map[string]any{"ok": true, "writer_id": bundle.WriterID, "generation": bundle.Generation})
+		respond(200, map[string]any{"ok": true, "writer_id": bundle.WriterID, "generation": bundle.Generation})
 	default:
-		writeJSON(w, 404, map[string]any{"detail": "unknown snapshot action"})
+		respond(404, map[string]any{"detail": "unknown snapshot action"})
 	}
 }
