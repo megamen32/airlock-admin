@@ -85,6 +85,9 @@ func (s *Server) Close() error {
 	if s.nodePeerClient != nil {
 		s.nodePeerClient.CloseIdleConnections()
 	}
+	for _, client := range s.nodePeerPinnedClients {
+		client.CloseIdleConnections()
+	}
 	if s.taskRuntimeStop != nil {
 		close(s.taskRuntimeStop)
 	}

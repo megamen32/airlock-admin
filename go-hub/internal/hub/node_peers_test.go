@@ -140,8 +140,24 @@ func TestNodePeersConfiguration(t *testing.T) {
 	}
 	t.Setenv("GPTADMIN_NODE_PEERS", `{"shell:nodeB":"https://node-b.example/"}`)
 	routes, err := parseNodePeers(FromEnv().NodePeersJSON)
-	if err != nil || routes["shell:nodeB"] != "https://node-b.example" {
+	if err != nil || routes["shell:nodeB"].URL != "https://node-b.example" {
 		t.Fatalf("env route not loaded: %v %v", routes, err)
+	}
+}
+
+func TestNodePeersPhysicalPinConfiguration(t *testing.T) {
+	if _, err := parseNodePeers(`{"shell:nodeB":{"url":"https://peer.example","connect_to":"127.0.0.1"}}`); err != nil {
+		t.Fatalf("physical peer route rejected: %v", err)
+	}
+	for _, raw := range []string{
+		`{"shell:nodeB":{"url":"http://peer.example","connect_to":"127.0.0.1"}}`,
+		`{"shell:nodeB":{"url":"https://peer.example","connect_to":"other.example"}}`,
+		`{"shell:nodeB":{"url":"https://peer.example","connect_to":"127.0.0.1:443"}}`,
+		`{"shell:nodeB":{"url":"https://peer.example","insecure":true}}`,
+	} {
+		if _, err := parseNodePeers(raw); err == nil {
+			t.Errorf("invalid physical peer accepted: %s", raw)
+		}
 	}
 }
 
@@ -150,10 +166,84 @@ func peerTestMCPCall(s *Server, body, token string) *httptest.ResponseRecorder {
 	r.Header.Set("Authorization", "Bearer "+token)
 	r.Header.Set("MCP-Protocol-Version", mcpProtocolVersion)
 	r.Header.Set("Mcp-Method", "tools/call")
-	r.Header.Set("Mcp-Name", "execute")
+	var envelope map[string]any
+	_ = json.Unmarshal([]byte(body), &envelope)
+	r.Header.Set("Mcp-Name", firstString(mapValue(envelope["params"]), "name"))
 	w := httptest.NewRecorder()
 	s.Handler().ServeHTTP(w, r)
 	return w
+}
+
+func TestNodePeersJobOwnerRouteAndLocalPriority(t *testing.T) {
+	b := peerTestHub(t, "token", map[string]string{"shell:nodeB": "http://127.0.0.1:1"})
+	if err := b.RegisterLocalExecutor("nodeB", map[string]string{"server_id": "b-id", "public_key": "b-key", "fingerprint": "b-fingerprint"}, strings.Repeat("b", 32)); err != nil {
+		t.Fatal(err)
+	}
+	b.mu.Lock()
+	b.shellJobs["owned"] = &shellJob{ID: "owned", Server: "nodeB", Status: "completed", CreatedAt: nowFloat(), DoneAt: nowFloat(), Result: map[string]any{"stdout": "owner-only-marker"}}
+	b.shellJobs["not-owned"] = &shellJob{ID: "not-owned", Server: "other", Status: "completed", CreatedAt: nowFloat(), DoneAt: nowFloat(), Result: map[string]any{"stdout": "must-not-leak"}}
+	err := b.saveTaskStateLocked("owned", "not-owned")
+	b.mu.Unlock()
+	if err != nil {
+		t.Fatal(err)
+	}
+	owner := httptest.NewServer(b.Handler())
+	defer owner.Close()
+	a := peerTestHub(t, "token", map[string]string{"shell:nodeB": owner.URL})
+	body := `{"jsonrpc":"2.0","id":9,"method":"tools/call","params":{"name":"job","arguments":{"id":"owned","owner_target":"shell:nodeB"}}}`
+	for i := 0; i < 2; i++ {
+		w := peerTestMCPCall(a, body, "token")
+		if w.Code != 200 || !strings.Contains(w.Body.String(), "owner-only-marker") || len(a.shellJobs) != 0 {
+			t.Fatalf("receipt route failed: %d %s", w.Code, w.Body.String())
+		}
+	}
+	for _, id := range []string{"not-owned", "missing"} {
+		w := peerTestMCPCall(a, strings.Replace(body, `"id":"owned"`, `"id":"`+id+`"`, 1), "token")
+		if w.Code != 404 || strings.Contains(w.Body.String(), "must-not-leak") {
+			t.Fatalf("nonowned receipt leaked: %d %s", w.Code, w.Body.String())
+		}
+	}
+	// A stale/colliding local record cannot be overridden by a supplied hint.
+	a.mu.Lock()
+	a.shellJobs["owned"] = &shellJob{ID: "owned", Server: "nodeA", Status: "completed", CreatedAt: nowFloat(), DoneAt: nowFloat()}
+	err = a.saveTaskStateLocked("owned")
+	a.mu.Unlock()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if w := peerTestMCPCall(a, body, "token"); w.Code != 404 || strings.Contains(w.Body.String(), "owner-only-marker") {
+		t.Fatalf("hint overrode local job: %d %s", w.Code, w.Body.String())
+	}
+}
+
+func TestNodePeersJobReadRejectsSecondHopAndForeignBearer(t *testing.T) {
+	body := `{"jsonrpc":"2.0","id":9,"method":"tools/call","params":{"name":"job","arguments":{"id":"missing","owner_target":"shell:nodeB"}}}`
+	for _, token := range []string{"token", "other"} {
+		b := peerTestHub(t, token, map[string]string{"shell:nodeB": "http://127.0.0.1:1"})
+		peer := httptest.NewServer(b.Handler())
+		a := peerTestHub(t, "token", map[string]string{"shell:nodeB": peer.URL})
+		w := peerTestMCPCall(a, body, "token")
+		peer.Close()
+		want := 508
+		if token != "token" {
+			want = 401
+		}
+		if w.Code != want || strings.Contains(w.Body.String(), `"outcome":"unknown"`) {
+			t.Fatalf("unsafe job read: %d %s", w.Code, w.Body.String())
+		}
+	}
+}
+
+func TestNodePeersJobHintSchema(t *testing.T) {
+	for _, tool := range appsSDKTools() {
+		if tool["name"] == "job" {
+			if mapValue(mapValue(tool["inputSchema"])["properties"])["owner_target"] == nil {
+				t.Fatal("job schema omits peer owner hint")
+			}
+			return
+		}
+	}
+	t.Fatal("job tool missing")
 }
 
 func TestNodePeersMCPPreservesProtocolAndBearer(t *testing.T) {

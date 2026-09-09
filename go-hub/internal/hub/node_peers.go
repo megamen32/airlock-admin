@@ -2,9 +2,11 @@ package hub
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/url"
 	"strings"
@@ -12,6 +14,27 @@ import (
 )
 
 const nodePeerHopHeader = "X-Gptadmin-Node-Hop"
+
+type nodePeerRoute struct {
+	URL       string `json:"url"`
+	ConnectTo string `json:"connect_to,omitempty"`
+}
+
+// One pool per logical origin and physical IP. The standard TLS transport
+// verifies the URL hostname, independent of this TCP-only address override.
+func newPinnedNodePeerClient(timeout time.Duration, route nodePeerRoute) *http.Client {
+	client := newNodePeerClient(timeout)
+	transport := client.Transport.(*http.Transport)
+	dialer := &net.Dialer{Timeout: 30 * time.Second, KeepAlive: 30 * time.Second}
+	transport.DialContext = func(ctx context.Context, network, address string) (net.Conn, error) {
+		_, port, err := net.SplitHostPort(address)
+		if err != nil {
+			return nil, err
+		}
+		return dialer.DialContext(ctx, network, net.JoinHostPort(route.ConnectTo, port))
+	}
+	return client
+}
 
 func newNodePeerClient(timeout time.Duration) *http.Client {
 	if timeout < 20*time.Second {
@@ -25,15 +48,25 @@ func newNodePeerClient(timeout time.Duration) *http.Client {
 
 // Routes are operator configuration, never caller-selected URLs. They confer
 // no authority: the destination must independently accept the original bearer.
-func parseNodePeers(raw string) (map[string]string, error) {
-	peers := map[string]string{}
+func parseNodePeers(raw string) (map[string]nodePeerRoute, error) {
+	peers := map[string]nodePeerRoute{}
 	if strings.TrimSpace(raw) == "" {
 		return peers, nil
 	}
-	if err := json.Unmarshal([]byte(raw), &peers); err != nil || peers == nil {
+	var entries map[string]json.RawMessage
+	if err := json.Unmarshal([]byte(raw), &entries); err != nil || entries == nil {
 		return nil, fmt.Errorf("GPTADMIN_NODE_PEERS must be a JSON object of shell targets and origins")
 	}
-	for target, origin := range peers {
+	for target, entry := range entries {
+		var route nodePeerRoute
+		if json.Unmarshal(entry, &route.URL) != nil {
+			decoder := json.NewDecoder(bytes.NewReader(entry))
+			decoder.DisallowUnknownFields()
+			if err := decoder.Decode(&route); err != nil {
+				return nil, fmt.Errorf("invalid node peer route for %q", target)
+			}
+		}
+		origin := route.URL
 		name := strings.TrimPrefix(target, "shell:")
 		if !strings.HasPrefix(target, "shell:") || name == "" || name != canonicalShellQueueName(name) || strings.ContainsAny(name, "/\\") {
 			return nil, fmt.Errorf("invalid node peer target %q", target)
@@ -42,7 +75,15 @@ func parseNodePeers(raw string) (map[string]string, error) {
 		if err != nil || u.Hostname() == "" || (u.Scheme != "https" && u.Scheme != "http") || u.User != nil || u.RawQuery != "" || u.ForceQuery || u.Fragment != "" || (u.Path != "" && u.Path != "/") || u.Opaque != "" {
 			return nil, fmt.Errorf("node peer %q requires an http(s) origin without credentials, path, query or fragment", target)
 		}
-		peers[target] = strings.TrimSuffix(origin, "/")
+		if route.ConnectTo != "" {
+			ip := net.ParseIP(route.ConnectTo)
+			if u.Scheme != "https" || ip == nil {
+				return nil, fmt.Errorf("node peer %q connect_to requires HTTPS and a literal IP", target)
+			}
+			route.ConnectTo = ip.String()
+		}
+		route.URL = strings.TrimSuffix(origin, "/")
+		peers[target] = route
 	}
 	return peers, nil
 }
@@ -54,11 +95,73 @@ func (s *Server) forwardNodePeerCall(w http.ResponseWriter, r *http.Request, tar
 	return s.forwardNodePeerRequest(w, r, target, body, "/mcp-relay/call")
 }
 
+func nodePeerJobTool(name string) bool {
+	return name == "job" || name == "get_mcp_job" || name == "getMcpJob"
+}
+
+// A receipt hint selects an enrolled executor, never an arbitrary URL. No job
+// index is replicated and no peer is searched when the owner is unknown.
+func (s *Server) routeNodePeerJob(w http.ResponseWriter, r *http.Request, args map[string]any, body []byte) bool {
+	rawTarget, hinted := args["owner_target"]
+	if !hinted && r.Header.Get(nodePeerHopHeader) == "" {
+		return false // Existing local job reads retain their contract.
+	}
+	fail := func(status int, detail string) bool {
+		var envelope map[string]json.RawMessage
+		_ = json.Unmarshal(body, &envelope)
+		writeJSON(w, status, map[string]any{"jsonrpc": "2.0", "id": envelope["id"],
+			"error": map[string]any{"code": -32000, "message": detail}})
+		return true
+	}
+	target, ok := rawTarget.(string)
+	name := strings.TrimPrefix(target, "shell:")
+	if !ok || !strings.HasPrefix(target, "shell:") || name == "" || name != canonicalShellQueueName(name) || strings.ContainsAny(name, "/\\") {
+		return fail(http.StatusBadRequest, "owner_target must identify an explicit shell executor")
+	}
+	jobID := firstString(args, "id", "job_id")
+	if jobID == "" {
+		return fail(http.StatusBadRequest, "job id is required")
+	}
+	if !profileAllowsTarget(r, target) {
+		return fail(http.StatusForbidden, "access profile denies the receipt owner target")
+	}
+	s.mu.Lock()
+	err := s.refreshTaskRecordsLocked(jobID)
+	local := s.localExecutors[target] != nil
+	job := s.shellJobs[jobID]
+	jobExists := job != nil || s.relayJobs[jobID] != nil
+	owned := job != nil && "shell:"+job.Server == target
+	s.mu.Unlock()
+	if err != nil {
+		return fail(http.StatusServiceUnavailable, "task state unavailable")
+	}
+	if jobExists {
+		// A supplied hint must never override a locally stored job's owner.
+		if !local || !owned {
+			return fail(http.StatusNotFound, "job does not belong to the requested local executor")
+		}
+		return false
+	}
+	if local {
+		return fail(http.StatusNotFound, "unknown job at requested owner")
+	}
+	if s.forwardNodePeerRequest(w, r, target, body, "/mcp") {
+		return true
+	}
+	return fail(http.StatusNotFound, "receipt owner is not a configured peer")
+}
+
 // Both consumer protocols use this transport; each destination keeps its own
 // admission, approval and queue path. MCP is never converted to a CTL call.
 func (s *Server) forwardNodePeerRequest(w http.ResponseWriter, r *http.Request, target string, body []byte, endpoint string) bool {
 	target = strings.TrimSpace(target)
-	origin, routed := s.nodePeers[target]
+	route, routed := s.nodePeers[target]
+	origin := route.URL
+	var requestEnvelope map[string]any
+	if endpoint == "/mcp" {
+		_ = json.Unmarshal(body, &requestEnvelope)
+	}
+	readingJob := endpoint == "/mcp" && firstString(requestEnvelope, "method") == "tools/call" && nodePeerJobTool(firstString(mapValue(requestEnvelope["params"]), "name"))
 	fail := func(status int, detail string, unknown bool) {
 		payload := map[string]any{"detail": detail, "owner_target": target, "owner_endpoint": origin}
 		if unknown {
@@ -97,7 +200,10 @@ func (s *Server) forwardNodePeerRequest(w http.ResponseWriter, r *http.Request, 
 		return true
 	}
 	failure := func(detail string) {
-		fail(http.StatusBadGateway, detail, true)
+		if readingJob {
+			detail = strings.TrimSuffix(detail, "; execution outcome may be unknown")
+		}
+		fail(http.StatusBadGateway, detail, !readingJob)
 	}
 	upstream, err := http.NewRequestWithContext(r.Context(), http.MethodPost, origin+endpoint, bytes.NewReader(body))
 	if err != nil {
@@ -121,7 +227,11 @@ func (s *Server) forwardNodePeerRequest(w http.ResponseWriter, r *http.Request, 
 	upstream.GetBody = nil
 	// The owner reauthorizes; the ingress must not hold auth sync during delivery.
 	releaseAuthAdmission(r)
-	response, err := s.nodePeerClient.Do(upstream)
+	client := s.nodePeerClient
+	if route.ConnectTo != "" {
+		client = s.nodePeerPinnedClients[route]
+	}
+	response, err := client.Do(upstream)
 	if err != nil {
 		failure("node peer delivery failed; execution outcome may be unknown")
 		return true

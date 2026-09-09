@@ -96,13 +96,22 @@ def main():
         result = response.get('result')
         if not isinstance(result, dict) or result.get('isError'):
             raise RuntimeError('MCP call did not return a successful tool result')
+        def receipt(value):
+            value = dict(value)
+            metadata = result.get('_meta')
+            owner = metadata.get('owner_target') if isinstance(metadata, dict) else None
+            if owner is not None:
+                if owner != args.target:
+                    raise RuntimeError('receipt owner differs from the requested executor')
+                value['owner_target'] = owner
+            return value
         if isinstance(result.get('structuredContent'), dict):
-            return result['structuredContent']
+            return receipt(result['structuredContent'])
         for item in result.get('content', []):
             if item.get('type') == 'text':
                 value = json.loads(item['text'])
                 if isinstance(value, dict):
-                    return value
+                    return receipt(value)
         raise RuntimeError('MCP result contains no JSON receipt')
 
     version, _ = request('/version')
@@ -122,11 +131,16 @@ def main():
     job = result.get('job_id') or result.get('task_id')
     if not job:
         raise RuntimeError('execution returned no job receipt')
+    job_args = {'job_id':job}
+    if result.get('owner_target') is not None:
+        if result['owner_target'] != args.target:
+            raise RuntimeError('receipt owner differs from the requested executor')
+        job_args['owner_target'] = args.target
     while result.get('status') != 'completed':
         if result.get('status') in ('failed', 'cancelled', 'canceled'):
             raise RuntimeError('probe job did not complete successfully')
         time.sleep(min(.2, max(0, deadline-time.monotonic())))
-        result = tool('job', {'job_id':job})
+        result = tool('job', job_args)
     if result.get('error') or result.get('returncode', 0) != 0 or result.get('stdout') != marker:
         raise RuntimeError('completed receipt does not contain the successful command stdout')
     print(json.dumps({'ok':True,'origin':origin,'connect_to':args.connect_to,'target':args.target,

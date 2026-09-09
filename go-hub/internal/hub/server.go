@@ -519,50 +519,51 @@ type Server struct {
 	oauthClientsPersisted map[string]oauthClientMetadata
 	cfg                   Config
 
-	mu                  sync.Mutex
-	authRateMu          sync.Mutex
-	cond                *sync.Cond
-	agents              map[string]*Agent
-	relayCredentials    map[string]string // SHA-256 digests keyed by agent_id; never retain raw credentials.
-	relayEnrollments    map[string]relayEnrollment
-	relayQueues         map[string][]string
-	relayJobs           map[string]*relayJob
-	shellQueues         map[string][]string
-	localExecutors      map[string]map[string]string
-	localExecutorTokens map[string]string
-	nodePeers           map[string]string
-	nodePeersErr        error
-	nodePeerClient      *http.Client
-	authMu              sync.RWMutex
-	authState           authSnapshotState
-	authInitialized     bool
-	authLocalID         string
-	authRuntimeLock     *flock.Flock
-	shellControls       map[string][]shellControl
-	shellJobs           map[string]*shellJob
-	taskOwner           *taskOwner
-	taskRuntimeClosed   bool
-	taskRuntimeStop     chan struct{}
-	idempotency         map[string]*idempotencyEntry
-	oauthCodes          map[string]oauthCode
-	managedMCP          map[string]managedMCPToken
-	oauthClients        map[string]oauthClientMetadata
-	accessProfiles      map[string]AccessProfile
-	approvals           map[string]*approvalRequest
-	autonomous          map[string]*autonomousBudget
-	security            securitySettings
-	securityPath        string
-	webauthnState       webAuthnState
-	webauthnPath        string
-	webauthnSessions    map[string]webAuthnSession
-	telemetry           telemetryState
-	telemetryPath       string
-	telemetryExporter   *telemetryExporter
-	secretStore         *SecretStore
-	secretStoreErr      error
-	audit               []auditEvent
-	authRate            map[string]authRateWindow
-	failover            FailoverConfig
+	mu                    sync.Mutex
+	authRateMu            sync.Mutex
+	cond                  *sync.Cond
+	agents                map[string]*Agent
+	relayCredentials      map[string]string // SHA-256 digests keyed by agent_id; never retain raw credentials.
+	relayEnrollments      map[string]relayEnrollment
+	relayQueues           map[string][]string
+	relayJobs             map[string]*relayJob
+	shellQueues           map[string][]string
+	localExecutors        map[string]map[string]string
+	localExecutorTokens   map[string]string
+	nodePeers             map[string]nodePeerRoute
+	nodePeersErr          error
+	nodePeerClient        *http.Client
+	nodePeerPinnedClients map[nodePeerRoute]*http.Client
+	authMu                sync.RWMutex
+	authState             authSnapshotState
+	authInitialized       bool
+	authLocalID           string
+	authRuntimeLock       *flock.Flock
+	shellControls         map[string][]shellControl
+	shellJobs             map[string]*shellJob
+	taskOwner             *taskOwner
+	taskRuntimeClosed     bool
+	taskRuntimeStop       chan struct{}
+	idempotency           map[string]*idempotencyEntry
+	oauthCodes            map[string]oauthCode
+	managedMCP            map[string]managedMCPToken
+	oauthClients          map[string]oauthClientMetadata
+	accessProfiles        map[string]AccessProfile
+	approvals             map[string]*approvalRequest
+	autonomous            map[string]*autonomousBudget
+	security              securitySettings
+	securityPath          string
+	webauthnState         webAuthnState
+	webauthnPath          string
+	webauthnSessions      map[string]webAuthnSession
+	telemetry             telemetryState
+	telemetryPath         string
+	telemetryExporter     *telemetryExporter
+	secretStore           *SecretStore
+	secretStoreErr        error
+	audit                 []auditEvent
+	authRate              map[string]authRateWindow
+	failover              FailoverConfig
 
 	updateStatePath     string
 	updateLockPath      string
@@ -692,6 +693,12 @@ func New(cfg Config) *Server {
 	}
 	s.nodePeers, s.nodePeersErr = parseNodePeers(cfg.NodePeersJSON)
 	s.nodePeerClient = newNodePeerClient(cfg.DefaultTimeout + 10*time.Second)
+	s.nodePeerPinnedClients = map[nodePeerRoute]*http.Client{}
+	for _, route := range s.nodePeers {
+		if route.ConnectTo != "" && s.nodePeerPinnedClients[route] == nil {
+			s.nodePeerPinnedClients[route] = newPinnedNodePeerClient(cfg.DefaultTimeout+10*time.Second, route)
+		}
+	}
 	s.cloudOSRegistry.Register(&cloudos.Computer{
 		ID:           "server-100",
 		Name:         "server-100",
@@ -8087,6 +8094,9 @@ func (s *Server) mcpEndpoint(w http.ResponseWriter, r *http.Request) {
 			s.auditToolDecision(r, "hub", name, args, "deny", err.Error(), nil, http.StatusForbidden)
 			rpcErr = map[string]any{"code": -32003, "message": err.Error()}
 		} else {
+			if nodePeerJobTool(name) && s.routeNodePeerJob(w, r, args, originalBody.Bytes()) {
+				return
+			}
 			if (name == "execute" || name == "callMcpTool" || name == "call_mcp_tool") && firstString(args, "tool", "tool_name", "name") == "shell_exec" {
 				target := firstString(args, "target", "server_id", "agent_id")
 				if strings.HasPrefix(strings.TrimSpace(target), "shell:") && s.forwardNodePeerRequest(w, r, target, originalBody.Bytes(), "/mcp") {
@@ -9176,8 +9186,8 @@ func appsSDKTools() []map[string]any {
 		{
 			"name":            "job",
 			"title":           "Job",
-			"description":     "Read a job; detail=full adds diagnostics.",
-			"inputSchema":     map[string]any{"type": "object", "properties": map[string]any{"id": map[string]any{"type": "string"}, "ack": map[string]any{"type": "boolean"}, "detail": toolOutputDetailSchema()}, "required": []string{"id"}, "additionalProperties": false},
+			"description":     "Peer: owner_target=execute.target",
+			"inputSchema":     map[string]any{"type": "object", "properties": map[string]any{"id": map[string]any{"type": "string"}, "owner_target": map[string]any{"type": "string"}, "ack": map[string]any{"type": "boolean"}, "detail": toolOutputDetailSchema()}, "required": []string{"id"}, "additionalProperties": false},
 			"outputSchema":    map[string]any{"type": "object", "additionalProperties": true},
 			"annotations":     map[string]any{"readOnlyHint": true, "destructiveHint": false, "openWorldHint": false},
 			"securitySchemes": readSecurity,
