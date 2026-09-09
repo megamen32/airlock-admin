@@ -68,7 +68,7 @@ GPTADMIN_AUTH_SYNC_WRITER_TOKEN_ENV=CTL_TOKEN
 GPTADMIN_AUTH_SYNC_READER_TOKEN_ENV=CTL_TOKEN
 GPTADMIN_AUTH_SYNC_STATUS_FILE=/var/lib/gptadmin/nodes/canary/auth-sync/status.json
 GPTADMIN_AUTH_SYNC_INTERVAL_S=30
-GPTADMIN_AUTH_SYNC_TIMEOUT_S=10
+GPTADMIN_AUTH_SYNC_TIMEOUT_S=30
 GPTADMIN_AUTH_SYNC_MAX_AGE_S=120
 GPTADMIN_AUTH_SNAPSHOT_MAX_BYTES=262144
 ```
@@ -122,3 +122,26 @@ wrong-host rejection, ordinary managed execution, periodic revocation convergenc
 reader restart, writer outage without success extension, expired promotion status
 while ordinary reader execution still works, writer recovery, two auth slots,
 bounded private status files and absence of credentials in helper logs.
+
+## Verified deployment, 2026-09-09
+
+Primary and VUSA run Node `30428c2`; the sync runner is the reviewed `b2fdbb8`
+script. VUSA runs it beside the local reader, independently of the home server.
+The service synchronized generations 16–19, survived a runner restart and
+continued executing with the existing managed credential; reader registration
+remained 503 and anonymous MCP remained 401. Successful post-fix transfers took
+0.7–1.3 seconds for 41,835 bytes. Observed systemd memory was about 10.8 MB for
+the Python runner and 10.1 MB for Node after these operations, not peak limits.
+
+The initial live attempt exposed a real lock bug: the auth gate exempted the
+wrong relay-poll path, so an idle poll delayed export for up to its timeout.
+This was not network transfer latency. The fix exempts the actual authenticated
+poll route and releases snapshot locks before sending the response. The real
+public regression kept a poll open while export completed in 0.086 seconds and
+a managed command plus receipt in 0.615 seconds. Increasing the timeout alone
+was not accepted as a fix. The deployed 30-second deadline remains bounded;
+the generic runner default is still 10 seconds.
+
+This proves periodic authorization continuity on these two installations.
+It does not prove automatic DNS switching, writer election, or physical-node
+identity from the status file alone.

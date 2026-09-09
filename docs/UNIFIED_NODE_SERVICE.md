@@ -136,3 +136,26 @@ canary подтвердил `hub_restarted_before_dispatch` и ноль испо
 пустая очередь перед остановкой — обязательная часть этого порядка обновления.
 Сбой машины не означает разрешение повторно выполнить неизвестно завершённую
 команду на другом узле.
+
+### Последующее обновление Node
+
+При обновлении primary до `30428c2` обнаружена конкуренция с FRP watchdog:
+он перезапускал tunnel service, а оставшийся `BindsTo=gptadmin-hub.service`
+снова запускал Hub и отменял его stop job. Пустое присваивание `BindsTo=`
+в drop-in на этой системе не удаляло зависимость из base unit. Base unit
+исправлен: tunnel следует nginx, а effective dependencies проверены через
+`systemctl show`. CLI сохраняет независимый lifecycle только для unified
+primary; прежний legacy failover-контракт остаётся в legacy-режиме.
+
+Перед такой остановкой приостанавливается соответствующий watchdog и
+проверяется завершение его service. После stop проверяются `MainPID=0`,
+`ActiveState=inactive|failed` и пустой service cgroup; один returncode команды
+не заменяет эти проверки. Runtime со старым кодом и открытым poll может
+завершиться по 10-секундному shutdown deadline. Затем проверяется cold SQLite.
+
+Identity сравнивается по `server_id`, public key, fingerprint и имени. Сравнение
+всего JSON побайтово было ошибкой проверки: `created_at` в этом файле меняется
+при restart и не означает смену ключа. Успешное обновление сохраняло 2122
+проверенных receipts без изменений и заняло 13,523 секунды public admission pause.
+После него отдельно прошли canonical MCP-команда и live idle-poll/export canary.
+VUSA обновлён тем же Node artifact; восемь прежних receipts и identity сохранены.

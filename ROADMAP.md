@@ -11,7 +11,7 @@ Status: active; architecture and limits in `docs/UNIFIED_NODE_ARCHITECTURE.md`.
 - [x] Explicit peer routing with physical target ownership; real two-node execution proof.
 - [x] Restore public ingress TLS and prove VUSA execution with the existing credential and canonical hostname.
 - [x] Bounded authorization snapshot, reader restrictions and restart continuity; live writer generation 2 applied on VUSA.
-- [ ] Periodic authorization synchronization with observable freshness.
+- [x] Periodic authorization synchronization with observable freshness; deployed beside the VUSA reader and restart-proven.
 - [ ] Stable per-node origins and live cross-node routing.
 - [ ] Controlled automatic ingress failover with the same client hostname and a real outage canary.
 - [ ] Portable installation/update path and optional transport providers.
