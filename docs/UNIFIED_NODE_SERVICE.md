@@ -24,8 +24,9 @@ SHELL_NAME=vusa-unified
 SHELL_IDENTITY_DIR=/var/lib/gptadmin/nodes/canary
 SHELL_SPOOL_DIR=/var/lib/gptadmin/nodes/canary/spool
 SHELL_OUTBOX_DIR=/var/lib/gptadmin/nodes/canary/spool/outbox
-SHELL_DEFAULT_CWD=/var/lib/gptadmin/nodes/canary
-SHELL_DEFAULT_HOME=/root
+SHELL_DEFAULT_USER=gptadmin-canary
+SHELL_DEFAULT_CWD=/var/lib/gptadmin/workspaces/canary
+SHELL_DEFAULT_HOME=/var/lib/gptadmin/workspaces/canary
 SHELLMCP_SELF_REPAIR_DISABLE=1
 ```
 
@@ -33,6 +34,12 @@ SHELLMCP_SELF_REPAIR_DISABLE=1
 отдельно доверенным provisioning. Не копируйте private identity другого узла,
 его outbox или task DB. Состояние авторизации должно пройти проверку перед
 публикацией listener. Обычный managed bearer не заменяется CTL в проверке.
+
+До запуска создайте пользователя исполнения и принадлежащий ему workspace.
+Каталог состояния Node остаётся доступен только root. Служба запускается от
+root, чтобы исполнитель мог переключить пользователя; без `SHELL_DEFAULT_USER`
+обычная shell-команда завершится отказом. Привилегированное выполнение требует
+явного выбора `run_as_user=root` в разрешённом запросе.
 
 После установки файлов:
 
