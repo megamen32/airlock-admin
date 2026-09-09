@@ -34,10 +34,17 @@ visible_since=-1
 echo "Waiting at least ${ttl_floor}s for DNS caches for $name" >&2
 while (( SECONDS - started < timeout )); do
   ready=true
+  missing=false
   for server in "${authorities[@]}"; do
-    answer=$(dig +time=3 +tries=1 +short "@$server" "$name" TXT) || answer=''
+    if ! answer=$(dig +time=3 +tries=1 +short "@$server" "$name" TXT); then
+      # An unavailable observation is not evidence that a published record
+      # disappeared. Still require every authority to answer before success.
+      ready=false
+      continue
+    fi
     if ! grep -Fxq -- "\"$CERTBOT_VALIDATION\"" <<< "$answer"; then
       ready=false
+      missing=true
     fi
   done
   if $ready; then
@@ -46,7 +53,7 @@ while (( SECONDS - started < timeout )); do
       echo "DNS challenge visible on all configured authorities; old RRset TTL elapsed" >&2
       exit 0
     fi
-  else
+  elif $missing; then
     visible_since=-1
   fi
   sleep 10
