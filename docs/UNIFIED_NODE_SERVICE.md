@@ -159,3 +159,19 @@ Identity сравнивается по `server_id`, public key, fingerprint и �
 проверенных receipts без изменений и заняло 13,523 секунды public admission pause.
 После него отдельно прошли canonical MCP-команда и live idle-poll/export canary.
 VUSA обновлён тем же Node artifact; восемь прежних receipts и identity сохранены.
+
+Следующее обновление primary до `e754316` добавило peer-маршрут с физическим
+IP и проверяемым HTTPS. Admission pause составил 13,429 секунды; identity
+сохранена, 2094 receipts не изменились, 19 завершённых записей истекли по
+действующей 24-часовой retention. Необъяснённых изменений нет. Реальная
+команда через canonical MCP прошла после обновления, watchdog возобновлён.
+
+При переходе на объектные значения `GPTADMIN_NODE_PEERS` обновляются binary
+и конфигурация вместе: предыдущий `30428c2` понимает только строки. Rollback
+возвращает совместимую пару binary/config, сохраняя актуальные auth и SQLite.
+
+VUSA также обновлён до `e754316` вместе с reciprocal peer config. Все 12
+прежних SQLite payloads и identity сохранены. Node и auth-sync активны;
+после обновления наблюдалось поколение 128 возрастом 3,841 секунды.
+Public peer canary в обоих направлениях подтвердил правильный host/user,
+три чтения одного receipt через исходный вход и один side effect.
