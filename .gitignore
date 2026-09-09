@@ -81,6 +81,7 @@ deploy/systemd/*
 !deploy/systemd/gptadmin-frp-watchdog.service
 !deploy/systemd/gptadmin-frp-watchdog.timer
 !deploy/systemd/gptadmin-handover@.service
+!deploy/systemd/gptadmin-ingress-failover@.service
 !deploy/systemd/gptadmin-hub-standby.service
 !deploy/systemd/gptadmin-hub-primary-ha.conf
 !deploy/systemd/gptadmin-hub-standby-self-repair.conf
