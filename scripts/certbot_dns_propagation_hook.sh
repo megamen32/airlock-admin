@@ -4,8 +4,10 @@ set -Eeuo pipefail
 
 : "${CERTBOT_DOMAIN:?certbot must supply CERTBOT_DOMAIN}"
 : "${CERTBOT_VALIDATION:?certbot must supply CERTBOT_VALIDATION}"
-: "${DNS_AUTH_HOOK:?set the existing provider auth hook path}"
-: "${DNS_AUTHORITIES:?set space-separated authoritative DNS servers}"
+# Defaults preserve unattended renewal on the existing SpaceWeb deployment:
+# certbot saves the hook path, but does not save the issuing shell environment.
+DNS_AUTH_HOOK="${DNS_AUTH_HOOK:-/root/certbot-sweb-auth.sh}"
+DNS_AUTHORITIES="${DNS_AUTHORITIES:-ns1.spaceweb.ru ns2.spaceweb.ru ns3.spaceweb.pro ns4.spaceweb.pro}"
 
 name="_acme-challenge.${CERTBOT_DOMAIN#\*.}"
 read -r -a authorities <<< "$DNS_AUTHORITIES"

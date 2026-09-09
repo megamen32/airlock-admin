@@ -17,7 +17,7 @@ VUSA также нестабильно доступен из VPN2; обновл�
 сходимости. Каждый challenge проверяется отдельно. Ошибки и timeout блокируют
 validation. Нового DNS API или бесконечного retry-loop нет.
 
-Переменные для существующего certbot запуска:
+Значения по умолчанию для существующего SpaceWeb deployment (можно переопределить):
 
 ```sh
 export DNS_AUTH_HOOK=/root/certbot-sweb-auth.sh
@@ -25,6 +25,10 @@ export DNS_AUTHORITIES='ns1.spaceweb.ru ns2.spaceweb.ru ns3.spaceweb.pro ns4.spa
 export DNS_PROPAGATION_TTL=600
 export DNS_PROPAGATION_TIMEOUT=1200
 ```
+
+Путь provider hook и authorities имеют эти значения по умолчанию: certbot
+сохраняет путь auth hook, но не окружение исходной оболочки. Для другого
+провайдера задайте постоянное окружение службы renewal или отдельный launcher.
 
 Перед одиночным выпуском нужно исключить параллельный запуск текущего
 `/root/cert-issue-loop.sh`. В certbot заменяется только `--manual-auth-hook` на
