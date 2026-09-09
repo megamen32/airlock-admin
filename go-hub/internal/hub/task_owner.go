@@ -79,6 +79,9 @@ func (s *Server) Close() error {
 		return nil
 	}
 	s.taskRuntimeClosed = true
+	if s.nodePeerClient != nil {
+		s.nodePeerClient.CloseIdleConnections()
+	}
 	if s.taskRuntimeStop != nil {
 		close(s.taskRuntimeStop)
 	}

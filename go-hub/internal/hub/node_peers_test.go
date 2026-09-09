@@ -1,0 +1,278 @@
+package hub
+
+import (
+	"encoding/json"
+	"io"
+	"net"
+	"net/http"
+	"net/http/httptest"
+	"strings"
+	"sync/atomic"
+	"testing"
+	"time"
+)
+
+func peerTestHub(t *testing.T, token string, routes map[string]string) *Server {
+	t.Helper()
+	raw, err := json.Marshal(routes)
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := New(Config{ConfigDir: t.TempDir(), CtlToken: token, NodePeersJSON: string(raw)})
+	t.Cleanup(func() { s.Close() })
+	return s
+}
+
+func peerTestCall(s *Server, body, token, hop string) *httptest.ResponseRecorder {
+	r := httptest.NewRequest(http.MethodPost, "/mcp-relay/call", strings.NewReader(body))
+	if token != "" {
+		r.Header.Set("Authorization", "Bearer "+token)
+	}
+	if hop != "" {
+		r.Header.Set(nodePeerHopHeader, hop)
+	}
+	w := httptest.NewRecorder()
+	s.Handler().ServeHTTP(w, r)
+	return w
+}
+
+func TestNodePeersPreserveCallerAndOriginalBody(t *testing.T) {
+	body := ` { "target":"shell:nodeB", "tool":"shell_exec", "arguments":{"cmd":"printf test","approval_id":"approved","number":9007199254740993}, "background":true, "idempotency_key":"same-key", "detail":"full" } `
+	var calls atomic.Int32
+	peer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls.Add(1)
+		data, _ := io.ReadAll(r.Body)
+		if string(data) != body || r.URL.Path != "/mcp-relay/call" || r.Header.Get("Authorization") != "Bearer caller-token" || r.Header.Get(nodePeerHopHeader) != "1" {
+			t.Errorf("request changed: path=%s body=%s", r.URL.Path, data)
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"job_id": "owned-by-b", "status": "running"})
+	}))
+	defer peer.Close()
+	s := peerTestHub(t, "caller-token", map[string]string{"shell:nodeB": peer.URL})
+	w := peerTestCall(s, body, "caller-token", "")
+	if w.Code != 200 || calls.Load() != 1 || !strings.Contains(w.Body.String(), `"owner_target":"shell:nodeB"`) || !strings.Contains(w.Body.String(), `"owner_endpoint":"`+peer.URL+`"`) {
+		t.Fatalf("forward failed: %d %s", w.Code, w.Body.String())
+	}
+	if len(s.shellJobs) != 0 || len(s.shellQueues) != 0 {
+		t.Fatal("ingress reserved a local execution")
+	}
+	w = peerTestCall(s, body, "", "")
+	if w.Code != 401 || calls.Load() != 1 {
+		t.Fatalf("anonymous call reached peer: %d", w.Code)
+	}
+	w = peerTestCall(s, strings.Replace(body, "shell:nodeB", "shell:unconfigured", 1), "caller-token", "")
+	if w.Code != 404 || calls.Load() != 1 {
+		t.Fatalf("unconfigured target forwarded: %d", w.Code)
+	}
+}
+
+func TestNodePeersDestinationAuthorizesOriginalBearer(t *testing.T) {
+	b := peerTestHub(t, "different-owner-token", map[string]string{})
+	peer := httptest.NewServer(b.Handler())
+	defer peer.Close()
+	a := peerTestHub(t, "caller-token", map[string]string{"shell:nodeB": peer.URL})
+	w := peerTestCall(a, `{"target":"shell:nodeB","tool":"shell_exec","arguments":{"cmd":"true"}}`, "caller-token", "")
+	if w.Code != 401 || len(b.shellJobs) != 0 {
+		t.Fatalf("destination auth bypassed: %d %s", w.Code, w.Body.String())
+	}
+}
+
+func TestNodePeersRejectSecondHop(t *testing.T) {
+	var calls atomic.Int32
+	c := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { calls.Add(1) }))
+	defer c.Close()
+	b := peerTestHub(t, "token", map[string]string{"shell:nodeB": c.URL})
+	peer := httptest.NewServer(b.Handler())
+	defer peer.Close()
+	a := peerTestHub(t, "token", map[string]string{"shell:nodeB": peer.URL})
+	w := peerTestCall(a, `{"target":"shell:nodeB","tool":"shell_exec","arguments":{"cmd":"true"}}`, "token", "")
+	if w.Code != 508 || calls.Load() != 0 || len(b.shellJobs) != 0 {
+		t.Fatalf("second hop accepted: %d %s", w.Code, w.Body.String())
+	}
+}
+
+func TestNodePeersNeverOverridePinnedLocalExecutor(t *testing.T) {
+	s := peerTestHub(t, "token", map[string]string{"shell:local": "http://127.0.0.1:1"})
+	identity := map[string]string{"server_id": "local-id", "public_key": "local-key", "fingerprint": "local-fingerprint"}
+	if err := s.RegisterLocalExecutor("local", identity, strings.Repeat("t", 32)); err != nil {
+		t.Fatal(err)
+	}
+	w := peerTestCall(s, `{"target":"shell:local","tool":"shell_exec","arguments":{"cmd":"true"},"background":true}`, "token", "1")
+	if w.Code != 200 || len(s.shellJobs) != 1 {
+		t.Fatalf("local executor overridden: %d %s", w.Code, w.Body.String())
+	}
+}
+
+func TestNodePeersDoNotFollowRedirectOrRetryDroppedWrite(t *testing.T) {
+	for _, mode := range []string{"redirect", "dropped"} {
+		t.Run(mode, func(t *testing.T) {
+			var calls atomic.Int32
+			peer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				calls.Add(1)
+				if mode == "redirect" {
+					w.Header().Set("Location", "/redirected")
+					w.WriteHeader(http.StatusTemporaryRedirect)
+				} else {
+					io.Copy(io.Discard, r.Body)
+					conn, _, err := w.(http.Hijacker).Hijack()
+					if err != nil {
+						t.Error(err)
+						return
+					}
+					conn.Close()
+				}
+			}))
+			defer peer.Close()
+			s := peerTestHub(t, "token", map[string]string{"shell:nodeB": peer.URL})
+			w := peerTestCall(s, `{"target":"shell:nodeB","tool":"shell_exec","arguments":{"cmd":"true"}}`, "token", "")
+			if w.Code != 502 || calls.Load() != 1 || !strings.Contains(w.Body.String(), `"outcome":"unknown"`) {
+				t.Fatalf("unsafe delivery: calls=%d %d %s", calls.Load(), w.Code, w.Body.String())
+			}
+		})
+	}
+}
+
+func TestNodePeersConfiguration(t *testing.T) {
+	for _, raw := range []string{`null`, `[]`, `{"shell:x":123}`, `{"hub":"http://localhost"}`, `{"shell: x":"http://localhost"}`, `{"shell:home-assistant":"http://localhost"}`, `{"shell:x":"http://user:secret@localhost"}`, `{"shell:x":"https://host/call"}`, `{"shell:x":"https://host?token=secret"}`, `{"shell:x":"file:///tmp/a"}`} {
+		if _, err := parseNodePeers(raw); err == nil {
+			t.Errorf("accepted invalid config %s", raw)
+		}
+	}
+	t.Setenv("GPTADMIN_NODE_PEERS", `{"shell:nodeB":"https://node-b.example/"}`)
+	routes, err := parseNodePeers(FromEnv().NodePeersJSON)
+	if err != nil || routes["shell:nodeB"] != "https://node-b.example" {
+		t.Fatalf("env route not loaded: %v %v", routes, err)
+	}
+}
+
+func peerTestMCPCall(s *Server, body, token string) *httptest.ResponseRecorder {
+	r := httptest.NewRequest(http.MethodPost, "/mcp", strings.NewReader(body))
+	r.Header.Set("Authorization", "Bearer "+token)
+	r.Header.Set("MCP-Protocol-Version", mcpProtocolVersion)
+	r.Header.Set("Mcp-Method", "tools/call")
+	r.Header.Set("Mcp-Name", "execute")
+	w := httptest.NewRecorder()
+	s.Handler().ServeHTTP(w, r)
+	return w
+}
+
+func TestNodePeersMCPPreservesProtocolAndBearer(t *testing.T) {
+	body := ` {"jsonrpc":"2.0","id":"original-id","method":"tools/call","params":{"name":"execute","arguments":{"target":"shell:nodeB","tool":"shell_exec","arguments":{"cmd":"true","approval_id":"owner-approval"},"background":true,"idempotency_key":"same-key"}}} `
+	var calls atomic.Int32
+	peer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls.Add(1)
+		data, _ := io.ReadAll(r.Body)
+		if r.URL.Path != "/mcp" || string(data) != body || r.Header.Get("Authorization") != "Bearer caller-token" || r.Header.Get("MCP-Protocol-Version") != mcpProtocolVersion || r.Header.Get("Mcp-Method") != "tools/call" || r.Header.Get("Mcp-Name") != "execute" {
+			t.Errorf("MCP request was converted: %s %s", r.URL.Path, data)
+		}
+		writeJSON(w, 200, map[string]any{"jsonrpc": "2.0", "id": "original-id", "result": mcpToolResult(map[string]any{"job_id": "owner-job"})})
+	}))
+	defer peer.Close()
+	s := peerTestHub(t, "caller-token", map[string]string{"shell:nodeB": peer.URL})
+	w := peerTestMCPCall(s, body, "caller-token")
+	var envelope map[string]any
+	if err := json.Unmarshal(w.Body.Bytes(), &envelope); err != nil {
+		t.Fatal(err)
+	}
+	result := mapValue(envelope["result"])
+	if w.Code != 200 || calls.Load() != 1 || envelope["id"] != "original-id" || mapValue(result["_meta"])["owner_target"] != "shell:nodeB" || mapValue(result["structuredContent"])["job_id"] != "owner-job" || len(s.shellJobs) != 0 {
+		t.Fatalf("MCP forwarding failed: %d %s", w.Code, w.Body.String())
+	}
+	// A accepts the caller, but B's independent MCP admission rejects it.
+	b := peerTestHub(t, "owner-only-token", map[string]string{})
+	owner := httptest.NewServer(b.Handler())
+	defer owner.Close()
+	a := peerTestHub(t, "caller-token", map[string]string{"shell:nodeB": owner.URL})
+	w = peerTestMCPCall(a, body, "caller-token")
+	if w.Code != 401 || w.Header().Get("WWW-Authenticate") == "" || len(b.shellJobs) != 0 {
+		t.Fatalf("MCP destination authorization bypassed: %d %s", w.Code, w.Body.String())
+	}
+}
+
+func TestNodePeersMCPRejectsSecondHop(t *testing.T) {
+	b := peerTestHub(t, "token", map[string]string{"shell:nodeB": "http://127.0.0.1:1"})
+	owner := httptest.NewServer(b.Handler())
+	defer owner.Close()
+	a := peerTestHub(t, "token", map[string]string{"shell:nodeB": owner.URL})
+	w := peerTestMCPCall(a, `{"jsonrpc":"2.0","id":42,"method":"tools/call","params":{"name":"execute","arguments":{"target":"shell:nodeB","tool":"shell_exec","arguments":{"cmd":"true"}}}}`, "token")
+	var envelope map[string]any
+	if err := json.Unmarshal(w.Body.Bytes(), &envelope); err != nil {
+		t.Fatal(err)
+	}
+	if w.Code != 508 || envelope["id"] != float64(42) || envelope["error"] == nil || len(b.shellJobs) != 0 {
+		t.Fatalf("MCP second hop accepted: %d %s", w.Code, w.Body.String())
+	}
+}
+
+func TestNodePeersReuseConnectionWithoutReplayingDeliveredPOST(t *testing.T) {
+	var calls, connections atomic.Int32
+	peer := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		call := calls.Add(1)
+		io.Copy(io.Discard, r.Body)
+		if r.Header.Get("Idempotency-Key") != "" || r.Header.Get("X-Idempotency-Key") != "" {
+			t.Error("HTTP retry-enabling headers were forwarded")
+		}
+		if call == 2 {
+			conn, _, err := w.(http.Hijacker).Hijack()
+			if err != nil {
+				t.Error(err)
+				return
+			}
+			conn.Close() // Body accepted on a reused connection; no receipt delivered.
+			return
+		}
+		writeJSON(w, 200, map[string]any{"job_id": "owner-job"})
+	}))
+	peer.Config.ConnState = func(_ net.Conn, state http.ConnState) {
+		if state == http.StateNew {
+			connections.Add(1)
+		}
+	}
+	peer.Start()
+	defer peer.Close()
+	s := peerTestHub(t, "token", map[string]string{"shell:nodeB": peer.URL})
+	body := `{"target":"shell:nodeB","tool":"shell_exec","arguments":{"cmd":"true"},"idempotency_key":"owner-key"}`
+	if w := peerTestCall(s, body, "token", ""); w.Code != 200 {
+		t.Fatalf("warmup: %d %s", w.Code, w.Body.String())
+	}
+	r := httptest.NewRequest(http.MethodPost, "/mcp-relay/call", strings.NewReader(body))
+	r.Header.Set("Authorization", "Bearer token")
+	r.Header.Set("Idempotency-Key", "do-not-forward")
+	r.Header.Set("X-Idempotency-Key", "do-not-forward")
+	w := httptest.NewRecorder()
+	s.Handler().ServeHTTP(w, r)
+	if w.Code != 502 || calls.Load() != 2 || connections.Load() != 1 || !strings.Contains(w.Body.String(), `"outcome":"unknown"`) {
+		t.Fatalf("connection not reused or delivered POST replayed: calls=%d connections=%d status=%d %s", calls.Load(), connections.Load(), w.Code, w.Body.String())
+	}
+}
+
+func TestNodePeersCloseReleasesIdleConnections(t *testing.T) {
+	closed := make(chan struct{}, 1)
+	peer := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		io.Copy(io.Discard, r.Body)
+		writeJSON(w, 200, map[string]any{"job_id": "owner-job"})
+	}))
+	peer.Config.ConnState = func(_ net.Conn, state http.ConnState) {
+		if state == http.StateClosed {
+			select {
+			case closed <- struct{}{}:
+			default:
+			}
+		}
+	}
+	peer.Start()
+	defer peer.Close()
+	s := peerTestHub(t, "token", map[string]string{"shell:nodeB": peer.URL})
+	w := peerTestCall(s, `{"target":"shell:nodeB","tool":"shell_exec","arguments":{"cmd":"true"}}`, "token", "")
+	if w.Code != 200 {
+		t.Fatalf("warmup: %d %s", w.Code, w.Body.String())
+	}
+	if err := s.Close(); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-closed:
+	case <-time.After(2 * time.Second):
+		t.Fatal("peer idle connection survived Server.Close")
+	}
+}

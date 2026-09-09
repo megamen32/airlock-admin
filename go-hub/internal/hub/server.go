@@ -57,8 +57,10 @@ type Config struct {
 	CtlToken        string
 	RelayAgentToken string
 	ShellToken      string
-	DefaultTimeout  time.Duration
-	PollMaxTimeout  time.Duration
+	// NodePeersJSON maps explicit shell targets to independently reachable node origins.
+	NodePeersJSON  string
+	DefaultTimeout time.Duration
+	PollMaxTimeout time.Duration
 	// ActionSyncWait bounds how long the HTTP Actions facade waits for a
 	// queued shell/child MCP operation before returning a durable job handle.
 	// Tool/command timeout remains an independent argument.
@@ -140,6 +142,7 @@ func FromEnv() Config {
 		CtlToken:                   env("CTL_TOKEN", env("GPTADMIN_CTL_TOKEN", "")),
 		RelayAgentToken:            env("MCP_RELAY_AGENT_TOKEN", env("GPTADMIN_MCP_RELAY_AGENT_TOKEN", "")),
 		ShellToken:                 env("SHELL_TOKEN", env("SHELLMCP_TOKEN", "")),
+		NodePeersJSON:              env("GPTADMIN_NODE_PEERS", ""),
 		DefaultTimeout:             time.Duration(defTimeout) * time.Second,
 		PollMaxTimeout:             time.Duration(pollTimeout) * time.Second,
 		ActionSyncWait:             time.Duration(actionSyncWaitMS) * time.Millisecond,
@@ -520,6 +523,9 @@ type Server struct {
 	shellQueues         map[string][]string
 	localExecutors      map[string]map[string]string
 	localExecutorTokens map[string]string
+	nodePeers           map[string]string
+	nodePeersErr        error
+	nodePeerClient      *http.Client
 	shellControls       map[string][]shellControl
 	shellJobs           map[string]*shellJob
 	taskOwner           *taskOwner
@@ -669,6 +675,8 @@ func New(cfg Config) *Server {
 		agentPolicies:     map[string]agentCleanupPolicy{},
 		tombstones:        []agentTombstone{},
 	}
+	s.nodePeers, s.nodePeersErr = parseNodePeers(cfg.NodePeersJSON)
+	s.nodePeerClient = newNodePeerClient(cfg.DefaultTimeout + 10*time.Second)
 	s.cloudOSRegistry.Register(&cloudos.Computer{
 		ID:           "server-100",
 		Name:         "server-100",
@@ -1420,6 +1428,9 @@ func (s *Server) ListenAndServe() error {
 func (s *Server) ServeContext(ctx context.Context, listener net.Listener) error {
 	defer s.Close()
 	defer listener.Close()
+	if s.nodePeersErr != nil {
+		return s.nodePeersErr
+	}
 	if s.secretStoreErr != nil {
 		return fmt.Errorf("secret ingress store unavailable: %w", s.secretStoreErr)
 	}
@@ -4141,6 +4152,11 @@ func (s *Server) mcpRelayCall(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusMethodNotAllowed, map[string]any{"detail": "method not allowed"})
 		return
 	}
+	var originalBody bytes.Buffer
+	r.Body = struct {
+		io.Reader
+		io.Closer
+	}{io.TeeReader(r.Body, &originalBody), r.Body}
 	var req map[string]any
 	if err := readJSON(r, &req); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]any{"detail": err.Error()})
@@ -4181,6 +4197,9 @@ func (s *Server) mcpRelayCall(w http.ResponseWriter, r *http.Request) {
 	if err := authorizeToolCall(r, target, toolName); err != nil {
 		s.auditToolDecision(r, target, toolName, args, "deny", err.Error(), nil, http.StatusForbidden)
 		writeJSON(w, http.StatusForbidden, map[string]any{"detail": err.Error()})
+		return
+	}
+	if s.forwardNodePeerCall(w, r, target, originalBody.Bytes()) {
 		return
 	}
 	selectedTarget, status, detail := s.selectMCPRelayTarget(target)
@@ -7979,6 +7998,11 @@ func (s *Server) mcpEndpoint(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusMethodNotAllowed, map[string]any{"detail": "method not allowed"})
 		return
 	}
+	var originalBody bytes.Buffer
+	r.Body = struct {
+		io.Reader
+		io.Closer
+	}{io.TeeReader(r.Body, &originalBody), r.Body}
 	var body map[string]any
 	if err := readJSON(r, &body); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]any{"jsonrpc": "2.0", "id": nil, "error": map[string]any{"code": -32700, "message": err.Error()}})
@@ -8016,6 +8040,12 @@ func (s *Server) mcpEndpoint(w http.ResponseWriter, r *http.Request) {
 			s.auditToolDecision(r, "hub", name, args, "deny", err.Error(), nil, http.StatusForbidden)
 			rpcErr = map[string]any{"code": -32003, "message": err.Error()}
 		} else {
+			if (name == "execute" || name == "callMcpTool" || name == "call_mcp_tool") && firstString(args, "tool", "tool_name", "name") == "shell_exec" {
+				target := firstString(args, "target", "server_id", "agent_id")
+				if strings.HasPrefix(strings.TrimSpace(target), "shell:") && s.forwardNodePeerRequest(w, r, target, originalBody.Bytes(), "/mcp") {
+					return
+				}
+			}
 			callArgs, approvalID := approvalArguments(args)
 			// In MCP Tasks mode the facade is a transparent router for approval:
 			// checkpoint the actual shell target/tool instead of creating a second
