@@ -13,7 +13,7 @@ Status: active; architecture and limits in `docs/UNIFIED_NODE_ARCHITECTURE.md`.
 - [x] Bounded authorization snapshot, reader restrictions and restart continuity; live writer generation 2 applied on VUSA.
 - [x] Periodic authorization synchronization with observable freshness; deployed beside the VUSA reader and restart-proven.
 - [x] Stable per-node origins and live cross-node routing; both public directions execute and repeatedly read receipts through the same entrypoint.
-- [ ] Controlled automatic ingress failover with the same client hostname and a real outage canary.
+- [x] Controlled automatic ingress failover: isolated public hostname outage and ordinary-DNS consumer canary passed; production watcher enabled and healthy. Production hostname/whole-machine fault not exercised.
 - [ ] Portable installation/update path and optional transport providers.
 - [ ] Capacity-aware replication policy and explicit authority recovery during prolonged outages.
 

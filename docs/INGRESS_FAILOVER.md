@@ -166,3 +166,36 @@ reader mutation rejection, restart persistence and no automatic return when A
 recovers. Record detection, provider acknowledgment, all-authoritative
 convergence and client recovery separately. Existing SpaceWeb TTL600 and
 observed multi-minute propagation are not a short-RTO guarantee.
+
+## Verified deployment, 2026-09-09
+
+The controller (`c4b7ad0`) and SpaceWeb adapter (`bf0201b`) ran on VUSA,
+independently of the primary host. Its runtime `swebmimic` dependency requires
+the connection-level no-replay fix from `megamen32/sweb-dns-mcp` commit
+`3d53b63`: disabling only outer retries is insufficient. A real local TLS
+connection regression reproduced two accepted POSTs with the old request and
+one with the corrected request after the server dropped its response.
+
+The isolated public hostname used actual primary/VUSA Nodes and verified TLS.
+After a marker disabled only its primary ingress, the controller updated the
+existing A record in place. The external VPN2 client used ordinary DNS on every
+new connection, with no IP pin or cache flush. It recovered the previous VUSA
+receipt, then executed one new command there; original/new side-effect counts
+were both one. Anonymous401 and reader-registration503 were verified on the
+actual VUSA connection. The primary canonical path remained operational.
+
+Measured from the isolated fault: provider confirmation51.381s, first full
+four-authority TCP/AA observation363.260s, first external receipt388.637s,
+complete consumer check623.086s. The last value includes correcting/resuming
+the observer when consecutive DNS resolutions selected different IPs; it is
+not pure recovery latency or an RTO guarantee. Negative checks hitting the old
+IP were not counted as evidence for the reader.
+
+The promoted state survived a controller restart. Restoring the primary test
+ingress did not change DNS back; all four authorities still returned VUSA.
+The test watcher was then stopped with its state retained. The production
+canonical watcher uses the same controller with its own state/config. Its
+watcher is enabled on VUSA and reports healthy `watching`, failures0, while
+the production A record remains primary95. Its readiness was checked with a
+real managed command at the canonical hostname pinned to VUSA. A fault of that
+production hostname or the entire primary machine was not performed here.
