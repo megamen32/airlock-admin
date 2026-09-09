@@ -2,6 +2,24 @@
 
 Priority order: top first.
 
+## Unified Node and independent failover — selected 2026-09-09
+
+Status: active; architecture and limits in `docs/UNIFIED_NODE_ARCHITECTURE.md`.
+
+- [x] Review and push the pre-existing complete working tree.
+- [x] One Node process routes and executes locally; primary migrated and public MCP command verified.
+- [x] Explicit peer routing with physical target ownership; real two-node execution proof.
+- [x] Restore public ingress TLS and prove VUSA execution with the existing credential and canonical hostname.
+- [x] Bounded authorization snapshot, reader restrictions and restart continuity; live writer generation 2 applied on VUSA.
+- [ ] Periodic authorization synchronization with observable freshness.
+- [ ] Stable per-node origins and live cross-node routing.
+- [ ] Controlled automatic ingress failover with the same client hostname and a real outage canary.
+- [ ] Portable installation/update path and optional transport providers.
+- [ ] Capacity-aware replication policy and explicit authority recovery during prolonged outages.
+
+An unavailable physical machine cannot execute elsewhere implicitly. Command
+history and execution replay are not included in the small authorization replica.
+
 ## P0 — Restore public GPTAdmin OAuth and Apps SDK widget
 
 Status: complete; v140 receipt and live UI acceptance deployed
