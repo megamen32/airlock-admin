@@ -54,6 +54,24 @@ systemctl start gptadmin-node@canary.service
 Автозапуск включается `systemctl enable gptadmin-node@canary.service` после
 этой проверки. Изменение публичного маршрута — отдельный проверяемый шаг.
 
+Повторяемая проверка кандидата использует существующий клиентский токен из
+окружения и настоящую команду `printf` на явно указанном исполнителе:
+
+```sh
+python3 scripts/gptadmin_node_probe.py \
+  --url https://u-f1102930.t.gptadmin.bezrabotnyi.com \
+  --connect-to 185.240.120.152 --target shell:vusa-unified \
+  --expect-commit 0672047
+```
+
+`--connect-to` сохраняет hostname, SNI и обычную проверку сертификата.
+По умолчанию токен берётся из `GPTADMIN_CODEX_MCP_BEARER`; другое имя задаётся
+через `--token-env`. Команда отправляется один раз, затем проверяется её receipt.
+Успех — JSON с `ok: true` и ожидаемым stdout; ошибка даёт ненулевой exit code.
+Это проверка перед переключением, а не частый health-poll: она создаёт настоящий
+job. Свежесть реплики и согласование writer проверяются отдельно. На Unix probe
+имеет общий deadline; при запуске на другой ОС задавайте внешний process timeout.
+
 `systemctl stop` отправляет SIGTERM одному процессу; runtime останавливает
 локальные callback-и и группы команд перед завершением HTTP-сервера.
 
