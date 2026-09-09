@@ -5048,6 +5048,42 @@ def _restart_update_services_after_rollback() -> None:
         print('WARNING: restored runtime could not be restarted automatically', file=sys.stderr)
 
 
+def _reject_legacy_update_for_unified_node():
+    """Read-only fence before the legacy updater snapshots or changes anything."""
+    modes = [os.environ.get('GPTADMIN_AUTH_MODE', '')]
+    # primary.env is the existing unified-primary override, not an extra marker.
+    # Other node instances (e.g. nodes/canary.env) do not select this primary.
+    for path in (ENV_FILE, ENV_FILE.parent / 'nodes' / 'primary.env'):
+        try:
+            lines = path.read_text().splitlines()
+        except FileNotFoundError:
+            continue
+        except OSError:
+            die(f'cannot check unified node configuration: {path}')
+        mode = ''
+        for line in lines:
+            key, separator, value = line.strip().partition('=')
+            if separator and key.strip() == 'GPTADMIN_AUTH_MODE':
+                mode = value.strip().strip('"\'').lower()
+        modes.append(mode)
+    if any(mode.strip().lower() in ('writer', 'reader') for mode in modes):
+        die('legacy update is disabled for a unified node; use the unified node deployment path')
+    if IS_MACOS or not UNIT_PATH_HUB.exists():
+        return
+    # Include effective systemd drop-ins, including a Node running in legacy
+    # auth mode. This is a read-only query, never a service start/restart.
+    command = ['systemctl'] + (['--user'] if IS_USER_INSTALL else [])
+    command += ['show', SYSTEMD_HUB, '--property=ExecStart', '--value']
+    try:
+        result = subprocess.run(command, capture_output=True, text=True, timeout=3, check=False)
+    except (OSError, subprocess.TimeoutExpired):
+        die('cannot inspect Hub ExecStart before legacy update; check systemd and retry')
+    if result.returncode != 0:
+        die('cannot inspect Hub ExecStart before legacy update; check systemd and retry')
+    if re.search(r'(?:^|[/\s=])gptadmin-node(?:[\s;}]|$)', result.stdout or ''):
+        die('legacy update is disabled for a unified node; use the unified node deployment path')
+
+
 def _transactional_update(func):
     """Decorate the update command with rollback-safe runtime restoration."""
 
@@ -5055,6 +5091,7 @@ def _transactional_update(func):
     def wrapped(args):
         global _active_update_snapshot
         need_root()
+        _reject_legacy_update_for_unified_node()
         snapshot = _UpdateRuntimeSnapshot(_update_runtime_paths())
         _active_update_snapshot = snapshot
         try:
@@ -6243,7 +6280,7 @@ def maybe_update_hint(args):
         return
 
     # Skip for certain commands.
-    cmd = getattr(args, 'command', None)
+    cmd = getattr(args, 'cmd', None) or getattr(args, 'command', None)
     if cmd in ('update', 'auto-update'):
         return
     if getattr(args, 'auto', False):
