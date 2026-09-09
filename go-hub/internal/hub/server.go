@@ -30,6 +30,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/gofrs/flock"
 	"github.com/megamen32/gptadmin/go-hub/internal/cloudos"
 )
 
@@ -58,9 +59,12 @@ type Config struct {
 	RelayAgentToken string
 	ShellToken      string
 	// NodePeersJSON maps explicit shell targets to independently reachable node origins.
-	NodePeersJSON  string
-	DefaultTimeout time.Duration
-	PollMaxTimeout time.Duration
+	NodePeersJSON      string
+	AuthMode           string
+	AuthSourceID       string
+	AuthSnapshotBudget int
+	DefaultTimeout     time.Duration
+	PollMaxTimeout     time.Duration
 	// ActionSyncWait bounds how long the HTTP Actions facade waits for a
 	// queued shell/child MCP operation before returning a durable job handle.
 	// Tool/command timeout remains an independent argument.
@@ -143,6 +147,9 @@ func FromEnv() Config {
 		RelayAgentToken:            env("MCP_RELAY_AGENT_TOKEN", env("GPTADMIN_MCP_RELAY_AGENT_TOKEN", "")),
 		ShellToken:                 env("SHELL_TOKEN", env("SHELLMCP_TOKEN", "")),
 		NodePeersJSON:              env("GPTADMIN_NODE_PEERS", ""),
+		AuthMode:                   strings.ToLower(strings.TrimSpace(env("GPTADMIN_AUTH_MODE", "legacy"))),
+		AuthSourceID:               strings.TrimSpace(env("GPTADMIN_AUTH_SOURCE_ID", "")),
+		AuthSnapshotBudget:         positiveIntEnv("GPTADMIN_AUTH_SNAPSHOT_MAX_BYTES", authSnapshotDefaultBudget),
 		DefaultTimeout:             time.Duration(defTimeout) * time.Second,
 		PollMaxTimeout:             time.Duration(pollTimeout) * time.Second,
 		ActionSyncWait:             time.Duration(actionSyncWaitMS) * time.Millisecond,
@@ -526,6 +533,11 @@ type Server struct {
 	nodePeers           map[string]string
 	nodePeersErr        error
 	nodePeerClient      *http.Client
+	authMu              sync.RWMutex
+	authState           authSnapshotState
+	authInitialized     bool
+	authLocalID         string
+	authRuntimeLock     *flock.Flock
 	shellControls       map[string][]shellControl
 	shellJobs           map[string]*shellJob
 	taskOwner           *taskOwner
@@ -578,6 +590,9 @@ type Server struct {
 }
 
 func New(cfg Config) *Server {
+	if cfg.AuthSnapshotBudget == 0 {
+		cfg.AuthSnapshotBudget = authSnapshotDefaultBudget
+	}
 	// Direct Config construction must use the same issuer/resource wire
 	// contract as FromEnv and the CLI token issuer.
 	cfg.PublicOrigin = normalizePublicURL(cfg.PublicOrigin)
@@ -759,8 +774,10 @@ func New(cfg Config) *Server {
 	if err := s.loadManagedMCPState(); err != nil {
 		log.Printf("MCP token state load failed path=%s err=%v", s.managedMCPStatePath(), err)
 	}
-	if err := s.reconcileExistingMCPBearers(); err != nil {
-		log.Printf("configured MCP bearer migration state failed path=%s err=%v", s.managedMCPStatePath(), err)
+	if !s.authContinuityEnabled() {
+		if err := s.reconcileExistingMCPBearers(); err != nil {
+			log.Printf("configured MCP bearer migration state failed path=%s err=%v", s.managedMCPStatePath(), err)
+		}
 	}
 	if err := s.loadOAuthClientsState(); err != nil {
 		log.Printf("OAuth client state load failed path=%s err=%v", s.oauthClientsStatePath(), err)
@@ -817,7 +834,7 @@ func (s *Server) managedMCPStatePath() string {
 	if s.cfg.ConfigDir == "" {
 		return ""
 	}
-	return filepath.Join(s.cfg.ConfigDir, "mcp_tokens_state.json")
+	return filepath.Join(s.authStoreDir(), "mcp_tokens_state.json")
 }
 
 func configuredMCPBearerID(name string) string {
@@ -1428,6 +1445,9 @@ func (s *Server) ListenAndServe() error {
 func (s *Server) ServeContext(ctx context.Context, listener net.Listener) error {
 	defer s.Close()
 	defer listener.Close()
+	if err := s.InitializeAuthContinuity(); err != nil {
+		return err
+	}
 	if s.nodePeersErr != nil {
 		return s.nodePeersErr
 	}
@@ -1461,6 +1481,7 @@ func (s *Server) ServeContext(ctx context.Context, listener net.Listener) error 
 
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
+	mux.HandleFunc("/admin/api/auth-snapshot/", s.authSnapshotHTTP)
 	mux.HandleFunc("/version", s.version)
 	mux.HandleFunc("/healthz", s.healthz)
 	mux.HandleFunc("/metrics", s.hubMetrics)
@@ -1594,7 +1615,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/admin/legacy/", s.adminLegacyStatic)
 	mux.HandleFunc("/admin/", s.adminStatic)
 	mux.HandleFunc("/admin", s.adminIndex)
-	return withRequestTrace(withIngressAudit(withCORS(mux)))
+	return withRequestTrace(withIngressAudit(withCORS(s.authSnapshotGate(mux))))
 }
 
 // cloudOSUI exposes the locally installed CloudOS UI below the same Hub origin.
@@ -4094,6 +4115,7 @@ func (s *Server) mcpRelayTools(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusForbidden, map[string]any{"detail": err.Error()})
 		return
 	}
+	releaseAuthAdmission(r)
 	target := firstString(req, "target", "server_id", "agent_id")
 	selectedTarget, status, detail := s.selectMCPRelayTarget(target)
 	if status != http.StatusOK {
@@ -4247,6 +4269,9 @@ func (s *Server) executeMCPTool(r *http.Request, target, toolName string, args m
 		}
 		args = resolvedArgs
 		secretValues = resolvedSecrets
+	}
+	if target != "hub" {
+		releaseAuthAdmission(r)
 	}
 	durableRequestKey := ""
 	operation := func() (map[string]any, int) {
@@ -6825,6 +6850,9 @@ func (s *Server) oauthAuthorizationServer(w http.ResponseWriter, r *http.Request
 }
 
 func (s *Server) oauthRegister(w http.ResponseWriter, r *http.Request) {
+	if !s.authWriterHTTP(w) {
+		return
+	}
 	if r.Method != http.MethodPost {
 		writeJSON(w, http.StatusMethodNotAllowed, map[string]any{"detail": "method not allowed"})
 		return
@@ -6918,6 +6946,9 @@ func (s *Server) oauthAuthorizeGet(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) oauthAuthorizePost(w http.ResponseWriter, r *http.Request) {
+	if !s.authWriterHTTP(w) {
+		return
+	}
 	if err := r.ParseForm(); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid_request"})
 		return
@@ -6965,6 +6996,9 @@ func (s *Server) oauthAuthorizePost(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) oauthToken(w http.ResponseWriter, r *http.Request) {
+	if !s.authWriterHTTP(w) {
+		return
+	}
 	if r.Method != http.MethodPost {
 		writeJSON(w, http.StatusMethodNotAllowed, map[string]any{"detail": "method not allowed"})
 		return
@@ -7066,7 +7100,11 @@ func oauthRedirectMatches(issued, requested string) bool {
 // Hub restart and OAuth signing-key change do not erase client authorization.
 func (s *Server) oauthRefreshToken(w http.ResponseWriter, r *http.Request) {
 	resource := strings.TrimRight(r.Form.Get("resource"), "/")
-	clientID := strings.TrimSpace(r.Form.Get("client_id"))
+	clientID, validClient := oauthTokenClientID(r)
+	if !validClient {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid_grant", "error_description": "client identification mismatch"})
+		return
+	}
 	refreshToken := strings.TrimSpace(r.Form.Get("refresh_token"))
 	record, ok := s.oauthRefreshTokenRecord(refreshToken, clientID, resource)
 	if !ok {
@@ -7610,6 +7648,9 @@ func compactJSON(v any) string {
 
 func (s *Server) agentMCPJSONRPC(r *http.Request, agent Agent, body map[string]any) (any, any, bool) {
 	method := firstString(body, "method")
+	if method == "initialize" || method == "server/discover" || method == "prompts/list" || method == "prompts/get" {
+		releaseAuthAdmission(r)
+	}
 	params := mapValue(body["params"])
 	switch method {
 	case "server/discover":
@@ -7766,6 +7807,7 @@ func (s *Server) agentToolsList(agent Agent) (any, any) {
 }
 
 func (s *Server) agentToolsListForRequest(r *http.Request, agent Agent) (any, any) {
+	releaseAuthAdmission(r)
 	if requestAccessMode(r) != accessModeReadonly {
 		return s.agentToolsList(agent)
 	}
@@ -7792,11 +7834,14 @@ func (s *Server) agentToolsListForRequest(r *http.Request, agent Agent) (any, an
 }
 
 func (s *Server) agentToolCall(r *http.Request, agent Agent, name string, args map[string]any) (any, any) {
+	if agent.AgentID != "hub" {
+		releaseAuthAdmission(r)
+	}
 	if agent.AgentID == "hub" {
 		if name == "resource_receipt" {
 			return mcpToolResult(s.appsSDKResourceReceipt(r, firstString(args, "uri"))), nil
 		}
-		return mcpToolResult(s.appsSDKCall(name, args)), nil
+		return mcpToolResult(s.appsSDKCallForRequest(r, name, args)), nil
 	}
 	if isVirtualMCPAgent(agent) {
 		return s.callVirtualMCPTool(r, agent, name, args)
@@ -7835,6 +7880,7 @@ func (s *Server) agentToolCall(r *http.Request, agent Agent, name string, args m
 }
 
 func (s *Server) agentResourcesList(r *http.Request, agent Agent) (any, any) {
+	releaseAuthAdmission(r)
 	if agent.AgentID == "hub" {
 		return s.appsSDKResourcesList(), nil
 	}
@@ -7855,6 +7901,7 @@ func (s *Server) agentResourcesList(r *http.Request, agent Agent) (any, any) {
 }
 
 func (s *Server) agentResourceRead(r *http.Request, agent Agent, uri string) (any, any) {
+	releaseAuthAdmission(r)
 	if agent.AgentID == "hub" {
 		return s.appsSDKResourceRead(r, uri), nil
 	}
@@ -8886,6 +8933,7 @@ func (s *Server) appsSDKCallForRequest(r *http.Request, name string, args map[st
 }
 
 func (s *Server) appsSDKSchemaForRequest(r *http.Request, args map[string]any) any {
+	releaseAuthAdmission(r)
 	target := firstString(args, "target", "server_id", "agent_id")
 	selectedTarget, status, detail := s.selectMCPRelayTarget(target)
 	if status != http.StatusOK {
@@ -9399,7 +9447,7 @@ func (s *Server) jwtKeyID() string {
 }
 
 func validJWTScopes(value string) bool {
-	allowed := map[string]bool{"gptadmin.read": true, "gptadmin.inspect": true, "gptadmin.exec": true, "gptadmin.settings.read": true, "gptadmin.settings.write": true, "gptadmin.registry.read": true, "gptadmin.registry.manage": true, "gptadmin.update": true}
+	allowed := map[string]bool{"gptadmin.read": true, "gptadmin.inspect": true, "gptadmin.exec": true, "gptadmin.settings.read": true, "gptadmin.settings.write": true, "gptadmin.registry.read": true, "gptadmin.registry.manage": true, "gptadmin.update": true, "offline_access": true}
 	for _, scope := range strings.Fields(value) {
 		if !allowed[scope] {
 			return false

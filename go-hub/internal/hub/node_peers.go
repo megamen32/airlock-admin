@@ -119,6 +119,8 @@ func (s *Server) forwardNodePeerRequest(w http.ResponseWriter, r *http.Request, 
 	// refuse replay after body delivery when GetBody is nil. Do not copy HTTP
 	// Idempotency-Key headers; application deduplication lives only at the owner.
 	upstream.GetBody = nil
+	// The owner reauthorizes; the ingress must not hold auth sync during delivery.
+	releaseAuthAdmission(r)
 	response, err := s.nodePeerClient.Do(upstream)
 	if err != nil {
 		failure("node peer delivery failed; execution outcome may be unknown")
