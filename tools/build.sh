@@ -374,6 +374,9 @@ copy_support_payloads() {
   rm -rf "$ART_DIR/hub_source" "$ART_DIR/client"
   mkdir -p "$ART_DIR/hub_source" "$ART_DIR/client"
   cp -a go-hub "$ART_DIR/hub_source/go-hub"
+  # The unified-node entrypoint imports the executor through a local Go module
+  # replacement. Keep source-only installations buildable from this payload.
+  cp -a go-shellmcp "$ART_DIR/hub_source/go-shellmcp"
   find "$ART_DIR/hub_source/go-hub" -name '*.bak.*' -delete
   cp -a client/. "$ART_DIR/client/"
   find "$ART_DIR/hub_source" "$ART_DIR/client" \( -name '__pycache__' -o -name '*.pyc' -o -name '*.bak*' \) -print0 | xargs -0 -r rm -rf

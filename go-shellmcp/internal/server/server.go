@@ -35,6 +35,8 @@ var BuildVersion = "3"
 var GitCommit = "go-shellmcp"
 
 type Config struct {
+	// Embedded executors are updated only with their containing node binary.
+	DisableSelfUpdate        bool
 	Addr                     string
 	Token                    string
 	LogLimit                 int64
@@ -255,6 +257,8 @@ type Server struct {
 	healthWG              sync.WaitGroup
 	healthClosed          bool
 	callbackMu            sync.Mutex
+	callbackWG            sync.WaitGroup
+	callbackClosed        bool
 	callbackCancels       map[string]context.CancelFunc
 	callbackCancelled     map[string]bool
 	queuePollCount        atomic.Int64
@@ -1225,8 +1229,13 @@ func shellRequestFromQueueJob(q hub.QueueJob, spillDir string) shell.Request {
 }
 
 func (s *Server) runCallbackTool(jobID, traceID, traceParent, name string, args map[string]any) {
+	runCtx, finish, ok := s.beginCallback(jobID)
+	if !ok {
+		return
+	}
+	defer finish()
 	traceID = normalizeTraceID(traceID)
-	result, err := s.callMCPTool(context.Background(), name, args)
+	result, err := s.callMCPTool(runCtx, name, args)
 	payload := hub.TaskResult{ID: jobID, TraceID: traceID, TraceParent: traceParent, Result: result}
 	if err != nil {
 		payload.Result = map[string]any{"error": err.Error()}
@@ -1239,7 +1248,9 @@ func (s *Server) runCallbackTool(jobID, traceID, traceParent, name string, args 
 	if s.hub == nil {
 		return
 	}
-	if postErr := s.hub.PostResult(context.Background(), s.cfg.Name, payload); postErr != nil {
+	resultCtx, cancelResult := s.callbackResultContext()
+	defer cancelResult()
+	if postErr := s.hub.PostResult(resultCtx, s.cfg.Name, payload); postErr != nil {
 		log.Printf("callback tool result failed job=%s tool=%s err=%v", jobID, name, postErr)
 		s.spoolOutbox(jobID, payload, postErr)
 	}
@@ -1264,21 +1275,11 @@ func (s *Server) cancelCallbackJob(jobID string) {
 
 func (s *Server) runCallbackJob(jobID string, req shell.Request) {
 	req.TraceID = normalizeTraceID(req.TraceID)
-	runCtx, cancel := context.WithCancel(context.Background())
-	s.callbackMu.Lock()
-	s.callbackCancels[jobID] = cancel
-	wasCancelled := s.callbackCancelled[jobID]
-	delete(s.callbackCancelled, jobID)
-	s.callbackMu.Unlock()
-	if wasCancelled {
-		cancel()
+	runCtx, finish, ok := s.beginCallback(jobID)
+	if !ok {
+		return
 	}
-	defer func() {
-		cancel()
-		s.callbackMu.Lock()
-		delete(s.callbackCancels, jobID)
-		s.callbackMu.Unlock()
-	}()
+	defer finish()
 	s.auditLog.Event(audit.ExecStart, map[string]any{"job_id": jobID, "trace_id": req.TraceID, "traceparent": req.TraceParent, "background": true})
 	res := s.runShell(runCtx, req)
 	s.auditLog.Event(audit.ExecEnd, map[string]any{"job_id": jobID, "trace_id": req.TraceID, "traceparent": req.TraceParent, "return_code": res.ReturnCode, "elapsed_ms": res.DurationMS})
@@ -1286,7 +1287,9 @@ func (s *Server) runCallbackJob(jobID string, req shell.Request) {
 		return
 	}
 	payload := hub.TaskResult{ID: jobID, TraceID: req.TraceID, TraceParent: req.TraceParent, Result: res}
-	if err := s.hub.PostResult(context.Background(), s.cfg.Name, payload); err != nil {
+	resultCtx, cancelResult := s.callbackResultContext()
+	defer cancelResult()
+	if err := s.hub.PostResult(resultCtx, s.cfg.Name, payload); err != nil {
 		log.Printf("callback result failed job=%s err=%v", jobID, err)
 		s.spoolOutbox(jobID, payload, err)
 	}

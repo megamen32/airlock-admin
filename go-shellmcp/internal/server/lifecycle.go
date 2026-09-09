@@ -21,6 +21,9 @@ import (
 // executes cfg.RestartCmd (when set) or returns ErrRestartNeeded so an
 // external supervisor can perform the swap.
 func (s *Server) startUpdateLoop(ctx context.Context) {
+	if s.cfg.DisableSelfUpdate {
+		return
+	}
 	// The legacy Hub-manifest updater is retained only as an explicit opt-in.
 	// Normal installs self-repair from public GitHub Releases; Hub runtime policy
 	// overrides the autonomous latest-release fallback when available.
@@ -94,7 +97,7 @@ func legacyManifestUpdateEnabled() bool {
 }
 
 func (s *Server) triggerGitHubSelfRepair(desired int, repo string) {
-	if desired <= 0 || selfRepairDisabled() {
+	if desired <= 0 || s.cfg.DisableSelfUpdate || selfRepairDisabled() {
 		return
 	}
 	current := parseBuildVersion(BuildVersion)

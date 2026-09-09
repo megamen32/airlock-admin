@@ -509,40 +509,42 @@ type Server struct {
 	oauthClientsPersisted map[string]oauthClientMetadata
 	cfg                   Config
 
-	mu                sync.Mutex
-	authRateMu        sync.Mutex
-	cond              *sync.Cond
-	agents            map[string]*Agent
-	relayCredentials  map[string]string // SHA-256 digests keyed by agent_id; never retain raw credentials.
-	relayEnrollments  map[string]relayEnrollment
-	relayQueues       map[string][]string
-	relayJobs         map[string]*relayJob
-	shellQueues       map[string][]string
-	shellControls     map[string][]shellControl
-	shellJobs         map[string]*shellJob
-	taskOwner         *taskOwner
-	taskRuntimeClosed bool
-	taskRuntimeStop   chan struct{}
-	idempotency       map[string]*idempotencyEntry
-	oauthCodes        map[string]oauthCode
-	managedMCP        map[string]managedMCPToken
-	oauthClients      map[string]oauthClientMetadata
-	accessProfiles    map[string]AccessProfile
-	approvals         map[string]*approvalRequest
-	autonomous        map[string]*autonomousBudget
-	security          securitySettings
-	securityPath      string
-	webauthnState     webAuthnState
-	webauthnPath      string
-	webauthnSessions  map[string]webAuthnSession
-	telemetry         telemetryState
-	telemetryPath     string
-	telemetryExporter *telemetryExporter
-	secretStore       *SecretStore
-	secretStoreErr    error
-	audit             []auditEvent
-	authRate          map[string]authRateWindow
-	failover          FailoverConfig
+	mu                  sync.Mutex
+	authRateMu          sync.Mutex
+	cond                *sync.Cond
+	agents              map[string]*Agent
+	relayCredentials    map[string]string // SHA-256 digests keyed by agent_id; never retain raw credentials.
+	relayEnrollments    map[string]relayEnrollment
+	relayQueues         map[string][]string
+	relayJobs           map[string]*relayJob
+	shellQueues         map[string][]string
+	localExecutors      map[string]map[string]string
+	localExecutorTokens map[string]string
+	shellControls       map[string][]shellControl
+	shellJobs           map[string]*shellJob
+	taskOwner           *taskOwner
+	taskRuntimeClosed   bool
+	taskRuntimeStop     chan struct{}
+	idempotency         map[string]*idempotencyEntry
+	oauthCodes          map[string]oauthCode
+	managedMCP          map[string]managedMCPToken
+	oauthClients        map[string]oauthClientMetadata
+	accessProfiles      map[string]AccessProfile
+	approvals           map[string]*approvalRequest
+	autonomous          map[string]*autonomousBudget
+	security            securitySettings
+	securityPath        string
+	webauthnState       webAuthnState
+	webauthnPath        string
+	webauthnSessions    map[string]webAuthnSession
+	telemetry           telemetryState
+	telemetryPath       string
+	telemetryExporter   *telemetryExporter
+	secretStore         *SecretStore
+	secretStoreErr      error
+	audit               []auditEvent
+	authRate            map[string]authRateWindow
+	failover            FailoverConfig
 
 	updateStatePath     string
 	updateLockPath      string
@@ -1406,7 +1408,18 @@ func (s *Server) registryCleanupLoop() {
 }
 
 func (s *Server) ListenAndServe() error {
+	listener, err := net.Listen("tcp", s.cfg.Addr)
+	if err != nil {
+		_ = s.Close()
+		return err
+	}
+	return s.ServeContext(context.Background(), listener)
+}
+
+// ServeContext lets the combined node own one listener and one shutdown signal.
+func (s *Server) ServeContext(ctx context.Context, listener net.Listener) error {
 	defer s.Close()
+	defer listener.Close()
 	if s.secretStoreErr != nil {
 		return fmt.Errorf("secret ingress store unavailable: %w", s.secretStoreErr)
 	}
@@ -1416,7 +1429,23 @@ func (s *Server) ListenAndServe() error {
 	log.Printf("gptadmin go hub listening addr=%s config_dir=%s public_dir=%s", s.cfg.Addr, s.cfg.ConfigDir, s.cfg.PublicDir)
 	go s.registryCleanupLoop()
 	srv := &http.Server{Addr: s.cfg.Addr, Handler: s.Handler(), ReadHeaderTimeout: 10 * time.Second}
-	return srv.ListenAndServe()
+	done := make(chan error, 1)
+	go func() { done <- srv.Serve(listener) }()
+	select {
+	case err := <-done:
+		if errors.Is(err, http.ErrServerClosed) {
+			return nil
+		}
+		return err
+	case <-ctx.Done():
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		if err := srv.Shutdown(shutdownCtx); err != nil {
+			_ = srv.Close()
+			return err
+		}
+		return nil
+	}
 }
 
 func (s *Server) Handler() http.Handler {
@@ -1888,7 +1917,24 @@ func (s *Server) requireArtifact(next http.HandlerFunc) http.HandlerFunc {
 
 func (s *Server) requireShell(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		if s.cfg.ShellToken == "" || !tokenMatches(r, s.cfg.ShellToken) {
+		expected := s.cfg.ShellToken
+		s.mu.Lock()
+		if strings.HasPrefix(r.URL.Path, "/queue/") {
+			name := strings.Split(strings.TrimPrefix(r.URL.Path, "/queue/"), "/")[0]
+			name, _ = url.PathUnescape(name)
+			name = canonicalShellQueueName(name)
+			if local := s.localExecutorTokens["shell:"+name]; local != "" {
+				expected = local
+			}
+		}
+		allowed := expected != "" && tokenMatches(r, expected)
+		if r.URL.Path == "/heartbeat" {
+			for _, local := range s.localExecutorTokens {
+				allowed = allowed || tokenMatches(r, local)
+			}
+		}
+		s.mu.Unlock()
+		if !allowed {
 			writeJSON(w, http.StatusUnauthorized, map[string]any{"detail": "unauthorized"})
 			return
 		}
@@ -3080,6 +3126,12 @@ func (s *Server) heartbeat(w http.ResponseWriter, r *http.Request) {
 	}
 	identity := shellIdentityFromMap(meta)
 	s.mu.Lock()
+	localToken := s.localExecutorTokens[agentID]
+	if !s.localExecutorMatchesLocked(agentID, identity) || (localToken != "" && !tokenMatches(r, localToken)) {
+		s.mu.Unlock()
+		writeJSON(w, http.StatusForbidden, map[string]any{"detail": "local executor identity mismatch"})
+		return
+	}
 	approved := s.shellIdentityApprovedLocked(agentID, identity)
 	meta["approved"] = approved
 	status := "online"
@@ -3165,6 +3217,9 @@ func (s *Server) pollShellQueue(w http.ResponseWriter, r *http.Request, name str
 		return
 	}
 	for {
+		if r.Context().Err() != nil {
+			return
+		}
 		if !s.touchShellPollLocked(name, r) {
 			writeJSON(w, http.StatusOK, map[string]any{"server_id": "shell:" + name, "status": "awaiting_approval"})
 			return
@@ -3250,7 +3305,11 @@ func (s *Server) touchShellPollLocked(name string, r *http.Request) bool {
 			meta[key] = v
 		}
 	}
-	approved := s.shellIdentityApprovedLocked(agentID, shellIdentityFromMap(meta))
+	identity := shellIdentityFromMap(meta)
+	if !s.localExecutorMatchesLocked(agentID, identity) {
+		return false
+	}
+	approved := s.shellIdentityApprovedLocked(agentID, identity)
 	meta["approved"] = approved
 	if a := s.agents[agentID]; a != nil {
 		if !approved {
@@ -3328,7 +3387,6 @@ func (s *Server) shellQueueResult(w http.ResponseWriter, r *http.Request, name s
 		return
 	}
 	s.mu.Lock()
-	s.touchShellPollLocked(name, r)
 	if err := s.refreshTaskRecordsLocked(res.ID); err != nil {
 		s.mu.Unlock()
 		writeJSON(w, http.StatusServiceUnavailable, map[string]any{"detail": "task state unavailable; retry"})
@@ -3338,6 +3396,17 @@ func (s *Server) shellQueueResult(w http.ResponseWriter, r *http.Request, name s
 	if job == nil {
 		s.mu.Unlock()
 		writeJSON(w, http.StatusNotFound, map[string]any{"detail": "unknown job"})
+		return
+	}
+	if job.Server != canonicalShellQueueName(name) {
+		s.mu.Unlock()
+		writeJSON(w, http.StatusForbidden, map[string]any{"detail": "job belongs to another executor"})
+		return
+	}
+	localToken := s.localExecutorTokens["shell:"+job.Server]
+	if (localToken != "" && !tokenMatches(r, localToken)) || (localToken == "" && !s.touchShellPollLocked(name, r)) {
+		s.mu.Unlock()
+		writeJSON(w, http.StatusForbidden, map[string]any{"detail": "executor credential does not own job"})
 		return
 	}
 	if job.Status == "cancelled" {
