@@ -44,7 +44,7 @@ python3 tests/e2e/node/run.py .tmp/node-build/gptadmin-node
 и файлы остаются на ней. Резервируется доступ и управление живыми узлами,
 а не физическое существование выключенного сервера.
 
-## Что уже установлено
+## Исходное состояние до миграции 2026-09-09
 
 - `go-hub/cmd/gptadmin-hub/main.go` запускает отдельный HTTP hub.
 - `go-shellmcp/cmd/shellmcp-go/main.go` запускает отдельный исполнитель;
@@ -79,6 +79,22 @@ Read-only проверка production дополнительно установ�
 - Около 150 KiB занимают текущие core auth/registry/routing-файлы primary.
   У managed tokens уже есть лимит 8 MiB, у OAuth clients и profiles по 128 KiB.
   Старый failover snapshot не переносит это состояние; auth code живёт в памяти.
+
+### Проверенный результат миграции
+
+На 08:47 МСК primary работает одним Node `3ba016d`; отдельные Shell,
+standby и старый failover controller остановлены и защищены от запуска.
+Команда действующим managed credential прошла через прежний canonical URL.
+VUSA работает reader-узлом `0672047`: тот же hostname с принудительным
+подключением к IP VUSA проходит обычную TLS-проверку и реальное исполнение
+на `shell:vusa-unified`. Регистрация на reader запрещена, анонимный MCP закрыт.
+Сертификаты обоих публичных ingress обновлены.
+
+Writer экспортировал generation 2, VUSA применил 41 834 байта авторизации.
+Это разовая синхронизация; автоматические sync, DNS promotion, writer election
+и адаптивная репликация истории этим результатом не доказаны. Canonical DNS
+пока указывает на primary. Подробности перехода и ограничения очереди —
+в [инструкции службы](UNIFIED_NODE_SERVICE.md).
 
 ## Два варианта стабильного входа
 
