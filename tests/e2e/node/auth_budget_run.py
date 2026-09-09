@@ -42,7 +42,7 @@ def main():
         subprocess.run(['mount', '-o', 'loop', str(image), str(mount)], check=True, capture_output=True)
         mounted = True
         report['filesystem'] = subprocess.check_output(['findmnt', '-n', '-o', 'FSTYPE', '--target', str(mount)], text=True).strip()
-        assert report['filesystem'] == 'ext2/ext3', report # stat's ext4 filesystem label
+        assert report['filesystem'] == 'ext4', report
         shared = secrets.token_urlsafe(32)
         with socket.socket() as a, socket.socket() as b:
             for name, sock in [('nodeA', a), ('nodeB', b)]:
