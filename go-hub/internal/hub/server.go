@@ -59,12 +59,13 @@ type Config struct {
 	RelayAgentToken string
 	ShellToken      string
 	// NodePeersJSON maps explicit shell targets to independently reachable node origins.
-	NodePeersJSON      string
-	AuthMode           string
-	AuthSourceID       string
-	AuthSnapshotBudget int
-	DefaultTimeout     time.Duration
-	PollMaxTimeout     time.Duration
+	NodePeersJSON            string
+	AuthMode                 string
+	AuthSourceID             string
+	AuthSnapshotReserveBytes int64
+	AuthSnapshotBudget       int
+	DefaultTimeout           time.Duration
+	PollMaxTimeout           time.Duration
 	// ActionSyncWait bounds how long the HTTP Actions facade waits for a
 	// queued shell/child MCP operation before returning a durable job handle.
 	// Tool/command timeout remains an independent argument.
@@ -149,6 +150,7 @@ func FromEnv() Config {
 		NodePeersJSON:              env("GPTADMIN_NODE_PEERS", ""),
 		AuthMode:                   strings.ToLower(strings.TrimSpace(env("GPTADMIN_AUTH_MODE", "legacy"))),
 		AuthSourceID:               strings.TrimSpace(env("GPTADMIN_AUTH_SOURCE_ID", "")),
+		AuthSnapshotReserveBytes:   authSnapshotReserveFromEnv(),
 		AuthSnapshotBudget:         positiveIntEnv("GPTADMIN_AUTH_SNAPSHOT_MAX_BYTES", authSnapshotDefaultBudget),
 		DefaultTimeout:             time.Duration(defTimeout) * time.Second,
 		PollMaxTimeout:             time.Duration(pollTimeout) * time.Second,
@@ -591,6 +593,9 @@ type Server struct {
 }
 
 func New(cfg Config) *Server {
+	if cfg.AuthSnapshotReserveBytes == 0 {
+		cfg.AuthSnapshotReserveBytes = authSnapshotDefaultReserve
+	}
 	if cfg.AuthSnapshotBudget == 0 {
 		cfg.AuthSnapshotBudget = authSnapshotDefaultBudget
 	}

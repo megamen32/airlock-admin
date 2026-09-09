@@ -438,6 +438,11 @@ func (s *Server) commitAuthSnapshotLocked(bundle authSnapshot, reader bool) erro
 	if err := regularAuthPath(s.authStatePath(), true); err != nil {
 		return err
 	}
+	if reader {
+		if err := s.preflightReaderAuthSnapshot(bundle); err != nil {
+			return err
+		}
+	}
 	s.authState.Pending = true
 	if err := writeAccessStateJSON(s.authStatePath(), s.authState, 4096); err != nil {
 		return err
@@ -565,7 +570,11 @@ func (s *Server) authSnapshotHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if err := s.commitAuthSnapshotLocked(bundle, true); err != nil {
-			respond(409, map[string]any{"detail": err.Error()})
+			status := 409
+			if errors.Is(err, errAuthSnapshotSpace) {
+				status = http.StatusInsufficientStorage
+			}
+			respond(status, map[string]any{"detail": err.Error()})
 			return
 		}
 		respond(200, map[string]any{"ok": true, "writer_id": bundle.WriterID, "generation": bundle.Generation})

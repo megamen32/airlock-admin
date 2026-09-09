@@ -250,6 +250,9 @@ type Server struct {
 	sshClient             *sshexec.Client
 	childMCP              *mcpclient.Client
 	storageLimit          int64
+	storageProtectedBytes atomic.Int64
+	storageOverflowBytes  atomic.Int64
+	storageEffectiveLimit atomic.Int64
 	mcpHealth             atomic.Value // map[string]map[string]any
 	healthBusy            atomic.Bool
 	healthMu              sync.Mutex
@@ -395,12 +398,33 @@ func (s *Server) storageRoots() []string {
 	return roots
 }
 
+// Spills may be referenced by a pending receipt or a delivered receipt still in
+// Hub history. Without a reference index neither age nor budget proves them disposable.
 func (s *Server) enforceStorage(protected map[string]bool) error {
-	if s.storageLimit > 0 {
-		_, err := storagebudget.EnforceRootsLimit(s.storageRoots(), s.storageLimit, protected)
-		return err
+	keep := make(map[string]bool, len(protected)+2)
+	for path, yes := range protected {
+		keep[path] = yes
 	}
-	_, err := storagebudget.EnforceRoots(s.storageRoots(), protected)
+	for _, path := range []string{s.cfg.SpillDir, s.cfg.OutboxDir} {
+		if strings.TrimSpace(path) != "" {
+			keep[path] = true
+		}
+	}
+	var result storagebudget.Result
+	var err error
+	if s.storageLimit > 0 {
+		result, err = storagebudget.EnforceRootsLimit(s.storageRoots(), s.storageLimit, keep)
+	} else {
+		result, err = storagebudget.EnforceRoots(s.storageRoots(), keep)
+	}
+	if err == nil {
+		s.storageProtectedBytes.Store(result.ProtectedBytes)
+		s.storageEffectiveLimit.Store(result.LimitBytes)
+		previous := s.storageOverflowBytes.Swap(result.OverBudgetBytes)
+		if result.OverBudgetBytes > 0 && previous != result.OverBudgetBytes {
+			log.Printf("storage mandatory data retained: protected_bytes=%d remaining_bytes=%d limit_bytes=%d over_budget_bytes=%d", result.ProtectedBytes, result.RemainingBytes, result.LimitBytes, result.OverBudgetBytes)
+		}
+	}
 	return err
 }
 
@@ -615,6 +639,7 @@ func (s *Server) metrics(w http.ResponseWriter, _ *http.Request) {
 		"component": "shellmcp-go", "build_version": parseBuildVersion(BuildVersion), "jobs": len(s.jobs.List()),
 		"queue_enabled": s.cfg.QueueEnabled, "mode": s.cfg.Mode, "heartbeat": s.cfg.HeartbeatEnabled, "audit_enabled": s.cfg.AuditLog != "",
 		"storage_limited": s.storageLimit > 0, "storage_limit_bytes": s.storageLimit, "storage_bytes": stats.StorageBytes, "spool_bytes": stats.SpoolBytes,
+		"storage_protected_bytes": s.storageProtectedBytes.Load(), "storage_over_budget_bytes": s.storageOverflowBytes.Load(), "storage_effective_limit_bytes": s.storageEffectiveLimit.Load(),
 		"outbox_depth": stats.OutboxDepth, "outbox_retry_attempts": stats.OutboxRetryAttempts,
 		"queue_poll_count": s.queuePollCount.Load(), "queue_poll_errors": s.queuePollErrors.Load(), "queue_poll_latency_ms": s.queuePollLatencyMS.Load(),
 		"outbox_retry_failures": s.outboxRetryFailures.Load(), "outbox_delivered": s.outboxDelivered.Load(),
@@ -1368,23 +1393,9 @@ func intAny(v any) int {
 	return 0
 }
 func (s *Server) cleanupSpoolByAge() {
-	if s.cfg.SpillDir == "" || s.cfg.SpoolRetention <= 0 {
-		return
-	}
-	cutoff := time.Now().Add(-s.cfg.SpoolRetention)
-	entries, err := os.ReadDir(s.cfg.SpillDir)
-	if err != nil {
-		return
-	}
-	for _, entry := range entries {
-		if entry.IsDir() || entry.Name() == "outbox" {
-			continue
-		}
-		info, err := entry.Info()
-		if err == nil && info.ModTime().Before(cutoff) {
-			_ = os.Remove(filepath.Join(s.cfg.SpillDir, entry.Name()))
-		}
-	}
+	// Age is not proof of receipt delivery or expiry. Retain all spills until a
+	// reference-aware reclamation policy exists; still reclaim disposable roots.
+	_ = s.enforceStorage(nil)
 }
 
 func (s *Server) spoolOutbox(jobID string, payload hub.TaskResult, cause error) {
@@ -1403,8 +1414,36 @@ func (s *Server) spoolOutbox(jobID string, payload hub.TaskResult, cause error) 
 		"next_attempt_at": 0,
 	}
 	b, _ := json.Marshal(entry)
-	_ = os.WriteFile(path, b, 0o600)
+	if err := writeOutboxFile(path, b); err != nil {
+		log.Printf("outbox persist failed job=%s err=%v", jobID, err)
+	}
 	_ = s.enforceStorage(nil)
+}
+
+// Atomic replacement keeps the previous pending payload intact if retry metadata
+// cannot be written (e.g. disk full). Only a successful acknowledgement removes it.
+func writeOutboxFile(path string, data []byte) error {
+	f, err := os.CreateTemp(filepath.Dir(path), ".outbox-*")
+	if err != nil {
+		return err
+	}
+	tmp := f.Name()
+	defer os.Remove(tmp)
+	if _, err = f.Write(data); err != nil {
+		f.Close()
+		return err
+	}
+	if err = f.Sync(); err != nil {
+		f.Close()
+		return err
+	}
+	if err = f.Close(); err != nil {
+		return err
+	}
+	if err = os.Rename(tmp, path); err != nil {
+		return err
+	}
+	return nil
 }
 
 // computeOutboxBackoff returns the wait time for the given attempt number
@@ -1475,12 +1514,7 @@ func (s *Server) flushOutbox(ctx context.Context) {
 			_ = os.Remove(path)
 			continue
 		}
-		var httpErr *hub.HTTPError
-		if errors.As(postErr, &httpErr) && httpErr.StatusCode == http.StatusNotFound {
-			log.Printf("outbox dropping stale result file=%s err=%v", path, postErr)
-			_ = os.Remove(path)
-			continue
-		}
+		// Even 404 is not delivery acknowledgement (e.g. temporarily restored Hub).
 		// Bump attempt counter and set next_attempt_at to the backoff window.
 		s.outboxRetryFailures.Add(1)
 		newAttempts := entry.Attempts + 1
@@ -1498,11 +1532,11 @@ func (s *Server) flushOutbox(ctx context.Context) {
 			log.Printf("outbox retry marshal failed file=%s err=%v", path, mErr)
 			continue
 		}
-		if wErr := os.WriteFile(path, raw, 0o600); wErr != nil {
+		if wErr := writeOutboxFile(path, raw); wErr != nil {
 			log.Printf("outbox retry persist failed file=%s err=%v", path, wErr)
 			continue
 		}
-		log.Printf("outbox retry failed file=%s err=%v attempts=%d next_attempt_in=%s", path, err, newAttempts, s.computeOutboxBackoff(newAttempts))
+		log.Printf("outbox retry failed file=%s err=%v attempts=%d next_attempt_in=%s", path, postErr, newAttempts, s.computeOutboxBackoff(newAttempts))
 	}
 }
 
