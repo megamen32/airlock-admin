@@ -92,3 +92,6 @@ deploy/systemd/*
 !deploy/systemd/gptadmin-auto-update-disabled.conf
 !deploy/systemd/gptadmin-hub.service
 .playwright-mcp/
+
+# CloudOS UI fork build output (served from PublicDir)
+cloudos-ui/dist/

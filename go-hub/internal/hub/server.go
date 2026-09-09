@@ -1630,31 +1630,21 @@ func (s *Server) Handler() http.Handler {
 	return withRequestTrace(withIngressAudit(withCORS(s.authSnapshotGate(mux))))
 }
 
-// cloudOSUI exposes the locally installed CloudOS UI below the same Hub origin.
-// Personal FRP hostnames already route to this Hub, so this does not create a
-// second public hostname or authentication ceremony.
+// cloudOSUI serves the locally installed CloudOS UI (cloudos-ui build output
+// below PublicDir) on the same Hub origin. Personal FRP hostnames already
+// route to this Hub, so this does not create a second public hostname or
+// authentication ceremony, and no separate UI service is required.
 func (s *Server) cloudOSUI(w http.ResponseWriter, r *http.Request) {
 	if r.URL.Path == "/cloudos" {
 		http.Redirect(w, r, "/cloudos/", http.StatusTemporaryRedirect)
 		return
 	}
-	target, _ := url.Parse("http://127.0.0.1:3030")
-	proxy := httputil.NewSingleHostReverseProxy(target)
-	originalDirector := proxy.Director
-	proxy.Director = func(req *http.Request) {
-		originalDirector(req)
-		req.URL.Path = strings.TrimPrefix(r.URL.Path, "/cloudos")
-		if req.URL.Path == "" {
-			req.URL.Path = "/"
-		}
-		req.Header.Set("X-Forwarded-Prefix", "/cloudos")
-		req.Header.Set("X-Forwarded-Proto", requestScheme(r))
-		req.Header.Set("X-Forwarded-Host", r.Host)
+	root := filepath.Join(s.cfg.PublicDir, "cloudos-ui")
+	if info, err := os.Stat(root); err != nil || !info.IsDir() {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]any{"detail": "CloudOS UI is not installed"})
+		return
 	}
-	proxy.ErrorHandler = func(w http.ResponseWriter, _ *http.Request, _ error) {
-		writeJSON(w, http.StatusBadGateway, map[string]any{"detail": "CloudOS UI is unavailable"})
-	}
-	proxy.ServeHTTP(w, r)
+	http.StripPrefix("/cloudos/", http.FileServer(http.Dir(root))).ServeHTTP(w, r)
 }
 
 func (s *Server) httpServiceEndpoint(w http.ResponseWriter, r *http.Request) {

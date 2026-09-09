@@ -2849,3 +2849,16 @@ plan is [`PROJECT_PLAN.md`](./PROJECT_PLAN.md).
 - Baseline: `docs/BUGS.md` entry `MCP-KEY-PERSISTENCE-20260726`; current Hub requires JWT `exp`, the issue endpoint defaults to 365 days, and `cli.py` advertises a legacy bearer deadline of `2026-07-27`.
 - Exit gate: offline regression proves a managed key survives a synthetic multi-year time jump, Hub restart and OAuth rotation; it fails only after explicit revoke/rotate. Existing environment-stored keys are imported by digest without logging their values.
 - Now: add the smallest failing Hub regression and implement durable opaque managed-key records. Next: migrate CLI issuance and preserve existing environment-stored client keys. Not now: NanoKVM public-repository publication, host installs, unrelated Android work, or production deployment.
+
+## 2026-09-10 - CloudOS desktop rebased onto macos-web fork - completed
+
+- Milestone: CloudOS
+- Owner: ZCode (LHC Lead)
+- Objective (user): "cloud os доделать: найти лучшую основу для fork — web ui like mac os with terminal finder browser etc. — форкнуть и использовать; все ноды по умолчанию часть cloud os."
+- Fork base: PuruVJ/macos-web (MIT, commit 1420480, vendored as `cloudos-ui/` with `FORK.md`). Puter rejected: mandatory second Node backend/DB/auth violates "CloudOS is only a client of the hub". DaedalOS rejected: Windows-style.
+- Change: new Svelte apps Terminal/Finder/Browser/Computers over the hub `/api/v1/cloud-os/*` APIs; hub now serves the built UI statically from `PublicDir/cloudos-ui` (reverse proxy to the 3030 Next.js service removed); cloudos shell exec/inspect/tabs got a foreground wait-timeout floor so a 0 DefaultTimeout no longer answers "still running" before execution.
+- Verification: `go vet` + full `go test ./...` green (new `cloudos_ui_static_test.go`: serves dist, blocks traversal, 503 when not installed); real browser canary on the deployed hub: Terminal ran `hostname && echo CLOUDOS-CANARY-OK` on `roomhacker-server-100` and printed the real output; Finder listed the real `/home/roomhacker` (464 entries, 245 folders); Computers showed 23 machines (7 online, nodes + direct agents) with no pairing; Browser listed real BrowserClaw/AgentBrowser connectors; personal tunnel `https://u-f1102930.t.gptadmin.bezrabotnyi.com/cloudos/` returns 200. Screenshot: `.tmp/cloudos-live-canary-20260910.png`.
+- Nodes by default: every unified-node shell executor is projected by `/api/v1/cloud-os/shell/computers` and rendered across all CloudOS apps — no opt-in.
+- Deploy: binaries rebuilt and installed atomically to `/opt/gptadmin/bin` (with `.pre-cloudos-*` backup), dist copied to `/opt/gptadmin/public/cloudos-ui`, `gptadmin-hub.service` restarted once.
+- Not now: xterm.js PTY sessions, file open/edit in Finder, porting the old opencode/grepmesh apps, auth on /cloudos/ (unchanged existing behavior).
+- Foreign WIP left uncommitted on purpose: `cli.py` + `tools/build.sh` + `tools/build_node.py` (portable node package, references missing `scripts/gptadmin_node_manage.py`), `browser-os/app/api/grepmesh/route.ts` (parallel agent work), `node_drain_test.go` quarantined to `.tmp/foreign-wip/` (references unimplemented `EnableNodeDrain`).
