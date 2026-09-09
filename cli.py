@@ -1602,11 +1602,15 @@ esac
     def svc_grepmesh_name(): return SYSTEMD_GREPMESH
 
     def write_frpc_unit(frpc_bin: str):
+        template = FRPC_UNIT_TPL
+        if _local_unified_node_enabled():
+            template = template.replace('BindsTo=gptadmin-hub.service\n', '').replace(
+                'After=network-online.target gptadmin-hub.service\n', 'After=network-online.target\n')
         UNIT_PATH_FRPC.parent.mkdir(parents=True, exist_ok=True)
         wrapper = BIN_DIR / 'run_frpc_all.sh'
         wrapper.write_text(frpc_wrapper_script(frpc_bin, env_read()))
         os.chmod(wrapper, 0o755)
-        UNIT_PATH_FRPC.write_text(FRPC_UNIT_TPL.format(
+        UNIT_PATH_FRPC.write_text(template.format(
             frpc_bin=wrapper,
             hardening=process_hardening_for_env(env_read()),
             wanted_by=LINUX_WANTED_BY,
@@ -5048,8 +5052,8 @@ def _restart_update_services_after_rollback() -> None:
         print('WARNING: restored runtime could not be restarted automatically', file=sys.stderr)
 
 
-def _reject_legacy_update_for_unified_node():
-    """Read-only fence before the legacy updater snapshots or changes anything."""
+def _local_unified_node_enabled():
+    """Detect the configured local primary, including effective systemd overrides."""
     modes = [os.environ.get('GPTADMIN_AUTH_MODE', '')]
     # primary.env is the existing unified-primary override, not an extra marker.
     # Other node instances (e.g. nodes/canary.env) do not select this primary.
@@ -5067,9 +5071,9 @@ def _reject_legacy_update_for_unified_node():
                 mode = value.strip().strip('"\'').lower()
         modes.append(mode)
     if any(mode.strip().lower() in ('writer', 'reader') for mode in modes):
-        die('legacy update is disabled for a unified node; use the unified node deployment path')
+        return True
     if IS_MACOS or not UNIT_PATH_HUB.exists():
-        return
+        return False
     # Include effective systemd drop-ins, including a Node running in legacy
     # auth mode. This is a read-only query, never a service start/restart.
     command = ['systemctl'] + (['--user'] if IS_USER_INSTALL else [])
@@ -5080,7 +5084,12 @@ def _reject_legacy_update_for_unified_node():
         die('cannot inspect Hub ExecStart before legacy update; check systemd and retry')
     if result.returncode != 0:
         die('cannot inspect Hub ExecStart before legacy update; check systemd and retry')
-    if re.search(r'(?:^|[/\s=])gptadmin-node(?:[\s;}]|$)', result.stdout or ''):
+    return bool(re.search(r'(?:^|[/\s=])gptadmin-node(?:[\s;}]|$)', result.stdout or ''))
+
+
+def _reject_legacy_update_for_unified_node():
+    """Read-only fence before the legacy updater snapshots or changes anything."""
+    if _local_unified_node_enabled():
         die('legacy update is disabled for a unified node; use the unified node deployment path')
 
 
