@@ -1,0 +1,62 @@
+-- name: GetSystemSettings :one
+SELECT * FROM system_settings WHERE id = true;
+
+-- name: GetPublicSystemStatus :one
+-- Reads activation state and locale from one statement snapshot so concurrent
+-- activation cannot expose a tenant paired with the pre-activation locale.
+SELECT s.ui_locale, EXISTS(SELECT 1 FROM tenants) AS activated
+FROM system_settings s
+WHERE s.id = true;
+
+-- name: GetSystemSettingsForActivation :one
+-- Serializes first-admin activation across replicas.
+SELECT * FROM system_settings WHERE id = true FOR UPDATE;
+
+-- name: GetSystemSettingsForUpdate :one
+-- Serializes whole-row settings updates across replicas.
+SELECT * FROM system_settings WHERE id = true FOR UPDATE;
+
+-- name: SetActivationCode :execrows
+-- Sets the activation code only if one hasn't been set yet.
+-- Returns rows affected: 0 means another writer already set it.
+UPDATE system_settings
+SET activation_code = @activation_code, updated_at = now()
+WHERE id = true AND activation_code IS NULL;
+
+-- name: CompleteActivation :exec
+UPDATE system_settings
+SET activation_code = NULL, ui_locale = @ui_locale, updated_at = now()
+WHERE id = true;
+
+-- name: UpdateLastSeenSDKVersion :exec
+-- Stamp the bundled agentsdk version after a successful mass rebuild
+-- (or on first boot when there's nothing to rebuild). Compared against
+-- agentsdk.Version on the next airlock startup to detect SDK drift.
+UPDATE system_settings
+SET last_seen_sdk_version = @last_seen_sdk_version, updated_at = now()
+WHERE id = true;
+
+-- name: UpdateSystemSettings :one
+-- Each system default is a pair: a providers row FK (nullable) and the
+-- bare model name. NULL/empty ⇄ no default configured for that slot.
+UPDATE system_settings
+SET default_build_provider_id     = @default_build_provider_id,
+    default_build_model           = @default_build_model,
+    default_exec_provider_id      = @default_exec_provider_id,
+    default_exec_model            = @default_exec_model,
+    default_stt_provider_id       = @default_stt_provider_id,
+    default_stt_model             = @default_stt_model,
+    default_vision_provider_id    = @default_vision_provider_id,
+    default_vision_model          = @default_vision_model,
+    default_tts_provider_id       = @default_tts_provider_id,
+    default_tts_model             = @default_tts_model,
+    default_image_gen_provider_id = @default_image_gen_provider_id,
+    default_image_gen_model       = @default_image_gen_model,
+    default_embedding_provider_id = @default_embedding_provider_id,
+    default_embedding_model       = @default_embedding_model,
+    default_search_provider_id    = @default_search_provider_id,
+    default_search_model          = @default_search_model,
+    ui_locale                     = @ui_locale,
+    updated_at = now()
+WHERE id = true
+RETURNING *;

@@ -1,0 +1,984 @@
+package main
+
+import (
+	"context"
+	"crypto/rand"
+	"encoding/hex"
+	"errors"
+	"fmt"
+	"net"
+	"net/http"
+	"os"
+	"os/signal"
+	"path/filepath"
+	"syscall"
+	"time"
+
+	"github.com/airlockrun/airlock/agentapi"
+	"github.com/airlockrun/airlock/api"
+	"github.com/airlockrun/airlock/builder"
+	"github.com/airlockrun/airlock/config"
+	"github.com/airlockrun/airlock/container"
+	"github.com/airlockrun/airlock/crypto"
+	"github.com/airlockrun/airlock/db"
+	"github.com/airlockrun/airlock/db/dbq"
+	"github.com/airlockrun/airlock/networkpolicy"
+	"github.com/airlockrun/airlock/oauth"
+	"github.com/airlockrun/airlock/realtime"
+	"github.com/airlockrun/airlock/secrets"
+	connectorartifactssvc "github.com/airlockrun/airlock/service/connectorartifacts"
+	connectormaintenancesvc "github.com/airlockrun/airlock/service/connectormaintenance"
+	connectororchestrationsvc "github.com/airlockrun/airlock/service/connectororchestration"
+	jobssvc "github.com/airlockrun/airlock/service/jobs"
+	"github.com/airlockrun/airlock/storage"
+	"github.com/airlockrun/airlock/trigger"
+	solprovider "github.com/airlockrun/sol/provider"
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/jackc/pgx/v5/pgxpool"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
+	"golang.org/x/sync/errgroup"
+	"golang.org/x/term"
+)
+
+func runServe(_ []string) {
+	cfg := config.Load()
+
+	// Logger. Default is a human-readable console format — the one you see in
+	// `docker logs` — with a plain wall-clock timestamp instead of an epoch
+	// float. LOG_FORMAT=json switches to structured JSON (with ISO8601 times)
+	// for log aggregation and the enterprise build. LOG_LEVEL=debug raises
+	// verbosity. Color is applied only when stdout is a real terminal, so
+	// container logs stay clean.
+	level := zap.InfoLevel
+	if os.Getenv("LOG_LEVEL") == "debug" {
+		level = zap.DebugLevel
+	}
+	var logger *zap.Logger
+	if os.Getenv("LOG_FORMAT") == "json" {
+		zapCfg := zap.NewProductionConfig()
+		zapCfg.Level = zap.NewAtomicLevelAt(level)
+		zapCfg.EncoderConfig.EncodeTime = zapcore.ISO8601TimeEncoder
+		logger = zap.Must(zapCfg.Build())
+	} else {
+		zapCfg := zap.NewDevelopmentConfig()
+		zapCfg.Level = zap.NewAtomicLevelAt(level)
+		zapCfg.EncoderConfig.EncodeTime = zapcore.TimeEncoderOfLayout("2006-01-02 15:04:05.000")
+		if term.IsTerminal(int(os.Stdout.Fd())) {
+			zapCfg.EncoderConfig.EncodeLevel = zapcore.CapitalColorLevelEncoder
+		}
+		// Stacktraces only for panics, not regular errors.
+		logger = zap.Must(zapCfg.Build(zap.AddStacktrace(zap.DPanicLevel)))
+	}
+	defer logger.Sync()
+
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer stop()
+
+	// The embedded Sol catalog is available synchronously. Refresh it from the
+	// Airlock catalog immediately and then every 12 hours.
+	solprovider.StartPeriodicRefresh(ctx)
+
+	// Connect to database
+	database := db.New(ctx, cfg.DatabaseURL)
+	defer database.Close()
+
+	// Run migrations
+	if err := db.RunMigrations(cfg.DatabaseURL); err != nil {
+		logger.Fatal("migrations failed", zap.Error(err))
+	}
+	logger.Info("migrations up to date")
+
+	// public_url / agent_domain are env-only (PUBLIC_URL / AGENT_DOMAIN in
+	// config.go), shared with the bundled Caddy via .env — no DB seeding.
+
+	// Ensure an activation code exists on first run, then write it to a
+	// mode-0600 file for docker-compose users to read.
+	// Safe to run from multiple replicas: SetActivationCode only writes
+	// when the column is NULL, and we always re-read the winning value.
+	if err := ensureActivationCode(ctx, database, cfg.ActivationCodeFile, logger); err != nil {
+		logger.Fatal("activation code setup failed", zap.Error(err))
+	}
+
+	// S3/MinIO client
+	s3Client := storage.NewS3Client(cfg)
+	if err := s3Client.EnsureBucket(ctx); err != nil {
+		logger.Fatal("s3: ensure bucket failed", zap.Error(err))
+	}
+	logger.Info("s3 connected")
+	var connectorStorageOrigins []string
+	if cfg.S3URLPublic != "" {
+		connectorStorageOrigins = []string{cfg.S3URLPublic}
+	}
+
+	// Container manager
+	containers := container.NewDockerManager(cfg, database.Pool(), container.DirectRuntimeNetworkPolicy{}, logger.Named("container"))
+	defer containers.Close()
+	logger.Info("docker manager ready")
+
+	// Ensure /libs/ is materialized on the host. Always extracts from the
+	// agent-builder image (so goose/templ are available); if AGENT_LIBS_PATH
+	// is set, the owned libs (agentsdk/goai/sol) come from there for live
+	// dev edits.
+	libs, err := builder.EnsureLibs(ctx, cfg.AgentBuilderImage, cfg.AgentLibsPath, cfg.AgentLibsCacheDir, logger.Named("libs"))
+	if err != nil {
+		logger.Fatal("agent libs setup failed", zap.Error(err))
+	}
+	cfg.AgentLibsPath = libs.Owned
+	cfg.AgentLibsExtPath = libs.Ext
+
+	// s3Client is used by agent API routes
+
+	// Decode encryption key(s)
+	encKey, err := hex.DecodeString(cfg.EncryptionKey)
+	if err != nil {
+		logger.Fatal("ENCRYPTION_KEY: invalid hex", zap.Error(err))
+	}
+	var oldKeys [][]byte
+	if cfg.EncryptionKeyOld != "" {
+		oldKey, err := hex.DecodeString(cfg.EncryptionKeyOld)
+		if err != nil {
+			logger.Fatal("ENCRYPTION_KEY_OLD: invalid hex", zap.Error(err))
+		}
+		oldKeys = append(oldKeys, oldKey)
+	}
+	secretStore := secrets.NewLocal(crypto.New(encKey, oldKeys...))
+	rewrapped, err := rewrapStoredSecrets(ctx, database.Pool(), secretStore, cfg.EncryptionKeyRewrap)
+	if err != nil {
+		logger.Fatal("secret storage migration failed", zap.Error(err))
+	}
+	logger.Info("encryption configured",
+		zap.String("active_key_id", crypto.KeyID(encKey)),
+		zap.Bool("rewrap_enabled", cfg.EncryptionKeyRewrap),
+		zap.Int64("rewrapped_secrets", rewrapped))
+
+	// Provider endpoints share a DNS-validating client across in-process model calls.
+	httpNetwork := networkpolicy.New(cfg.AgentHTTPPrivateCIDRs, networkpolicy.AllowsLocalhostDevelopment(cfg.PublicURL))
+	providerEndpointHTTPClient := httpNetwork.ProviderEndpointClient(0)
+
+	// Build service
+	buildSvc := builder.New(cfg, database, containers, secretStore, providerEndpointHTTPClient, s3Client, logger.Named("builder"))
+
+	// Prune orphaned containers, stale images, and dead monorepo dirs on startup.
+	var recreateAgentRuntimes []uuid.UUID
+	{
+		q := dbq.New(database.Pool())
+		agents, err := q.ListAgents(ctx)
+		if err != nil {
+			logger.Fatal("list agents for prune failed", zap.Error(err))
+		}
+		validAgents := make(map[string]container.AgentRuntimeSpec, len(agents))
+		for _, a := range agents {
+			id := uuid.UUID(a.ID.Bytes).String()
+			validAgents[id] = container.AgentRuntimeSpec{Image: a.ImageRef, TokenVersion: a.AgentTokenVersion, Status: a.Status}
+		}
+		recreateAgentRuntimes = containers.PruneAgentResources(ctx, validAgents)
+		validAgentImages := make(map[string]string, len(validAgents))
+		for id, spec := range validAgents {
+			validAgentImages[id] = spec.Image
+		}
+		pruneAgentRepos(buildSvc.ReposPath(), validAgentImages, logger.Named("prune"))
+	}
+
+	// Warm Docker build cache in background — first agent build will be faster.
+	go buildSvc.WarmBuildCache(ctx)
+	// Warm the runtime go-mod / go-build volumes the build-prompt loop's
+	// direct `go build` invocations consume (distinct cache from the one
+	// above, which only seeds BuildKit's cache mount for `docker build`).
+	go buildSvc.WarmRuntimeCaches(ctx)
+	// If the bundled agentsdk version moved since the last airlock boot,
+	// re-image every agent against the new SDK. Failures park the agent
+	// (status=stopped + error_message) so the operator sees the breakage
+	// instead of finding a silently incompatible agent days later.
+
+	// Create Hub and PubSub
+	hub := realtime.NewHub(logger.Named("hub"))
+	pubsub := realtime.NewPubSub(hub, logger.Named("pubsub"))
+	jobEventRelay := realtime.NewJobEventRelay(database.Pool(), hub, logger.Named("job-events"))
+	defer pubsub.Close()
+
+	// Wire build events to PubSub
+	buildSvc.SetEventPublisher(realtime.NewBuildEventPublisher(pubsub, hub))
+
+	// Create WS handler
+	wsHandler := realtime.NewHandler(database, hub, pubsub, logger.Named("handler"))
+
+	// Trigger system
+	dispatcher := trigger.NewDispatcher(cfg, database, containers, secretStore, logger.Named("dispatcher"))
+	var recreateGroup errgroup.Group
+	recreateGroup.SetLimit(8)
+	for _, agentID := range recreateAgentRuntimes {
+		recreateGroup.Go(func() error {
+			if _, err := dispatcher.EnsureRunning(ctx, agentID); err != nil {
+				logger.Error("recreate stale agent runtime", zap.String("agent_id", agentID.String()), zap.Error(err))
+			}
+			return nil
+		})
+	}
+	_ = recreateGroup.Wait()
+	transcriptionResolver := trigger.NewTranscriptionResolver(database, secretStore)
+	prompter := trigger.NewPromptProxy(dispatcher, database, s3Client, transcriptionResolver, cfg.AgentBaseURL, logger.Named("prompt-proxy"))
+	telegramDriver := trigger.NewTelegramDriver(logger.Named("telegram"))
+	drivers := map[string]trigger.BridgeDriver{
+		"telegram": telegramDriver,
+	}
+	bridgeMgr := trigger.NewBridgeManager(drivers, prompter, database, secretStore, cfg.JWTSecret, cfg.PublicURL, cfg.AgentBaseURL, logger.Named("bridges"))
+	jobWorker := trigger.NewJobWorker(dispatcher, database, logger.Named("job-worker"))
+	buildSvc.SetJobWake(jobWorker.Wake)
+	scheduler := trigger.NewScheduler(database, jobWorker.Wake, logger.Named("scheduler"))
+	jobsService := jobssvc.New(database, jobWorker.Wake, logger.Named("jobs"))
+	connectorArtifactsService := connectorartifactssvc.New(database, s3Client, logger.Named("connector-artifacts"))
+	connectorOrchestrationService := connectororchestrationsvc.New(database, logger.Named("connector-orchestration-worker"))
+	connectorMaintenance := connectormaintenancesvc.New(database, connectorOrchestrationService, s3Client, logger.Named("connector-maintenance"))
+
+	// OAuth, MCP, and connection calls share the general outbound policy transport.
+	oauthClient := oauth.NewClient(httpNetwork.Client(30*time.Second), networkpolicy.AllowsLocalhostDevelopment(cfg.PublicURL))
+
+	// Reverse proxy real IP config
+	realIPCfg := api.ParseRealIPConfig(cfg.ReverseProxyTrustedPeers, cfg.ReverseProxyLimit, cfg.ReverseProxyAuthSecret)
+	if realIPCfg.Enabled() {
+		logger.Info("real IP extraction enabled",
+			zap.String("trusted_peers", cfg.ReverseProxyTrustedPeers),
+			zap.Int("limit", cfg.ReverseProxyLimit),
+		)
+	}
+
+	// Build router
+	router := api.NewRouter(api.RouterConfig{
+		DB:                         database,
+		JWTSecret:                  cfg.JWTSecret,
+		PublicURL:                  cfg.PublicURL,
+		OAuthClient:                oauthClient,
+		TelegramDriver:             telegramDriver,
+		Secrets:                    secretStore,
+		S3Client:                   s3Client,
+		ConnectorStorageOrigins:    connectorStorageOrigins,
+		BuildService:               buildSvc,
+		Dispatcher:                 dispatcher,
+		Scheduler:                  scheduler,
+		BridgeManager:              bridgeMgr,
+		Jobs:                       jobsService,
+		ConnectorArtifacts:         connectorArtifactsService,
+		Containers:                 containers,
+		PromptProxy:                prompter,
+		Hub:                        hub,
+		PubSub:                     pubsub,
+		Handler:                    wsHandler,
+		AgentDomain:                cfg.AgentDomain,
+		AgentBaseURL:               cfg.AgentBaseURL,
+		LLMProxyURL:                cfg.LLMProxyURL,
+		ForceInlineAttachments:     cfg.ForceInlineAttachments,
+		HTTPNetwork:                httpNetwork,
+		ProviderEndpointHTTPClient: providerEndpointHTTPClient,
+		ActivationCodeFile:         cfg.ActivationCodeFile,
+		RealIP:                     realIPCfg,
+		Logger:                     logger,
+	})
+
+	// Start HTTP server
+	srv := &http.Server{
+		Addr:              cfg.ServerAddr,
+		Handler:           router,
+		ReadHeaderTimeout: 10 * time.Second,
+		ReadTimeout:       2 * time.Minute,
+		IdleTimeout:       2 * time.Minute,
+		MaxHeaderBytes:    64 << 10,
+		// Streaming NDJSON and WebSocket connections do not have a fixed
+		// response lifetime, so a server-wide WriteTimeout is unsafe.
+		WriteTimeout: 0,
+	}
+	defer srv.Close()
+	listener, err := net.Listen("tcp", cfg.ServerAddr)
+	if err != nil {
+		logger.Fatal("server listen failed", zap.Error(err))
+	}
+	defer listener.Close()
+
+	group, gctx := errgroup.WithContext(ctx)
+	group.Go(func() error {
+		return connectorArtifactsService.Run(gctx)
+	})
+	group.Go(func() error {
+		return connectorMaintenance.Run(gctx)
+	})
+	jobCtx, stopJobWorker := context.WithCancel(context.Background())
+	jobDone := make(chan struct{})
+	group.Go(func() error {
+		defer close(jobDone)
+		return jobWorker.Run(jobCtx)
+	})
+	group.Go(func() error {
+		return scheduler.Run(gctx)
+	})
+	group.Go(func() error {
+		return jobEventRelay.Run(gctx)
+	})
+
+	group.Go(func() error {
+		logger.Info("server listening", zap.String("addr", cfg.ServerAddr))
+		if err := srv.Serve(listener); err != nil {
+			if !errors.Is(err, context.Canceled) && !errors.Is(err, http.ErrServerClosed) {
+				return fmt.Errorf("could not run server: %w", err)
+			}
+
+			return nil
+		}
+
+		return nil
+	})
+	if err := buildSvc.RecoverStuckOperations(ctx); err != nil {
+		logger.Fatal("build service recovery failed", zap.Error(err))
+	}
+	logger.Info("build service ready")
+	go buildSvc.RebuildAllOnSDKChange(context.Background())
+
+	// Start background trigger services
+	if err := bridgeMgr.Start(gctx); err != nil {
+		logger.Fatal("bridge manager start failed", zap.Error(err))
+	}
+	defer bridgeMgr.Stop()
+
+	// Token refresh job
+	refreshJob := oauth.NewRefreshJob(database, secretStore, oauthClient, logger.Named("oauth-refresh"))
+	go refreshJob.Run(gctx)
+
+	// External-git polling fallback (5-min ls-remote per connected
+	// agent). Catches pushes from providers without webhook support
+	// configured (Bitbucket/Gitea in v1) and from users behind
+	// firewalls that block inbound webhooks.
+	go buildSvc.RunGitPoll(gctx)
+
+	// Inbound-OAuth GC: sweeps expired authz codes, long-consumed
+	// refresh tokens, and ancient grants every 5 minutes.
+	inboundOAuthGC := api.NewInboundOAuthGC(database, logger.Named("oauth-inbound-gc"))
+	go inboundOAuthGC.Run(gctx)
+
+	queries := dbq.New(database.Pool())
+
+	group.Go(func() error {
+		const period = time.Hour * 6
+
+		return cleanS3Objects(gctx, logger, s3Client, period)
+	})
+
+	group.Go(func() error {
+		const period = time.Hour * 6
+
+		return cleanupAgentsObjects(gctx, logger, s3Client, queries, period)
+	})
+
+	group.Go(func() error {
+		return historyRetention(gctx, logger, queries)
+	})
+
+	group.Go(func() error {
+		const period = time.Hour
+
+		return authPruner(gctx, logger, queries, period)
+	})
+
+	group.Go(func() error {
+		const period = time.Hour
+
+		return anonConvPruner(gctx, logger, queries, period)
+	})
+
+	group.Go(func() error {
+		const period = time.Minute
+
+		return sweeper(
+			gctx,
+			logger,
+			queries,
+			dispatcher,
+			pubsub,
+			period,
+		)
+	})
+
+	group.Go(func() error {
+		const period = time.Hour * 24
+
+		return cachePruner(gctx, logger, queries, period)
+	})
+
+	group.Go(func() error {
+		select {
+		case <-ctx.Done():
+		case <-gctx.Done():
+		}
+		stopJobWorker()
+		select {
+		case <-jobDone:
+		case <-time.After(15 * time.Second):
+			logger.Warn("job worker graceful shutdown timed out")
+		}
+
+		sctx, scancel := context.WithTimeout(context.Background(), time.Second*10)
+		defer scancel()
+
+		if err := srv.Shutdown(sctx); err != nil {
+			logger.Warn("server graceful shutdown failed", zap.Error(err))
+		}
+
+		return nil
+	})
+
+	if err := group.Wait(); err != nil {
+		logger.Fatal("failed to run service", zap.Error(err))
+	}
+
+	logger.Info("stopping server")
+}
+
+func rewrapStoredSecrets(ctx context.Context, pool *pgxpool.Pool, store secrets.Store, enabled bool) (int64, error) {
+	if !enabled {
+		return 0, nil
+	}
+	return secrets.RewrapDatabase(ctx, pool, store)
+}
+
+// ensureActivationCode runs on startup. If the system isn't activated yet,
+// it guarantees an activation code exists in DB (generating one if missing)
+// and writes it to filePath so `docker compose` users can grab it
+// with a single `cat`. On a fresh first run the file is created; on a
+// subsequent restart where a code already exists, the file is overwritten
+// with the same value (in case someone deleted it). Once a tenant exists,
+// the code has already been consumed and the file is removed.
+func ensureActivationCode(ctx context.Context, database *db.DB, filePath string, logger *zap.Logger) error {
+	q := dbq.New(database.Pool())
+
+	exists, err := q.TenantExists(ctx)
+	if err != nil {
+		return fmt.Errorf("check tenant exists: %w", err)
+	}
+	if exists {
+		// Already activated. Remove any stale activation file from a previous
+		// first-run so the secret doesn't linger on disk.
+		if filePath != "" {
+			if err := os.Remove(filePath); err != nil && !os.IsNotExist(err) {
+				logger.Warn("failed to remove stale activation file", zap.String("path", filePath), zap.Error(err))
+			}
+		}
+		return nil
+	}
+
+	settings, err := q.GetSystemSettings(ctx)
+	if err != nil {
+		return fmt.Errorf("get system settings: %w", err)
+	}
+
+	if !settings.ActivationCode.Valid {
+		var buf [16]byte
+		if _, err := rand.Read(buf[:]); err != nil {
+			return fmt.Errorf("generate activation code: %w", err)
+		}
+		code := hex.EncodeToString(buf[:])
+		// Only the first writer wins (WHERE activation_code IS NULL) — safe
+		// under concurrent startup from multiple replicas.
+		if _, err := q.SetActivationCode(ctx, pgtype.Text{String: code, Valid: true}); err != nil {
+			return fmt.Errorf("set activation code: %w", err)
+		}
+		settings, err = q.GetSystemSettings(ctx)
+		if err != nil {
+			return fmt.Errorf("re-read system settings: %w", err)
+		}
+	}
+
+	code := settings.ActivationCode.String
+	logger.Info("activation code file ready", zap.String("file", filePath))
+
+	if filePath != "" {
+		if err := os.MkdirAll(filepath.Dir(filePath), 0o755); err != nil {
+			logger.Warn("failed to create activation file dir", zap.String("path", filePath), zap.Error(err))
+		} else if err := os.WriteFile(filePath, []byte(code+"\n"), 0o600); err != nil {
+			logger.Warn("failed to write activation file", zap.String("path", filePath), zap.Error(err))
+		}
+	}
+
+	return nil
+}
+
+// pruneAgentRepos removes per-agent repo directories under basePath
+// that don't correspond to any agent in the database. With the
+// per-agent-repo layout each agent's source lives at basePath/<agentID>/,
+// so orphan cleanup is a single rm of that directory. The
+// _monorepo_archive/ folder (left in place by 003_split_monorepo for
+// disaster-recovery) is preserved by skipping non-UUID-shaped names.
+func pruneAgentRepos(basePath string, validAgents map[string]string, logger *zap.Logger) {
+	if basePath == "" {
+		return
+	}
+	entries, err := os.ReadDir(basePath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return
+		}
+		logger.Warn("failed to read agent repos dir", zap.Error(err))
+		return
+	}
+	for _, e := range entries {
+		if !e.IsDir() {
+			continue
+		}
+		name := e.Name()
+		// Skip anything that isn't a UUID: archive dirs, vendor caches,
+		// half-written tempdirs, etc. Only delete what we know we own.
+		if _, err := uuid.Parse(name); err != nil {
+			continue
+		}
+		if _, ok := validAgents[name]; ok {
+			continue
+		}
+		logger.Info("removing orphaned agent repo", zap.String("agent", name))
+		if err := builder.RemoveAgentRepo(basePath, name); err != nil {
+			logger.Warn("failed to remove agent repo", zap.String("agent", name), zap.Error(err))
+		}
+	}
+}
+
+func cleanS3Objects(
+	ctx context.Context,
+	lgr *zap.Logger,
+	s3client *storage.S3Client,
+	period time.Duration,
+) error {
+	if s3client == nil {
+		return errors.New("expected *S3Client but got nil")
+	}
+
+	lgr = lgr.Named("event-cleanup")
+
+	ticker := time.NewTicker(period)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return nil
+		case <-ticker.C:
+		}
+
+		objects, err := s3client.ListObjects(ctx, "events/")
+		if err != nil {
+			lgr.Error("list events failed", zap.Error(err))
+			continue
+		}
+
+		cutoff := time.Now().Add(-24 * time.Hour)
+		todelete := collectObjectsToDelete(objects, cutoff)
+
+		deleted, err := s3client.DeleteObjects(ctx, todelete...)
+		if err != nil {
+			lgr.Error("deletion failed", zap.Int("deleted.count", deleted), zap.Error(err))
+			continue
+		}
+
+		if deleted > 0 {
+			lgr.Info("deleted events", zap.Int("deleted.count", deleted))
+		}
+	}
+}
+
+// Storage retention sweeper — delete objects under any directory the
+// agent registered with retention_hours > 0, once they're older than
+// the configured TTL. The framework auto-registers "tmp" at 72h
+// (DirectoryOpts.RetentionHours), so the prior hardcoded "tmp/" sweep
+// falls out naturally as a special case of this loop. Builders can
+// opt arbitrary directories into the sweep by passing
+// RetentionHours when calling RegisterDirectory.
+//
+// We list each opted-in S3 prefix per directory rather than scanning
+// "agents/" once because per-directory TTLs vary and a single TTL on
+// the union would either over- or under-keep depending on the
+// shortest/longest opt-in. Cheap: the prefix lists are bounded by
+// what the agent actually wrote.
+func cleanupAgentsObjects(
+	ctx context.Context,
+	lgr *zap.Logger,
+	s3client *storage.S3Client,
+	queries *dbq.Queries,
+	period time.Duration,
+) error {
+	if s3client == nil {
+		return errors.New("expected *S3Client but got nil")
+	}
+
+	if queries == nil {
+		return errors.New("expected *dbq.Queries but got nil")
+	}
+
+	lgr = lgr.Named("storage-retention-sweeper")
+
+	ticker := time.NewTicker(period)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return nil
+		case <-ticker.C:
+		}
+
+		dirs, err := queries.ListDirectoriesWithRetention(ctx)
+		if err != nil {
+			lgr.Error("list directories with retention", zap.Error(err))
+
+			continue
+		}
+
+		for _, dir := range dirs {
+			agentUUID, err := uuid.FromBytes(dir.AgentID.Bytes[:])
+			if err != nil {
+				continue
+			}
+
+			prefix := "agents/" + agentUUID.String() + "/" + dir.Path + "/"
+
+			objects, err := s3client.ListObjects(ctx, prefix)
+			if err != nil {
+				lgr.Error("list prefix failed", zap.String("prefix", prefix), zap.Error(err))
+
+				continue
+			}
+
+			retention := time.Duration(dir.RetentionHours) * time.Hour
+			cutoff := time.Now().Add(-retention)
+			todelete := collectObjectsToDelete(objects, cutoff)
+
+			deleted, err := s3client.DeleteObjects(ctx, todelete...)
+			if err != nil {
+				lgr.Error("deletion failed", zap.Int("deleted.count", deleted), zap.Error(err))
+				continue
+			}
+
+			if deleted > 0 {
+				lgr.Info(
+					"deleted events",
+					zap.Int("deleted.count", deleted),
+					zap.String("agent_id", dir.AgentID.String()),
+					zap.String("path", dir.Path),
+					zap.Duration("retention", retention),
+				)
+			}
+		}
+	}
+}
+
+func collectObjectsToDelete(objects []storage.ObjectInfo, cutoff time.Time) []string {
+	result := make([]string, 0, min(len(objects), 100))
+
+	for _, object := range objects {
+		if object.LastModified.Before(cutoff) {
+			result = append(result, object.Key)
+		}
+	}
+
+	return result
+}
+
+// historyRetention deletes terminal jobs and compacts verbose terminal run data
+// after 30 days. Each replica can sweep concurrently because the queries lock
+// ordered, bounded batches with SKIP LOCKED.
+func historyRetention(
+	ctx context.Context,
+	lgr *zap.Logger,
+	queries *dbq.Queries,
+) error {
+	if ctx == nil {
+		panic("expected context.Context but got nil")
+	}
+	if queries == nil {
+		panic("expected *dbq.Queries but got nil")
+	}
+	if lgr == nil {
+		panic("expected *zap.Logger but got nil")
+	}
+
+	const (
+		retention = 30 * 24 * time.Hour
+		period    = 24 * time.Hour
+		batchSize = 500
+	)
+
+	lgr = lgr.Named("history-retention")
+	ticker := time.NewTicker(period)
+	defer ticker.Stop()
+
+	for {
+		cutoff := pgtype.Timestamptz{
+			Time:  time.Now().Add(-retention),
+			Valid: true,
+		}
+
+		var pruned int64
+		for {
+			n, err := queries.PruneTerminalAgentJobs(ctx, dbq.PruneTerminalAgentJobsParams{
+				Cutoff: cutoff,
+				Lim:    batchSize,
+			})
+			if err != nil {
+				lgr.Error("prune terminal agent jobs failed", zap.Error(err))
+				break
+			}
+			pruned += n
+			if n < batchSize {
+				break
+			}
+		}
+		if pruned > 0 {
+			lgr.Info("pruned terminal agent jobs", zap.Int64("rows.count", pruned))
+		}
+
+		var compacted int64
+		for {
+			n, err := queries.CompactOldRuns(ctx, dbq.CompactOldRunsParams{
+				Cutoff: cutoff,
+				Lim:    batchSize,
+			})
+			if err != nil {
+				lgr.Error("compact terminal runs failed", zap.Error(err))
+				break
+			}
+			compacted += n
+			if n < batchSize {
+				break
+			}
+		}
+		if compacted > 0 {
+			lgr.Info("compacted terminal runs", zap.Int64("rows.count", compacted))
+		}
+
+		select {
+		case <-ctx.Done():
+			return nil
+		case <-ticker.C:
+		}
+	}
+}
+
+// Auth-lockout prune — drop failure rows older than 24h plus expired lockout
+// rows that have been quiet for 24h (so a subsequent first failure resets the
+// escalation tier to 0). Hourly is fine: the failures table is small and the
+// queries are pure DELETEs.
+func authPruner(
+	ctx context.Context,
+	lgr *zap.Logger,
+	queries *dbq.Queries,
+	period time.Duration,
+) error {
+	ticker := time.NewTicker(period)
+	defer ticker.Stop()
+
+	if queries == nil {
+		return errors.New("expected *dbq.Queries but got nil")
+	}
+
+	lgr = lgr.Named("auth-lockout-prune")
+
+	for {
+		select {
+		case <-ctx.Done():
+			return nil
+		case <-ticker.C:
+		}
+
+		n, err := queries.PruneAuthFailures(ctx)
+		if err != nil {
+			lgr.Error("prune auth_failures failed", zap.Error(err))
+		}
+
+		if n > 0 {
+			lgr.Info("pruned auth_failures", zap.Int64("rows.count", n))
+		}
+
+		n, err = queries.PruneStaleAuthLockouts(ctx)
+		if err != nil {
+			lgr.Error("prune auth_lockouts failed", zap.Error(err))
+		}
+
+		if n > 0 {
+			lgr.Info("pruned auth_lockouts", zap.Int64("rows.count", n))
+		}
+	}
+}
+
+// anonA2AConversationTTL bounds how long an anonymous A2A conversation
+// (user_id NULL, source='a2a' — minted for an unauthenticated
+// external-MCP caller) survives idle. These have no resume UI and no
+// owning user, so without a sweep they accumulate forever.
+const anonA2AConversationTTL = 12 * time.Hour
+
+// anonConvPruner deletes anonymous A2A conversations idle past
+// anonA2AConversationTTL every period. The row delete cascades to
+// agent_messages via FK. Authed-A2A and bridge conversations are
+// untouched (the query keys on user_id IS NULL AND source='a2a').
+func anonConvPruner(
+	ctx context.Context,
+	lgr *zap.Logger,
+	queries *dbq.Queries,
+	period time.Duration,
+) error {
+	ticker := time.NewTicker(period)
+	defer ticker.Stop()
+
+	if queries == nil {
+		return errors.New("expected *dbq.Queries but got nil")
+	}
+
+	lgr = lgr.Named("anon-a2a-conv-prune")
+
+	for {
+		select {
+		case <-ctx.Done():
+			return nil
+		case <-ticker.C:
+		}
+
+		n, err := queries.DeleteExpiredAnonA2AConversations(ctx, int32(anonA2AConversationTTL.Seconds()))
+		if err != nil {
+			lgr.Error("delete expired anon a2a conversations failed", zap.Error(err))
+		}
+
+		if n > 0 {
+			lgr.Info("pruned anon a2a conversations", zap.Int64("rows.count", n))
+		}
+	}
+}
+
+// Stuck-run sweeper — runs in 'running' status older than the absolute HTTP
+// ceiling are presumed orphaned (airlock restart, agent crash mid- stream,
+// network partition). Skip runs the dispatcher still tracks in memory: those
+// will tear down naturally when the cancel context fires or the user clicks
+// Cancel. Synthesize orphan tool_results so the next LLM turn doesn't 400 on
+// unpaired tool_use, and publish a synthetic run.complete WS event so any live
+// UI that was watching unblocks. The sweeper's terminal write wins over a
+// delayed agent completion, so an orphaned run cannot be reopened.
+func sweeper(
+	ctx context.Context,
+	lgr *zap.Logger,
+	queries *dbq.Queries,
+	dispatcher *trigger.Dispatcher,
+	pubsub *realtime.PubSub,
+	period time.Duration,
+) error {
+	ticker := time.NewTicker(period)
+	defer ticker.Stop()
+
+	const stuckCutoff = trigger.PromptHTTPCeiling + 30*time.Second
+
+	if queries == nil {
+		return errors.New("expected *dbq.Queries but got nil")
+	}
+
+	if dispatcher == nil {
+		return errors.New("expected *trigger.Dispatcher but got nil")
+	}
+
+	if pubsub == nil {
+		return errors.New("expected *realtime.PubSub but got nil")
+	}
+
+	lgr = lgr.Named("stuck-run-sweeper")
+
+	for {
+		select {
+		case <-ctx.Done():
+			return nil
+		case <-ticker.C:
+		}
+
+		cutoff := pgtype.Timestamptz{
+			Time:  time.Now().Add(-stuckCutoff),
+			Valid: true,
+		}
+
+		stuck, err := queries.ListStuckRuns(ctx, cutoff)
+		if err != nil {
+			lgr.Error("list stuck runs", zap.Error(err))
+			continue
+		}
+
+		if len(stuck) == 0 {
+			continue
+		}
+
+		inFlight := make(map[uuid.UUID]struct{})
+		for _, id := range dispatcher.InFlightIDs() {
+			inFlight[id] = struct{}{}
+		}
+
+		for _, run := range stuck {
+			runUUID, err := uuid.FromBytes(run.ID.Bytes[:])
+			if err != nil {
+				continue
+			}
+
+			if _, live := inFlight[runUUID]; live {
+				continue
+			}
+
+			agentUUID, err := uuid.FromBytes(run.AgentID.Bytes[:])
+			if err != nil {
+				continue
+			}
+
+			updated, err := queries.FailStuckRun(ctx, run.ID)
+			if err != nil {
+				lgr.Error("failed to update run completed", zap.Error(err))
+				continue
+			}
+			if updated == 0 {
+				continue
+			}
+
+			agentapi.SynthesizeOrphanToolResults(ctx, queries, runUUID, "timeout", lgr)
+
+			agentapi.PublishRunTerminal(ctx, pubsub, agentUUID, runUUID, "error", "agent disconnected")
+
+			lgr.Warn(
+				"stuck run reaped",
+				zap.String("run_id", runUUID.String()),
+				zap.String("agent_id", agentUUID.String()),
+			)
+		}
+	}
+}
+
+// Attachment URL cache prune — drop rows that expired more than 24h ago.
+// Stale rows aren't harmful (just unused), so a slow daily sweep is enough.
+func cachePruner(
+	ctx context.Context,
+	lgr *zap.Logger,
+	queries *dbq.Queries,
+	period time.Duration,
+) error {
+	ticker := time.NewTicker(period)
+	defer ticker.Stop()
+
+	if queries == nil {
+		return errors.New("expected *dbq.Queries but got nil")
+	}
+
+	lgr = lgr.Named("attachment-url-cache-prune")
+
+	for {
+		select {
+		case <-ctx.Done():
+			return nil
+		case <-ticker.C:
+		}
+
+		n, err := queries.PruneExpiredAttachmentURLs(ctx)
+		if err != nil {
+			lgr.Error("prune attachment_url_cache failed", zap.Error(err))
+
+			continue
+		}
+
+		if n > 0 {
+			lgr.Info("pruned attachment_url_cache", zap.Int64("rows.count", n))
+		}
+	}
+}

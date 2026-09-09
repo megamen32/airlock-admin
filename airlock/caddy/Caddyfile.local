@@ -1,0 +1,26 @@
+# TLS_MODE=local - plain HTTP on the loopback-only Compose service.
+{
+	auto_https off
+}
+
+import routes.caddy
+
+(proxy_airlock) {
+	reverse_proxy {$AIRLOCK_UPSTREAM} {
+		header_up X-Airlock-Proxy-Auth {$REVERSE_PROXY_AUTH_SECRET}
+	}
+}
+
+http://{$DOMAIN} {
+	import apex_routes
+}
+
+http://s3.{$DOMAIN} {
+	import s3_routes
+}
+
+http://*.{$DOMAIN} {
+	request_header -X-Airlock-Proxy-Auth
+	import baseline_security_headers
+	import proxy_airlock
+}

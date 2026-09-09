@@ -1,0 +1,39 @@
+# TLS_MODE=manual — bring your own TLS certificate.
+#
+# Caddy serves the cert + key you provide instead of issuing any. Drop them in
+# the cert dir bind-mounted by docker-compose.yml (TLS_CERT_DIR, default
+# ./certs → /certs) and point TLS_CERT_FILE / TLS_KEY_FILE at them in .env
+# (defaults /certs/cert.pem and /certs/key.pem).
+#
+# Per-agent `*.{$DOMAIN}` TLS is terminated here using your cert, so it MUST be
+# a wildcard cert covering apex + `*.{$DOMAIN}` (+ s3.{$DOMAIN}) — a
+# single-host cert breaks per-agent {slug}.{$DOMAIN} routing. A SAN cert with
+# both `{$DOMAIN}` and `*.{$DOMAIN}` is the usual shape.
+
+import routes.caddy
+
+(proxy_airlock) {
+	reverse_proxy {$AIRLOCK_UPSTREAM} {
+		header_up X-Airlock-Proxy-Auth {$REVERSE_PROXY_AUTH_SECRET}
+	}
+}
+
+{$DOMAIN} {
+	tls {$TLS_CERT_FILE} {$TLS_KEY_FILE}
+	import https_security_headers
+	import apex_routes
+}
+
+s3.{$DOMAIN} {
+	tls {$TLS_CERT_FILE} {$TLS_KEY_FILE}
+	import https_security_headers
+	import s3_routes
+}
+
+*.{$DOMAIN} {
+	request_header -X-Airlock-Proxy-Auth
+	tls {$TLS_CERT_FILE} {$TLS_KEY_FILE}
+	import baseline_security_headers
+	import https_security_headers
+	import proxy_airlock
+}

@@ -1,0 +1,651 @@
+package builder
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"path/filepath"
+	"sort"
+	"strings"
+	"time"
+
+	"github.com/airlockrun/airlock/container"
+	"github.com/airlockrun/airlock/db/dbq"
+	"github.com/airlockrun/airlock/llmledger"
+	"github.com/airlockrun/goai/message"
+	"github.com/airlockrun/goai/stream"
+	"github.com/airlockrun/goai/tool"
+	sol "github.com/airlockrun/sol"
+	"github.com/airlockrun/sol/activity"
+	"github.com/airlockrun/sol/bus"
+	"github.com/airlockrun/sol/executor"
+	solprovider "github.com/airlockrun/sol/provider"
+	soltools "github.com/airlockrun/sol/tools"
+	"github.com/airlockrun/sol/websearch"
+	dmount "github.com/docker/docker/api/types/mount"
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
+	"go.uber.org/zap"
+)
+
+// buildSink receives the codegen todo snapshot. The builder's buildPublisher
+// implements it to persist + publish the todo list; nil in non-build callers
+// (e.g. sol CLI parity tests).
+type buildSink interface {
+	OnTodos(todosJSON []byte, done, total int)
+}
+
+// solRunOpts configures an in-process Sol run with a remote toolserver.
+type solRunOpts struct {
+	WorkDir            string      // host path to the cloned per-agent repo
+	AgentDir           string      // container-side path (typically "/workspace")
+	AgentID            pgtype.UUID // owning agent — for the llm_usage row
+	UserID             pgtype.UUID // attributes build llm_usage to a user (initiator, or owner fallback)
+	BuildID            pgtype.UUID // agent_builds row this codegen attributes to
+	BuildType          string      // "build" | "upgrade" — llm_usage.call_kind
+	BuildProviderID    pgtype.UUID // providers row FK; pairs with BuildModel
+	BuildModel         string      // bare model name (e.g. "gpt-5"); empty ⇄ FK invalid
+	Prompt             string      // prompt for the runner
+	LogCallback        func(line string)
+	RuntimeLogCallback func(line string)
+	Sink               buildSink                                  // optional: receives structured live actions + todos
+	LocalTools         tool.Set                                   // optional in-process tools (e.g., set_agent_description)
+	TestDBURL          string                                     // test schema DB URL with search_path baked in
+	TestDBPSQL         string                                     // test schema DB URL without search_path (for psql)
+	TestDBSchema       string                                     // test schema name (for psql SET search_path)
+	IntegrationToken   string                                     // build-bound credential for go tool air integration commands
+	GoProxyDir         string                                     // dev: host path to the generated lib proxy; empty in prod
+	Verify             func(context.Context, tool.Executor) error // required isolated-workspace verification
+}
+
+// solRunResult captures the outcome of an in-process Sol run. ExitStatus
+// and ExitMessage are populated when the agent invoked the exit tool —
+// callers map ExitStatus="success" onto the next pipeline step and any
+// other status ("error" or "refused") onto a halted pipeline.
+type solRunResult struct {
+	Status      sol.RunStatus
+	TotalText   string
+	Error       error
+	ExitCalled  bool
+	ExitStatus  string // "success", "error", or "refused" when ExitCalled
+	ExitMessage string
+	VerifyError error
+	Nudges      int
+}
+
+// runSolInProcess starts a toolserver container, runs the Sol Runner in-process,
+// and returns the result. The toolserver provides filesystem tools (read, write,
+// bash, etc.) while the LLM loop runs in the Airlock process.
+func (b *BuildService) runSolInProcess(ctx context.Context, opts solRunOpts) (*solRunResult, error) {
+	if opts.Verify == nil {
+		return nil, errors.New("codegen verification callback is required")
+	}
+	if opts.IntegrationToken == "" || !opts.AgentID.Valid {
+		return nil, errors.New("codegen integration credentials are required")
+	}
+	// Fall back to the system-wide default build model when no per-agent
+	// override has been set. Live inheritance — no snapshot at agent create.
+	if !opts.BuildProviderID.Valid || opts.BuildModel == "" {
+		q := dbq.New(b.db.Pool())
+		settings, sErr := q.GetSystemSettings(ctx)
+		if sErr != nil {
+			return nil, fmt.Errorf("load system settings: %w", sErr)
+		}
+		opts.BuildProviderID = settings.DefaultBuildProviderID
+		opts.BuildModel = settings.DefaultBuildModel
+	}
+	if !opts.BuildProviderID.Valid || opts.BuildModel == "" {
+		return nil, fmt.Errorf("no build model configured — set one in admin Settings or on the agent's Models tab")
+	}
+
+	// Step 1: Resolve LLM model (decrypt API key from DB).
+	model, rp, err := b.resolveModel(ctx, opts.BuildProviderID, opts.BuildModel)
+	if err != nil {
+		return nil, fmt.Errorf("resolve model: %w", err)
+	}
+
+	// Record the resolved model on the build row so the builds list can show
+	// which model produced each build. Written now (not at completion) so a
+	// build that later fails still carries it. Best-effort: this is cosmetic
+	// metadata, never load-bearing, so a write error only logs.
+	if opts.BuildID.Valid {
+		if mErr := dbq.New(b.db.Pool()).SetAgentBuildModel(ctx, dbq.SetAgentBuildModelParams{
+			ID:         opts.BuildID,
+			BuildModel: opts.BuildModel,
+		}); mErr != nil {
+			b.logger.Warn("record build model", zap.Error(mErr))
+		}
+	}
+
+	// Step 1b: Resolve web search tool (optional).
+	hasWebSearch := false
+	if searchTool, ok := b.resolveSearchTool(ctx, rp); ok {
+		if opts.LocalTools == nil {
+			opts.LocalTools = tool.Set{}
+		}
+		opts.LocalTools[searchTool.Name] = searchTool
+		hasWebSearch = true
+	}
+
+	// Step 2: Start toolserver container.
+	var toolEnv []string
+	if opts.TestDBURL != "" {
+		toolEnv = append(toolEnv,
+			"TEST_DB_URL="+opts.TestDBURL,
+			"TEST_DB_PSQL="+opts.TestDBPSQL,
+			"TEST_DB_SCHEMA="+opts.TestDBSchema,
+		)
+	}
+	toolEnv = append(toolEnv,
+		"AIRLOCK_API_URL="+b.cfg.APIURLAgent,
+		"AIRLOCK_AGENT_ID="+uuid.UUID(opts.AgentID.Bytes).String(),
+		"AIRLOCK_INTEGRATION_TOKEN="+opts.IntegrationToken,
+	)
+	// Workspace mount: in compose/docker-in-docker mode, mount only this
+	// build's subdirectory from the shared codegen volume. The toolserver
+	// must not see activation data, cached libraries, or other workspaces in
+	// the same persistent volume. Native development uses a direct bind.
+	var workspaceMount dmount.Mount
+	agentDir := opts.AgentDir
+	if b.cfg.AgentCodegenVolume != "" && b.cfg.AgentCodegenPath != "" {
+		volumeRoot := filepath.Dir(b.cfg.AgentCodegenPath)
+		subpath, err := filepath.Rel(volumeRoot, opts.WorkDir)
+		if err != nil || subpath == "." || subpath == ".." || strings.HasPrefix(subpath, ".."+string(filepath.Separator)) {
+			return nil, fmt.Errorf("toolserver workspace %q is outside codegen volume root %q", opts.WorkDir, volumeRoot)
+		}
+		workspaceMount = dmount.Mount{
+			Type:          dmount.TypeVolume,
+			Source:        b.cfg.AgentCodegenVolume,
+			Target:        "/workspace",
+			VolumeOptions: &dmount.VolumeOptions{Subpath: filepath.ToSlash(subpath)},
+		}
+	} else {
+		workspaceMount = dmount.Mount{Type: dmount.TypeBind, Source: opts.WorkDir, Target: "/workspace"}
+	}
+	mounts := []dmount.Mount{workspaceMount}
+	if b.cfg.AgentLibsPathExplicit {
+		// Dev: overlay the live lib trees read-only at /libs so the codegen
+		// LLM reads the current agentsdk/goai/sol source + REFERENCE.md guide
+		// (the prompt instructs it to). This is docs/reference only — go
+		// resolution goes through the proxy below, not /libs (the committed
+		// go.mod has no replaces pointing here). Prod uses the agent-builder
+		// image's baked /libs for the same docs.
+		for _, sub := range []string{"agentsdk", "goai", "sol"} {
+			mounts = append(mounts, dmount.Mount{
+				Type:     dmount.TypeBind,
+				Source:   filepath.Join(b.cfg.AgentLibsPath, sub),
+				Target:   "/libs/" + sub,
+				ReadOnly: true,
+			})
+		}
+	}
+	// Dev: mount the generated lib proxy and point GOPROXY at it so the owned
+	// libs resolve from live source. The proxy serves each lib at a content-
+	// addressed version, so changed source is a new version Go fetches fresh
+	// — no shared-cache eviction needed. Prod: GoProxyDir empty → public proxy.
+	if opts.GoProxyDir != "" {
+		mounts = append(mounts, dmount.Mount{
+			Type:     dmount.TypeBind,
+			Source:   opts.GoProxyDir,
+			Target:   "/goproxy",
+			ReadOnly: true,
+		})
+		toolEnv = append(toolEnv, "GOPROXY=file:///goproxy,https://proxy.golang.org")
+	}
+	// Point the toolserver's skill registry at the platform skill roots baked
+	// into the agent-builder image from agentsdk's version-matched bundle.
+	// airlock owns the path; sol just scans whatever SKILLS_DIRS names.
+	toolEnv = append(toolEnv, "SKILLS_DIRS=/usr/local/lib/agent-skills")
+	tc, err := b.containers.StartToolserver(ctx, container.ToolserverOpts{
+		Image:       b.cfg.AgentBuilderImage,
+		Mounts:      mounts,
+		WorkDir:     agentDir,
+		Env:         toolEnv,
+		LogCallback: opts.RuntimeLogCallback,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("start toolserver: %w", err)
+	}
+	// Use a fresh ctx for teardown so a cancelled build still tears the
+	// container down. With the build's ctx the Docker SDK calls return
+	// ctx.Err immediately and the toolserver leaks (kept running long
+	// after the LLM loop exits — the in-flight bash/build keeps chewing).
+	defer func() {
+		stopCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		b.containers.StopToolserver(stopCtx, tc.Name)
+	}()
+
+	// Eager force-kill on cancel. The defer above handles the normal
+	// exit path with a 5s graceful stop, but on a user-initiated cancel
+	// every second of the toolserver still running means more log spam
+	// streaming into the build view from an in-flight tool the user
+	// already gave up on. Watch ctx and SIGKILL immediately the moment
+	// it's done — KillToolserver's RemoveOptions{Force: true} sends
+	// SIGKILL and removes in one shot. Both this and the defer call
+	// the same docker engine; the second invocation no-ops on a
+	// missing container.
+	killOnCancel := make(chan struct{})
+	defer close(killOnCancel)
+	go func() {
+		select {
+		case <-ctx.Done():
+			killCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			defer cancel()
+			if err := b.containers.KillToolserver(killCtx, tc.Name); err != nil {
+				b.logger.Warn("eager kill toolserver on cancel", zap.String("name", tc.Name), zap.Error(err))
+			}
+		case <-killOnCancel:
+		}
+	}()
+
+	b.logger.Info("toolserver ready", zap.String("endpoint", tc.Endpoint))
+
+	// Step 3: Connect to toolserver via WebSocket.
+	wsURL := strings.Replace(tc.Endpoint, "http://", "ws://", 1) + "/ws"
+	transport, err := executor.NewWSTransport(wsURL)
+	if err != nil {
+		b.captureToolRuntimeDiagnostics(ctx, tc.Name, "failed to connect")
+		return nil, fmt.Errorf("connect to toolserver: %w", err)
+	}
+	defer transport.Close()
+
+	// Step 4: Fetch remote tools and set auto-approve rules.
+	remoteTools, err := transport.FetchTools(ctx)
+	if err != nil {
+		b.captureToolRuntimeDiagnostics(ctx, tc.Name, "failed during startup")
+		return nil, fmt.Errorf("fetch tools: %w", err)
+	}
+	if err := transport.SetRules(ctx, []bus.PermissionRule{
+		{Permission: "*", Pattern: "*", Action: "allow"},
+	}); err != nil {
+		b.captureToolRuntimeDiagnostics(ctx, tc.Name, "failed during startup")
+		return nil, fmt.Errorf("set rules: %w", err)
+	}
+
+	remoteExec := executor.NewRemoteExecutor(transport, remoteTools)
+
+	// Step 5: Register the agent-builder's exit tool (sol's exit plus a
+	// "refused" status) as a LOCAL tool. Sol's NewRunner can auto-inject
+	// its own exit tool, but execution still flows through the
+	// caller-provided executor — and our compositeExecutor routes
+	// anything not in `local.Tools()` to the remote toolserver, which
+	// does not implement `exit`. Adding it here ensures the composite
+	// keeps `exit` local; sol's auto-injection then sees `exit` already
+	// in the tool set and skips its own copy.
+	exitState := &soltools.ExitState{}
+	if opts.LocalTools == nil {
+		opts.LocalTools = tool.Set{}
+	}
+	opts.LocalTools["exit"] = newExitTool(exitState)
+
+	// Step 6: Build tool.Set and executor, merging local tools if present.
+	toolSet := remoteToolsToSet(remoteTools)
+	var exec tool.Executor = remoteExec
+
+	if len(opts.LocalTools) > 0 {
+		for name, t := range opts.LocalTools {
+			toolSet[name] = t
+		}
+		exec = &compositeExecutor{
+			remote: remoteExec,
+			local:  tool.NewLocalExecutor(opts.LocalTools, nil),
+		}
+	}
+
+	// Step 7: Create the agent-builder agent with all tools.
+	ag := newAgentBuilderAgent(toolSet, hasWebSearch)
+	// sol parses Model as "provider/model" internally; reconstruct from
+	// the resolved row's catalog provider_id + the bare model name.
+	ag.Model = rp.CatalogID + "/" + opts.BuildModel
+
+	// Step 8: Create scoped bus and subscribe for log streaming.
+	runBus := bus.New()
+	if opts.LogCallback != nil {
+		subscribeForLogs(runBus, opts.LogCallback, opts.Sink)
+	}
+
+	// Step 9: Create and run Sol Runner. ExitState opts the runner into
+	// "agent must call exit" semantics; RunUntilExit handles the nudge
+	// loop when the model stops without doing so. The exit tool was
+	// already wired into the executor above, so sol's auto-injection
+	// path will no-op (it sees the tool in the set and skips).
+	runner := sol.NewRunner(sol.RunnerOptions{
+		Agent:     ag,
+		Model:     model,
+		Bus:       runBus,
+		Executor:  exec,
+		Quiet:     true,
+		ExitState: exitState,
+	})
+	runner.PermissionManager().SetRules([]bus.PermissionRule{
+		{Permission: "*", Pattern: "*", Action: "allow"},
+	})
+
+	codegenStart := time.Now()
+	exitedResult, err := runner.RunUntilExit(ctx, opts.Prompt, sol.RunUntilExitOptions{
+		MaxNudges:    2,
+		NudgeMessage: builderNudgeMessage,
+	})
+	if executor.IsTransportError(err) {
+		b.captureToolRuntimeDiagnostics(ctx, tc.Name, "disconnected")
+	}
+	// Codegen LLM spend bypasses the runtime proxy (in-process runner,
+	// direct provider model), so record it straight into the ledger here
+	// — both the success and error paths, since a failed codegen still
+	// burned tokens. resolveModel filled opts.BuildModel from the default
+	// when the agent had no override, so it's the effective model now.
+	b.recordBuildUsage(opts, rp.CatalogID, rp.Slug, exitedResult, err, time.Since(codegenStart))
+	if err != nil {
+		// Preserve the runner's status when it filled one in (RunCancelled
+		// on ctx cancel) — overwriting to RunFailed unconditionally would
+		// hide cancellation from the build path's errors.Is check.
+		status := sol.RunFailed
+		var totalText string
+		if exitedResult != nil && exitedResult.RunResult != nil {
+			status = exitedResult.RunResult.Status
+			totalText = exitedResult.RunResult.TotalText
+		}
+		return &solRunResult{
+			Status:    status,
+			TotalText: totalText,
+			Error:     err,
+		}, nil
+	}
+
+	out := &solRunResult{
+		Status:    exitedResult.RunResult.Status,
+		TotalText: exitedResult.RunResult.TotalText,
+		Error:     exitedResult.RunResult.Error,
+		Nudges:    exitedResult.Nudges,
+	}
+	if exitState.Called() {
+		out.ExitCalled = true
+		out.ExitStatus, out.ExitMessage = exitState.Result()
+	}
+	if out.ExitStatus == exitStatusSuccess {
+		out.VerifyError = opts.Verify(ctx, remoteExec)
+	}
+	return out, nil
+}
+
+func (b *BuildService) captureToolRuntimeDiagnostics(ctx context.Context, name, reason string) {
+	diagCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	if ctx.Err() != nil {
+		return
+	}
+	if err := b.containers.CaptureToolserverDiagnostics(diagCtx, name, reason); err != nil {
+		b.logger.Warn("capture tool runtime diagnostics", zap.String("name", name), zap.String("reason", reason), zap.Error(err))
+	}
+}
+
+// recordBuildUsage writes the codegen run's LLM spend to the shared
+// llm_usage ledger (attributed to the build) and refreshes the
+// agent_builds aggregate. Best-effort and on a fresh bounded context so
+// a cancelled/failed build still records the tokens it already burned.
+// exited may be nil (runner returned before producing a result).
+func (b *BuildService) recordBuildUsage(opts solRunOpts, providerCatalogID, providerSlug string, exited *sol.ExitedRunResult, runErr error, latency time.Duration) {
+	if !opts.BuildID.Valid {
+		return // nothing to attribute to (defensive — callers set it)
+	}
+
+	c := llmledger.Capture{
+		AgentID:           opts.AgentID,
+		UserID:            opts.UserID,
+		BuildID:           opts.BuildID,
+		ProviderCatalogID: providerCatalogID,
+		ProviderSlug:      providerSlug,
+		Model:             opts.BuildModel,
+		Capability:        "text",
+		CallKind:          opts.BuildType, // "build" | "upgrade"
+		Slug:              "codegen",
+		FinishReason:      "error",
+		Errored:           runErr != nil,
+		Latency:           latency,
+	}
+	if exited != nil && exited.RunResult != nil {
+		c.TokensFromStreamUsage(exited.RunResult.Usage)
+		c.FinishReason = string(exited.RunResult.Status)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	q := dbq.New(b.db.Pool())
+	llmledger.Record(ctx, q, b.logger, c)
+	if err := q.UpdateBuildLLMStats(ctx, opts.BuildID); err != nil {
+		b.logger.Error("aggregate build llm stats", zap.Error(err))
+	}
+}
+
+// resolvedProvider holds the result of looking up and decrypting a provider.
+// CatalogID carries the models.dev catalog name (e.g. "openai") — *not*
+// the providers row UUID. The row UUID lives on the agent's *_provider_id
+// FK columns; we don't carry it here because callers already have it.
+type resolvedProvider struct {
+	CatalogID                 string
+	Slug                      string
+	APIKey                    string
+	BaseURL                   string
+	IncludeUsage              *bool
+	SupportsStructuredOutputs *bool
+}
+
+// resolveModel loads the providers row by FK, decrypts its API key, and
+// builds a stream.Model from (catalog provider_id, modelName). The FK
+// uniquely identifies which key to use even when multiple rows share a
+// provider_id (multi-key support).
+func (b *BuildService) resolveModel(ctx context.Context, providerRowID pgtype.UUID, modelName string) (stream.Model, *resolvedProvider, error) {
+	rp, err := b.resolveProvider(ctx, providerRowID)
+	if err != nil {
+		return nil, nil, err
+	}
+	if rp.CatalogID == "openai-compatible" {
+		confirmed, err := dbq.New(b.db.Pool()).GetProviderModel(ctx, dbq.GetProviderModelParams{
+			ConfiguredProviderID: providerRowID,
+			ModelID:              modelName,
+		})
+		if err != nil {
+			return nil, nil, fmt.Errorf("model %q is not confirmed for provider %q (%s): %w", modelName, rp.CatalogID, rp.Slug, err)
+		}
+		rp.IncludeUsage = &confirmed.IncludeUsage
+		rp.SupportsStructuredOutputs = &confirmed.StructuredOutputs
+	}
+	model := solprovider.CreateModel(rp.CatalogID, modelName, b.languageModelOptions(rp))
+	return model, rp, nil
+}
+
+func (b *BuildService) languageModelOptions(rp *resolvedProvider) solprovider.Options {
+	opts := solprovider.Options{
+		APIKey:                    rp.APIKey,
+		BaseURL:                   rp.BaseURL,
+		IncludeUsage:              rp.IncludeUsage,
+		SupportsStructuredOutputs: rp.SupportsStructuredOutputs,
+	}
+	if rp.CatalogID == "openai-compatible" {
+		opts.HTTPClient = b.providerHTTPClient
+	}
+	return opts
+}
+
+// resolveProvider loads a providers row by FK, decrypts its API key, and
+// applies the LLM-proxy override if one is configured.
+func (b *BuildService) resolveProvider(ctx context.Context, providerRowID pgtype.UUID) (*resolvedProvider, error) {
+	q := dbq.New(b.db.Pool())
+	p, err := q.GetProviderByID(ctx, providerRowID)
+	if err != nil {
+		return nil, fmt.Errorf("provider row not found: %w", err)
+	}
+	if !p.IsEnabled {
+		return nil, fmt.Errorf("provider %q (%s) is disabled", p.CatalogID, p.Slug)
+	}
+	apiKey := ""
+	if p.ApiKey != "" {
+		apiKey, err = b.encryptor.Get(ctx, "provider/"+p.ID.String()+"/api_key", p.ApiKey)
+		if err != nil {
+			return nil, fmt.Errorf("decrypt API key for %q (%s): %w", p.CatalogID, p.Slug, err)
+		}
+	}
+
+	baseURL := p.BaseUrl
+	if b.cfg.LLMProxyURL != "" {
+		baseURL = b.cfg.LLMProxyURL
+	}
+
+	return &resolvedProvider{
+		CatalogID: p.CatalogID,
+		Slug:      p.Slug,
+		APIKey:    apiKey,
+		BaseURL:   baseURL,
+	}, nil
+}
+
+// resolveSearchTool tries to create a web search tool for the builder.
+// First checks whether the build LLM provider has a native search backend
+// (grok/gemini/kimi); if not, walks the providers table for any enabled row
+// whose overlay entry declares a SearchBackend, preferring catalog-only
+// entries (brave/perplexity) over LLM providers that happen to offer search.
+func (b *BuildService) resolveSearchTool(ctx context.Context, rp *resolvedProvider) (tool.Tool, bool) {
+	// 1. Try the LLM provider cascade — reuses rp's key when the provider
+	//    has a native search backend (soltools.WebSearch reads the overlay).
+	if t, ok := soltools.WebSearch(rp.CatalogID, rp.APIKey); ok {
+		return t, true
+	}
+
+	// 2. Walk the providers table for any configured search-capable row.
+	q := dbq.New(b.db.Pool())
+	providers, err := q.ListProviders(ctx)
+	if err != nil {
+		return tool.Tool{}, false
+	}
+	base, _ := solprovider.LoadProviders()
+
+	type cand struct {
+		row         dbq.Provider
+		backend     string
+		catalogOnly bool
+	}
+	var ranked []cand
+	for _, p := range providers {
+		if !p.IsEnabled {
+			continue
+		}
+		backend := solprovider.SearchBackend(p.CatalogID)
+		if backend == "" {
+			continue
+		}
+		_, inBase := base[p.CatalogID]
+		ranked = append(ranked, cand{row: p, backend: backend, catalogOnly: !inBase})
+	}
+	sort.Slice(ranked, func(i, j int) bool {
+		if ranked[i].catalogOnly != ranked[j].catalogOnly {
+			return ranked[i].catalogOnly
+		}
+		if ranked[i].row.CatalogID != ranked[j].row.CatalogID {
+			return ranked[i].row.CatalogID < ranked[j].row.CatalogID
+		}
+		if ranked[i].row.Slug != ranked[j].row.Slug {
+			return ranked[i].row.Slug < ranked[j].row.Slug
+		}
+		return ranked[i].row.ID.String() < ranked[j].row.ID.String()
+	})
+	for _, c := range ranked {
+		apiKey, err := b.encryptor.Get(ctx, "provider/"+c.row.ID.String()+"/api_key", c.row.ApiKey)
+		if err != nil {
+			continue
+		}
+		return websearch.NewTool(websearch.NewClient(websearch.Options{
+			Provider: c.backend,
+			APIKey:   apiKey,
+		})), true
+	}
+
+	return tool.Tool{}, false
+}
+
+// remoteToolsToSet converts remote tool.Info list to a tool.Set for the agent definition.
+// The tools in this set have no Execute function — execution goes through the RemoteExecutor.
+func remoteToolsToSet(infos []tool.Info) tool.Set {
+	ts := make(tool.Set)
+	for _, info := range infos {
+		ts[info.Name] = tool.Tool{
+			Name:        info.Name,
+			Description: info.Description,
+			InputSchema: info.InputSchema,
+		}
+	}
+	return ts
+}
+
+// subscribeForLogs subscribes to bus events and forwards them as the curated
+// codegen log plus, when sink is non-nil, structured live actions and todo
+// snapshots.
+//
+// Each tool result becomes one compact line via the shared activity formatter
+// (no file contents, no edited line bodies; commands/searches truncated) — a
+// stark contrast to dumping the model-facing output. LLM text deltas are
+// buffered and emitted as a single `[output] ...` line just before the next
+// tool call / step boundary. The exit tool is skipped here — codegen.go emits
+// the richer `[exit] <status>: <message>` line from the run result. The bus
+// dispatches synchronously on the runner's goroutine, so a closure-local
+// buffer is safe without a mutex.
+func subscribeForLogs(b *bus.Bus, cb func(string), sink buildSink) {
+	var textBuf strings.Builder
+
+	flushText := func() {
+		if textBuf.Len() == 0 {
+			return
+		}
+		cb("[output] " + textBuf.String())
+		textBuf.Reset()
+	}
+
+	b.Subscribe(bus.StreamTextDelta, func(e bus.Event) {
+		td, ok := e.Properties.(stream.TextDeltaEvent)
+		if !ok {
+			return
+		}
+		textBuf.WriteString(td.Text)
+	})
+	// A tool call only flushes any buffered LLM text; the result event below
+	// carries the one compact line per tool.
+	b.Subscribe(bus.StreamToolCall, func(e bus.Event) {
+		flushText()
+	})
+	b.Subscribe(bus.StreamToolResult, func(e bus.Event) {
+		flushText()
+		tr, ok := e.Properties.(stream.ToolResultEvent)
+		if !ok {
+			return
+		}
+		// The exit tool's outcome is logged by codegen.go from the run result;
+		// streaming its benign "Run terminated" result here would double up.
+		if tr.ToolName == "exit" {
+			return
+		}
+		act := activity.Summarize(
+			tr.ToolName, tr.Input, tr.Title, tr.Metadata,
+			message.ToolOutputText(tr.Output), string(message.ToolOutcome(tr.Output)),
+		)
+		cb(act.LogLine())
+		if sink == nil {
+			return
+		}
+		// Todo snapshots drive the Tasks checklist + the "N/M" badge; every
+		// other tool is represented by its compact codegen-log line above.
+		if tr.ToolName == "todowrite" || tr.ToolName == "todoread" {
+			todosJSON, _ := json.Marshal(tr.Metadata["todos"])
+			done, total := activity.TodoCounts(tr.Metadata)
+			sink.OnTodos(todosJSON, done, total)
+		}
+	})
+	b.Subscribe(bus.StreamStepComplete, func(e bus.Event) {
+		flushText()
+		step, ok := e.Properties.(*sol.StepResult)
+		if !ok {
+			return
+		}
+		cb(fmt.Sprintf("[step] complete (finish: %s)", step.FinishReason))
+	})
+}

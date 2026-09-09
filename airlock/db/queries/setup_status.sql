@@ -1,0 +1,52 @@
+-- name: AgentSetupStatus :one
+-- Counts of registered slots that need operator action before the agent
+-- can run cleanly. "Needs setup" definitions:
+--   resources: every required need must be bound and ready
+--   env_vars: is_secret AND value_ref = ''  (no fallback)
+--           OR (NOT is_secret) AND value_ref = '' AND default_value = ''
+-- Pattern mismatch on stored values is handled at sync time
+-- (UpsertAgentEnvVar clears value_ref when the pattern changes and the
+-- stored value no longer matches), so a non-empty value_ref means
+-- "configured + currently passes pattern".
+SELECT
+    (SELECT COUNT(*)::int FROM agent_resource_needs n
+        LEFT JOIN connections c ON c.id = n.bound_connection_id
+        WHERE n.agent_id = $1 AND n.type = 'connection' AND n.deleted_at IS NULL
+          AND n.required
+          AND (n.bound_connection_id IS NULL
+            OR (c.auth_mode != 'none' AND (c.access_token_ref = ''
+              OR (c.auth_mode = 'oauth' AND (NOT c.scopes_verified
+                OR NOT (string_to_array(n.expected_scopes, ' ') <@ string_to_array(c.granted_scopes, ' '))))))))
+        AS connections,
+    (SELECT COUNT(*)::int FROM agent_resource_needs n
+        LEFT JOIN agent_mcp_servers m ON m.id = n.bound_mcp_id
+        WHERE n.agent_id = $1 AND n.type = 'mcp_server' AND n.deleted_at IS NULL
+          AND n.required
+          AND (n.bound_mcp_id IS NULL
+            OR (m.auth_mode != 'none' AND (m.access_token_ref = ''
+              OR (m.auth_mode IN ('oauth', 'oauth_discovery') AND (NOT m.scopes_verified
+                OR NOT (string_to_array(n.expected_scopes, ' ') <@ string_to_array(m.granted_scopes, ' '))))))))
+        AS mcp_servers,
+    (SELECT COUNT(*)::int FROM agent_resource_needs n
+        LEFT JOIN connector_resources c ON c.id = n.bound_connector_id
+        WHERE n.agent_id = $1 AND n.type = 'connector' AND n.deleted_at IS NULL
+          AND n.required
+           AND ((n.bound_connector_id IS NULL AND n.bound_connector_group_id IS NULL)
+             OR (n.bound_connector_id IS NOT NULL AND (
+               c.lifecycle <> 'active'
+               OR c.readiness <> 'ready'
+               OR NOT connector_interface_satisfies_need(c.interface_descriptor, c.contract_id, n.spec)))
+             OR (n.bound_connector_group_id IS NOT NULL AND NOT EXISTS (
+               SELECT 1
+               FROM connector_target_group_members member
+               JOIN connector_resources grouped ON grouped.id = member.connector_id
+               WHERE member.group_id = n.bound_connector_group_id
+                 AND grouped.lifecycle = 'active'
+                 AND grouped.readiness = 'ready'
+                 AND connector_interface_satisfies_need(grouped.interface_descriptor, grouped.contract_id, n.spec)))))
+        AS connectors,
+    (SELECT COUNT(*)::int FROM agent_env_vars e
+        WHERE e.agent_id = $1
+          AND e.value_ref = ''
+          AND (e.is_secret OR e.default_value = ''))
+        AS env_vars;

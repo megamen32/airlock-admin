@@ -1,0 +1,29 @@
+# Dockerfile.frontend — Vue 3 SPA (build + serve via Caddy)
+#
+# Build context is this repo's root.
+
+# --- Build ---
+FROM node:22-alpine AS builder
+
+# pnpm via corepack (matches frontend/pnpm-lock.yaml). Pin explicitly: newer
+# corepack defaults to pnpm 11 and won't auto-switch to the packageManager pin.
+RUN corepack enable && corepack prepare pnpm@10.33.0 --activate
+
+WORKDIR /app
+# pnpm-workspace.yaml carries `ignoredBuiltDependencies` — must be
+# present at install time so pnpm doesn't bail with ERR_PNPM_IGNORED_BUILDS.
+COPY frontend/package.json frontend/pnpm-lock.yaml frontend/pnpm-workspace.yaml ./
+RUN pnpm install --frozen-lockfile
+
+COPY frontend/ .
+RUN pnpm run build
+
+# --- Runtime ---
+FROM caddy:2-alpine
+
+COPY --from=builder /app/dist /srv
+
+# Serve the SPA on :80, fall through unknown paths to index.html for
+# client-side routing. Public Caddy reverse-proxies to this on the
+# internal Docker network; nothing here is exposed to the outside.
+RUN printf ':80 {\n\troot * /srv\n\tencode gzip\n\ttry_files {path} /index.html\n\tfile_server\n}\n' > /etc/caddy/Caddyfile

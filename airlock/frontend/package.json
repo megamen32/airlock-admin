@@ -1,0 +1,47 @@
+{
+  "name": "airlock-frontend",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@10.33.0",
+  "scripts": {
+    "dev": "vite",
+    "build": "pnpm run notices && vue-tsc --noEmit && vite build",
+    "test": "vitest run",
+    "watch": "vite build --watch",
+    "typecheck": "vue-tsc --noEmit",
+    "preview": "vite preview",
+    "notices": "node scripts/licenses.mjs gen",
+    "check:licenses": "node scripts/licenses.mjs check"
+  },
+  "dependencies": {
+    "@bufbuild/protobuf": "^2.11.0",
+    "@fontsource-variable/inter": "^5.3.0",
+    "@primeuix/themes": "^2.0.3",
+    "@primevue/forms": "^4.3.0",
+    "@simplewebauthn/browser": "^13.3.0",
+    "@zxcvbn-ts/core": "^4.1.1",
+    "@zxcvbn-ts/language-common": "^4.1.1",
+    "axios": "^1.18.1",
+    "dompurify": "^3.4.12",
+    "marked": "^17.0.0",
+    "pinia": "^3.0.0",
+    "primeicons": "^7.0.0",
+    "primevue": "^4.3.0",
+    "vue": "^3.5.0",
+    "vue-i18n": "^11.4.10",
+    "vue-router": "^4.6.0"
+  },
+  "devDependencies": {
+    "@primevue/auto-import-resolver": "^4.3.0",
+    "@types/node": "^24.0.0",
+    "@vitejs/plugin-vue": "^6.0.0",
+    "@vue/test-utils": "^2.5.0",
+    "@vue/tsconfig": "^0.8.0",
+    "jsdom": "^29.1.1",
+    "typescript": "~5.9.0",
+    "unplugin-vue-components": "^32.0.0",
+    "vite": "^8.0.16",
+    "vitest": "^4.1.10",
+    "vue-tsc": "^3.0.0"
+  }
+}

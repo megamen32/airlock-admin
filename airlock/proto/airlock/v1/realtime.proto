@@ -1,0 +1,156 @@
+syntax = "proto3";
+
+package airlock.v1;
+
+option go_package = "github.com/airlockrun/airlock/gen/airlock/v1;airlockv1";
+
+import "airlock/v1/types.proto";
+
+// --- Events ---
+
+// ErrorEvent carries a WebSocket error message.
+message ErrorEvent {
+  string error = 1;
+}
+
+// SubscribedEvent confirms a topic subscription.
+message SubscribedEvent {}
+
+// AgentStatusEvent is broadcast when an agent's status changes.
+message AgentStatusEvent {
+  AgentInfo agent = 1;
+}
+
+// --- Run streaming events (published to agent WS topic) ---
+
+// RunStartedEvent signals that a new run has begun.
+message RunStartedEvent {
+  string run_id = 1;
+  string agent_id = 2;
+  string conversation_id = 3;
+}
+
+// TextDeltaEvent carries a chunk of generated text.
+message TextDeltaEvent {
+  string run_id = 1;
+  string text = 2;
+}
+
+// CompactionStartedEvent marks the start of an automatic context compaction.
+message CompactionStartedEvent {
+  string run_id = 1;
+}
+
+// CompactionFinishedEvent describes the result of an automatic context compaction.
+message CompactionFinishedEvent {
+  string run_id = 1;
+  int32 tokens_freed = 2;
+  string error = 3;
+}
+
+// ToolCallEvent signals a tool call is ready for execution.
+message ToolCallEvent {
+  string run_id = 1;
+  string tool_call_id = 2;
+  string tool_name = 3;
+  string input = 4; // JSON string
+}
+
+// ToolResultEvent carries the result (or error) of a tool execution.
+message ToolResultEvent {
+  string run_id = 1;
+  string tool_call_id = 2;
+  string tool_name = 3;
+  string output = 4; // human-facing text of the result
+  string error = 5;  // set if tool errored (error text)
+  // outcome is the structured, persisted tool status derived from the
+  // discriminated tool-result output: "success" | "error" | "denied".
+  string outcome = 6;
+}
+
+// ConfirmationRequiredEvent signals the user must approve an action.
+message ConfirmationRequiredEvent {
+  string run_id = 1;
+  string permission = 2;
+  repeated string patterns = 3;
+  string code = 4;
+  string tool_call_id = 5;
+  // description is the plain-language summary a run_js call carries (its
+  // `description` arg). Shown in the confirmation card / bridge prompt in
+  // place of the permission name when present. Empty for tools that don't
+  // supply one.
+  string description = 6;
+}
+
+// RunSuspendedEvent signals the run is suspended (e.g. awaiting approval).
+message RunSuspendedEvent {
+  string run_id = 1;
+  string reason = 2;
+}
+
+// RunCompleteEvent signals the run has finished.
+message RunCompleteEvent {
+  string run_id = 1;
+  string finish_reason = 2;
+  int32 tokens_in = 3;
+  int32 tokens_out = 4;
+}
+
+// RunErrorEvent signals an error during the run.
+message RunErrorEvent {
+  string run_id = 1;
+  string error = 2;
+}
+
+// JobProgressEvent carries a job's latest operator-visible progress snapshot.
+message JobProgressEvent {
+  string agent_id = 1;
+  string job_id = 2;
+  int64 state_version = 3;
+  JobProgressInfo progress = 4;
+}
+
+// JobLifecycleEvent carries an operator-safe job summary without input/output.
+message JobLifecycleEvent {
+  JobInfo summary = 1;
+}
+
+// JobsSubscribedEvent confirms an agent's operator job topic is active.
+message JobsSubscribedEvent {
+  string agent_id = 1;
+}
+
+// --- Client → server control messages ---
+
+// SubscribeBuildRequest asks the hub to subscribe this connection to a
+// build's verbose topic (codegen log, live actions, todos). The Build page
+// sends it on mount; the hub gates it on AgentBuildsView for the owning agent.
+message SubscribeBuildRequest {
+  string build_id = 1;
+}
+
+// UnsubscribeBuildRequest drops the per-build subscription (sent on unmount).
+message UnsubscribeBuildRequest {
+  string build_id = 1;
+}
+
+// SubscribeJobsRequest asks for operator job events on an agent-specific topic.
+message SubscribeJobsRequest {
+  string agent_id = 1;
+}
+
+// UnsubscribeJobsRequest drops an agent's operator job-event subscription.
+message UnsubscribeJobsRequest {
+  string agent_id = 1;
+}
+
+// --- Notification events ---
+
+// NotificationEvent carries an output() or topic publish notification.
+message NotificationEvent {
+  string agent_id = 1;
+  string conversation_id = 2;
+  string topic = 3;           // empty for direct output()
+  string parts_json = 4;      // JSON-encoded []DisplayPart
+  string source = 5;          // "notification"
+}
