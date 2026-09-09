@@ -85,3 +85,11 @@ reader auth/receipt across restart, then applied generation4 after freeing
 space. Evidence: `.tmp/auth-budget/real-{red,green}.log`.
 The focused estimator/refusal tests are separate logic/filesystem checks;
 they do not substitute for this real two-process ext4 canary.
+
+Final committed artifact8736611 passed the same real ext4 canary
+(`.tmp/resource-root/auth-final.log`) and was deployed sequentially to VUSA and
+the primary on2026-09-09. Both retained their identity and unexpired receipts;
+ordinary public primary execution and bidirectional physical-origin TLS peer
+execution passed. VUSA periodic synchronization advanced to generation297 with
+no error after deployment. These observations do not extend the reader-only
+preflight to writer admission or guarantee writes against concurrent exhaustion.

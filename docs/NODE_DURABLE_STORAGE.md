@@ -95,3 +95,15 @@ three identical reads per receipt. `.tmp/outbox-budget/real-node.log` records th
 run. These are isolated-runtime proofs, not a production rollout, power-loss
 survival or distributed job replication. Root owns combined auth/storage
 acceptance and deployment.
+
+Combined release8736611 repeated the actual TCP/ENOSPC canary successfully
+(`.tmp/resource-root/outbox-final.log`) and is deployed on VUSA and the primary.
+The controlled updates preserved19 and1872 prior receipts respectively;17
+primary receipts expired under the existing24-hour retention policy, with no
+unexplained changes. Public peer jobs `8ba675e6432fa54a81254dcc0d579147`
+and `7671e9746dfb0bcc368efd0fe60c8b13` each produced one physical effect and
+three identical receipt reads. The primary public self-probe also passed.
+After maintenance the tunnel watchdog and canonical DNS watcher were restored;
+the latter retained its configuration binding, watching phase and zero failures,
+with authoritative canonical DNS still95.165.165.65. This verifies the deployed
+storage change; it is not a whole-machine outage or power-loss test.

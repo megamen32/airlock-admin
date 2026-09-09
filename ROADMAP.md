@@ -15,6 +15,7 @@ Status: active; architecture and limits in `docs/UNIFIED_NODE_ARCHITECTURE.md`.
 - [x] Stable per-node origins and live cross-node routing; both public directions execute and repeatedly read receipts through the same entrypoint.
 - [x] Controlled automatic ingress failover: isolated public hostname outage and ordinary-DNS consumer canary passed; production watcher enabled and healthy. Production hostname/whole-machine fault not exercised.
 - [ ] Portable installation/update path and optional transport providers.
+- [x] Protect saved receipts/spill under disk pressure and reject undersized reader snapshot applies before changing authorization; real filesystem/network faults and both production nodes verified on8736611.
 - [ ] Capacity-aware replication policy and explicit authority recovery during prolonged outages.
 
 An unavailable physical machine cannot execute elsewhere implicitly. Command
