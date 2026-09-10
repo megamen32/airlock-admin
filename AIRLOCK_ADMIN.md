@@ -255,3 +255,11 @@ cd airlock && docker compose -f docker-compose.yml -f docker-compose.dev.yml \
 - Грабли: на сервере два rclone — юнит обязан использовать
   `~/.local/bin/rclone` (v1.74.2); `/usr/bin/rclone` v1.53 не умеет serve s3.
   Флаги сервера у `rclone serve s3` парсятся только после remote-path.
+
+## Доп. (2026-09-10, вечер)
+
+- Кэш S3-шлюза перенесён в RAM: `--cache-dir /dev/shm/rclone-airlock-s3`
+  (лимит 1 ГБ; флаг именно `--cache-dir`, не `--vfs-cache-dir`). Проверено:
+  upload → RAM → объект на Диске в той же секунде.
+- Второй админ: `cyberteaborg@gmail.com` (temp-пароль выдан владельцу,
+  `must_change_password=true` — смена при первом входе).
