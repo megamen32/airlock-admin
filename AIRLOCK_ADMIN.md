@@ -5,6 +5,12 @@
 записей и платформа AI-приложений. Цель репозитория — управлять машинами через MCP из
 любого ИИ и закрывать доступ к этому управлению аккаунтами/авторизацией Airlock.
 
+Смысл связки в одну строку: **GPTAdmin — руки (умеет всё на любой машине),
+Airlock — пропуск (решает, кому и что можно), обе AGPL-3.0, сверху —
+ExManager как ИИ-секретарь**. Зачем это как продукт —
+[PRODUCT_VISION.md](PRODUCT_VISION.md); этот документ — операционный ранбук
+живого стенда.
+
 ## Провенанс
 
 - `airlock/` — вендорный subtree-форк [airlockrun/airlock](https://github.com/airlockrun/airlock)
@@ -161,7 +167,7 @@ admin-токен, выпущенный при отладке, ротирован
 ```
 $ curl -sS -i -X POST https://airlock.bezrabotnyi.com/auth/login \
     -H 'Content-Type: application/json' \
-    -d '{"email":"roomhacker@bezrabotnyi.com","password":"<REDACTED-PASSWORD>"}'
+    -d '{"email":"roomhacker@bezrabotnyi.com","password":"<пароль>"}'
 HTTP/2 200  content-type: application/json  via: 1.1 Caddy
 {"accessToken":"eyJ...","user":{"email":"roomhacker@bezrabotnyi.com","tenantRole":"TENANT_ROLE_ADMIN",...}}
 ```

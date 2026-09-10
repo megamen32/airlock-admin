@@ -95,3 +95,13 @@ deploy/systemd/*
 
 # CloudOS UI fork build output (served from PublicDir)
 cloudos-ui/dist/
+
+# --- Airlock local artifacts (never commit) ---
+# live systemd binary lives here (bin/airlock) — regenerable build output
+airlock/bin/
+# accidental artifact of an unexpanded ${HOME} in a shell command
+airlock/${HOME}/
+# database dumps contain credentials — local only
+db-backup-*.sql
+# stray memory-format note with live credentials (content superseded by AIRLOCK_ADMIN.md)
+AIRLOCK_RUNBOOK.md
