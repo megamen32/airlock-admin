@@ -149,9 +149,10 @@ admin-токен, выпущенный при отладке, ротирован
   валидатором вне `localhost`. Боевой ключ — `openssl rand -hex 32`.
 - `ENCRYPTION_KEY_REWRAP=true` с потерянным `ENCRYPTION_KEY_OLD` падает с
   `secret storage migration failed: unknown key ID` (в БД остались записи
-  `agents.db_password`, зашифрованные уже не существующим ключом). Сейчас
-  rewrap выключен (`ENCRYPTION_KEY_REWRAP=false`) — `fleet-admin` в этом
-  dev-инстансе не запускается, его `db_password` не используется.
+  `agents.db_password`, зашифрованные уже не существующим ключом). ~~Сейчас
+  rewrap выключен~~ **Исправлено тем же днём (см. след. секцию): rewrap выполнен
+  с `ENCRYPTION_KEY_OLD=<dev-ключ>`, все 3 секрета перепакованы, fleet-admin
+  запускается.**
 - В логах caddy-proxy SPA обращается по пути `/auth/login` (без `/api`);
   внешний curl нужно слать так же.
 
@@ -164,3 +165,70 @@ $ curl -sS -i -X POST https://airlock.bezrabotnyi.com/auth/login \
 HTTP/2 200  content-type: application/json  via: 1.1 Caddy
 {"accessToken":"eyJ...","user":{"email":"roomhacker@bezrabotnyi.com","tenantRole":"TENANT_ROLE_ADMIN",...}}
 ```
+
+## Харденинг и agent-субдомен (2026-09-10, финал)
+
+Параллельно с починкой 502 двумя сессиями выполнены: полная ротация dev-секретов,
+штатный rewrap, перевод бэкенда на systemd и публикация agent-субдомена.
+
+### Секреты — всё dev-выпилено
+
+Ротированы (значения только в `airlock/.env`, не в git): `ENCRYPTION_KEY`,
+`JWT_SECRET`, `REVERSE_PROXY_AUTH_SECRET`, `POSTGRES_PASSWORD` и
+`AIRLOCK_DB_PASSWORD` (обе через `ALTER ROLE` в живом postgres + правка
+`DATABASE_URL`), `S3_SECRET_KEY`. Postgres/rustfs пересозданы с новым env,
+аутентификация app-роли новым паролем проверена реально.
+
+**Rewrap по docs/secret-storage.md**: boot с `ENCRYPTION_KEY_OLD=<dev-ключ>` +
+`ENCRYPTION_KEY_REWRAP=true` → лог `rewrapped_secrets: 3`, key ID конверта в БД
+сменён на текущий (проверено прямым SQL). После этого `REWRAP=false`,
+`ENCRYPTION_KEY_OLD` **оставлен** — под dev-ключом могут жить agent-owned
+`/seal`-значения; удалять только после их перепечатки. E2E-подтверждение:
+`POST /api/v1/agents/{id}/start` → 204, контейнер `airlock-dev-agent-5302d0ae`
+поднялся, decrypt-ошибок в журнале нет.
+
+Ключевой ID-факт для диагностики: key ID конверта = `sha256(raw-ключа)[:16]`
+(не hex-строка!) — по нему в БД видно, под каким ключом лежит значение:
+`substring(db_password from 'airlock-crypto:v2:([0-9a-f]+)')`.
+
+### Backend под systemd
+
+`/etc/systemd/system/airlock.service`: `bin/airlock serve` (собран
+`go build -o bin/airlock ./cmd/airlock`), `EnvironmentFile=airlock/.env`,
+`Restart=on-failure`, enabled. nohup-вариант из «Реинкарнации» заменён —
+переживает ребут и крэш. Инфра-контейнеры поднимать только с dev-overlay и
+явным списком сервисов (иначе `up -d` без overlay поднимает контейнерный
+airlock, который crash-loop'ится на host-`DATABASE_URL`):
+
+```bash
+cd airlock && docker compose -f docker-compose.yml -f docker-compose.dev.yml \
+  up -d postgres rustfs caddy-proxy
+```
+
+`COMPOSE_PROFILES=bundled-db,bundled-s3,caddy-proxy` (caddy-local снят).
+
+### Agent-субдомен fleet-admin.airlock.bezrabotnyi.com
+
+- DNS: wildcard `*.airlock.bezrabotnyi.com` → 95.165.165.65 уже существовал
+  (NS — spaceweb, DNS-01/Cloudflare недоступен ⇒ wildcard-серт невозможен).
+- Схема: **per-host LE-сертификат** (webroot, HTTP-01) + отдельный ssl-блок.
+  Для каждого нового агента: добавить хост в `server_name` :80-блока → apply →
+  `certbot certonly --webroot -w /var/www/letsencrypt -d <slug>.airlock…` →
+  добавить ssl-блок → apply. Всё в `ServersAdministartion/nginx-dev/state/files/
+  sites-available/airlock.bezrabotnyi.com`, коммиты `e4d1649` + `1b80e13`.
+- Анонимный GET субдомена → **401 от airlock-бэкенда** — это штатно
+  (`api.SubdomainProxy` требует relay-код; браузерный флоу — через apex
+  `/auth/relay` + cookie `__air_session`, host-scoped).
+
+### Операционные ловушки (новые)
+
+- `nginxctl import` оставляет `state/` root-owned — после него
+  `sudo chown -R roomhacker:roomhacker state`, иначе refresh падает на temp-файле.
+- `nginx-dev-sync.timer` не применяет коммиты, пока checkout грязный: в дереве
+  лежат чужие незакоммиченные `debate.bezrabotnyi.com` и `t.gptadmin…`,
+  чей контент уже в live (`nginxctl diff` — «no managed drift»). Когда их
+  закоммитят, таймер применит HEAD; до тех пор apply вручную (`sudo
+  ./nginxctl apply`) + живая проба. deployed-git-sha двигает только таймер.
+- Старые nginx workers переживают reload — после каждого apply/reload
+  обязательна живая curl-проба (ловушка повторилась на субдомене: первые пробы
+  дали 000, ответ появился после явного reload+паузы).
