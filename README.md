@@ -1,214 +1,86 @@
-# GPT‑Админ
+# Must Up — self-hosted AI workspace
 
 [![License: AGPL-3.0](https://img.shields.io/badge/License-AGPL--3.0-blue.svg)](LICENSE)
-[![Python 3.10+](https://img.shields.io/badge/Python-3.10%2B-blue.svg)](https://www.python.org/)
 [![Self-hosted](https://img.shields.io/badge/Self--hosted-yes-green.svg)](#)
-[![MCP](https://img.shields.io/badge/MCP-compatible-violet.svg)](#how-it-works)
+[![MCP](https://img.shields.io/badge/MCP-compatible-violet.svg)](#)
 
-**One MCP hub — any AI controls any infrastructure.**
+> **Brand direction: "Must Up"** — picked 2026-09-10, domains under verification.
 
-GPT‑Админ is a self-hosted MCP hub that sits between your AI assistant and your
-servers. Plug servers and any MCP tools into the hub, then connect your AI via
-one of three adapters. Manage everything from server admin to running subagents
-— from ChatGPT, Claude, Codex, DeepSeek, Qwen, even Yandex Alice or Sber
-GigaChat.
-
-> 🌐 Website & live docs: **https://gptadmin.bezrabotnyi.com**
-> 📚 Full docs: **[docs/](./docs/Home.md)** — architecture, adapters, hub, install, config, API, security, FAQ
-> 📦 Install: `curl -s https://raw.githubusercontent.com/megamen32/gptadmin_opensource/main/deploy/install.sh | bash`
+One AGPL-licensed stack for self-hosted corporate AI: an identity + governance
+server (Airlock) and a distributed MCP hub that runs on every employee device
+(GPTAdmin). An optional personal-secretary template (ExManager) lives on top
+and gives every employee a chat agent that lives in their existing messengers.
 
 ---
 
-## Why
+## What's here
 
-Most "AI server admin" tools are either cloud-only, tied to one AI, or require
-a paid API. GPT‑Админ is different:
+| Layer | What it does | Code |
+|-------|--------------|------|
+| **Airlock** (server) | Identity, grants, audit, agent runtime, app platform, S3, OAuth server. The "passport". | `airlock/` (vendored fork of [airlockrun/airlock](https://github.com/airlockrun/airlock), AGPL-3.0) |
+| **GPTAdmin** (edge) | MCP hub on every machine: shell, file, process, MCP tools with approval flow, peer mesh. The "hands". | `go-hub/`, `go-shellmcp/`, `cli.py` (this repo, AGPL-3.0) |
+| **ExManager** (front, optional) | Personal-secretary template: per-employee Telegram bot, PWA web face, mail adapter, reminders, audit. The "face". | Separate repo at [agents-projects/exmanager](https://github.com/megamen32/exmanager) (AGPL-3.0) |
 
-- **Self-hosted** — your servers, your hub, your tokens. Nothing leaves your
-  infra.
-- **Any AI** — ChatGPT, Claude, Codex, OpenCode, DeepSeek, Qwen, Alice,
-  GigaChat. Even free web chats work via a browser extension.
-- **MCP-native** — the hub speaks MCP remote SSE, so any MCP client connects.
-  Plug in chrome-devtools, openmemory, or any other MCP too.
-- **Real execution** — not "here's the command, copy it". The agent reads
-  state, runs commands, validates, and reports actual output.
-- **Optional relay and webhook capabilities** — when you need them, GPTAdmin
-  can expose a single MCP server or route webhook events through dedicated
-  documented surfaces. Start from the quick path below; see the linked docs
-  only if you need those extra capabilities.
+The pieces are independent — you can use just GPTAdmin, just Airlock, or
+both together. The cross-product integration (airlock as identity + governance
+plane, GPTAdmin as the edge execution plane) is the recommended deployment.
 
-## How it works
+## Where to start
 
-```
-   MCP tools plug IN            AIs connect OUT (3 adapters)
-  ┌─────────────────┐          ┌──────────────────────┐
-  │ shellmcp        │          │ Claude · Codex       │ (MCP client)
-  │ chrome-devtools │  ──►  ┌──┴──────────────┐       │
-  │ openmemory      │       │   GPT‑Админ     │  ──►  │ DeepSeek · Qwen  │ (browser ext)
-  │ any MCP         │  ◄──  │   MCP hub       │       │ Alice · GigaChat │
-  └─────────────────┘       └──┬──────────────┘  ──►  │ ChatGPT · OpenUI │ (OpenAI Action)
-                              │                │       └──────────────────────┘
-                              ▼
-                        your servers
-                     (Linux · macOS · Windows)
-```
-
-The hub is one process. Tools plug into it. AIs connect to it via one of three
-adapters. Capabilities (admin, code, logs, search, subagents) come from the hub
-— independent of which AI you use.
+| You are... | Read this |
+|------------|-----------|
+| Founder / product lead | **[PRODUCT_VISION.md](./PRODUCT_VISION.md)** — strategic plan, MVP slice, personas, business model, open decisions |
+| Operator / devops | **[AIRLOCK_ADMIN.md](./AIRLOCK_ADMIN.md)** — current operational runbook, hardening notes, deployment lessons |
+| GPTAdmin user / contributor | **[gptadmin docs](https://gptadmin.bezrabotnyi.com)** and `go-hub/`, `go-shellmcp/` here |
+| Airlock user | **[airlock docs](https://airlock.run/docs/)** and `airlock/docs/` here |
 
 ## Quickstart
 
+This repo is the integration tree. Pick the product you want:
+
 ```bash
-# 1. Install (Linux / macOS — auto-detects user/system mode)
+# GPTAdmin hub (any host with Python 3.10+)
 curl -s https://raw.githubusercontent.com/megamen32/gptadmin_opensource/main/deploy/install.sh | bash
 
-# Windows (PowerShell, no Administrator needed)
-iwr -UseBasicParsing https://became.bezrabotnyi.com/install_win.ps1 | iex
+# Airlock server (Linux with Docker + Go 1.26+)
+git clone https://github.com/megamen32/airlock-admin.git
+cd airlock-admin/airlock
+cp .env.dev.example .env
+make dev   # see AIRLOCK_ADMIN.md for production
 ```
 
-The installer prints one **Hub URL**. Open that URL, then pick the shortest
-path for the client you want:
+Live public demo: **https://airlock.bezrabotnyi.com** (login is email + password).
 
-```text
-ChatGPT Custom GPT → import https://your-hub.example/actions/openapi.yaml
-```
+## Provenance
 
-That Actions file is generated from the Hub's current MCP tool list. It is the
-schema the GPT should import; you do not hand-write it.
+- `airlock/` — vendored subtree-merge of [airlockrun/airlock](https://github.com/airlockrun/airlock) @ v0.6.3 (2026-09-03), AGPL-3.0, © Oleg Karpov. Full upstream history preserved: `git log --oneline --graph -20`.
+- Everything else — original work, AGPL-3.0, © the project owners.
 
-For authentication, choose one of these two paths:
-
-```text
-Bearer → paste only a scoped token value issued by the Hub
-OAuth → use the Hub authorize/token flow from the Hub URL
-```
-
-An existing legacy compatibility token remains valid until its owner explicitly rotates or removes it.
-
-Never paste an internal service secret into a GPT or client. If you need a
-different adapter, use the dedicated docs below.
+To refresh the vendored airlock copy (preserves local history):
 
 ```bash
-# 2. Connect your AI — pick one adapter:
-#    - OpenAI Action (ChatGPT Custom GPT / Open WebUI) → see docs
-#    - MCP remote SSE (Claude / Codex / OpenCode)      → see docs
-#    - Browser extension (free web AIs)                → see docs
-
-# 3. Use it:
-#    "поставь nginx", "почини сайт", "покажи логи", "запусти codex для фикса бага"
+git remote add airlock https://github.com/airlockrun/airlock.git   # once
+git subtree pull --prefix=airlock airlock main
 ```
-
-Full per-adapter instructions: **https://gptadmin.bezrabotnyi.com/#/docs**
-
-## What you can do through the hub
-
-| Capability | Example |
-|------------|---------|
-| **Server administration** | restart systemd services, manage firewall/nginx/fail2ban/sshd, install packages |
-| **Write & run code** | edit files, run type-check/lint/build, launch subagents ("run codex to fix this bug") |
-| **Fix & clean PRs** | find fork in memory, keep one feature commit, force-push via SSH |
-| **Check logs** | parse journalctl/nginx/postgres, find anomalies, suggest & apply fixes |
-| **Web search** | via chrome-devtools MCP — agent opens pages, reads docs, searches |
-| **Diagnose incidents** | find downed service, read logs, understand cause (ECONNREFUSED, 503, OOM), fix it |
-
-## Three adapters
-
-| Adapter | For | How |
-|---------|-----|-----|
-| **OpenAI Action** | ChatGPT, Open WebUI | Import the generated OpenAPI schema, then choose Bearer or OAuth. No Codex limits. |
-| **MCP remote SSE** | Claude Desktop, Codex, OpenCode | Hub is an MCP server (Streamable HTTP). Add to `claude_desktop_config.json`. |
-| **Browser extension** | DeepSeek, Qwen, Alice, GigaChat, ChatGPT (free) | Userscript (Tampermonkey/Firefox) adds MCP buttons to web chat UIs. No paid API. |
-
-All three connect to the **same hub**. Same capabilities. Pick what fits your AI.
-
-## Install paths
-
-| OS | user-mode (default) | system-mode (`sudo`) |
-|----|---------------------|----------------------|
-| Linux / macOS | `~/.local/share/gptadmin` | `/opt/gptadmin` |
-| Windows | `%LOCALAPPDATA%\gptadmin` | `C:\Program Files\gptadmin` |
-
-The installer auto-detects the mode: no `sudo` → user-mode (home dir, user
-service); `sudo` → system-mode. No domain needed — auto-tunnel via FRP or
-Cloudflare gives a public URL.
-
-## Project layout
-
-```
-go-hub/                  # the Go MCP hub — proxies commands to agents
-server_for_installer.py # serves install scripts + OpenAPI
-gptadmin_security.py    # auth, OAuth, token validation
-cli.py                  # `gptadmin` CLI (setup, tunnel, status, logs)
-telegram_logs_bot.py    # optional Telegram alerts
-go-shellmcp/            # primary shell agent (Go) — runs on target machines
-public/                 # OpenAPI schema, install scripts, mcp-bridge.user.js
-deploy/                 # install scripts, systemd, nginx configs
-tests/                  # test_hub.py, test_rootd.py
-docs/                   # OPEN_CORE_PLAN.md
-```
-
-> Structure is being cleaned up — see `docs/OPEN_CORE_PLAN.md` for the target
-> layout and the open-core launch plan.
-
-## Running from source
-
-```bash
-python3 -m venv .venv && source .venv/bin/activate
-pip install fastapi uvicorn requests
-
-# hub (terminal 1)
-python3 cli.py setup --hub --tunnel none --user
-
-# agent on a target machine (terminal 2)
-python3 cli.py setup --no-hub --shellmcp --hub-url http://127.0.0.1:9001 --user
-
-# smoke test (terminal 3)
-python tests/test_hub.py
-```
-
-## Contributing
-
-PRs welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) for dev setup, code style,
-and the PR process. For security issues see [SECURITY.md](SECURITY.md).
 
 ## License
 
-**GNU AGPL-3.0** — see [LICENSE](LICENSE).
+**AGPL-3.0-or-later** for every component. See [LICENSE](LICENSE).
 
-The hub, shellmcp, all three adapters, and the basic web panel are **free
-forever**. Future paid offerings (hosted cloud, enterprise SSO/audit/RBAC,
-advanced panel, support) will live in a separate repo — the core stays open.
+The core (identity, governance, MCP hub, shell agent, the personal-secretary
+template, the basic web panels) stays free and open-source forever. Commercial
+add-ons (hosted cloud, enterprise SSO/audit/RBAC, advanced panels, support)
+will live in separate repos under their own licenses — the AGPL core is not
+encumbered.
+
+## Contributing
+
+PRs welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) for dev setup, code
+style, and the PR process. For security issues see [SECURITY.md](SECURITY.md).
 
 ## Links
 
-- 🌐 Website & docs: https://gptadmin.bezrabotnyi.com
-- 💬 Telegram: [@careviolan](https://t.me/careviolan)
-- 📦 Other projects: https://bezrabotnyi.com
-
-## Failover: alive and degraded
-
-GPTAdmin can keep a fallback control plane available when the primary hub dies. A fallback node watches the public health URL, promotes only after a failure threshold, and keeps enough of the service online to inspect logs, reach surviving servers, and restore the primary.
-
-This is graceful degradation, not magic multi-master replication: recent in-memory counters or jobs running exactly on the dead node can be stale. But queues, background job metadata, large stdout/stderr spill files, shellmcp spool files, outbox responses, registry snapshots and failover logs are written to disk, so the recovery trail is not lost forever.
-
-See **[docs/FAILOVER.md](./docs/FAILOVER.md)**.
-
-## Show current public URLs
-
-Use the CLI to print the active hub URL, tunnel mode, MCP endpoints and per-server OpenAPI Action schema URLs:
-
-```bash
-sudo gptadmin urls
-sudo gptadmin urls --all
-sudo gptadmin urls --json
-```
-
-The default output focuses on the hub and ShellMCP endpoints. `--all` also includes every registered MCP server such as OpenMemory, FileShare and Chrome DevTools.
-
-## Optional capabilities
-
-If you later need a single-server relay or webhook ingress, use the dedicated docs:
-
-- [MCP Proxy Relay](./docs/MCP_PROXY_RELAY.md)
-- [Webhooks](./docs/WEBHOOKS.md)
+- 🌐 GPTAdmin website & docs: https://gptadmin.bezrabotnyi.com
+- 🌐 Airlock website & docs: https://airlock.run
+- 📦 Issue tracker: this repo's GitHub Issues
+- 💬 Discussion: see project owners' contacts in `MAINTAINERS.md` if present, or open an issue
