@@ -1,76 +1,93 @@
-# Contributing to GPT‑Админ
+# Как контрибутить в GPT-Админ
 
-Thanks for your interest in contributing! This project is open-core (AGPL-3.0)
-and welcomes community contributions.
+Спасибо за интерес! Проект open-core (AGPL-3.0), комьюнити-контрибуции приветствуются.
 
-## Quick start
+## Окружение
+
+Хост: **Python 3.10+** + **Go 1.21+** + **Docker** (для e2e-тестов и
+интеграционных сценариев). На Linux понадобится ещё `systemd` для
+установочных скриптов.
 
 ```bash
-git clone https://github.com/megamen32/gptadmin.git
-cd gptadmin
+git clone https://github.com/megamen32/airlock-admin.git
+cd airlock-admin
+
 python3 -m venv .venv && source .venv/bin/activate
-pip install -r requirements.txt   # or: pip install fastapi uvicorn
+pip install pytest pytest-asyncio
 ```
 
-Run the hub + an agent locally:
+Дополнительные dev-зависимости (pyinstaller для сборки бинарей и пр.)
+указаны в `pyproject.toml` под `[project.optional-dependencies]` /
+`[dependency-groups]` — ставьте по необходимости.
+
+## Запуск хаба и агента локально
 
 ```bash
-go run ./go-hub/cmd/gptadmin-hub   # terminal 1
-SHELLMCP_TOKEN=agent-token HUB_URL=http://127.0.0.1:9001 go run ./go-shellmcp/cmd/shellmcp-go   # terminal 2
-python tests/test_hub.py    # terminal 3 — smoke test
+# Терминал 1 — hub
+go run ./go-hub/cmd/gptadmin-hub
+
+# Терминал 2 — shellmcp-агент
+SHELLMCP_TOKEN=agent-token HUB_URL=http://127.0.0.1:9001 \
+  go run ./go-shellmcp/cmd/shellmcp-go
 ```
 
-## Development workflow
+После запуска хаб печатает URL для подключения. MCP-эндпоинт
+транслируется в `Streamable HTTP`; коннекторы (Claude Desktop / Codex /
+OpenCode) добавляются через стандартный MCP-конфиг.
 
-1. **Fork & branch:** create a branch from `main` (`git checkout -b feat/my-feature`)
-2. **Write code:** follow existing style (f-strings, explicit logging, type hints where helpful)
-3. **Test:** add or update tests in `tests/`. Run `pytest -q` before committing.
-4. **Lint:** `ruff check .` (Python) and `eslint adapters/userscript/` (userscript)
-5. **Commit:** use clear commit messages (`feat:`, `fix:`, `docs:`, `refactor:`, `test:`)
-6. **PR:** open a pull request against `main`. Describe what changed and why.
+## Workflow разработки
 
-## Testing policy: reality first
+1. **Fork + ветка:** создайте ветку от `main` (`git checkout -b feat/my-feature`)
+2. **Код:** следуйте существующему стилю (f-strings, явное логирование, type hints где полезно)
+3. **Тесты:** добавляйте/обновляйте тесты в `tests/`. Перед коммитом — `pytest -q`
+4. **Линт:** `ruff check .` (Python) и `eslint adapters/userscript/` (userscript)
+5. **Коммит:** понятные сообщения (`feat:`, `fix:`, `docs:`, `refactor:`, `test:`)
+6. **PR:** открывайте Pull Request в `main`. Опишите что изменилось и зачем
 
-GPTAdmin treats mocks, fakes, stubs, monkeypatches, and simulated services as
-**unit-test tools only**. They may prove local branching or error handling, but
-they do not prove that an installation, integration, update, failover, deployment,
-or release works.
+## Тест-политика: реальный путь
 
-For integration and acceptance coverage, use the real candidate artifacts and the
-real execution path whenever it is safe to do so: install the package, start the
-real services, authenticate through the supported protocol, execute a harmless real
-operation, and verify its actual result. Process `active`, HTTP `200`, tool/schema
-discovery, or a mocked response is not sufficient when the product claim is that
-the operation itself works.
+GPT-Админ относится к мокам, фейкам, стабам, monkeypatch-ам и симулируемым
+сервисам **как к инструментам только юнит-тестов**. Они могут доказывать
+локальную ветку или обработку ошибок, но не доказывают, что установка,
+интеграция, обновление, failover, деплой или релиз работают.
 
-If a real dependency cannot be exercised in CI, mark that acceptance lane as
-unverified/skipped with an explicit reason. Do not silently replace it with a fake
-and promote the result to release evidence.
+Для интеграционного и acceptance-покрытия используйте реальные кандидатные
+артефакты и реальный путь исполнения, когда это безопасно: установить
+пакет, запустить реальные сервисы, пройти аутентификацию по штатному
+протоколу, выполнить безвредную реальную операцию и проверить её
+фактический результат. Процесс `active`, HTTP `200`, обнаружение
+tool/schema или мокнутый ответ **недостаточны**, когда продуктовое
+утверждение — что сама операция работает.
 
-## Code style
+Если в CI невозможно выполнить реальную зависимость, отметьте этот
+acceptance-канал как непроверенный/пропущенный с явной причиной. Не
+подменяйте молча фейком и не выдавайте результат за release-evidence.
 
-- **Python:** PEP 8, 4-space indent, f-strings, descriptive names
-- **Shell:** `set -euo pipefail`, quote variables, check with `shellcheck`
-- **Userscript:** vanilla JS, no bundler, must run in Tampermonkey/Userscripts
+## Стиль кода
 
-## Project structure
+- **Python:** PEP 8, 4 пробела, f-strings, описательные имена
+- **Go:** `gofmt`, idiomatic Go, явные ошибки
+- **Shell:** `set -euo pipefail`, переменные в кавычках, проверка через `shellcheck`
+- **Userscript:** vanilla JS, без бандлера, должен работать в Tampermonkey/Userscripts
 
-See `docs/OPEN_CORE_PLAN.md` for the target structure. Currently in transition —
-root-level `.py` files will move into `hub/`, `cli/`, `shellmcp/` folders.
+## Структура проекта
 
-## Reporting bugs
+См. `docs/OPEN_CORE_PLAN.md` — целевая структура. Сейчас в переходном
+состоянии.
 
-Open a GitHub issue with:
-- OS and Python version
-- GPT‑Админ version (`cat VERSION`)
-- Steps to reproduce
-- Expected vs actual behavior
-- Relevant logs (redact secrets!)
+## Багрепорты
 
-## Feature requests
+Открывайте GitHub Issue с:
+- ОС и версия Python
+- Версия GPT-Админ (`gptadmin --version` или из `pyproject.toml`)
+- Шаги для воспроизведения
+- Ожидаемое vs фактическое поведение
+- Релевантные логи (секреты вычистить!)
 
-Open a GitHub Discussion first to gauge interest before building.
+## Запросы фич
 
-## Code of Conduct
+Сначала откройте GitHub Discussion — оцените интерес, потом стройте.
 
-Be respectful and constructive. See `CODE_OF_CONDUCT.md`.
+## Кодекс поведения
+
+Будьте уважительны и конструктивны. См. [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md).

@@ -1,41 +1,41 @@
-# Security Policy
+# Политика безопасности
 
-## Reporting a Vulnerability
+## Сообщить об уязвимости
 
-GPT‑Админ gives AI agents access to your servers — security matters. If you
-find a vulnerability, please report it responsibly.
+GPT-Админ даёт AI-агентам доступ к вашим серверам — безопасность важна.
+Если нашли уязвимость, пожалуйста, сообщайте ответственно.
 
-- **Do NOT open a public GitHub issue.**
-- Report via Telegram: [@careviolan](https://t.me/careviolan)
-- Or email the maintainer directly.
+- **НЕ открывайте публичный GitHub Issue.**
+- Через Telegram: [@careviolan](https://t.me/careviolan)
+- Или напрямую мейнтейнеру по email.
 
-Please include:
-- A description of the issue and its potential impact
-- Steps to reproduce (proof-of-concept)
-- Affected version (`cat VERSION` or `gptadmin --version`)
-- Suggested fix, if any
+Что приложить:
+- Описание проблемы и потенциальный импакт
+- Шаги воспроизведения (proof-of-concept)
+- Затронутая версия (`gptadmin --version` или из `pyproject.toml`)
+- Предложение по фиксу (если есть)
 
-## Response SLA
+## SLA по ответам
 
-- **Acknowledgement:** within 48 hours
-- **Initial assessment:** within 7 days
-- **Fix or mitigation:** depends on severity, target 30 days for critical issues
+- **Подтверждение получения:** в течение 48 часов
+- **Первичная оценка:** в течение 7 дней
+- **Фикс или митигация:** зависит от severity, цель — 30 дней для критичных
 
-## Disclosure
+## Раскрытие
 
-We follow coordinated disclosure. Once a fix is released, we will publish a
-GitHub Security Advisory and credit the reporter (unless they prefer to remain
-anonymous).
+Следуем coordinated disclosure. Как только фикс выпущен, публикуем
+GitHub Security Advisory и кредитуем репортера (если он не против
+анонимности).
 
 ## Scope
 
-- The `gptadmin_hub` / `shellmcp` services and their HTTP/MCP endpoints
-- The `gptadmin` CLI
-- The `mcp-bridge.user.js` browser extension
-- Install scripts (`deploy/install*.sh`, `install_win.ps1`)
+- Сервисы `go-hub` (MCP-хаб) и `go-shellmcp` (shell-агент) и их HTTP/MCP-эндпоинты
+- Python-CLI `gptadmin` (`cli.py`)
+- Браузерное расширение `public/mcp-bridge.user.js`
+- Установочные скрипты (`deploy/install*.sh`, `install_*.sh`)
 
-## Out of scope
+## Вне scope
 
-- Vulnerabilities in third-party dependencies (report upstream)
-- Issues requiring already-compromised root access
-- Social engineering
+- Уязвимости в сторонних зависимостях (репортьте upstream)
+- Проблемы, требующие уже скомпрометированного root-доступа
+- Социальная инженерия

@@ -1,59 +1,64 @@
-# Contributor Covenant Code of Conduct
+# Кодекс поведения участников
 
-## Our Pledge
+## Наше обещание
 
-We as members, contributors, and leaders pledge to make participation in our
-community a harassment-free experience for everyone, regardless of age, body
-size, visible or invisible disability, ethnicity, sex characteristics, gender
-identity and expression, level of experience, education, socio-economic status,
-nationality, personal appearance, race, religion, or sexual identity and
-orientation.
+Мы — участники, контрибьюторы и лидеры — обещаем сделать участие в нашем
+сообществе свободным от притеснений для всех, независимо от возраста,
+телосложения, видимой или невидимой инвалидности, этнической
+принадлежности, половых характеристик, гендерной идентичности и
+выражения, уровня опыта, образования, социально-экономического статуса,
+национальности, внешности, расы, религии, сексуальной идентичности и
+ориентации.
 
-We pledge to act and interact in ways that contribute to an open, welcoming,
-diverse, inclusive, and healthy community.
+Мы обязуемся действовать и взаимодействовать так, чтобы способствовать
+открытому, доброжелательному, разнообразному, инклюзивному и здоровому
+сообществу.
 
-## Our Standards
+## Наши стандарты
 
-Examples of behavior that contributes to a positive environment:
+Примеры поведения, которое создаёт позитивную среду:
 
-* Demonstrating empathy and kindness toward other people
-* Being respectful of differing opinions, viewpoints, and experiences
-* Giving and gracefully accepting constructive feedback
-* Accepting responsibility and apologizing to those affected by mistakes
-* Focusing on what is best for the overall community
+- Проявление эмпатии и доброты к другим людям
+- Уважение к отличным мнениям, взглядам и опыту
+- Конструктивная обратная связь — давать и принимать
+- Принятие ответственности и извинения, когда мы навредили
+- Фокус на том, что лучше для сообщества в целом
 
-Examples of unacceptable behavior:
+Примеры неприемлемого поведения:
 
-* The use of sexualized language or imagery, and sexual attention or advances
-* Trolling, insulting or derogatory comments, and personal or political attacks
-* Public or private harassment
-* Publishing others' private information without explicit permission
-* Other conduct which could reasonably be considered inappropriate
+- Использование сексуализированного языка или образов, сексуальное
+  внимание или домогательства
+- Троллинг, оскорбления, унизительные комментарии, личные или
+  политические атаки
+- Публичные или частные домогательства
+- Публикация чужих персональных данных без явного разрешения
+- Другое поведение, которое обоснованно может считаться неуместным
 
-## Enforcement Responsibilities
+## Ответственность за применение
 
-Community leaders are responsible for clarifying and enforcing our standards
-and will take appropriate and fair corrective action in response to any
-behavior they deem inappropriate, threatening, offensive, or harmful.
+Лидеры сообщества ответственны за разъяснение и применение наших
+стандартов и предпримут соответствующие справедливые корректирующие
+действия в ответ на любое поведение, которое они сочтут неуместным,
+угрожающим, оскорбительным или вредным.
 
 ## Scope
 
-This Code of Conduct applies within all community spaces, and also applies
-when an individual is officially representing the community in public spaces.
+Этот Кодекс применяется во всех пространствах сообщества, а также когда
+человек официально представляет сообщество в публичных пространствах.
 
-## Enforcement
+## Применение
 
-Instances of abusive, harassing, or otherwise unacceptable behavior may be
-reported to the community leaders responsible for enforcement via Telegram
-[@careviolan](https://t.me/careviolan). All complaints will be reviewed and
-investigated promptly and fairly.
+Случаи оскорбительного, домогательного или иного неприемлемого поведения
+можно репортить лидерам сообщества через Telegram
+[@careviolan](https://t.me/careviolan). Все жалобы будут рассмотрены и
+проверены быстро и справедливо.
 
-## Attribution
+## Атрибуция
 
-This Code of Conduct is adapted from the [Contributor Covenant][homepage],
-version 2.1, available at
+Этот Кодекс поведения адаптирован из [Contributor Covenant][homepage],
+версия 2.1, доступен на
 [https://www.contributor-covenant.org/version/2/1/code_of_conduct.html](https://www.contributor-covenant.org/version/2/1/code_of_conduct.html).
 
 [homepage]: https://www.contributor-covenant.org
 
-Community Impact Guidelines were inspired by [Mozilla's code of conduct enforcement ladder](https://github.com/mozilla/diversity).
+Community Impact Guidelines вдохновлены [Mozilla's code of conduct enforcement ladder](https://github.com/mozilla/diversity).
