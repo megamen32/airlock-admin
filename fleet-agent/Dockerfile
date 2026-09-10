@@ -1,0 +1,79 @@
+# Default empty module proxy. Airlock's dev builds override this stage with
+# `docker build --build-context goproxy=<dir>`, where <dir> is a generated
+# file:// module proxy serving the airlock-owned libs (agentsdk/goai/sol) at
+# their pinned versions from live source. On a prod build or a user clone
+# (`docker build .`) the stage stays empty: GOPROXY's file:// entry returns
+# 404 for every module and the build falls through to the public proxy. So
+# the committed go.mod — which pins published versions and carries no
+# replace directives — resolves normally.
+FROM scratch AS goproxy
+
+FROM sqlc/sqlc:1.30.0 AS sqlc
+
+FROM golang:1.26.0 AS builder
+
+# Pinned versions for the Tailwind toolchain. ARGs (not literal URLs) so
+# scripts/check-versions.sh can extract these and diff against the
+# toolserver image's ARGs — drift between the two means agent builds
+# would compile against a different stylesheet engine than the LLM's
+# iterative codegen loop.
+ARG TAILWIND_VERSION=v4.1.0
+ARG DAISYUI_VERSION=v5.5.23
+
+WORKDIR /build
+
+COPY go.mod go.sum* ./
+COPY . .
+
+# Tailwind v4 standalone + DaisyUI live under the same repo-local path the
+# local CLI installer writes, so styles/app.css can load the plugin by one
+# relative path in both local builds and Docker builds.
+RUN mkdir -p .airlock/toolchain/bin .airlock/toolchain/lib/tailwind views/static internal/db db/queries db/migrations
+COPY --from=sqlc /workspace/sqlc /build/.airlock/toolchain/bin/sqlc
+ADD https://github.com/tailwindlabs/tailwindcss/releases/download/${TAILWIND_VERSION}/tailwindcss-linux-x64 /build/.airlock/toolchain/bin/tailwindcss
+ADD --chmod=0644 https://github.com/saadeghi/daisyui/releases/download/${DAISYUI_VERSION}/daisyui.mjs       /build/.airlock/toolchain/lib/tailwind/daisyui.mjs
+ADD --chmod=0644 https://github.com/saadeghi/daisyui/releases/download/${DAISYUI_VERSION}/daisyui-theme.mjs /build/.airlock/toolchain/lib/tailwind/daisyui-theme.mjs
+RUN chmod +x .airlock/toolchain/bin/tailwindcss
+
+# Resolve modules via the bind-mounted goproxy first, public proxy second.
+# The goproxy bind is build-time only (not baked into a layer). The dev proxy
+# serves the owned libs at content-addressed versions (v<const>-dev<hash>), so
+# changed source is a new version Go fetches fresh — no cache eviction needed,
+# and the shared module-cache mount is safe under concurrent builds.
+# GONOSUMDB=* skips the checksum DB for the unpublished local versions.
+# `go mod tidy` fills go.sum for the templ tool directive's transitive deps
+# that `go mod download` skips as of Go 1.24.
+#
+# Order: sqlc runs when query inputs exist; templ emits *_templ.go; tailwindcss
+# scans the materialised templates; go build runs after all generated inputs
+# exist.
+RUN --mount=type=bind,from=goproxy,target=/goproxy \
+    --mount=type=cache,target=/go/pkg/mod \
+    --mount=type=cache,target=/root/.cache/go-build \
+    export GOPROXY="file:///goproxy,https://proxy.golang.org" GONOSUMDB="*" GOSUMDB=off && \
+    find internal/db -type f -name '*.go' ! -name 'doc.go' -delete && \
+    go mod tidy && \
+    if [ -n "$(find db/queries -type f -name '*.sql' -print -quit)" ]; then .airlock/toolchain/bin/sqlc generate; fi && \
+    go tool templ generate && \
+    .airlock/toolchain/bin/tailwindcss -i styles/app.css -o views/static/app.css --minify && \
+    go build -o /agent .
+
+# Runtime
+FROM ghcr.io/airlockrun/airlock-agent-base:latest
+
+# Agent-specified system setup (optional). Same script the builder tested
+# against locally — runs as root so it can apt-get install, curl-bash an
+# installer, pip install, drop binaries under /var/agent/bin/, whatever.
+# BuildKit cache mounts keep apt repeat-installs cheap; neither directory
+# lands in the final image.
+COPY setup.sh* /tmp/
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt/lists,sharing=locked \
+    mkdir -p /var/agent/bin /var/agent/data && \
+    if [ -f /tmp/setup.sh ]; then bash /tmp/setup.sh; fi
+
+COPY --from=builder /agent /agent
+COPY --from=builder /build/db/migrations /migrations
+COPY --from=builder /build/THIRD_PARTY_NOTICES*.md /licenses/
+
+CMD ["/agent"]
