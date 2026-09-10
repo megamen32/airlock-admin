@@ -122,3 +122,45 @@ admin-токен, выпущенный при отладке, ротирован
   обязательна живая проба curl; (2) airlock Create-юзера всегда генерит
   temp-password и игнорирует переданный — пароль выставляется прямым bcrypt-хэшем
   в dev-БД; (3) members API не создал grant — вставлен напрямую в agent_grants.
+
+### Реинкарнация 2026-09-10 (починка 502)
+
+Через несколько часов после первой публикации публичный логин перестал
+работать: nginx отдавал `502 Bad Gateway`, в логах caddy-proxy — `dial tcp
+172.17.0.1:8080: connect: connection refused`. Нативный airlock backend не был
+запущен: `make dev` поднимает его в foreground, и при завершении прошлой сессии
+`go run ./cmd/airlock serve` умер.
+
+Восстановление:
+
+1. `airlock-caddy-proxy-1` пересоздан с актуальными секретами (ротация из
+   первой сессии уже была в `.env`, контейнер нужно было лишь переподнять).
+2. Хост-биндинги rustfs (`42900`) и postgres (`42432`) восстановлены полным
+   `docker compose up -d postgres rustfs caddy-proxy` — `up -d <single>`
+   теряет биндинги у остальных сервисов.
+3. Backend запущен в фоне: `cd airlock && set -a && . ./.env && set +a &&
+   nohup go run ./cmd/airlock serve &`, слушает `127.0.0.1:8080`.
+4. `POST /auth/login` через nginx возвращает 200 + accessToken;
+   `/api/v1/agents` отдаёт `fleet-admin` под `roomhacker`.
+
+Ловушки:
+
+- `ENCRYPTION_KEY=000…deadbeef` — дефолт из `.env.dev.example` отвергается
+  валидатором вне `localhost`. Боевой ключ — `openssl rand -hex 32`.
+- `ENCRYPTION_KEY_REWRAP=true` с потерянным `ENCRYPTION_KEY_OLD` падает с
+  `secret storage migration failed: unknown key ID` (в БД остались записи
+  `agents.db_password`, зашифрованные уже не существующим ключом). Сейчас
+  rewrap выключен (`ENCRYPTION_KEY_REWRAP=false`) — `fleet-admin` в этом
+  dev-инстансе не запускается, его `db_password` не используется.
+- В логах caddy-proxy SPA обращается по пути `/auth/login` (без `/api`);
+  внешний curl нужно слать так же.
+
+Подтверждённый E2E:
+
+```
+$ curl -sS -i -X POST https://airlock.bezrabotnyi.com/auth/login \
+    -H 'Content-Type: application/json' \
+    -d '{"email":"roomhacker@bezrabotnyi.com","password":"<REDACTED-PASSWORD>"}'
+HTTP/2 200  content-type: application/json  via: 1.1 Caddy
+{"accessToken":"eyJ...","user":{"email":"roomhacker@bezrabotnyi.com","tenantRole":"TENANT_ROLE_ADMIN",...}}
+```
