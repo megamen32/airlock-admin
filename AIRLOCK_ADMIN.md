@@ -104,3 +104,21 @@ admin-токен, выпущенный при отладке, ротирован
 - схемы инструментов MCP синкаются только при старте контейнера агента — после
   смены инструментария хаба нужен рестарт агента (toolCount 0 → 15);
 - имя машины в mesh — `shell:roomhacker-server-88` (не `server-100`).
+
+## Публичная развёртка (2026-09-10)
+
+- **https://airlock.bezrabotnyi.com** — nginx vhost (ServersAdministartion/nginx-dev,
+  коммит `d4bbd27`): `127.0.0.1:8444 ssl` + WS-upgrade → airlock caddy-proxy
+  (`127.0.0.1:4280`, TLS_MODE=proxy, CADDY_TRUSTED_PROXIES=127.0.0.1). Сертификат
+  Let's Encrypt (webroot /var/www/letsencrypt).
+- Конфиг в `airlock/.env` (не в git): DOMAIN=airlock.bezrabotnyi.com,
+  PUBLIC_URL=https://airlock.bezrabotnyi.com. **JWT_SECRET ротирован** —
+  публично известный dev-секрет из открытого репо airlock неприемлем для
+  публичного инстанса (фордж админ-JWT).
+- Аккаунты: `roomhacker@bezrabotnyi.com` (админ, выдан владельцем) и
+  `admin@airlock.local` (операционный, локальный). roomhacker имеет grant admin
+  на агента fleet-admin.
+- Уроки: (1) `nginx -s reload` может молча не примениться — после каждого reload
+  обязательна живая проба curl; (2) airlock Create-юзера всегда генерит
+  temp-password и игнорирует переданный — пароль выставляется прямым bcrypt-хэшем
+  в dev-БД; (3) members API не создал grant — вставлен напрямую в agent_grants.
