@@ -232,3 +232,26 @@ cd airlock && docker compose -f docker-compose.yml -f docker-compose.dev.yml \
 - Старые nginx workers переживают reload — после каждого apply/reload
   обязательна живая curl-проба (ловушка повторилась на субдомене: первые пробы
   дали 000, ответ появился после явного reload+паузы).
+
+## Хранилище: Яндекс.Диск как S3-бэкенд (2026-09-10)
+
+- **Схема**: airlock → S3-шлюз `rclone serve s3` (127.0.0.1:4281, systemd
+  `airlock-s3-gateway.service`, bucket `airlock-storage`) → папка
+  `airlock-storage` на Яндекс.Диске (remote `yadisk`, OAuth до 2027). rustfs
+  остановлен. VFS-кэш на сервере ограничен 1 ГБ.
+- **Presigned-скачивания**: `s3.airlock.bezrabotnyi.com` → 4281 (LE-серт,
+  nginx-dev `e45f59f`); `S3_URL_PUBLIC` указывает туда — Host сохраняется,
+  SigV4-подписи валидны через наш домен.
+- **Провайдер LLM** переключён на публичный `https://omniroute.bezrabotnyi.com/v1`
+  (loopback-эндпоинты запрещены сетевой политикой после ухода PUBLIC_URL
+  с localhost).
+- **Бюджет 10 ГБ**: watchdog `scripts/yadisk_quota_watchdog.sh` каждые 6 ч
+  (systemd timer `airlock-yadisk-quota.timer`): журнал + NoticePlace при
+  8 ГБ (notice) и 10 ГБ (critical). Для NoticePlace нужен проектный токен —
+  NP_TOKEN/NP_EVENTS_URL/NP_PROJECT в шапке скрипта; админ-панель
+  notification-center (:8092) на момент настройки висла на рендере дашборда.
+- Приёмка: upload через API → объект на Диске → агент процитировал содержимое
+  в чате → скачивание по presigned-URL из интернета (HTTP 200).
+- Грабли: на сервере два rclone — юнит обязан использовать
+  `~/.local/bin/rclone` (v1.74.2); `/usr/bin/rclone` v1.53 не умеет serve s3.
+  Флаги сервера у `rclone serve s3` парсятся только после remote-path.
