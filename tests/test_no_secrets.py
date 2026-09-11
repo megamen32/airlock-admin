@@ -96,6 +96,9 @@ def test_no_static_passwords():
             # psql :'name' / :"name" placeholders are substituted by psql at runtime
             if content[max(0, m.start(1) - 2):m.start(1)] in (":'", ':"'):
                 continue
+            # Template binding (:password="expr") binds a variable — value is not a literal
+            if m.start() > 0 and content[m.start() - 1] == ":":
+                continue
             # Skip values that look dynamically generated (contain + or function calls)
             ctx = content[m.start():m.end()+30]
             if "+" in ctx or "secrets." in ctx or "token_urlsafe" in ctx or "$(" in ctx or "os.environ" in content[max(0,m.start()-60):m.start()]:

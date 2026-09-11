@@ -115,6 +115,10 @@ pytest -q
 `deploy/install_win.ps1` (Windows). Установщик печатает Hub URL, к которому
 подключается любой AI-клиент.
 
+Существующие legacy-токены остаются валидными, пока владелец явно не
+выполнит их ротацию или отзыв (canonical rule: the owner **explicitly
+rotates or removes** them).
+
 ## Документы
 
 | Документ | О чём |
