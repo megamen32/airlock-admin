@@ -9,8 +9,10 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"runtime"
 	"strings"
 	"sync/atomic"
+	"syscall"
 	"testing"
 	"time"
 )
@@ -30,6 +32,11 @@ func TestNodePeerPinnedPoolsSeparateSameOriginPhysicalIPs(t *testing.T) {
 	second, err := net.Listen("tcp", fmt.Sprintf("127.0.0.2:%d", port))
 	if err != nil {
 		first.Close()
+		if errors.Is(err, syscall.EADDRNOTAVAIL) {
+			// Linux resolves any 127.0.0.N address; macOS needs an explicit
+			// lo0 alias that hosted CI runners do not configure.
+			t.Skipf("loopback alias 127.0.0.2 unavailable on %s: %v", runtime.GOOS, err)
+		}
 		t.Fatal(err)
 	}
 	for i, listener := range []net.Listener{first, second} {
