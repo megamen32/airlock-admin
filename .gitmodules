@@ -1,0 +1,9 @@
+[submodule "airlock"]
+	path = airlock
+	url = git@github.com:megamen32/airlock.git
+	branch = airlock-admin
+	ignore = dirty
+[submodule "gptadmin"]
+	path = gptadmin
+	url = git@github.com:megamen32/gptadmin.git
+	branch = main

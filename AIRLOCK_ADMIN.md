@@ -1,6 +1,17 @@
 # Airlock-Admin
 
-Объединённый репозиторий: **GPTAdmin × Airlock**. GPTAdmin — удобный сайдкар на машины
+> **2026-09-11, реструктуризация.** Этот репозиторий — интеграционный слой,
+> а не сами продукты: `gptadmin/` и `airlock/` теперь **сабмодули**
+> (`megamen32/gptadmin` и `megamen32/airlock`, ветка `airlock-admin` c
+> форк-патчем MCP), пины см. в [.gitmodules](.gitmodules) и README.
+> Команды ниже, написанные до реструктуризации, выполнялись в корне, когда
+> дерево GPTAdmin лежало прямо здесь, — теперь соответствующие пути находятся
+> внутри сабмодулей (`go-hub/…` → `gptadmin/go-hub/…` и т.п.). История
+> старого объединённого дерева полностью сохранена в истории этого репо.
+> Прод-сервис `airlock.service` работает из `airlock/` (сабмодуль + нетрекаемый
+> рантайм-оверлей `.env*`, `bin/`, `frontend/dist`).
+
+Объединённая система: **GPTAdmin × Airlock**. GPTAdmin — удобный сайдкар на машины
 для ИИ (MCP-хаб управления инфраструктурой), Airlock — готовый слой безопасности учётных
 записей и платформа AI-приложений. Цель репозитория — управлять машинами через MCP из
 любого ИИ и закрывать доступ к этому управлению аккаунтами/авторизацией Airlock.
@@ -13,18 +24,20 @@ ExManager как ИИ-секретарь**. Зачем это как проду�
 
 ## Провенанс
 
-- `airlock/` — вендорный subtree-форк [airlockrun/airlock](https://github.com/airlockrun/airlock)
-  @ `3603d51` (v0.6.3, 2026-09-03), AGPL-3.0, © Oleg Karpov. Полная история коммитов
-  сохранена и достижима: `git log --oneline --graph -20` (subtree-merge `04fb498`,
-  второй родитель — вся цепочка airlockrun/airlock).
-- Остальное дерево — [megamen32/gptadmin](https://github.com/megamen32/gptadmin)
-  (AGPL-3.0-only), remote `gptadmin`.
+- Исторически `airlock/` подключался как вендорный subtree-форк
+  [airlockrun/airlock](https://github.com/airlockrun/airlock) @ v0.6.3
+  (subtree-merge `04fb498`, форк-патч `11760533`). С 2026-09-11 это сабмодуль
+  [megamen32/airlock](https://github.com/megamen32/airlock) (форк), ветка
+  `airlock-admin` = v0.6.3 + патч `0b91e0f8`.
+- GPTAdmin — [megamen32/gptadmin](https://github.com/megamen32/gptadmin)
+  (AGPL-3.0-only), с 2026-09-11 сабмодуль.
 
-Обновление вендорной копии (история сохраняется):
+Обновление форка airlock (ветка `airlock-admin`, история апстрима сохранена):
 
 ```bash
-git remote add airlock https://github.com/airlockrun/airlock.git   # один раз
-git subtree pull --prefix=airlock airlock main
+git -C airlock fetch origin
+# форварднутся за апстримом при желании: git -C airlock merge origin/main
+git -C airlock checkout <новый sha> && git add airlock
 ```
 
 ## У кого что сильное
