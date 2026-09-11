@@ -9,6 +9,8 @@ import unittest
 from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
+# Fresh checkouts have no gitignored .tmp dir; temp dirs are created under it.
+(ROOT / '.tmp').mkdir(exist_ok=True)
 sys.path.insert(0, str(ROOT / 'scripts'))
 import gptadmin_ingress_failover as controller
 

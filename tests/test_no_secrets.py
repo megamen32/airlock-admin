@@ -90,6 +90,12 @@ def test_no_static_passwords():
             # Skip safe placeholder values
             if val in SAFE_VALUES or any(s in val for s in ("example", "your", "placeholder")):
                 continue
+            # A variable reference ($VAR) resolves at runtime — not a static secret
+            if val.startswith("$"):
+                continue
+            # psql :'name' / :"name" placeholders are substituted by psql at runtime
+            if content[max(0, m.start(1) - 2):m.start(1)] in (":'", ':"'):
+                continue
             # Skip values that look dynamically generated (contain + or function calls)
             ctx = content[m.start():m.end()+30]
             if "+" in ctx or "secrets." in ctx or "token_urlsafe" in ctx or "$(" in ctx or "os.environ" in content[max(0,m.start()-60):m.start()]:
