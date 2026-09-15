@@ -46,8 +46,8 @@ git -C airlock checkout <новый sha> && git add airlock
 `airlock-agent/`: нативный Go runtime на `agentsdk`, без регистрации или вызова
 внешнего eXmanager MCP. Airlock даёт agent-owned PostgreSQL, миграции и
 user-scoped tool access; сам eXmanager реализует память, задачи и явный
-approval state machine как нативные SDK tools. Секреты и MCP token для этого
-пути не требуются.
+approval state machine как нативные SDK tools, а private reminders — через
+durable job и per-user topic. Секреты и MCP token для этого пути не требуются.
 
 ## У кого что сильное
 
