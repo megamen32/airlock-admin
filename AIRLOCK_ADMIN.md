@@ -51,6 +51,8 @@ owner-controlled share ACL и явный approval/rejection state machine как
 Owner может экспортировать документ в native agent storage, после чего
 стандартный `air.output` доставляет файл в текущий Airlock/bridge chat.
 Lifecycle внешних действий пишет per-user append-only SHA-256 audit chain.
+Предложение внешнего действия требует versioned `outbound.external` consent;
+grant/revoke тоже попадают в этот audit chain.
 Память сохраняет исходный 30-дневный retention: expired rows исключаются из
 поиска и ежедневно удаляются native scheduled job.
 `get_status` отдаёт user-scoped snapshot задач, напоминаний, документов,
