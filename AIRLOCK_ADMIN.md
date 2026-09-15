@@ -50,9 +50,9 @@ owner-controlled share ACL и явный approval/rejection state machine как
 нативные SDK tools, а private reminders — через durable job и per-user topic.
 Тема доставляется в подписанный Airlock conversation (в том числе bridge);
 одобренное внешнее действие идёт через native `outbound_messaging` Connector
-с action ID как idempotency key и становится `DELIVERED` только после ответа
-provider. Секреты и MCP token для этого пути не требуются: credential и binding
-provider управляются Airlock.
+с action ID как idempotency key и неизменным Airlock user ID владельца; оно
+становится `DELIVERED` только после ответа provider. Секреты и MCP token для
+этого пути не требуются: credential и binding provider управляются Airlock.
 
 ## У кого что сильное
 
