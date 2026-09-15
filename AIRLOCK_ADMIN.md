@@ -70,6 +70,11 @@ grant/revoke тоже попадают в этот audit chain.
 [cutover checklist](https://github.com/megamen32/exmanager/blob/main/airlock-agent/CUTOVER.md):
 он отдельно фиксирует mapping legacy ID в Airlock UUID, подписки topic,
 connector и live business canaries.
+В форке есть read-only exporter legacy SQLite и подтверждаемый admin import:
+snapshot кладётся в `legacy-imports/`, один legacy principal явно мапится на
+один Airlock User UUID, после чего transaction переносит память, документы,
+задачи и pending reminders. История чатов и external actions намеренно не
+переносятся: их нельзя честно приписать новому connector/audit chain.
 
 ## У кого что сильное
 
