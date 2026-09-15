@@ -66,6 +66,10 @@ grant/revoke тоже попадают в этот audit chain.
 с action ID как idempotency key и неизменным Airlock user ID владельца; оно
 становится `DELIVERED` только после ответа provider. Секреты и MCP token для
 этого пути не требуются: credential и binding provider управляются Airlock.
+Перед выключением legacy Telegram runtime нужно пройти
+[cutover checklist](https://github.com/megamen32/exmanager/blob/main/airlock-agent/CUTOVER.md):
+он отдельно фиксирует mapping legacy ID в Airlock UUID, подписки topic,
+connector и live business canaries.
 
 ## У кого что сильное
 
