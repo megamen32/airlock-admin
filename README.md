@@ -78,12 +78,13 @@ airlock/            # сабмодуль → megamen32/airlock (форк airlock
 | Путь | Репозиторий | Pin | Что это |
 |------|-------------|-----|---------|
 | `gptadmin/` | [megamen32/gptadmin](https://github.com/megamen32/gptadmin) (приватный) | см. `git ls-tree HEAD gptadmin` | текущий main хаба |
-| `airlock/` | [megamen32/airlock](https://github.com/megamen32/airlock), ветка `airlock-admin` | `0b91e0f8` | airlock v0.6.3 + форк-патч MCP |
+| `airlock/` | [megamen32/airlock](https://github.com/megamen32/airlock), ветка `main` | `b5a55f3` | airlock v0.7.0-rc.2 + форк-патч MCP |
 
-Форк-патч в `airlock/` (ветка `airlock-admin`): клиент MCP в airlock
+Форк-патч в `airlock/` (ветка `main`): клиент MCP в airlock
 пинирует протокол `2025-11-25`, а хаб GPTAdmin отвечает `2026-07-28` и
 возвращает `HTTP 204` на JSON-RPC нотификации. Патч держит свою пиннутую
-версию вместо обрыва соединения и считает 204 успехом.
+версию вместо обрыва соединения и считает 204 успехом. Для upstream открыт
+[PR #107](https://github.com/airlockrun/airlock/pull/107).
 
 Обновить пин:
 
@@ -150,5 +151,5 @@ cd gptadmin && go run ./go-hub/cmd/gptadmin-hub
 
 - `airlock/` — форк [airlockrun/airlock](https://github.com/airlockrun/airlock)
   (© Oleg Karpov), история апстрима сохранена; наш форк-патч живёт в ветке
-  `airlock-admin`.
+  `main`.
 - GPTAdmin — [megamen32/gptadmin](https://github.com/megamen32/gptadmin).

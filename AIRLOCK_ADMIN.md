@@ -2,7 +2,7 @@
 
 > **2026-09-11, реструктуризация.** Этот репозиторий — интеграционный слой,
 > а не сами продукты: `gptadmin/` и `airlock/` теперь **сабмодули**
-> (`megamen32/gptadmin` и `megamen32/airlock`, ветка `airlock-admin` c
+> (`megamen32/gptadmin` и `megamen32/airlock`, ветка `main` c
 > форк-патчем MCP), пины см. в [.gitmodules](.gitmodules) и README.
 > Команды ниже, написанные до реструктуризации, выполнялись в корне, когда
 > дерево GPTAdmin лежало прямо здесь, — теперь соответствующие пути находятся
@@ -28,17 +28,26 @@ ExManager как ИИ-секретарь**. Зачем это как проду�
   [airlockrun/airlock](https://github.com/airlockrun/airlock) @ v0.6.3
   (subtree-merge `04fb498`, форк-патч `11760533`). С 2026-09-11 это сабмодуль
   [megamen32/airlock](https://github.com/megamen32/airlock) (форк), ветка
-  `airlock-admin` = v0.6.3 + патч `0b91e0f8`.
+  `main` = v0.7.0-rc.2 + патч `b5a55f3`.
 - GPTAdmin — [megamen32/gptadmin](https://github.com/megamen32/gptadmin)
   (AGPL-3.0-only), с 2026-09-11 сабмодуль.
 
-Обновление форка airlock (ветка `airlock-admin`, история апстрима сохранена):
+Обновление форка airlock (ветка `main`, история апстрима сохранена):
 
 ```bash
 git -C airlock fetch origin
-# форварднутся за апстримом при желании: git -C airlock merge origin/main
+# форварднутся за апстримом при желании: git -C airlock merge upstream/main
 git -C airlock checkout <новый sha> && git add airlock
 ```
+
+## eXmanager как Airlock app
+
+В [megamen32/exmanager](https://github.com/megamen32/exmanager) появился
+`airlock-agent/`: нативный Go app на `agentsdk`, который регистрирует
+защищённый eXmanager MCP как user-scoped capability Airlock. Airlock хранит
+credential и запускает agent runtime; eXmanager остаётся единственным
+источником бизнес-логики и политик. После deploy оператор настраивает MCP token
+в Airlock UI — секрет не хранится в репозитории.
 
 ## У кого что сильное
 
