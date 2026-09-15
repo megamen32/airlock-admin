@@ -28,7 +28,8 @@ ExManager как ИИ-секретарь**. Зачем это как проду�
   [airlockrun/airlock](https://github.com/airlockrun/airlock) @ v0.6.3
   (subtree-merge `04fb498`, форк-патч `11760533`). С 2026-09-11 это сабмодуль
   [megamen32/airlock](https://github.com/megamen32/airlock) (форк), ветка
-  `main` = v0.7.0-rc.2 + патч `b5a55f3`.
+  `main` = v0.7.0-rc.2 + MCP-патч `b5a55f3` + host-only auth CLI
+  `bb553be` + защита от literal `${HOME}/` runtime cache `467e6ac`.
 - GPTAdmin — [megamen32/gptadmin](https://github.com/megamen32/gptadmin)
   (AGPL-3.0-only), с 2026-09-11 сабмодуль.
 

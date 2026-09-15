@@ -78,7 +78,7 @@ airlock/            # сабмодуль → megamen32/airlock (форк airlock
 | Путь | Репозиторий | Pin | Что это |
 |------|-------------|-----|---------|
 | `gptadmin/` | [megamen32/gptadmin](https://github.com/megamen32/gptadmin) (приватный) | см. `git ls-tree HEAD gptadmin` | текущий main хаба |
-| `airlock/` | [megamen32/airlock](https://github.com/megamen32/airlock), ветка `main` | `b5a55f3` | airlock v0.7.0-rc.2 + форк-патч MCP |
+| `airlock/` | [megamen32/airlock](https://github.com/megamen32/airlock), ветка `main` | `467e6ac` | airlock v0.7.0-rc.2 + MCP-патч + host-only auth CLI |
 
 Форк-патч в `airlock/` (ветка `main`): клиент MCP в airlock
 пинирует протокол `2025-11-25`, а хаб GPTAdmin отвечает `2026-07-28` и
