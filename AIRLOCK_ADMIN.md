@@ -48,6 +48,8 @@ git -C airlock checkout <новый sha> && git add airlock
 user-scoped tool access; сам eXmanager реализует память, задачи, документы с
 owner-controlled share ACL и явный approval/rejection state machine как
 нативные SDK tools, а private reminders — через durable job и per-user topic.
+Owner может экспортировать документ в native agent storage, после чего
+стандартный `air.output` доставляет файл в текущий Airlock/bridge chat.
 Тема доставляется в подписанный Airlock conversation (в том числе bridge);
 одобренное внешнее действие идёт через native `outbound_messaging` Connector
 с action ID как idempotency key и неизменным Airlock user ID владельца; оно
