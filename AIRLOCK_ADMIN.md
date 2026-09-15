@@ -57,6 +57,10 @@ grant/revoke тоже попадают в этот audit chain.
 поиска и ежедневно удаляются native scheduled job.
 `get_status` отдаёт user-scoped snapshot задач, напоминаний, документов,
 состояний действий и memory retention.
+Для group-digest агентский admin после явного подтверждения вызывает
+`publish_team_update`: нативный `team_updates` topic доставляет текст только
+явно подписанным Airlock conversation и не читает/не раздаёт private memory
+участников.
 Тема доставляется в подписанный Airlock conversation (в том числе bridge);
 одобренное внешнее действие идёт через native `outbound_messaging` Connector
 с action ID как idempotency key и неизменным Airlock user ID владельца; оно
