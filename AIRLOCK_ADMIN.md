@@ -53,6 +53,8 @@ Owner может экспортировать документ в native agent s
 Lifecycle внешних действий пишет per-user append-only SHA-256 audit chain.
 Память сохраняет исходный 30-дневный retention: expired rows исключаются из
 поиска и ежедневно удаляются native scheduled job.
+`get_status` отдаёт user-scoped snapshot задач, напоминаний, документов,
+состояний действий и memory retention.
 Тема доставляется в подписанный Airlock conversation (в том числе bridge);
 одобренное внешнее действие идёт через native `outbound_messaging` Connector
 с action ID как idempotency key и неизменным Airlock user ID владельца; оно
