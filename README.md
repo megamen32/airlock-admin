@@ -14,6 +14,10 @@ GPTAdmin, интеграционный план и живая эксплуата
 > 🎯 Продуктовое видение — что строим и зачем: **[PRODUCT_VISION.md](PRODUCT_VISION.md)**
 > 🔧 Живой стенд — деплой, секреты, хранилище, интеграция: **[AIRLOCK_ADMIN.md](AIRLOCK_ADMIN.md)**
 
+Текущие инструкции запуска: [AGENTS.md](AGENTS.md) и
+[AIRLOCK_RUNBOOK.md](AIRLOCK_RUNBOOK.md). Исторические dev/Caddy заметки в
+[AIRLOCK_ADMIN.md](AIRLOCK_ADMIN.md) не заменяют действующий systemd contract.
+
 ---
 
 ## Кто есть кто
@@ -105,6 +109,7 @@ git clone --recurse-submodules git@github.com:megamen32/airlock-admin.git
 
 ```bash
 # Airlock dev-стенд (postgres, s3, ingress + backend)
+# Local development only; production uses system airlock.service.
 cd airlock && make dev
 
 # Хаб GPTAdmin из исходников (Go 1.21+)

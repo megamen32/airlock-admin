@@ -22,6 +22,26 @@ ExManager как ИИ-секретарь**. Зачем это как проду�
 [PRODUCT_VISION.md](PRODUCT_VISION.md); этот документ — операционный ранбук
 живого стенда.
 
+## Действующая эксплуатация (2026-10-06)
+
+Приведённые ниже планы и канарии 2026-09-10 являются историей, а не командами
+восстановления текущего инстанса. Следуйте [AGENTS.md](AGENTS.md) и
+[AIRLOCK_RUNBOOK.md](AIRLOCK_RUNBOOK.md). Сейчас Airlock запущен как системный
+`airlock.service` с бинарником `airlock/bin/airlock serve`, рабочим каталогом
+сабмодуля и защищённым `.env`. Не запускайте параллельный dev/nohup backend.
+Ingress проксирует backend 8080; прежний Caddy 4280 не является текущей цепочкой.
+
+Внешние MCP подключаются штатным `RegisterMCP` и encrypted resource credentials.
+Для существующей Todo-доски (`todo.bezrabotnyi.com`) используйте
+`/home/roomhacker/agents-projects/exmanager/docs/todo-mcp.md`: источник доски
+`/home/roomhacker/excode`, Compose проект `services/kanban-board`, gateway 43327.
+Старый mini listener 8767 работает в REST-режиме и не является HTTP MCP.
+Доска и Airlock core не переписываются; X-manager проверяет проектные права
+в своих callback tools. Инфраструктурная карта:
+`/home/roomhacker/ServersAdministartion/docs/inventory/sites/todo.md`.
+
+## Исторический интеграционный план
+
 ## Провенанс
 
 - Исторически `airlock/` подключался как вендорный subtree-форк

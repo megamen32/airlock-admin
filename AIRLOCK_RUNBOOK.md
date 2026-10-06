@@ -5,30 +5,62 @@ metadata:
   type: project
 ---
 
-Airlock публично поднят через `nginx 127.0.0.1:8444 ssl → airlock-caddy-proxy-1 127.0.0.1:4280 → нативный airlock backend на 127.0.0.1:8080`.
+Airlock публично поднят через `nginx 127.0.0.1:8444 ssl → нативный airlock backend на 127.0.0.1:8080`. Caddy-proxy убран из цепочки 2026-09-29 (PR #TBD): nginx теперь сам терминирует TLS и проксирует SPA-статику + API + agent-subdomains. S3-сабдомен `s3.airlock.bezrabotnyi.com` обслуживается отдельным vhost (`sites-available/s3.airlock.bezrabotnyi.com`).
 
-**Самая частая причина «502 Bad Gateway»** — нативный `go run ./cmd/airlock serve` не запущен. `make dev` поднимает его в foreground сессии; если сессия завершилась — backend мёртв, а caddy-proxy не на что проксировать (в логах `dial tcp 172.17.0.1:8080: connect: connection refused`). Бэкенд **не поднимается автоматически** — никакого systemd/supervisor.
+## Действующий запуск на server-100 (проверено 2026-10-06)
 
-Чтобы оживить:
+Платформа работает как системный `airlock.service`, а не как `make dev` или
+фоновый `nohup go run`. Unit запускает
+`/home/roomhacker/airlock-admin/airlock/bin/airlock serve`, использует этот
+каталог как WorkingDirectory и читает защищённый `.env` как EnvironmentFile.
+Сервис был проверен в состоянии active/running. Не запускайте второй процесс
+на 8080 и не обходите systemd/resource guard ради восстановления.
+
+Для диагностики без изменения состояния:
 
 ```bash
-cd /home/roomhacker/airlock-admin/airlock
-set -a && . ./.env && set +a
-nohup go run ./cmd/airlock serve > /tmp/airlock-backend.log 2>&1 & disown
+systemctl status airlock.service --no-pager
+systemctl show airlock.service -p ActiveState -p SubState -p WorkingDirectory -p ExecStart
+ss -ltnp 'sport = :8080'
+curl -sS -o /dev/null -w '%{http_code}\n' http://127.0.0.1:8080/
 ```
 
-После — проверить:
-- `ss -ltnp | grep :8080` — должен быть процесс `airlock`.
-- `curl -sS -i -X POST http://127.0.0.1:8080/auth/login -H 'Content-Type: application/json' -d '{"email":"roomhacker@bezrabotnyi.com","password":"<admin password — rotated 2026-09-11, local only: .tmp/airlock-admin-creds>"}'` → 200 + accessToken.
-- Публично: `curl -sS -i -X POST https://airlock.bezrabotnyi.com/auth/login ...` → 200, header `via: 1.1 Caddy`.
+После подтверждённого отказа и проверки владельца изменения перезапуск:
+`sudo systemctl restart airlock.service`. Изменение сборки платформы — отдельная
+операция её владельца; подключение MCP к X-менеджеру не требует правки ядра.
+Не выводите `.env`, auth responses, пароли или токены в диагностику.
 
-**Что ещё ломает backend при старте:**
+Публичный X-менеджер: `https://exmanager.airlock.bezrabotnyi.com`;
+его настройки моделей: `/settings`. Приложение объявляет внешние MCP через
+штатный SDK, а платформа хранит credentials в зашифрованных resources.
+Интеграция существующей доски описана в
+`/home/roomhacker/agents-projects/exmanager/docs/todo-mcp.md`;
+её инфраструктурная карточка —
+`/home/roomhacker/ServersAdministartion/docs/inventory/sites/todo.md`.
 
-- `ENCRYPTION_KEY=000…deadbeef` — дефолт из `.env.dev.example` отвергается `validateDeployment` вне `localhost`. Боевой: `openssl rand -hex 32`.
-- `ENCRYPTION_KEY_REWRAP=true` при наличии в БД записей (`agents.db_password`), зашифрованных **третьим**, уже потерянным ключом — `FATAL secret storage migration failed: unknown key ID`. Решение: `ENCRYPTION_KEY_REWRAP=false` (пока нет резервной копии старого ключа). На dev-инстансе `fleet-admin` не запускается, его `db_password` всё равно не используется.
-- `docker compose up -d <single_service>` теряет host-биндинги остальных сервисов (rustfs `42900`, postgres `42432`). Поднимать весь набор сразу: `docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d postgres rustfs caddy-proxy`.
-- SPA вызывает `/auth/login` (без префикса `/api`).
+## Ingress and ownership
 
-Аккаунт `roomhacker@bezrabotnyi.com` (пароль — см. `.tmp/airlock-admin-creds`, вне git; ротирован 2026-09-11 после того, как черновик ранбука с паролем попал в публичный пуш) — admin, имеет grant admin на агента fleet-admin. Пароль выставлялся прямым bcrypt-хэшем в `users.password_hash` (через `airlock Users API` нельзя — он генерит temp-password и игнорирует переданный).
+Airlock ingress uses nginx and backend 8080. The common vhost serves the apex,
+platform frontend, and wildcard app routing. X-manager also has an explicit
+thin app vhost in its own repository:
+`/home/roomhacker/agents-projects/exmanager/deploy/nginx/exmanager.airlock.bezrabotnyi.com`.
+Its enabled-site symlink sends native app pages and the authentication callback
+to Airlock; do not send those pages to the platform SPA or apply a CSP that
+blocks the native login bootstrap.
 
-2026-09-11: бэкенд поднят как systemd-юнит `airlock.service` (WorkingDirectory = этот каталог, рантайм-оверлей поверх сабмодуля) — `systemctl restart airlock.service` вместо ручного `nohup`.
+The common proxy-auth secret lives only in protected nginx/runtime
+configuration. Do not copy it into this repository. Before changing ingress,
+follow the canonical site inventory and the owning authored config, validate
+`nginx -t`, then verify the public native page. A successful config test does
+not prove browser authentication or model-settings persistence.
+
+S3 and PostgreSQL are separate dependencies of the platform. Inspect their
+current Compose files, live containers, port bindings, and project budgets
+before restarting or recreating them. An MCP declaration does not require
+recreating platform databases, rotating encryption keys, or changing submodule
+pins. Never replace an encryption key to address an unrelated connection error.
+
+Historical dev/Caddy incidents and old passwords/login commands are recorded
+in `AIRLOCK_ADMIN.md` as dated history. They are not current recovery recipes.
+The platform core belongs to its maintainer; app-specific integrations use
+native SDK/resource APIs and thin adapters in the owning app checkout.
