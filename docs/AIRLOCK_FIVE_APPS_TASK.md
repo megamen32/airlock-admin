@@ -2,7 +2,7 @@
 
 ## Текущая задача: полноценные веб-интерфейсы и единый вход
 
-Статус: **в работе**. Прямое поручение владельца 09.10.2026 после проверки
+Статус: **завершено, независимая реальная приёмка PASS**. Прямое поручение владельца 09.10.2026 после проверки
 страницы Notice Place: убрать промежуточную страницу подключения и показывать
 существующие веб-интерфейсы всех пяти продуктов через Airlock.
 
@@ -35,6 +35,34 @@ WIP сохраняются. Изменения в продуктах огран�
 Все найденные отказы остаются задачами исполнителя до исправления и повторной
 проверки. Прежний результат ниже относится только к API/MCP-этапу.
 
+## Итог полноценного UI-этапа
+
+Все пять действующих продуктов открываются сразу своими существующими
+интерфейсами после единого входа Airlock. Native приложения не пересоздавались,
+оба подтверждённых пользователя имеют project-admin во всех пяти.
+
+| Приложение | Рабочий native маршрут | Браузерная приёмка |
+| --- | --- | --- |
+| Notice Place | https://noticeplace.airlock.bezrabotnyi.com/ | Original Admin,59forms, CSRF/history, reload PASS |
+| Universal UserIO | https://universal-userio.airlock.bezrabotnyi.com/ | Original React/assets, accounts/preferences API200, reload PASS |
+| GPTAdmin | https://gptadmin.airlock.bezrabotnyi.com/ | Original console/assets, clients API200, reload PASS |
+| Agent Herder | https://agent-herder.airlock.bezrabotnyi.com/ | Original React/assets, adapters API200, native SSE, reload PASS |
+| GrepMesh | https://grepmesh.airlock.bezrabotnyi.com/ | Original Files/ui/assets, host-status API200, reload PASS |
+
+Олег входит в эти UI через свою Airlock identity без подмены owner cookie.
+В UserIO он получает свой отдельный пустой профиль. Подключение собственных
+внешних почтовых/мессенджерских провайдеров остаётся обычным личным действием;
+оно не требуется для входа в приложение или выдачи project-admin.
+GPTAdmin admin UI связывает подписанного caller с actor/audit; owner OAuth
+credential не подставляется Олегу. Личный OAuth MCP slot GPTAdmin — отдельная
+возможность предыдущего API-этапа, не условие единого UI-входа.
+Admin позволяет менять integration source/resources; это доверенная native
+authority, а не обещание изоляции от самого project-admin.
+
+Исходные product UI, пользовательские данные и исходные production domains
+сохранены; core Airlock не изменялся. Чужой WIP сохранён. Gateway и пять native
+контейнеров имеют конечные workload budgets с lazy-generation reconciliation.
+
 ## Текущее подтверждённое состояние full UI
 
 NoticePlace: независимая cookie-only headed browser приёмка PASS: исходная
@@ -43,8 +71,8 @@ NoticePlace: независимая cookie-only headed browser приёмка PA
 /tmp/airlock-noticeplace-ui-reload-pass.png.
 
 UserIO, GPTAdmin, Herder, GrepMesh: текущие native HTTP requests возвращают
-полные исходные страницы и assets, без промежуточной страницы. Следующий шаг —
-конечная cookie-only браузерная проверка четырёх продуктов координатором.
+полные исходные страницы и assets, без промежуточной страницы. Независимая
+конечная cookie-only браузерная проверка четырёх продуктов координатором PASS.
 UserIO Олега штатно provisioned как отдельный пустой local user; его token
 используется только по его principal. Owner accounts не переносились.
 GPTAdmin SSO принимает подписанного native caller, строго проверяет loopback
@@ -73,6 +101,29 @@ signed budget handshake до MCP; cron/нового scheduler/platform patch н�
 Ordinary release has aggregate hard180s including setup. Slow nightly remains
 reserved for genuinely slow coverage; no nightly job needed for this slice.
 Earlier API/MCP-stage records below are historical, not a substitute for full UI.
+
+### Конечный source/runtime freeze
+
+Owned source опубликован и проверен на remote main:
+`fa2ee89188d3092ff97ea5cba6ed587d1cb3057b`. Shared wrapper checkout остаётся
+`nginx-direct-airlock-proxy` с сохранённым чужим WIP; clean-main не заявляется.
+Пять replacement builds complete; native UUID/resources/grants сохранены.
+Обычный release GREEN: 8 checks, 28.097s, hard180s включая setup. Получены
+исходные HTML/assets/API всех пяти, обе admin memberships, anonymous denial,
+фактические Docker caps и начальная строка действующего Herder EventSource.
+Receipt: `/tmp/airlock-real-ui-release-check.json`.
+Live delegated Oleg UserIO read с legacy owner cookies вернул собственный
+пустой accounts array. Это проверка доверенного private SDK delegation,
+не имитация native login: `/tmp/airlock-userio-own-principal-proof.json`.
+Конечная независимая cookie-only browser приёмка всех пяти PASS: 58.303s
+включая setup11.723s/browser45.418s, hard180s. Для каждого приложения
+подтверждены оригинальный DOM, родные assets/CSS, реальные API200 и
+location.reload с новым timeOrigin/navigationType=reload. NoticePlace59forms.
+Receipt: /tmp/airlock-real-ui-root-browser-batch.json. Runtime/source freeze
+сохранён. Ранний RED сохранён как ошибка устаревшего Herder test selector;
+скриншот просмотрен, оригинальный UI совпал с live18787, runtime не менялся.
+Старые wrapper templates сохранены как история предыдущего этапа; они
+не embedded, не routed и не входят в текущий deployment tar.
 
 ## История API/MCP-этапа
 
