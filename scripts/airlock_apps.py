@@ -17,7 +17,7 @@ BASE = "https://airlock.bezrabotnyi.com"
 ROOT = Path(__file__).resolve().parents[1]
 SOURCE = ROOT / "integrations/airlock-apps"
 ADMINS = ["5e438326-6339-4ac8-a328-59dae1d6241f", "98daa037-a87d-49b1-ba07-cd9e6f451864"]
-OWNED_SOURCE = ["go.mod", "go.sum", "main.go", "main_test.go", "page.html", "app.js", "db/migrations/doc.go", "styles/app.css"]
+OWNED_SOURCE = ["go.mod", "go.sum", "main.go", "main_test.go", "ui_proxy.go", "ui_proxy_test.go", "runtime_budget.go", "bridgeauth/auth.go", "bridgeauth/auth_test.go", "db/migrations/doc.go", "styles/app.css"]
 
 def private_json(path, data):
     fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
@@ -58,7 +58,7 @@ def bundle(config, agent_id):
 
 def run():
     p = argparse.ArgumentParser()
-    p.add_argument("command", choices=["register", "upload", "status", "bind", "credential", "tools", "consumer", "budget"])
+    p.add_argument("command", choices=["register", "upload", "status", "bind", "credential", "tools", "consumer", "budget", "env"])
     p.add_argument("--credential-file", default="/tmp/airlock-integration-session.json")
     p.add_argument("--state", default="/tmp/airlock-five-apps-deployment.json")
     p.add_argument("--app")
@@ -127,6 +127,12 @@ def run():
             if not status.get("status", {}).get("authorized"):
                 raise RuntimeError(f"{slug}: credential was not confirmed by native readback")
             record.setdefault("credential_configured", {})[args.binding] = True
+        elif args.command == "env":
+            if not args.binding or not args.token_file:
+                raise RuntimeError("env requires --binding and --token-file")
+            value = Path(args.token_file).read_text().strip()
+            api.call("POST", path + f"/env-vars/{args.binding}", {"value": value})
+            record.setdefault("secret_env_configured", {})[args.binding] = True
         elif args.command == "tools":
             tools, _ = api.call("GET", path + f"/integrations/mcp/{args.binding}/tools")
             print(json.dumps({"app":slug,"tools":[{"name":t["name"],"schema":t.get("inputSchemaJson")} for t in tools.get("tools", [])]},ensure_ascii=False))
@@ -138,13 +144,20 @@ def run():
             if not ok:
                 raise RuntimeError(f"{slug} upstream rejected consumer call")
         elif args.command == "budget":
-            name = "airlock-dev-agent-" + agent_id.split("-", 1)[0]
-            info = json.loads(subprocess.check_output(["docker", "inspect", name], text=True))[0]
-            if info["Config"]["Labels"].get("run.airlock.agent") != agent_id:
-                raise RuntimeError("container ownership mismatch")
-            subprocess.run(["docker", "update", "--cpus=1", "--memory=256m", "--memory-reservation=128m", "--memory-swap=256m", "--pids-limit=128", name], check=True, stdout=subprocess.DEVNULL)
-            info = json.loads(subprocess.check_output(["docker", "inspect", name], text=True))[0]["HostConfig"]
-            record["runtime_budget"] = {k:info.get(k) for k in ("Memory", "MemoryReservation", "MemorySwap", "NanoCpus", "PidsLimit")}
+            ids = subprocess.check_output(["docker", "ps", "-q", "--filter", "label=run.airlock.agent=" + agent_id], text=True, timeout=5).split()
+            if not ids:
+                record["runtime_budget_state"] = "idle; reconciled on next admitted UI/MCP request"
+            elif len(ids) != 1:
+                raise RuntimeError("owned container is not unique")
+            else:
+                name = ids[0]
+                info = json.loads(subprocess.check_output(["docker", "inspect", name], text=True, timeout=5))[0]
+                if info["Config"]["Labels"].get("run.airlock.agent") != agent_id:
+                    raise RuntimeError("container ownership mismatch")
+                subprocess.run(["docker", "update", "--cpus=1", "--memory=256m", "--memory-reservation=128m", "--memory-swap=256m", "--pids-limit=128", name], check=True, timeout=5, stdout=subprocess.DEVNULL)
+                info = json.loads(subprocess.check_output(["docker", "inspect", name], text=True, timeout=5))[0]["HostConfig"]
+                record["runtime_budget"] = {k:info.get(k) for k in ("Memory", "MemoryReservation", "MemorySwap", "NanoCpus", "PidsLimit")}
+                record["runtime_budget_state"] = "applied to current owned generation"
         elif args.command == "status":
             detail, _ = api.call("GET", path)
             builds, _ = api.call("GET", path + "/builds")

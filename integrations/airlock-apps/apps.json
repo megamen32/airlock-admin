@@ -30,7 +30,8 @@
           "enabled": true
         }
       }
-    ]
+    ],
+    "ui_url": "http://host.docker.internal:19419/noticeplace"
   },
   {
     "name": "Universal UserIO",
@@ -80,7 +81,8 @@
           "text": ""
         }
       }
-    ]
+    ],
+    "ui_url": "http://host.docker.internal:19419/universal-userio"
   },
   {
     "name": "GPTAdmin",
@@ -139,7 +141,8 @@
           "args": {}
         }
       }
-    ]
+    ],
+    "ui_url": "http://host.docker.internal:19419/gptadmin"
   },
   {
     "name": "Agent Herder",
@@ -172,7 +175,8 @@
           "inputId": ""
         }
       }
-    ]
+    ],
+    "ui_url": "http://host.docker.internal:19419/agent-herder"
   },
   {
     "name": "GrepMesh",
@@ -228,6 +232,7 @@
         }
       }
     ],
-    "product_url": "https://grep.bezrabotnyi.com/"
+    "product_url": "https://grep.bezrabotnyi.com/",
+    "ui_url": "http://host.docker.internal:19419/grepmesh"
   }
 ]

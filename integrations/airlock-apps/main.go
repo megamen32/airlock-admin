@@ -5,10 +5,6 @@ import (
 	"embed"
 	"encoding/json"
 	"errors"
-	"html/template"
-	"net/http"
-	"net/url"
-	"strings"
 	"time"
 
 	"github.com/airlockrun/agentsdk"
@@ -18,7 +14,7 @@ import (
 // Every uploaded app has its own non-secret manifest. Credentials stay in
 // encrypted Airlock resources; requests use SDK callbacks, never direct HTTP.
 //
-//go:embed app.json page.html app.js
+//go:embed app.json
 var files embed.FS
 
 type binding struct {
@@ -41,6 +37,7 @@ type appConfig struct {
 	Slug       string      `json:"slug"`
 	AgentID    string      `json:"agent_id"`
 	ProductURL string      `json:"product_url,omitempty"`
+	UIURL      string      `json:"ui_url,omitempty"`
 	Bindings   []binding   `json:"bindings"`
 	Operations []operation `json:"operations"`
 }
@@ -53,6 +50,7 @@ type application struct {
 	agent  *agentsdk.Agent
 	config appConfig
 	mcp    map[string]*agentsdk.MCPHandle
+	uiKey  *agentsdk.EnvVarHandle
 }
 
 func (c appConfig) bindingFor(principal string) (binding, error) {
@@ -82,12 +80,13 @@ func makeApplication(c appConfig) *application {
 	for _, b := range c.Bindings {
 		app.mcp[b.Slug] = a.RegisterMCP(&agentsdk.MCP{Slug: b.Slug, Name: c.Name, URL: b.URL, AuthMode: agentsdk.MCPAuth(b.AuthMode), AuthURL: b.AuthURL, TokenURL: b.TokenURL, Scopes: b.Scopes})
 	}
-	a.RegisterRoute(&agentsdk.Route{Method: "GET", Path: "/", Access: agentsdk.AccessAdmin, Description: "Управление " + c.Name, Handler: app.home})
-	a.RegisterRoute(&agentsdk.Route{Method: "GET", Path: "/api/operations", Access: agentsdk.AccessAdmin, Description: "Доступные операции", Handler: app.operations})
-	a.RegisterRoute(&agentsdk.Route{Method: "POST", Path: "/api/call", Access: agentsdk.AccessAdmin, Description: "Выполнить операцию в исходном сервисе", Handler: app.invoke})
-	js, _ := files.ReadFile("app.js")
-	a.RegisterStaticAsset(&agentsdk.StaticAsset{Name: "app.js", ContentType: "text/javascript; charset=utf-8", Data: js})
-	a.RegisterTool(tool.Typed[callInput, *agentsdk.MCPToolCallResponse]("service_read").Description("Read an allowlisted service operation. Mutations are available only in the authenticated app page with explicit confirmation.").Execute(func(ctx context.Context, in callInput) (*agentsdk.MCPToolCallResponse, error) {
+	app.uiKey = a.RegisterEnvVar(&agentsdk.EnvVar{Slug: "ui_gateway_key", Description: "Write-only key for caller-bound original product UI access", Secret: true})
+	// Go's native GET route also serves HEAD; a separate catch-all HEAD
+	// conflicts with the SDK's more specific GET asset routes.
+	for _, method := range []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"} {
+		a.RegisterRoute(&agentsdk.Route{Method: method, Path: "/{path...}", Access: agentsdk.AccessAdmin, Description: "Existing " + c.Name + " interface", Handler: app.productUI})
+	}
+	a.RegisterTool(tool.Typed[callInput, *agentsdk.MCPToolCallResponse]("service_read").Description("Read an allowlisted service operation; changes use the existing product interface.").Execute(func(ctx context.Context, in callInput) (*agentsdk.MCPToolCallResponse, error) {
 		for _, op := range c.Operations {
 			if op.Tool == in.Tool && op.Mutation {
 				return nil, errors.New("Изменения требуют подтверждения в приложении")
@@ -129,6 +128,9 @@ func (a *application) call(ctx context.Context, in callInput) (*agentsdk.MCPTool
 	if selected.Mutation && !in.Confirm {
 		return nil, errors.New("Подтвердите точную операцию и её параметры")
 	}
+	if err := a.ensureRuntimeBudget(ctx); err != nil {
+		return nil, err
+	}
 	ctx, cancel := context.WithTimeout(ctx, 45*time.Second)
 	defer cancel()
 	result, err := a.mcp[b.Slug].CallTool(ctx, in.Tool, in.Args)
@@ -141,63 +143,4 @@ func (a *application) call(ctx context.Context, in callInput) (*agentsdk.MCPTool
 	return result, nil
 }
 
-func (a *application) home(w http.ResponseWriter, r *http.Request) error {
-	if _, err := requireAdmin(r.Context()); err != nil {
-		http.Error(w, err.Error(), 403)
-		return nil
-	}
-	w.Header().Set("Cache-Control", "no-store")
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	page, _ := files.ReadFile("page.html")
-	return template.Must(template.New("page").Parse(string(page))).Execute(w, a.config)
-}
-func (a *application) operations(w http.ResponseWriter, r *http.Request) error {
-	if _, err := requireAdmin(r.Context()); err != nil {
-		http.Error(w, err.Error(), 403)
-		return nil
-	}
-	w.Header().Set("Cache-Control", "no-store")
-	w.Header().Set("Content-Type", "application/json")
-	return json.NewEncoder(w).Encode(a.config.Operations)
-}
-func (a *application) invoke(w http.ResponseWriter, r *http.Request) error {
-	w.Header().Set("Cache-Control", "no-store")
-	if origin := r.Header.Get("Origin"); origin != "" {
-		u, err := url.Parse(origin)
-		// The native SubdomainProxy rewrites Host to the container. Its Rewrite
-		// sets X-Forwarded-Host to the original public request host; the app is
-		// reached only through the authenticated SDK host boundary.
-		host := r.Header.Get("X-Forwarded-Host")
-		if host == "" {
-			host = r.Host
-		}
-		if err != nil || !strings.EqualFold(u.Host, host) || u.Scheme != "https" {
-			http.Error(w, "Запрос с другого сайта отклонён", 403)
-			return nil
-		}
-	}
-	var in callInput
-	d := json.NewDecoder(http.MaxBytesReader(w, r.Body, 64<<10))
-	d.DisallowUnknownFields()
-	if err := d.Decode(&in); err != nil {
-		http.Error(w, "Некорректные параметры операции", 400)
-		return nil
-	}
-	result, err := a.call(r.Context(), in)
-	if err != nil {
-		http.Error(w, err.Error(), 403)
-		return nil
-	}
-	data, err := json.Marshal(result)
-	if err != nil {
-		return err
-	}
-	if len(data) > 2<<20 {
-		http.Error(w, "Ответ слишком большой; сузьте запрос", 502)
-		return nil
-	}
-	w.Header().Set("Content-Type", "application/json")
-	_, err = w.Write(data)
-	return err
-}
 func main() { newAgent().Serve() }

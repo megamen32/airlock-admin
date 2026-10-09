@@ -1,5 +1,81 @@
 # Пять действующих приложений в Airlock
 
+## Текущая задача: полноценные веб-интерфейсы и единый вход
+
+Статус: **в работе**. Прямое поручение владельца 09.10.2026 после проверки
+страницы Notice Place: убрать промежуточную страницу подключения и показывать
+существующие веб-интерфейсы всех пяти продуктов через Airlock.
+
+Исполнитель остаётся Codex `01a12171-d815-7680-a037-1dd0d599c1fe` на
+server-100; координатор и независимая браузерная приёмка —
+`01a1216e-62ff-7543-852b-928e2c58c268`. Существующие пять UUID, ресурсы,
+администраторы и результаты предыдущего API-этапа сохраняются.
+
+Результат для пользователя: войти в Airlock, открыть любое из пяти приложений
+и сразу получить полноценный существующий интерфейс продукта на его
+`*.airlock.bezrabotnyi.com`, с правильной учётной записью и проектными правами.
+Основные разделы, статические файлы, API, необходимые WebSocket и обновление
+страницы должны работать. Вход связывается штатными средствами, тонким
+веб-прокси и адаптерами авторизации. Интерфейсы и базы продуктов не дублируются.
+
+Промежуточная HTML-страница, ссылка на внешний сайт, iframe или успешный
+MCP-вызов не закрывают этот пользовательский результат. Core Airlock и чужой
+WIP сохраняются. Изменения в продуктах ограничиваются их поддерживаемыми
+настройками/адаптерами входа; точные файлы и владельцы фиксируются до правки.
+
+Первый срез: настоящий Notice Place UI через Airlock с рабочим входом и
+браузерной проверкой; затем UserIO, GPTAdmin, Agent Herder и GrepMesh.
+Операторский вход уже имеется в защищённом хранилище native CLI; повторно
+пароль не запрашивается. Личные внешние аккаунты пользователей не подменяются.
+Открытый тестовый стенд остаётся отдельным будущим этапом.
+
+Приёмка текущего этапа: после окончательной доставки пройти реальные
+интерфейсы в видимом браузере, проверить штатные разделы и перезагрузку,
+права обоих администраторов, отказ без входа и отсутствие подмены личных данных.
+Все найденные отказы остаются задачами исполнителя до исправления и повторной
+проверки. Прежний результат ниже относится только к API/MCP-этапу.
+
+## Текущее подтверждённое состояние full UI
+
+NoticePlace: независимая cookie-only headed browser приёмка PASS: исходная
+консоль, 59 форм, переход /admin/, фильтр истории, CSRF и location.reload.
+Доказательство: /tmp/airlock-real-ui-root-verification.json и
+/tmp/airlock-noticeplace-ui-reload-pass.png.
+
+UserIO, GPTAdmin, Herder, GrepMesh: текущие native HTTP requests возвращают
+полные исходные страницы и assets, без промежуточной страницы. Следующий шаг —
+конечная cookie-only браузерная проверка четырёх продуктов координатором.
+UserIO Олега штатно provisioned как отдельный пустой local user; его token
+используется только по его principal. Owner accounts не переносились.
+GPTAdmin SSO принимает подписанного native caller, строго проверяет loopback
+и записывает UUID/email актёра в аудит без assertion. Источник a04e0bf включён
+в remote main7db69e1; canonical checkout clean и синхронизирован с этим main.
+Herder и GrepMesh исходники/чужой WIP не менялись.
+
+Общий UI gateway172.17.0.1:19419 и exact private Docker CIDR ingress входят
+в согласованный scope. Все requests требуют подписи native SDK caller и
+подтверждённых UUID/email двух администраторов. Старые owner auth cookies
+не переопределяют подписанного пользователя; CSRF/preferences сохраняются.
+При lazy recreation gateway проверяет exact run.airlock.agent label и
+применяет256MiB RAM/128MiB reservation/CPU1/pids128/swap0 для нового containerID.
+Проверка имеет5s deadline, ошибку нельзя обойти. service_read выполняет тот же
+signed budget handshake до MCP; cron/нового scheduler/platform patch нет.
+Действующие UI и пользовательские данные остаются в исходных продуктах.
+
+| Текущая проверка | Category | Purpose / defect | Expected/max seconds |
+| --- | --- | --- | --- |
+| Signature verifier | fast unit | Exact native user/app/request/time binding; forgery denied | <1/5 |
+| SDK full UI + MCP guard | focused integration | Original HTML and caller identity; missing caps block MCP | 10/45 |
+| Gateway identity/cookies + SSE/upgrade + lazy caps | focused integration | Own UserIO bearer, preserved CSRF/binary/stream, current generation bounded | <1/5 |
+| Original five UI/assets/API/admin/anonymous/caps | focused integration | Real native HTTP route and original product output | 4/35 each |
+| Herder real EventSource | focused integration | Stream not buffered or broken | 1/10 |
+
+Ordinary release has aggregate hard180s including setup. Slow nightly remains
+reserved for genuinely slow coverage; no nightly job needed for this slice.
+Earlier API/MCP-stage records below are historical, not a substitute for full UI.
+
+## История API/MCP-этапа
+
 Исполнитель: Codex `01a12171-d815-7680-a037-1dd0d599c1fe` на server-100.
 Координатор и независимая проверка: `01a1216e-62ff-7543-852b-928e2c58c268`.
 
@@ -97,7 +173,7 @@ cron или runners не создавали. Ранний release receipt RED с
 `/tmp/airlock-five-apps-root-verification.json`; final UI receipt координатора.
 Токены/auth responses/личные сообщения в контракт и отчёты не записываются.
 
-## Итог: выполнено 09.10.2026
+## Итог предыдущего API/MCP-этапа: выполнено 09.10.2026
 
 Независимая реальная приёмка координатора: headed AgentBrowser на MacMini6,2,
 с действующей owner identity. Для каждого из пяти публичных native app URLs:
@@ -124,3 +200,24 @@ Infra ingress `1a64401` и matching inventory `b136865` опубликованы
 Репозиторий целиком не объявляется clean/synchronized: canonical wrapper
 сохранил `nginx-direct-airlock-proxy` и foreign WIP. Remote main содержит только
 owned integration source и эту запись; foreign branch history не публиковали.
+
+
+### Full UI continuation: первый срез Notice Place принят
+
+Нативный SDK catch-all route проверяет текущего Airlock user UUID/email и
+AccessAdmin, затем делегирует одну HTTP/WS request через короткую подписанную
+identity assertion в приватный gateway172.17.0.1:19419. Gateway использует
+существующую NoticePlace auth seam X-Notify-Admin:1 к loopback8092.
+Shared owner cookie, iframe и новый интерфейс не используются.
+
+Root real headed browser с server-issued Secure HttpOnly __air_session,
+без Authorization header, подтвердил NoticePlace Admin, исходные59форм,
+Health dashboard/Producer projects/Delivery profiles/Event history,
+отсутствие wrapper. Screenshot: /tmp/airlock-noticeplace-real-ui-first.png.
+Worker native owner request с browser Origin также получил200 и исходные
+формы за6.81s. Остальные четыре full UI продолжаются; это не общий done.
+
+Gateway имеет RAM128/256MiB, CPU1, tasks96, swap0. Один scoped UFW rule
+разрешает192.168.128.0/20→172.17.0.1:19419/tcp, весь остальной firewall/SSH
+сохранён. Подпись проверяет UUID приложения, principal, роль, host, HTTP
+method, request URI и срок; ключ — write-only encrypted native EnvVar.

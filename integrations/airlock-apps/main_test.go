@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
-	"strings"
 	"testing"
 
 	"github.com/airlockrun/agentsdk"
@@ -24,12 +23,20 @@ func TestPrivateCredentialsAreSelectedByPrincipal(t *testing.T) {
 }
 
 func TestMutationNeedsConfirmationAndUnknownToolNeverReachesMCP(t *testing.T) {
+	budgetStatus := 204
+	budget := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(budgetStatus) }))
+	defer budget.Close()
 	c := appConfig{Name: "fixture", Bindings: []binding{{Slug: "fixture", URL: "https://example.com/mcp", AuthMode: "none"}}, Operations: []operation{{Tool: "read", Title: "Read"}, {Tool: "write", Title: "Write", Mutation: true}}}
 	var app *application
+	c.UIURL = budget.URL
 	env := agenttest.New(t, func() *agentsdk.Agent { app = makeApplication(c); return app.agent })
 	base := env.Airlock.Server.Config.Handler
 	var calls []string
 	env.Airlock.Server.Config.Handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/api/agent/env-vars/ui_gateway_key" {
+			json.NewEncoder(w).Encode(map[string]string{"value": "fixture-key"})
+			return
+		}
 		if r.URL.Path == "/api/agent/mcp/fixture/tools/call" {
 			var req wire.MCPToolCallRequest
 			json.NewDecoder(r.Body).Decode(&req)
@@ -60,27 +67,8 @@ func TestMutationNeedsConfirmationAndUnknownToolNeverReachesMCP(t *testing.T) {
 	if len(calls) != 2 {
 		t.Fatal("valid operations did not use native MCP proxy")
 	}
-	// Airlock rewrites Host to the container and supplies the original browser
-	// host through X-Forwarded-Host. A valid same-origin browser must still work.
-	for _, tc := range []struct {
-		origin string
-		status int
-	}{
-		{"https://fixture.airlock.bezrabotnyi.com", http.StatusOK},
-		{"https://foreign.example", http.StatusForbidden},
-	} {
-		r := httptest.NewRequest("POST", "http://internal-container:8080/api/call", strings.NewReader(`{"tool":"read","args":{}}`)).WithContext(ctx)
-		r.Header.Set("Origin", tc.origin)
-		r.Header.Set("X-Forwarded-Host", "fixture.airlock.bezrabotnyi.com")
-		w := httptest.NewRecorder()
-		if err := app.invoke(w, r); err != nil {
-			t.Fatal(err)
-		}
-		if w.Code != tc.status {
-			t.Fatalf("browser origin %s: status %d, want %d", tc.origin, w.Code, tc.status)
-		}
-	}
-	if len(calls) != 3 {
-		t.Fatal("foreign origin reached service or valid browser did not")
+	budgetStatus = 503
+	if _, err := app.call(ctx, callInput{Tool: "read"}); err == nil || len(calls) != 2 {
+		t.Fatal("MCP call bypassed missing finite runtime budget")
 	}
 }

@@ -12,7 +12,7 @@ from airlock_apps import ADMINS, API, ROOT, SOURCE, private_json
 
 START = time.monotonic()
 DEADLINE = START + 180
-RECEIPT = Path("/tmp/airlock-five-apps-release-check.json")
+RECEIPT = Path("/tmp/airlock-real-ui-release-check.json")
 CHECKS = []
 
 def remaining():
@@ -66,35 +66,54 @@ def main():
               lambda:command(["env","GOMAXPROCS=2","GOFLAGS=-p=2","go","test","-mod=readonly","./..."],SOURCE,45))
         check("MCP ingress auth and sessions","focused integration","Reject bad bearer before forwarding; retain native MCP session IDs","Anonymous backend exposure or broken MCP transport",1,10,
               lambda:command(["python3","-B","-m","unittest","-q","test_airlock_mcp_proxy"],ROOT/"integrations",10))
-        check("Browser script syntax","fast unit","Validate deployed JavaScript syntax","App administration page cannot run",1,5,
-              lambda:command(["node","--check",str(SOURCE/"app.js")],ROOT,5))
         api=API("/tmp/airlock-integration-session.json")
         state=json.loads(Path("/tmp/airlock-five-apps-deployment.json").read_text())
-        operations={"noticeplace":("noticeplace_instructions",{}),"universal-userio":("userio.accounts.list",{}),"gptadmin":("discover",{}),"agent-herder":("list_agents",{"limit":1,"includeLastMessage":False}),"grepmesh":("list_locations",{"hosts":"local"})}
-        for slug, record in state.items():
-            def native(slug=slug,record=record):
+        targets={
+            "noticeplace":("/admin/","NoticePlace Admin",None),
+            "universal-userio":("/","Universal UserIO","/v1/accounts"),
+            "gptadmin":("/admin/","GPTAdmin console","/admin/api/clients"),
+            "agent-herder":("/","Agent Herder","/api/adapters"),
+            "grepmesh":("/ui/","GrepMesh — Files","/api/host-status"),
+        }
+        for slug, (page,title,read_api) in targets.items():
+            record=state[slug]
+            def native(slug=slug,record=record,page=page,title=title,read_api=read_api):
+                import re
+                origin=record["route"].rstrip("/")
                 path="/api/v1/agents/"+record["id"]
                 detail,_=api.call("GET",path)
                 if detail["agent"]["status"]!="active":raise RuntimeError(slug+": native app not active")
                 members,_=api.call("GET",path+"/members")
                 grants={m["userId"]:m["role"] for m in members["members"]}
                 if any(grants.get(user)!="admin" for user in ADMINS):raise RuntimeError(slug+": missing confirmed administrator")
-                code,_=request(record["route"]+"api/operations")
-                if code not in (401,403):raise RuntimeError(slug+": anonymous operation route not denied")
-                name,args=operations[slug]
-                code,raw=request(record["route"]+"api/call",api.token,{"tool":name,"args":args},record["route"].rstrip("/"))
-                if code!=200:raise RuntimeError(slug+": native callback HTTP "+str(code))
-                result=json.loads(raw)
-                if result.get("isError") or not result.get("content"):raise RuntimeError(slug+": native callback did not return service response")
-                for content in result["content"]:
-                    if content.get("type")=="text":
-                        text=content.get("text","")
-                        if not text.strip():raise RuntimeError(slug+": empty service response")
-                        try:data=json.loads(text)
-                        except json.JSONDecodeError:continue
-                        if isinstance(data,dict) and data.get("job_id") and data.get("status") in ("running","pending"):
-                            raise RuntimeError(slug+": service job not complete")
-            check(slug+" live callback, grants and auth denial","focused integration","Real browser-origin app route reaches existing service with two confirmed admin grants","Unbound resource, broken forwarded Origin or unauthorized public access",35 if slug=="agent-herder" else 3,45 if slug=="agent-herder" else 30,native)
+                code,_=request(origin+page)
+                if code not in (401,403):raise RuntimeError(slug+": anonymous UI not denied")
+                code,raw=request(origin+page,api.token,origin=origin)
+                html=raw.decode()
+                if code!=200 or title not in html or 'id="operation-form"' in html:raise RuntimeError(slug+": original product UI missing")
+                assets=re.findall(r'(?:src|href)=["\']([^"\']+\.(?:js|css)(?:\?[^"\']*)?)["\']',html)
+                from urllib.parse import urljoin
+                for asset in assets[:2]:
+                    url=urljoin(origin+page,asset)
+                    if not url.startswith(origin+"/"):raise RuntimeError(slug+": external product asset")
+                    code,data=request(url,api.token)
+                    if code!=200 or not data:raise RuntimeError(slug+": product asset missing")
+                if read_api:
+                    code,data=request(origin+read_api,api.token,origin=origin)
+                    if code!=200 or not isinstance(json.loads(data),(dict,list)):raise RuntimeError(slug+": product API missing")
+                ids=subprocess.check_output(["docker","ps","-q","--filter","label=run.airlock.agent="+record["id"]],text=True,timeout=min(5,remaining())).split()
+                if len(ids)!=1:raise RuntimeError(slug+": runtime not uniquely identified")
+                info=json.loads(subprocess.check_output(["docker","inspect",ids[0]],text=True,timeout=min(5,remaining())))[0]["HostConfig"]
+                wanted={"Memory":256<<20,"MemoryReservation":128<<20,"MemorySwap":256<<20,"NanoCpus":1000000000,"PidsLimit":128}
+                if any(info.get(k)!=v for k,v in wanted.items()):raise RuntimeError(slug+": runtime budget missing")
+            check(slug+" original UI, assets, API, grants, auth and budget","focused integration","Use original existing product through admitted native caller","Wrapper UI, broken auth/static/API or unbounded lazy container",4,35,native)
+        def stream():
+            url=state["agent-herder"]["route"]+"api/events/stream?after=0"
+            req=urllib.request.Request(url,headers={"Authorization":"Bearer "+api.token,"Accept":"text/event-stream"})
+            with urllib.request.urlopen(req,timeout=min(10,remaining())) as response:
+                if response.status!=200 or not response.headers.get("Content-Type","").startswith("text/event-stream") or not response.readline():
+                    raise RuntimeError("native original SSE stream failed")
+        check("Herder original event stream","focused integration","Original EventSource stream remains live through native proxy","Buffered or broken native SSE transport",1,10,stream)
         overall=True
     finally:
         private_json(RECEIPT,{"ok":overall,"elapsed_seconds":round(time.monotonic()-START,3),"hard_deadline_seconds":180,"checks":CHECKS})
