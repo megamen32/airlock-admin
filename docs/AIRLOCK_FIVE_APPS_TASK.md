@@ -14,11 +14,11 @@
 
 | Приложение | Native app UUID / маршрут | Доказанный результат | Следующий шаг |
 | --- | --- | --- | --- |
-| Notice Place | `ac873193-77d4-46ff-a272-4539517b7ff1` / https://noticeplace.airlock.bezrabotnyi.com/ | ACTIVE, native MCP credential и instructions response | Финальная браузерная проверка после Origin fix |
+| Notice Place | `ac873193-77d4-46ff-a272-4539517b7ff1` / https://noticeplace.airlock.bezrabotnyi.com/ | ACTIVE, native MCP credential и instructions response | Браузерный read consumer PASS |
 | Universal UserIO | `d45583e2-649b-44e7-865d-2ea1817b4167` / https://universal-userio.airlock.bezrabotnyi.com/ | ACTIVE, owner resource bound, accounts.list response | Олег: отдельно авторизовать собственный UserIO slot |
 | GPTAdmin | `178f37c3-283d-48b9-82ef-03775e772438` / https://gptadmin.airlock.bezrabotnyi.com/ | ACTIVE, owner OAuth resource reused, discover response | Олег: отдельно авторизовать собственный GPTAdmin slot |
-| Agent Herder | `4b9ec929-d8f3-44c3-b6d0-50b23329d374` / https://agent-herder.airlock.bezrabotnyi.com/ | ACTIVE, protected HTTPS MCP, list_agents response | Финальная браузерная проверка |
-| GrepMesh | `eb9c7250-33c4-46c0-ae49-1b0e756b4e81` / https://grepmesh.airlock.bezrabotnyi.com/ | ACTIVE, независимый MCP без GPTAdmin, list_locations response | Финальная браузерная проверка |
+| Agent Herder | `4b9ec929-d8f3-44c3-b6d0-50b23329d374` / https://agent-herder.airlock.bezrabotnyi.com/ | ACTIVE, protected HTTPS MCP, list_agents response | Браузерный read consumer PASS |
+| GrepMesh | `eb9c7250-33c4-46c0-ae49-1b0e756b4e81` / https://grepmesh.airlock.bezrabotnyi.com/ | ACTIVE, независимый MCP без GPTAdmin, list_locations response | Браузерный read consumer PASS |
 
 
 Штатный device login владельца подтверждён координатором. Человеческий пароль
@@ -96,3 +96,31 @@ cron или runners не создавали. Ранний release receipt RED с
 `/tmp/airlock-five-apps-release-check.json`, независимый
 `/tmp/airlock-five-apps-root-verification.json`; final UI receipt координатора.
 Токены/auth responses/личные сообщения в контракт и отчёты не записываются.
+
+## Итог: выполнено 09.10.2026
+
+Независимая реальная приёмка координатора: headed AgentBrowser на MacMini6,2,
+с действующей owner identity. Для каждого из пяти публичных native app URLs:
+открыть страницу → проверить title → открыть диагностику → fresh snapshot →
+выполнить default read → увидеть «Получен ответ действующего сервиса» и
+непустой ответ. Все пять journeys PASS после финальных replacements и caps;
+Origin проверен браузером, а не только запросом без Origin.
+
+Обычный release: 8 checks GREEN за50.117s при hard180s. Обе подтверждённые
+admin memberships во всех пяти apps прочитаны обратно; anonymous operations
+отклоняются. Runtime и конфигурация после final freeze не менялись.
+
+Independent evidence: `/tmp/airlock-final-browser-proof.json`,
+`/tmp/airlock-five-apps-root-verification.json`; безопасный screenshot NoticePlace
+`/tmp/airlock-noticeplace-success.png` с закрытым результатом диагностики.
+Исходники/runtime candidate опубликованы в wrapper remote main `f7887dbc`.
+Infra ingress `1a64401` и matching inventory `b136865` опубликованы в infra main.
+Последняя публикация этого документа содержит только acceptance metadata.
+
+Оставшееся действие Олега: авторизовать собственные личные UserIO и GPTAdmin
+подключения через штатный экран. Это отдельно от уже выданных admin rights;
+чужую OAuth identity не имитировали и owner credential в его слот не помещали.
+
+Репозиторий целиком не объявляется clean/synchronized: canonical wrapper
+сохранил `nginx-direct-airlock-proxy` и foreign WIP. Remote main содержит только
+owned integration source и эту запись; foreign branch history не публиковали.
