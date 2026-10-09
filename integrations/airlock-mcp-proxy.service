@@ -1,0 +1,27 @@
+[Unit]
+Description=Protected native Airlock routes to existing Herder and GrepMesh MCP
+After=network.target
+
+[Service]
+Type=simple
+User=roomhacker
+Group=roomhacker
+Environment=AIRLOCK_HERDER_TOKEN_FILE=/home/roomhacker/.config/airlock-apps/herder.token
+Environment=AIRLOCK_GREPMESH_TOKEN_FILE=/home/roomhacker/.config/airlock-apps/grepmesh.token
+ExecStart=/usr/bin/python3 -I -B /home/roomhacker/airlock-admin/integrations/airlock_mcp_proxy.py
+Restart=on-failure
+RestartSec=3
+MemoryHigh=128M
+MemoryMax=256M
+MemorySwapMax=0
+CPUQuota=50%
+TasksMax=32
+IOWeight=20
+TimeoutStopSec=10
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+
+[Install]
+WantedBy=multi-user.target

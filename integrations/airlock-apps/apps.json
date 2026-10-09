@@ -1,0 +1,233 @@
+[
+  {
+    "name": "Notice Place",
+    "slug": "noticeplace",
+    "product_url": "https://notify.bezrabotnyi.com/",
+    "bindings": [
+      {
+        "slug": "noticeplace",
+        "url": "https://notify.bezrabotnyi.com/mcp",
+        "auth_mode": "token"
+      }
+    ],
+    "operations": [
+      {
+        "tool": "noticeplace_instructions",
+        "title": "Правила подключения уведомлений",
+        "args": {}
+      },
+      {
+        "tool": "noticeplace_list_mutes",
+        "title": "Отключённые уведомления",
+        "args": {}
+      },
+      {
+        "tool": "noticeplace_set_notifications",
+        "title": "Изменить уведомления инцидента",
+        "mutation": true,
+        "args": {
+          "incident_id": "",
+          "enabled": true
+        }
+      }
+    ]
+  },
+  {
+    "name": "Universal UserIO",
+    "slug": "universal-userio",
+    "product_url": "https://msg.bezrabotnyi.com/",
+    "bindings": [
+      {
+        "slug": "userio_owner",
+        "url": "https://msg.bezrabotnyi.com/mcp",
+        "auth_mode": "token",
+        "principal": "5e438326-6339-4ac8-a328-59dae1d6241f"
+      },
+      {
+        "slug": "userio_oleg",
+        "url": "https://msg.bezrabotnyi.com/mcp",
+        "auth_mode": "token",
+        "principal": "98daa037-a87d-49b1-ba07-cd9e6f451864"
+      }
+    ],
+    "operations": [
+      {
+        "tool": "userio.accounts.list",
+        "title": "Мои подключённые аккаунты",
+        "args": {}
+      },
+      {
+        "tool": "userio.channels.list",
+        "title": "Мои чаты",
+        "args": {
+          "limit": 20
+        }
+      },
+      {
+        "tool": "userio.channels.read",
+        "title": "Прочитать выбранный чат",
+        "args": {
+          "chat_id": "",
+          "limit": 20
+        }
+      },
+      {
+        "tool": "userio.channels.send_draft",
+        "title": "Сохранить черновик",
+        "mutation": true,
+        "args": {
+          "chat_id": "",
+          "text": ""
+        }
+      }
+    ]
+  },
+  {
+    "name": "GPTAdmin",
+    "slug": "gptadmin",
+    "product_url": "https://mcp.bezrabotnyi.com/",
+    "bindings": [
+      {
+        "slug": "gptadmin_owner",
+        "url": "https://mcp.bezrabotnyi.com/mcp",
+        "auth_mode": "oauth",
+        "principal": "5e438326-6339-4ac8-a328-59dae1d6241f",
+        "auth_url": "https://mcp.bezrabotnyi.com/oauth/authorize",
+        "token_url": "https://mcp.bezrabotnyi.com/oauth/token",
+        "scopes": [
+          "gptadmin.read",
+          "gptadmin.inspect",
+          "gptadmin.exec",
+          "offline_access"
+        ]
+      },
+      {
+        "slug": "gptadmin_oleg",
+        "url": "https://mcp.bezrabotnyi.com/mcp",
+        "auth_mode": "oauth",
+        "principal": "98daa037-a87d-49b1-ba07-cd9e6f451864",
+        "auth_url": "https://mcp.bezrabotnyi.com/oauth/authorize",
+        "token_url": "https://mcp.bezrabotnyi.com/oauth/token",
+        "scopes": [
+          "gptadmin.read",
+          "gptadmin.inspect",
+          "gptadmin.exec",
+          "offline_access"
+        ]
+      }
+    ],
+    "operations": [
+      {
+        "tool": "discover",
+        "title": "Доступные сервисы моего профиля",
+        "args": {}
+      },
+      {
+        "tool": "schema",
+        "title": "Схема выбранного сервиса",
+        "args": {
+          "target": ""
+        }
+      },
+      {
+        "tool": "execute",
+        "title": "Выполнить выбранную команду",
+        "mutation": true,
+        "args": {
+          "target": "",
+          "tool": "",
+          "args": {}
+        }
+      }
+    ]
+  },
+  {
+    "name": "Agent Herder",
+    "slug": "agent-herder",
+    "product_url": "https://agent.bezrabotnyi.com/",
+    "bindings": [
+      {
+        "slug": "herder",
+        "url": "https://agent.bezrabotnyi.com/airlock-mcp",
+        "auth_mode": "token"
+      }
+    ],
+    "operations": [
+      {
+        "tool": "list_agents",
+        "title": "Активные рабочие сессии",
+        "args": {
+          "limit": 20,
+          "includeLastMessage": false
+        }
+      },
+      {
+        "tool": "send_message",
+        "title": "Передать поручение выбранной сессии",
+        "mutation": true,
+        "args": {
+          "sessionId": "",
+          "message": "",
+          "mode": "queue",
+          "inputId": ""
+        }
+      }
+    ]
+  },
+  {
+    "name": "GrepMesh",
+    "slug": "grepmesh",
+    "bindings": [
+      {
+        "slug": "grepmesh",
+        "url": "https://grep.bezrabotnyi.com/airlock-mcp",
+        "auth_mode": "token"
+      }
+    ],
+    "operations": [
+      {
+        "tool": "list_locations",
+        "title": "Доступные узлы и каталоги",
+        "args": {}
+      },
+      {
+        "tool": "search",
+        "title": "Поиск по файлам",
+        "args": {
+          "query": "",
+          "hosts": "local",
+          "max_matches": 20,
+          "wait_ms": 1000
+        }
+      },
+      {
+        "tool": "find_paths",
+        "title": "Поиск имени файла",
+        "args": {
+          "pattern": "",
+          "hosts": "local",
+          "max_matches": 20
+        }
+      },
+      {
+        "tool": "read_text",
+        "title": "Прочитать выбранный файл",
+        "args": {
+          "host": "server-100",
+          "path": "",
+          "start_line": 1,
+          "end_line": 100
+        }
+      },
+      {
+        "tool": "search_status",
+        "title": "Результат начатого поиска",
+        "args": {
+          "job_id": "",
+          "page_size": 20
+        }
+      }
+    ],
+    "product_url": "https://grep.bezrabotnyi.com/"
+  }
+]

@@ -1,0 +1,1 @@
+{"name":"Integration fixture","slug":"fixture","bindings":[{"slug":"fixture","url":"https://example.com/mcp","auth_mode":"none"}],"operations":[{"tool":"read","title":"Read","args":{}}]}
