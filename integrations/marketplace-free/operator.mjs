@@ -28,6 +28,13 @@ if(input.op==='list') {
   console.log(JSON.stringify({id:a.id,name:a.name,slug:a.slug,status:a.status,reused:!!existing}));
 } else if(input.op==='builds'||input.op==='needs'||input.op==='connections'||input.op==='mcp-servers') {
   console.log(JSON.stringify(await json(prefix+input.id+'/'+input.op)));
+} else if(input.op==='run-proof') {
+  const data=await json('/api/v1/runs/'+input.id);
+  const run=data.run;
+  console.log(JSON.stringify({id:run.id,status:run.status,errorKind:run.errorKind,
+    durationMs:run.durationMs,sourceRef:run.sourceRef,
+    actionTypes:(run.actions||[]).map(a=>({type:a.type,tool:a.tool||a.toolName||a.name})),
+    messageRoles:(data.messages||[]).map(m=>m.role)}));
 } else if(input.op==='upgrade') {
   const r=await request(prefix+input.id+'/upgrade',{description:input.description},'POST');
   console.log(JSON.stringify({id:input.id,accepted:r.status===202}));

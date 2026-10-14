@@ -14,5 +14,5 @@ Free Shtab limit10calls/hour/company. Empty actual workspace is reported honestl
 missing/error/malformed responses are never substituted with fabricated zero.
 Russian full HTML page and chat use the same service. No writes, owner profile,
 raw MCP tools, arbitrary names, credentials in code or Airlock core changes.
-Native source deployment validates build, tests and migration roundtrip; real
+Native source deployment compiles the app; native startup applies migrations; real
 provider result and ordinary guest UI remain required for acceptance.
