@@ -157,6 +157,11 @@ const server=http.createServer(async(req,res)=>{
       const list=await api('/api/v1/agents',undefined,await adminToken(),'GET');
       return json(res,(list.data.agents||[]).some(a=>a.slug===slug) ? 200:403,{});
     }
+    // These hosts reach native app/S3 routing, never the dashboard API.
+    // Let native per-route user grants and signed S3 requests govern app actions.
+    const host=(req.headers.host||'').split(':')[0];
+    if(host===`s3.${domain}` || (host.endsWith(`.${domain}`) && /^d88-[a-z0-9-]+$/.test(host.slice(0,-domain.length-1))))
+      return proxy(req,res);
     if (path.includes('%') || path.includes('\\') || /\/\/|\/\.\.?\//.test(path)) return json(res,400,{error:'Некорректный адрес.'});
     if (req.method==='POST' && path==='/auth/refresh' && !req.headers.cookie && !req.headers.authorization) return await guest(res);
     const runMatch=/^\/api\/v1\/runs\/([0-9a-f-]{36})$/.exec(path);

@@ -1,61 +1,63 @@
-# Public Airlock demo on server-88
+# Демо Airlock Internal
 
-Final address: https://demo.airlockrun.ru. Authoritative `demo` and `*.demo`
-records point to the airlockrun VPS, 31.177.110.230. VPS Caddy preserves the
-original Host and proxies HTTPS to `demo.airlock.bezrabotnyi.com`; server-100
-nginx terminates this second TLS connection and forwards to 192.168.2.75:43280.
-Existing private Airlock and its data are independent.
+Адрес: **https://demo.airlockrun.ru**. Демо работает на **server-88**,
+в отдельной инстанции, с русским интерфейсом и автоматическим гостевым входом.
+Посетители могут общаться и создавать проекты. Изменение, удаление,
+остановка проектов, управление участниками и настройками закрыты для гостей.
 
-The official Airlock Internal v0.7.0 release runs in a separate rootless Docker owned by
-`airlock-demo`, UID 993, socket `/run/user/993/docker.sock`. Runtime archive,
-Compose files and private credentials live in `/var/lib/airlock-demo/runtime`.
-This is a deployment artifact, not a second Git checkout. `setup-rootless.sh`
-owns the dedicated user, subordinate IDs, filesystem mount and budget.
-`prepare-runtime.sh` prepares the upstream release and bounded Compose overlay.
-`gateway.mjs` is an external adapter; the Airlock core remains official.
+## Версия и русский интерфейс
 
-Source: private `airlockrun/airlock-internal`, revision
-`690a90e7bafd781e39c5618f12598e42f5d9c306`. Both official backend and frontend
-image labels must match this revision. The frontend is specifically
-`ghcr.io/airlockrun/airlock-enterprise-frontend:v0.7.0`, containing the upstream
-English/Russian catalogs from `enterprise/frontend/src/i18n/`. Persisted
-`settings.uiLocale=ru` makes Russian the instance default, including a fresh
-visitor with an English browser. The community frontend contains only English
-and is not an acceptable fallback. Private source/translations stay out of this
-public operations repository. Follow `enterprise/README.md` in the shared
-Internal repository: authenticate on100, pull the private frontend, then
-`docker save | ssh ... docker load` into the dedicated88 socket without copying
-registry credentials. Verify the immutable image digest and labels after loading.
+Источник — приватный репозиторий `airlockrun/airlock-internal`, предоставленный
+владельцу. Версия **v0.7.0**, ревизия
+`690a90e7bafd781e39c5618f12598e42f5d9c306`.
+Backend: `ghcr.io/airlockrun/airlock:v0.7.0`.
+Frontend: **`ghcr.io/airlockrun/airlock-enterprise-frontend:v0.7.0`**.
+Оба образа имеют проверенные OCI-метки источника и этой ревизии.
 
-Budget, admitted against 94GiB available RAM and 124GiB free disk on 88:
-aggregate RAM high8GiB/max12GiB, swap0, CPU4, tasks4096, I/O read128MiB/s and
-write32MiB/s, persistent disk48GiB. Host reserves: RAM32GiB/disk20GiB.
-BuildKit4GiB/CPU2/cpuset0,1, Airlock2GiB/CPU2, PostgreSQL1GiB/CPU1,
-RustFS1GiB/CPU1, gateway256MiB/CPU1, Caddy256MiB/CPU0.5,
-frontend128MiB/CPU0.5. One build at a time; per app memory1GiB. The outer
-UID budget applies to all containers together. BuildKit UID0 is namespaced
-inside rootless Docker; it has no host-root privileges. This avoids unsupported
-nested rootlesskit subordinate-ID maps. Source setup expected180s/emergency1800s.
-The build cpuset also bounds Go compiler parallelism on this 88-core host;
-CPU quota alone allowed compiler process fan-out to exhaust the task limit.
+Приватный frontend содержит официальные английский и русский каталоги из
+`enterprise/frontend/src/i18n/`. В базе установлено `settings.uiLocale=ru`:
+русский интерфейс открывается также у нового посетителя с английским браузером.
+Community frontend содержит только английский и для этого демо не подходит.
+Digest приватного пакета:
+`sha256:902ea8f94afe743b59ec20f677b349ed31fb51376f8c7143f3fd3c35d9f00639`.
 
-New visitors obtain separate native user sessions automatically, with HttpOnly
-cookies and tenant user role. The broker creates projects as the owner but
-grants visitors only the built-in All users membership with role user.
-Visitors can chat, upload chat files and create projects; gateway denies other
-mutations, including updates, deletion, lifecycle, membership and admin changes.
-Creation accepts only name/slug/description/instructions/skipInitialBuild,
-uses system model defaults, and never forwards guest Git credentials or ownership.
-Limits: two concurrent guest registrations, 256 guests, 32 projects, one create
-at a time, 128 proxy connections, 64KiB creation payload. Own AI inference key
-has $5/day and $20/week limits, one explicit model route and 256 visitor session identities.
+Согласно `enterprise/README.md` в Airlock Internal, образ скачивается на
+авторизованном server-100 и передаётся на88 через `docker save | ssh … docker load`.
+Токен GHCR на88 не копируется. Приватные исходники и переводы не публикуются в
+этом репозитории; здесь только конфигурация и внешний адаптер демо.
 
-`Caddyfile.vps-demo` is merged with the existing VPS site. On-demand certificates
-are allowed only for the apex, S3 and actual existing `d88-*` project hosts by
-the gateway `/_demo/tls` endpoint. This uses native Caddy leaf certificates;
-no registrar API or wildcard certificate is required on the VPS.
+## Маршрут и HTTPS
 
-Operate only the dedicated socket:
+Олег добавил `demo.airlockrun.ru` и `*.demo.airlockrun.ru` → **31.177.110.230**;
+записи проверены на авторитативном `ns1.reg.ru`.
+
+1. Caddy на VPS принимает HTTPS для демо и его проектов.
+2. Запрос с исходным Host передаётся по HTTPS на
+   `demo.airlock.bezrabotnyi.com` — технический адрес домашнего ingress.
+3. Nginx server-100 завершает это второе TLS-соединение и направляет запрос
+   на **192.168.2.75:43280**, в отдельный gateway демо.
+4. Gateway передаёт запросы штатному Caddy и Airlock на88.
+
+`Caddyfile.vps-demo` добавлен к прежней конфигурации VPS. Caddy автоматически
+выпускает отдельные сертификаты при первом обращении. Endpoint `/_demo/tls`
+разрешает только основной адрес, S3 и существующие проекты `d88-*`.
+Неизвестный проект получает отказ; API регистратора для этого не требуется.
+Private Airlock и прежний сайт `airlockrun.ru` работают независимо.
+
+## Установка и обслуживание
+
+Выделенный пользователь **airlock-demo**, UID993, домашний каталог
+`/var/lib/airlock-demo`; rootless Docker socket `/run/user/993/docker.sock`.
+Архив релиза, конфигурация и приватные файлы находятся в
+`/var/lib/airlock-demo/runtime`. Это артефакт развёртывания, не Git checkout.
+
+- `setup-rootless.sh`: пользователь, subuid/subgid, отдельная файловая система,
+  systemd-бюджет и делегирование cgroup-контроллеров.
+- `prepare-runtime.sh`: архив upstream, ограниченный Compose overlay и образы.
+  Приватный frontend должен быть заранее загружен; замены на community нет.
+- `gateway.mjs`: автоматические обычные сессии и ограничение возможностей гостей.
+- `bootstrap.mjs`: первичная активация, провайдер, модель, русский язык. Секреты
+  передаются на stdin внутри контейнера; входные данные не печатаются.
 
 ```sh
 sudo -u airlock-demo env DOCKER_HOST=unix:///run/user/993/docker.sock \
@@ -64,39 +66,67 @@ sudo -u airlock-demo env DOCKER_HOST=unix:///run/user/993/docker.sock \
   -f /var/lib/airlock-demo/runtime/compose.demo.yml ps
 ```
 
-`bootstrap.mjs` accepts activation code/provider credentials on stdin inside
-the gateway container; never print its input or copy private runtime `.env` or
-`owner.json` into a repository. Local private receipts belong in ignored `.tmp`.
+Используйте только этот socket. Общий Docker хоста и данные Private Airlock
+не относятся к демо. Не публикуйте `.env`, `owner.json` и `.tmp`.
 
-## Verified delivery, 14 October 2026
+## Ресурсы и AI
 
-Authoritative ns1.reg.ru returns31.177.110.230 for demo and wildcard. Public
-HTTPS and the encrypted VPS/home connection pass. Official Internal enterprise
-frontend package digest902ea8f94afe743b59ec20f677b349ed31fb51376f8c7143f3fd3c35d9f00639
-is transferred without registry credentials; runtime source/revision labels match
-690a90e7. Headed Chrome on88 enters without password; document language ru,
-Russian navigation, no persistent browser credential keys. A native guest-created
-«Стартап-навигатор» was generated, built and deployed successfully in198 seconds.
-Five real guest mutations (rename, delete, membership elevation, settings, stop)
-return403; persisted name and user membership remain intact. Unknown app hosts
-are denied by the TLS admission endpoint. No fake transport or AI was used.
+Перед запуском измерено: доступно94GiB RAM и124GiB диска на88. Резерв хоста:
+32GiB RAM и20GiB диска. Общий бюджет UID993: RAM high8/max12GiB, swap0, CPU4,
+tasks4096, чтение128MiB/s, запись32MiB/s. Отдельная файловая система48GiB.
 
-Foreign wrapper changes/branch and infrastructure WIP are preserved. Delivery
-uses a separate temporary Git index based on origin/main and a scoped remote
-commit; no branch switch, new checkout, stash or foreign staging is involved.
+Контейнеры: BuildKit4GiB/CPU2/cpuset0,1; backend2GiB/CPU2; PostgreSQL и RustFS
+по1GiB/CPU1; gateway256MiB/CPU1; Caddy256MiB/CPU0.5; frontend128MiB/CPU0.5.
+Одна сборка одновременно; каждое приложение ограничено1GiB. Общий бюджет
+распространяется на все контейнеры вместе. BuildKit UID0 находится внутри
+rootless Docker и не имеет прав root на хосте. Cpuset ограничивает параллелизм
+Go-компилятора на88-ядерном сервере; одной CPU quota для этого недостаточно.
+Подготовка: ожидаемо180с, аварийный предел1800с.
 
-Guest run polling is narrowed to runs proved by native messages in the caller-owned
-conversation from the same-origin Referer. The adapter returns status, a Russian
-error and that run’s messages; it excludes source, inputs, actions, logs and panic
-traces. Foreign conversations and missing ownership proof fail closed. v0.7.0
-native admin-only run detail otherwise hid provider errors from ordinary chat.
-The inference key’s session identity limit is256 (equal to the guest cap), not a
-concurrency limit; setting it to2 blocked chat after setup/build sessions. CPU,
-RAM, request rate30/min and monetary budgets remain bounded separately.
+AI использует отдельный inference-ключ OmniRoute, явную проверенную модель
+`cx/gpt-6-luna`, лимиты $5/день и $20/неделю, 30запросов/минуту.
+Лимит256 идентификаторов сессий соответствует лимиту гостей; это не число
+одновременных вычислений. Источник модели: models-supplement от14.10.2026;
+маршрут подтверждён настоящим запросом, скрытого автоматического fallback нет.
 
-Every newly-created guest also receives direct user membership on existing demo
-projects; every new project receives direct user memberships for existing guests.
-This grants the same user rights as All users, and fixes v0.7.0’s WebSocket
-auto-subscription query, which reads only direct per-user grants. Existing demo
-grants were reconciled without replaying project creation. Live chat must display
-an AI response without reloading; database persistence alone is insufficient.
+## Права гостей
+
+Каждому посетителю создаётся отдельный обычный пользователь с нативной сессией
+и HttpOnly cookies. Ключ администратора не попадает в браузер. При создании
+проекта broker принимает только название, slug, описание, инструкцию и
+skipInitialBuild. Модели берутся из настроек владельца; Git-ключи и права
+владельца из пользовательского запроса не принимаются.
+
+Владелец создаёт проект; гости получают роль **user**, включая создателя.
+Общая группа «Все пользователи» обеспечивает видимость. Дополнительно выдаются
+прямые user-членства: WebSocket v0.7.0 подписывает только прямых участников,
+поэтому без них ответ чата сохранялся, но не появлялся сразу. Новый посетитель
+получает членства на существующих проектах; новый проект — на существующих гостях.
+
+Gateway блокирует изменения dashboard API. HTTP-действия самих приложений и
+подписанные S3-запросы проходят через штатные проверки нативных маршрутов.
+Гостевой статус выполнения выдаётся только после проверки, что run находится
+в собственном диалоге пользователя. Возвращаются статус, понятная русская ошибка
+и уже доступные этому пользователю сообщения; исходники, входные параметры,
+действия инструментов, журналы и panic traces исключены. Чужой диалог закрыт.
+WebSocket передаёт также штатный query `since` для восстановления соединения.
+
+Конечные ограничения: 2 одновременные регистрации, 256 гостей, 32проекта,
+одно создание проекта одновременно, 128proxy-соединений, 64KiB запроса создания.
+
+## Проверено 14 октября 2026
+
+- Настоящий гостевой вход по публичному HTTPS без пароля; интерфейс и lang=ru.
+- Создание «Стартап-навигатор», реальная AI-генерация, сборка и запуск за198с.
+- Создание отдельной идеи гостем из браузера; другой гость видит её с ролью user.
+- Rename, delete, остановка, повышение прав и изменение настроек возвращают403;
+  сохранённый проект остаётся прежним. Чужой диалог и его run возвращают404.
+- Настоящие русские ответы AI сохраняются и появляются через WebSocket без
+  обновления страницы. Проверен также handshake с `?since=1`.
+- Нативный вход в приложение проходит через relay, без ручного ввода пароля.
+- Образы, gateway и конфигурация сверены с работающей инстанцией. Моки и
+  поддельные ответы сервисов не использовались.
+
+Чужие изменения и ветка wrapper, а также WIP инфраструктуры сохранены.
+Собственные пути опубликованы в origin/main через отдельный временный индекс;
+рабочие деревья не переключались, чужие файлы не включались в коммиты.
