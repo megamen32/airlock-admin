@@ -54,3 +54,21 @@ DOM на /summary с langru показал «Данные Priceva пока не�
 не показываются. Это успешная проверка честного отказа, **не приёмка цен**.
 Категория focused integration, ожидаемо60/max600с; mocks не использовались.
 Внешний шаг: активация Priceva, затем реальный контракт объектов/цен и canary.
+
+## GuestTTL24h wrapper
+
+Отдельный gateway/module, опубликован до gateway-only deployment; core OCI не
+менялся. Unit eligibility/точная24hграница/сохранениеактивности/неуспешныйdelete
+прошёл~0.1с (fastunit,max20с). Контролируемому собственному nativeguest в
+постоянномstate задан старый timestamp; настоящий DELETE удалилакаунт,
+его прежний /api/v1/me получил401. Это не24часовойsoak.
+
+Focusednativecanary (ожидаемо30/max300с): новыйобычныйгость +последующийrefresh
+сHttpOnlycookies вернултого жепользователя; все5appIDsдо/послеравны. После
+штатногоперезапускаgateway дата созданиясохранилась, lastSeenнеоткатилась.
+НативныйWS?since=1 сCookie дал101, реальнаяформаDaDataвернулаОГРН1027700132195.
+РанняяручнаяWSпробасBearerвернула401: upstreamWSпринимаетHttpOnlycookie,
+правильныйпутьзатемпроверен. ПервоначальнаяошибкаполяqueryвручнойHTTPпробе
+исправлена на штатноеidentifier; вappcodeдляэтогонетправок.
+Runtime gateway/module bytes совпали с опубликованным source; privateполный
+receipt ttl-proof.json хранитchecks иhashes. Обновленияисторий/паролейнетвGit.

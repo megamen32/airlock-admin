@@ -149,3 +149,12 @@ DELETE /api/v1/users/<id>. Только roleuser с точным broker email
 guest-lifecycle.mjs — отдельная часть wrapper, coreAirlock не меняется.
 prepare-runtime.sh создаёт mount gateway-state и задаёт TTL/путь состояния;
 при обновлении копировать оба gateway.mjs и guest-lifecycle.mjs.
+
+Проверка TTL14.10.2026: один собственный тестовый guest с явно состаренной
+lifecycle-записью удалён штатнымAPI, прежнийaccessToken получил401. Остальные
+пятьпроектов сохранилиID; свежийguestиrefreshсHttpOnlycookies работают.
+Дата создания и активность сохранились после gateway-onlyrestart. Реальная
+гостевая формаDaData снова вернулаОГРН1027700132195, WS?since=1 снативной
+HttpOnlycookie дал101. Проверялся контролируемый agedrecord, не24часовойsoak.
+Fastunit~0.1с/max20с; focusednativecanary~30с/max300с. Первая ручнаяWSпроба
+сBearer была401: штатныйWSтребуетCookie; правильныйпутьзатемпрошёл101.

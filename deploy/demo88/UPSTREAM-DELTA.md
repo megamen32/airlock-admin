@@ -56,3 +56,9 @@ upstream-патчи:
 
 Интеграции маркетплейса добавляются как отдельные native SDK приложения и
 ресурсы. Они не требуют форка Airlock или изменения приватного RU frontend.
+
+TTL wrapper принят отдельно: guest-lifecycle.mjs и gateway.mjs опубликованы,
+точныеSHA256 сохранены в private ttl-proof.json и совпали с runtime. Один
+agedfixtureguest удалён реальнымnativeAPI, новыйгость/HttpOnlyrefresh/WS/DaData
+работают; все5appIDsсохранены. При обновлении сохранить gateway-state/guests.json
+вместе сoverlay: безнего срок существующихгостей начнётся заново.
