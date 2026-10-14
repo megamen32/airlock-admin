@@ -1,0 +1,16 @@
+[Unit]
+Description=Проверка новых результатов регистраций Airlock
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/python3 %h/.local/lib/airlock-marketplace-watch/watch.py %h/.config/airlock-marketplace-watch/config.json
+TimeoutStartSec=60
+MemoryHigh=32M
+MemoryMax=64M
+MemorySwapMax=0
+CPUQuota=5%
+TasksMax=8
+Nice=10
+UMask=0077
+StandardOutput=journal
+StandardError=journal
