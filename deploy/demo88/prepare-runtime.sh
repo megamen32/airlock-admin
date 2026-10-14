@@ -92,12 +92,16 @@ services:
     pids_limit: 64
     volumes:
       - ./gateway.mjs:/app/gateway.mjs:ro
+      - ./guest-lifecycle.mjs:/app/guest-lifecycle.mjs:ro
+      - ./gateway-state:/var/lib/demo-gateway
       - ./owner.json:/run/demo-owner.json:ro
     environment:
       DEMO_DOMAIN: demo.airlockrun.ru
       DEMO_UPSTREAM: http://caddy-private:80
       DEMO_API: http://airlock:8080
       DEMO_OWNER_FILE: /run/demo-owner.json
+      DEMO_GUEST_TTL_SECONDS: '86400'
+      DEMO_GUEST_STATE_FILE: /var/lib/demo-gateway/guests.json
       DEMO_BOOTSTRAP_SECRET: ${DEMO_BOOTSTRAP_SECRET}
       JWT_SECRET: ${JWT_SECRET}
       REVERSE_PROXY_AUTH_SECRET: ${REVERSE_PROXY_AUTH_SECRET}
@@ -107,7 +111,8 @@ networks:
     ipam:
       config: [{subnet: 172.29.88.0/24}]
 YAML
-mkdir -p caddy-demo
+mkdir -p caddy-demo gateway-state
+chmod 700 gateway-state
 cp caddy/routes.caddy caddy-demo/routes.caddy
 cp caddy/Caddyfile.proxy caddy-demo/Caddyfile.proxy
 # Existing source archive/images only; never build the platform locally.

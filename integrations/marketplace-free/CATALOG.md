@@ -11,7 +11,7 @@ Airlock_marketplace_v9.zip, 37 карточек. Архив — статичес
 |---|---|---|---|
 | [DaData](https://dadata.ru/pricing/) | До10 000 lookup/suggestions запросов в сутки; платные clean/enrichment исключены | [Регистрация и подтверждение почты](https://dadata.ru/profile/), скопировать API-ключ. Secret key не нужен | Найти реальную компанию по ИНН/ОГРН; отдельный native Connection |
 | [Shtab](https://doc.shtab.app/kak-podkliuchit-chatgpt-claude-i-drugie-ii-assistenty-k-shtab-cherez-mcp/) | MCP10запросов/час на компанию | [Создать отдельную демо-команду](https://my.shtab.app/), ИИ-ассистенты и MCP → Для разработчиков → Создать токен; добавить несколько несекретных демо-задач | Читать задачи через native MCP callback; не давать гостю raw write tools |
-| [Priceva](https://priceva.com/subscription) | Starter:20товаров/20сайтов/6200проверок в месяц, API включён, без карты | [Регистрация](https://app.priceva.com/), API-ключ и2–3 публичных товарных URL, дождаться первой проверки | 14.10 live API вернул403 account type для product/list/source/list/report/list. Нужна активация/уточнение доступа, платный тариф не включён. |
+| [Priceva](https://priceva.com/subscription) | Starter:20товаров/20сайтов/6200проверок в месяц, API включён, без карты | [Регистрация](https://app.priceva.com/), API-ключ и2–3 публичных товарных URL, дождаться первой проверки | Правильная кампания3jb создана, товар/источник добавлены; на модерации. Новый ключ даётJSON401, цен ещё нет; платный тариф не включён. |
 
 DaData: POST https://suggestions.dadata.ru/suggestions/api/4_1/rs/findById/party,
 Authorization: Token API_KEY, JSON query/count/branch_type. [Официальный метод](https://dadata.ru/api/find-party/).
@@ -58,7 +58,7 @@ DaData и Shtab рассмотрены выше. Следующая таблиц
 | VseLLM | **Платный API**, регистрация + пополнение. Реферальные бонусы не бесплатная постоянная API-квота | Аккаунт, раздел Ключи; OpenAI-compatible https://api.vsellm.ru/v1 , Bearer | https://vsellm.ru/ ; https://vsellm.ru/docs |
 | PolzaAI | **Платный API**, минимальное пополнение 100 ₽; бесплатная IDE не даёт бесплатных токенов | Аккаунт/организация, API-ключ, баланс; OpenAI-compatible https://polza.ai/api/v1 | https://polza.ai/collections/text ; https://polza.ai/ ; https://polza.ai/software-registry/functional-characteristics |
 | Botmother | **Бесплатный Test**, до 10 ботов/5 тестеров; подходит ограниченному тесту, не массовому public demo | app.botmother.ru, бот, Настройки → События → Внешнее событие, секретный webhook URL; HTTP POST JSON | https://botmother.ru/price ; https://docs.botmother.ru/article/41072 |
-| Priceva | **Сайт обещает бесплатный Starter с API**, до20 товаров/20сайтов,6200проверок/мес. **Реальный новый аккаунт отклонил чтение:403 account type**; работающий free API пока не подтверждён | app.priceva.com, API-настройки, ключ, URL публичных товаров, дождаться мониторинга; REST auth уточнить в Apiary/кабинете | https://priceva.com/subscription ; https://priceva.docs.apiary.io/ ; https://app.priceva.com/ai/client/vcr/settings/api |
+| Priceva | **Сайт обещает бесплатный Starter с API**, до20 товаров/20сайтов,6200проверок/мес. **Правильная кампания3jb на модерации, новый ключ возвращаетJSON401**; работающий free API пока не подтверждён | app.priceva.com, API-настройки, ключ, URL публичных товаров, дождаться мониторинга; REST auth уточнить в Apiary/кабинете | https://priceva.com/subscription ; https://priceva.docs.apiary.io/ ; https://app.priceva.com/ai/client/vcr/settings/api |
 | MoonAI | **3-дневный trial**, постоянного Free API нет | Аккаунт, агент, API-канал; платная подписка и AI-токены после пробника. Настройки авторизации канала по документации | https://mooonai.com/en/ai-salesperson ; https://mooonai.com/en/integrations/whatsapp ; https://docs.mooonai.com/channels/api_channel/ |
 | Legiscan | Бесплатный первый документ в UI, **API только бизнес/PRO** | Бизнес-аккаунт и ключ; REST `X-API-Key` или Bearer; /api/edo/analyze и /api/edo/jobs/{id} | https://legiscan.ru/docs/api ; https://legiscan.ru/fizicheskim-litsam |
 | Lexis Voice | Бесплатный первый UI-разговор не бесплатный API; **API в Стандартном от 34 000 ₽/мес** для тренировок (речевая аналитика — отдельный пакет) | Запросить ключ у команды после согласования сценария; HTTP API/webhooks, точные scopes | https://lexisvoice.ru/pricing ; https://lexisvoice.ru/integrations |
@@ -87,3 +87,9 @@ code403: `You are not allowed to use this method with your account type`.
 Цена/товары не получены. Успешный HTTP200 не принимается за интеграцию.
 Нужно проверить тип кампании/доступ API в кабинете или получить разъяснение
 поставщика; платные тарифы и repricing не активировались, сообщения не отправлялись.
+
+После настройки14.10: правильная бесплатная CompetitorPriceMonitoring3jb,
+товарLogitechK120 и источникRegard созданы; стараяujb сохранена. UI прямо
+«Кампания не активна/на модерации», финальные3метода даютJSON401 безresult.
+Native приложение показывает отсутствие данных, не нулевые цены. Это внешняя
+граница активации, не доказательство работающего freeAPI; платежи не включались.

@@ -10,6 +10,7 @@ OCI revision: 690a90e7bafd781e39c5618f12598e42f5d9c306, source airlock-internal.
 
 | Файл | Назначение |
 |---|---|
+| guest-lifecycle.mjs | TTL24часа неактивности, постоянные timestamps и native удаление только broker гостей |
 | gateway.mjs | Отдельные обычные гостевые сессии, создание через broker, запрет изменения/удаления, native WebSocket и проверка гостевого run |
 | prepare-runtime.sh | Отдельный compose.demo.yml поверх официального Compose, rootless runtime, русский официальный frontend |
 | setup-rootless.sh | Выделенный UID, отдельная файловая система и конечные бюджеты |
@@ -21,7 +22,8 @@ OCI revision: 690a90e7bafd781e39c5618f12598e42f5d9c306, source airlock-internal.
 581ebefd5acf8ae6305355fcf0281dfa2f2f9ce1. Инфраструктурные ingress и inventory
 отдельно в megamen32/ServersAdministartion, первоначально0c15c657.
 Эти commits фиксируют изменения независимо от чужого WIP в рабочем checkout.
-Live gateway SHA256: a3fca650835f38a412e8b7ae46dbdc4343fe49c7e382ce49473c421207c2f7f4.
+Первоначальный gateway SHA256: a3fca650835f38a412e8b7ae46dbdc4343fe49c7e382ce49473c421207c2f7f4;
+следующее изменение wrapper добавляет независимый guestTTL, официальный core тот же.
 
 Приватный исходный архив и переводы не копируются в публичный wrapper.
 Старый detached checkout megamen32/airlock и его прежние патчи не являются
