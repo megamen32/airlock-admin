@@ -22,8 +22,9 @@ if(input.providerKey) {
   let providers=(await call('/api/v1/providers',undefined,token,'GET')).providers||[];
   let provider=providers.find(p=>p.slug==='demo-omniroute');
   if(!provider) provider=(await call('/api/v1/providers',{providerId:'openai-compatible',slug:'demo-omniroute',displayName:'Демо AI',apiKey:input.providerKey,baseUrl:'https://omniroute.bezrabotnyi.com/v1'},token)).provider;
+  await call(`/api/v1/providers/${provider.id}/models`,{models:[{modelId:input.model,displayName:'GPT-6 Luna',toolCall:true,reasoning:true,vision:true,structuredOutputs:true,contextLimit:'1050000',outputLimit:'8192'}]},token,'PUT');
   // Use the explicit verified route; never an automatic model fallback.
   const current=(await call('/api/v1/settings',undefined,token,'GET')).settings;
-  const result=await call('/api/v1/settings',{settings:{...current,defaultBuildModel:input.model,defaultBuildProviderId:provider.id,defaultExecModel:input.model,defaultExecProviderId:provider.id}},token,'PATCH');
+  const result=await call('/api/v1/settings',{settings:{...current,uiLocale:'ru',defaultBuildModel:input.model,defaultBuildProviderId:provider.id,defaultExecModel:input.model,defaultExecProviderId:provider.id}},token,'PUT');
   console.log(JSON.stringify({provider:provider.id,configured:true,model:input.model}));
 }

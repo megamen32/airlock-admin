@@ -47,7 +47,12 @@ services:
   postgres: {mem_limit: 1g, memswap_limit: 1g, cpus: 1, pids_limit: 256}
   postgres-bootstrap: {mem_limit: 256m, memswap_limit: 256m, cpus: 1, pids_limit: 64}
   rustfs: {mem_limit: 1g, memswap_limit: 1g, cpus: 1, pids_limit: 256}
-  frontend: {mem_limit: 128m, memswap_limit: 128m, cpus: 0.5, pids_limit: 64}
+  frontend:
+    image: ghcr.io/airlockrun/airlock-enterprise-frontend:v0.7.0
+    mem_limit: 128m
+    memswap_limit: 128m
+    cpus: 0.5
+    pids_limit: 64
   caddy-private:
     mem_limit: 256m
     memswap_limit: 256m
@@ -71,6 +76,7 @@ services:
   buildkitd:
     image: moby/buildkit:latest
     privileged: true
+    cpuset: '0,1'
     mem_limit: 4g
     memswap_limit: 4g
     cpus: 2
@@ -105,8 +111,14 @@ mkdir -p caddy-demo
 cp caddy/routes.caddy caddy-demo/routes.caddy
 cp caddy/Caddyfile.proxy caddy-demo/Caddyfile.proxy
 # Existing source archive/images only; never build the platform locally.
-for image in pgvector/pgvector:pg17 rustfs/rustfs:latest caddy:2-alpine node:22-alpine ghcr.io/airlockrun/airlock:v0.7.0 ghcr.io/airlockrun/airlock-frontend:v0.7.0 ghcr.io/airlockrun/airlock-agent-builder:v0.7.0 ghcr.io/airlockrun/airlock-agent-base:v0.7.0 ghcr.io/airlockrun/airlock-js-executor:v0.7.0 moby/buildkit:latest; do
-  docker image inspect "$image" >/dev/null 2>&1 || docker pull "$image"
+for image in pgvector/pgvector:pg17 rustfs/rustfs:latest caddy:2-alpine node:22-alpine ghcr.io/airlockrun/airlock:v0.7.0 ghcr.io/airlockrun/airlock-enterprise-frontend:v0.7.0 ghcr.io/airlockrun/airlock-agent-builder:v0.7.0 ghcr.io/airlockrun/airlock-agent-base:v0.7.0 ghcr.io/airlockrun/airlock-js-executor:v0.7.0 moby/buildkit:latest; do
+  if ! docker image inspect "$image" >/dev/null 2>&1; then
+    if [[ "$image" == *airlock-enterprise-frontend* ]]; then
+      echo 'Transfer the official private enterprise frontend from an authenticated host first; no community fallback.' >&2
+      exit 1
+    fi
+    docker pull "$image"
+  fi
 done
 docker compose -p airlock-demo88 -f docker-compose.yml -f compose.demo.yml config --quiet
 echo 'Demo runtime prepared; official images pulled.'

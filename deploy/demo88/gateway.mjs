@@ -10,6 +10,7 @@ let ownerSession;
 let ownerLogin;
 let creating = false;
 let guestSlots = 0;
+let usersGroup;
 const json = (res, status, data, cookies) => {
   res.writeHead(status, {'Content-Type':'application/json; charset=utf-8', 'Cache-Control':'no-store', ...(cookies?.length ? {'Set-Cookie':cookies}: {})});
   res.end(JSON.stringify(data));
@@ -22,7 +23,7 @@ async function api(path, body, token, method='POST') {
       ...(token ? {Authorization:`Bearer ${token}`} : {})},
     ...(body === undefined ? {} : {body:JSON.stringify(body)}),
   });
-  const data = await response.json();
+  const data = response.status===204 ? {} : await response.json();
   if (!response.ok) { const error = new Error(data.error || 'Airlock request failed'); error.status=response.status; throw error; }
   return {data, cookies:response.headers.getSetCookie(), status:response.status};
 }
@@ -79,6 +80,11 @@ async function createProject(req,res) {
     if (typeof input.name!=='string' || !input.name.trim() || input.name.length>120 || typeof input.slug!=='string' || !/^[a-z0-9][a-z0-9-]{0,40}$/.test(input.slug))
       return json(res,400,{error:'Укажите название и адрес проекта латинскими буквами.'});
     const token=await adminToken();
+    if(!usersGroup) {
+      const directory=await api('/api/v1/users/selectable',undefined,token,'GET');
+      usersGroup=directory.data.users?.find(u=>u.kind==='group' && u.displayName==='All users')?.id;
+      if(!usersGroup || !/^[0-9a-f-]{36}$/.test(usersGroup)) throw new Error('Native all-users group unavailable');
+    }
     const list=await api('/api/v1/agents',undefined,token,'GET');
     if ((list.data.agents||[]).length>=32) return json(res,429,{error:'В демо уже достаточно проектов. Попробуйте позже.'});
     const made=await api('/api/v1/agents',{
@@ -88,7 +94,7 @@ async function createProject(req,res) {
       skipInitialBuild:input.skipInitialBuild===true,
     },token);
     // Guests never receive ownership or admin membership, including on their own projects.
-    await api(`/api/v1/agents/${made.data.agent.id}/members`,{userId:'user',role:'user'},token);
+    await api(`/api/v1/agents/${made.data.agent.id}/members`,{userId:usersGroup,role:'user'},token);
     made.data.agent.yourAccess='user';made.data.agent.isOwner=false;
     json(res,made.status,made.data);
   } finally {creating=false;}
