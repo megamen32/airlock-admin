@@ -1,0 +1,262 @@
+{
+  "repo": "https://github.com/airlockrun/airlock",
+  "commit": "e605529334a250d3158d546b5702c7651eb052c6",
+  "files": 478,
+  "textBytes": 3627185,
+  "sourceTypes": [
+    "DOCX: immutable public code snapshot",
+    "Website: https://airlockrun.ru/"
+  ],
+  "guide": {
+    "document": "Airlock-public-code-guide-e605529334a2.docx",
+    "fileId": 7630,
+    "files": [
+      "README.md",
+      "authz/access.go",
+      "authz/authorize.go",
+      "authz/policy.go",
+      "docker-compose.yml",
+      "docs/agent-isolation.md",
+      "docs/mcp.md",
+      "docs/secret-storage.md"
+    ]
+  },
+  "documents": [
+    {
+      "document": "Airlock-code-01-e605529334a2.docx",
+      "fileId": 7631
+    },
+    {
+      "document": "Airlock-code-02-e605529334a2.docx",
+      "fileId": 7632
+    },
+    {
+      "document": "Airlock-code-03-e605529334a2.docx",
+      "fileId": 7633
+    },
+    {
+      "document": "Airlock-code-04-e605529334a2.docx",
+      "fileId": 7634
+    },
+    {
+      "document": "Airlock-code-05-e605529334a2.docx",
+      "fileId": 7635
+    },
+    {
+      "document": "Airlock-code-06-e605529334a2.docx",
+      "fileId": 7636
+    },
+    {
+      "document": "Airlock-code-07-e605529334a2.docx",
+      "fileId": 7637
+    },
+    {
+      "document": "Airlock-code-08-e605529334a2.docx",
+      "fileId": 7638
+    },
+    {
+      "document": "Airlock-code-09-e605529334a2.docx",
+      "fileId": 7639
+    },
+    {
+      "document": "Airlock-code-10-e605529334a2.docx",
+      "fileId": 7640
+    },
+    {
+      "document": "Airlock-code-11-e605529334a2.docx",
+      "fileId": 7641
+    },
+    {
+      "document": "Airlock-code-12-e605529334a2.docx",
+      "fileId": 7642
+    },
+    {
+      "document": "Airlock-code-13-e605529334a2.docx",
+      "fileId": 7643
+    },
+    {
+      "document": "Airlock-code-14-e605529334a2.docx",
+      "fileId": 7644
+    },
+    {
+      "document": "Airlock-code-15-e605529334a2.docx",
+      "fileId": 7645
+    },
+    {
+      "document": "Airlock-code-16-e605529334a2.docx",
+      "fileId": 7646
+    },
+    {
+      "document": "Airlock-code-17-e605529334a2.docx",
+      "fileId": 7647
+    },
+    {
+      "document": "Airlock-code-18-e605529334a2.docx",
+      "fileId": 7648
+    },
+    {
+      "document": "Airlock-code-19-e605529334a2.docx",
+      "fileId": 7649
+    },
+    {
+      "document": "Airlock-code-20-e605529334a2.docx",
+      "fileId": 7650
+    },
+    {
+      "document": "Airlock-code-21-e605529334a2.docx",
+      "fileId": 7651
+    },
+    {
+      "document": "Airlock-code-22-e605529334a2.docx",
+      "fileId": 7652
+    },
+    {
+      "document": "Airlock-code-23-e605529334a2.docx",
+      "fileId": 7653
+    },
+    {
+      "document": "Airlock-code-24-e605529334a2.docx",
+      "fileId": 7654
+    },
+    {
+      "document": "Airlock-code-25-e605529334a2.docx",
+      "fileId": 7655
+    },
+    {
+      "document": "Airlock-code-26-e605529334a2.docx",
+      "fileId": 7656
+    },
+    {
+      "document": "Airlock-code-27-e605529334a2.docx",
+      "fileId": 7657
+    },
+    {
+      "document": "Airlock-code-28-e605529334a2.docx",
+      "fileId": 7658
+    },
+    {
+      "document": "Airlock-code-29-e605529334a2.docx",
+      "fileId": 7659
+    },
+    {
+      "document": "Airlock-code-30-e605529334a2.docx",
+      "fileId": 7660
+    },
+    {
+      "document": "Airlock-code-31-e605529334a2.docx",
+      "fileId": 7661
+    },
+    {
+      "document": "Airlock-code-32-e605529334a2.docx",
+      "fileId": 7662
+    },
+    {
+      "document": "Airlock-code-33-e605529334a2.docx",
+      "fileId": 7663
+    },
+    {
+      "document": "Airlock-code-34-e605529334a2.docx",
+      "fileId": 7664
+    },
+    {
+      "document": "Airlock-code-35-e605529334a2.docx",
+      "fileId": 7665
+    },
+    {
+      "document": "Airlock-code-36-e605529334a2.docx",
+      "fileId": 7666
+    },
+    {
+      "document": "Airlock-code-37-e605529334a2.docx",
+      "fileId": 7667
+    },
+    {
+      "document": "Airlock-code-38-e605529334a2.docx",
+      "fileId": 7668
+    },
+    {
+      "document": "Airlock-code-39-e605529334a2.docx",
+      "fileId": 7669
+    },
+    {
+      "document": "Airlock-code-40-e605529334a2.docx",
+      "fileId": 7670
+    },
+    {
+      "document": "Airlock-code-41-e605529334a2.docx",
+      "fileId": 7671
+    },
+    {
+      "document": "Airlock-code-42-e605529334a2.docx",
+      "fileId": 7672
+    },
+    {
+      "document": "Airlock-code-43-e605529334a2.docx",
+      "fileId": 7673
+    },
+    {
+      "document": "Airlock-code-44-e605529334a2.docx",
+      "fileId": 7674
+    },
+    {
+      "document": "Airlock-code-45-e605529334a2.docx",
+      "fileId": 7675
+    },
+    {
+      "document": "Airlock-code-46-e605529334a2.docx",
+      "fileId": 7676
+    },
+    {
+      "document": "Airlock-code-47-e605529334a2.docx",
+      "fileId": 7677
+    },
+    {
+      "document": "Airlock-code-48-e605529334a2.docx",
+      "fileId": 7678
+    },
+    {
+      "document": "Airlock-code-49-e605529334a2.docx",
+      "fileId": 7679
+    },
+    {
+      "document": "Airlock-code-50-e605529334a2.docx",
+      "fileId": 7680
+    },
+    {
+      "document": "Airlock-code-51-e605529334a2.docx",
+      "fileId": 7681
+    },
+    {
+      "document": "Airlock-code-52-e605529334a2.docx",
+      "fileId": 7682
+    },
+    {
+      "document": "Airlock-code-53-e605529334a2.docx",
+      "fileId": 7683
+    },
+    {
+      "document": "Airlock-code-54-e605529334a2.docx",
+      "fileId": 7684
+    },
+    {
+      "document": "Airlock-code-55-e605529334a2.docx",
+      "fileId": 7685
+    },
+    {
+      "document": "Airlock-code-56-e605529334a2.docx",
+      "fileId": 7686
+    }
+  ],
+  "excluded": [
+    "tests",
+    "generated code",
+    "frontend",
+    "vendor",
+    "node_modules"
+  ],
+  "refresh": "manual immutable snapshot; no automatic GitHub sync",
+  "architectureExcerpt": {
+    "document": "Airlock-architecture-e605529334a2.docx",
+    "fileId": 7687
+  }
+}

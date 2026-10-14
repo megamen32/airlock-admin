@@ -13,6 +13,9 @@ import (
 	"time"
 )
 
+const knowledgeSource = "Wikibot API; основной источник: https://github.com/airlockrun/airlock (снимок e605529334a2); дополнительный: https://airlockrun.ru/; пример docker-compose.yml"
+const demoQuestion = "Ответь кратко, до 70 слов, только по ФАЙЛУ docker-compose.yml из документа Airlock-public-code-guide-e605529334a2. Какие Docker image указаны у postgres и x-caddy-common (CADDY_IMAGE)? Назови базу данных и reverse proxy по этим строкам. Дай ссылку на docker-compose.yml в GitHub. Не обсуждай авторизацию и другие файлы; не угадывай, если строк не видишь."
+
 type Input struct{}
 type Result struct {
 	Ready     bool   `json:"ready"`
@@ -37,7 +40,7 @@ func (s *Service) Tool(ctx context.Context, _ Input) (Result, error) {
 	return r, nil
 }
 func (s *Service) Get(ctx context.Context) (Result, error) {
-	fail := errors.New("Wikibot пока не ответил. Возможно, закончились бесплатные кредиты. Платное пополнение и обращение к оператору из демо не выполняются.")
+	fail := errors.New("Не удалось получить ответ Wikibot. Сервис мог не успеть ответить; попробуйте позже. Автоматическое пополнение и обращение к оператору не выполняются.")
 	select {
 	case s.busy <- struct{}{}:
 		defer func() { <-s.busy }()
@@ -47,7 +50,7 @@ func (s *Service) Get(ctx context.Context) (Result, error) {
 	ctx, cancel := context.WithTimeout(ctx, 60*time.Second)
 	defer cancel()
 	var cached []byte
-	e := s.db.QueryRowContext(ctx, "SELECT payload FROM summary_cache WHERE id=1 AND fetched_at>NOW()-INTERVAL '10 minutes'").Scan(&cached)
+	e := s.db.QueryRowContext(ctx, "SELECT payload FROM summary_cache WHERE id=1 AND fetched_at>NOW()-INTERVAL '10 minutes' AND payload->>'source'=$1", knowledgeSource).Scan(&cached)
 	if e == nil {
 		var r Result
 		if json.Unmarshal(cached, &r) != nil {
@@ -71,7 +74,7 @@ func (s *Service) Get(ctx context.Context) (Result, error) {
 	if _, e = rand.Read(nonce[:]); e != nil {
 		return Result{}, fail
 	}
-	body, _ := json.Marshal(map[string]string{"chatId": "airlock-demo-" + hex.EncodeToString(nonce[:]), "query": "Что такое Airlock и как начать работу с этой платформой?", "format": "raw"})
+	body, _ := json.Marshal(map[string]string{"chatId": "airlock-demo-" + hex.EncodeToString(nonce[:]), "query": demoQuestion, "format": "raw"})
 	resp, e := s.h.RequestStream(ctx, agentsdk.RequestOpts{Method: "POST", Path: "/api/bot/ask", Body: body, Headers: map[string]string{"Content-Type": "application/json"}})
 	if e != nil {
 		return Result{}, fail
@@ -87,10 +90,10 @@ func (s *Service) Get(ctx context.Context) (Result, error) {
 		BotID  string `json:"botId"`
 		ChatID string `json:"chatId"`
 	}
-	if json.Unmarshal(raw, &actual) != nil || actual.Type != "SUCCESS" || actual.BotID != "4c1594b6-85fe-4526-a48e-96fc40c69910" || actual.ChatID != "airlock-demo-"+hex.EncodeToString(nonce[:]) || strings.TrimSpace(actual.Answer) == "" || len(actual.Answer) > 30000 {
+	if json.Unmarshal(raw, &actual) != nil || actual.Type != "SUCCESS" || actual.BotID != "4c1594b6-85fe-4526-a48e-96fc40c69910" || actual.ChatID != "airlock-demo-"+hex.EncodeToString(nonce[:]) || strings.TrimSpace(actual.Answer) == "" || len(actual.Answer) > 30000 || !verifiedComposeAnswer(actual.Answer) {
 		return Result{}, fail
 	}
-	r := Result{Ready: true, Message: strings.TrimSpace(actual.Answer), Source: "Wikibot API; база знаний: https://airlockrun.ru/", FetchedAt: time.Now().UTC().Format(time.RFC3339)}
+	r := Result{Ready: true, Message: strings.TrimSpace(actual.Answer), Source: knowledgeSource, FetchedAt: time.Now().UTC().Format(time.RFC3339)}
 	b, e := json.Marshal(r)
 	if e != nil {
 		return Result{}, fail
