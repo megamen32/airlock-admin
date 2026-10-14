@@ -1,0 +1,152 @@
+import http from 'node:http';
+import {readFileSync} from 'node:fs';
+import {randomBytes} from 'node:crypto';
+
+const domain = process.env.DEMO_DOMAIN;
+const apiURL = process.env.DEMO_API;
+const upstream = new URL(process.env.DEMO_UPSTREAM);
+const owner = JSON.parse(readFileSync(process.env.DEMO_OWNER_FILE, 'utf8'));
+let ownerSession;
+let ownerLogin;
+let creating = false;
+let guestSlots = 0;
+const json = (res, status, data, cookies) => {
+  res.writeHead(status, {'Content-Type':'application/json; charset=utf-8', 'Cache-Control':'no-store', ...(cookies?.length ? {'Set-Cookie':cookies}: {})});
+  res.end(JSON.stringify(data));
+};
+async function api(path, body, token, method='POST') {
+  const response = await fetch(apiURL + path, {
+    method, redirect:'error', signal:AbortSignal.timeout(30000),
+    headers:{'Content-Type':'application/json', Host:domain, Origin:`https://${domain}`,
+      'X-Airlock-Proxy-Auth':process.env.REVERSE_PROXY_AUTH_SECRET, 'X-Forwarded-Proto':'https',
+      ...(token ? {Authorization:`Bearer ${token}`} : {})},
+    ...(body === undefined ? {} : {body:JSON.stringify(body)}),
+  });
+  const data = await response.json();
+  if (!response.ok) { const error = new Error(data.error || 'Airlock request failed'); error.status=response.status; throw error; }
+  return {data, cookies:response.headers.getSetCookie(), status:response.status};
+}
+async function adminToken() {
+  if (ownerSession && ownerSession.expires > Date.now()) return ownerSession.token;
+  if (!ownerLogin) ownerLogin = api('/auth/login', owner).then(({data}) => {
+    ownerSession={token:data.accessToken, expires:Date.now()+300000}; return data.accessToken;
+  }).finally(()=>{ownerLogin=null;});
+  return ownerLogin;
+}
+async function guest(res) {
+  if (guestSlots >= 2) return json(res,429,{error:'Подождите несколько секунд и обновите страницу.'});
+  guestSlots++;
+  try {
+    const token = await adminToken();
+    const users = await api('/api/v1/users',undefined,token,'GET');
+    if ((users.data.users || []).length >= 256) return json(res,429,{error:'Демо заполнено. Попробуйте позже.'});
+    const email=`guest-${randomBytes(12).toString('hex')}@${domain}`;
+    const made = await api('/api/v1/users',{email,displayName:'Гость',tenantRole:'user'},token);
+    const login = await api('/auth/login',{email,password:made.data.tempPassword});
+    const session = await api('/auth/change-password',{currentPassword:made.data.tempPassword,newPassword:randomBytes(36).toString('base64url')},login.data.accessToken);
+    json(res,200,session.data,session.cookies);
+  } finally { guestSlots--; }
+}
+async function body(req) {
+  let length=0;const chunks=[];
+  for await (const chunk of req) {
+    length+=chunk.length;
+    if (length > 65536) {const e=new Error('Слишком большой запрос.');e.status=413;throw e;}
+    chunks.push(chunk);
+  }
+  try {return JSON.parse(Buffer.concat(chunks).toString() || '{}');}
+  catch {const e=new Error('Некорректный запрос.');e.status=400;throw e;}
+}
+function requestToken(req) {
+  if (req.headers.authorization) {
+    const match=/^Bearer ([^\s,]+)$/.exec(req.headers.authorization);
+    return match?.[1];
+  }
+  const cookies=(req.headers.cookie||'').split(';').map(x=>x.trim()).filter(x=>x.startsWith('airlock_session='));
+  return cookies.length===1 ? cookies[0].slice(16) : undefined;
+}
+async function identity(req) {
+  const token=requestToken(req);
+  if (!token) {const e=new Error('Откройте демо заново.');e.status=401;throw e;}
+  return (await api('/api/v1/me',undefined,token,'GET')).data.user;
+}
+async function createProject(req,res) {
+  if (creating) return json(res,429,{error:'Сейчас создаётся другой проект. Попробуйте немного позже.'});
+  creating=true;
+  try {
+    await identity(req);
+    const input=await body(req);
+    if (typeof input.name!=='string' || !input.name.trim() || input.name.length>120 || typeof input.slug!=='string' || !/^[a-z0-9][a-z0-9-]{0,40}$/.test(input.slug))
+      return json(res,400,{error:'Укажите название и адрес проекта латинскими буквами.'});
+    const token=await adminToken();
+    const list=await api('/api/v1/agents',undefined,token,'GET');
+    if ((list.data.agents||[]).length>=32) return json(res,429,{error:'В демо уже достаточно проектов. Попробуйте позже.'});
+    const made=await api('/api/v1/agents',{
+      name:input.name.trim(),slug:`d88-${input.slug}-${randomBytes(3).toString('hex')}`,
+      description:typeof input.description==='string' ? input.description.slice(0,4000):'',
+      instructions:typeof input.instructions==='string' ? input.instructions.slice(0,16000):'',
+      skipInitialBuild:input.skipInitialBuild===true,
+    },token);
+    // Guests never receive ownership or admin membership, including on their own projects.
+    await api(`/api/v1/agents/${made.data.agent.id}/members`,{userId:'user',role:'user'},token);
+    made.data.agent.yourAccess='user';made.data.agent.isOwner=false;
+    json(res,made.status,made.data);
+  } finally {creating=false;}
+}
+function headers(req) {
+  const result={...req.headers,'X-Forwarded-Proto':'https'};
+  delete result['x-airlock-proxy-auth'];delete result['x-demo-bootstrap'];
+  return result;
+}
+function proxy(req,res) {
+  const request=http.request({hostname:upstream.hostname,port:upstream.port||80,path:req.url,method:req.method,headers:headers(req)},response=>{
+    res.writeHead(response.statusCode,response.headers);response.pipe(res);
+  });
+  request.on('error',()=>{if (!res.headersSent) json(res,502,{error:'Демо запускается. Обновите страницу через несколько секунд.'});else res.destroy();});
+  request.setTimeout(120000,()=>request.destroy());req.on('aborted',()=>request.destroy());req.pipe(request);
+}
+const chatPost=/^\/api\/v1\/(agents\/[^/]+\/(prompt|conversations|files)|conversations\/[^/]+\/(cancel|clear))$/;
+const server=http.createServer(async(req,res)=>{
+  try {
+    const url=new URL(req.url,'http://gateway');
+    const path=url.pathname;
+    if (req.method==='GET' && path==='/_demo/tls') {
+      const name=url.searchParams.get('domain');
+      if ([domain,`s3.${domain}`].includes(name)) return json(res,200,{});
+      const suffix=`.${domain}`;
+      if (!name?.endsWith(suffix)) return json(res,403,{});
+      const slug=name.slice(0,-suffix.length);
+      if (!/^d88-[a-z0-9-]{1,60}$/.test(slug)) return json(res,403,{});
+      const list=await api('/api/v1/agents',undefined,await adminToken(),'GET');
+      return json(res,(list.data.agents||[]).some(a=>a.slug===slug) ? 200:403,{});
+    }
+    if (path.includes('%') || path.includes('\\') || /\/\/|\/\.\.?\//.test(path)) return json(res,400,{error:'Некорректный адрес.'});
+    if (req.method==='POST' && path==='/auth/refresh' && !req.headers.cookie && !req.headers.authorization) return await guest(res);
+    if (['GET','HEAD','OPTIONS'].includes(req.method)) return proxy(req,res);
+    if (path==='/auth/activate') return json(res,403,{error:'Демо уже настроено.'});
+    if (req.headers.origin && req.headers.origin!==`https://${domain}`) return json(res,403,{error:'Откройте демо на его сайте.'});
+    if (req.method==='POST' && ['/auth/refresh','/auth/login','/auth/logout','/auth/relay-code','/auth/relay-exchange'].includes(path)) return proxy(req,res);
+    const user=await identity(req);
+    if (['admin','TENANT_ROLE_ADMIN'].includes(user?.tenantRole)) return proxy(req,res);
+    if (req.method==='POST' && path==='/api/v1/agents') return await createProject(req,res);
+    if (req.method==='POST' && chatPost.test(path)) return proxy(req,res);
+    return json(res,403,{error:'В демо можно общаться и создавать проекты. Изменять, удалять и администрировать проекты может только владелец.'});
+  } catch(error) {
+    // Never log native responses, credentials, request bodies or session tokens.
+    console.error('demo request failed',error.status||502);
+    if (!res.headersSent) json(res,error.status||502,{error:error.status && error.status<500 ? error.message : 'Демо временно недоступно. Попробуйте позже.'});
+  }
+});
+server.on('upgrade',(req,socket,head)=>{
+  if (req.url!=='/ws' || req.headers.origin!==`https://${domain}`) {socket.end('HTTP/1.1 403 Forbidden\r\n\r\n');return;}
+  const request=http.request({hostname:upstream.hostname,port:upstream.port||80,path:req.url,headers:headers(req)});
+  request.on('upgrade',(response,remote,remoteHead)=>{
+    socket.write(`HTTP/1.1 ${response.statusCode} ${response.statusMessage}\r\n`+Object.entries(response.headers).map(([k,v])=>`${k}: ${v}`).join('\r\n')+'\r\n\r\n');
+    if(remoteHead.length)socket.write(remoteHead);if(head.length)remote.write(head);
+    remote.pipe(socket);socket.pipe(remote);socket.on('error',()=>remote.destroy());remote.on('error',()=>socket.destroy());socket.on('close',()=>remote.destroy());
+  });
+  request.on('response',response=>{socket.end(`HTTP/1.1 ${response.statusCode} Unauthorized\r\n\r\n`);response.resume();});
+  request.on('error',()=>socket.destroy());request.end();
+});
+server.maxConnections=128;server.requestTimeout=120000;server.headersTimeout=15000;
+server.listen(8088,'0.0.0.0',()=>console.log('Airlock demo gateway listening'));
