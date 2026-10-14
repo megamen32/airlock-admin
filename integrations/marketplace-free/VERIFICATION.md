@@ -116,3 +116,51 @@ Edumotion total0/trial notice, Wikibot содержательный ответ A
 Это focused integration, expected300/max3000с для всей consumer-проверки;
 никакой тест не обрывался из-за оценки времени. Последний parser-only unit
 повторён перед публикацией, PASS0.006с; broad/nightly suite не запускались.
+
+## Wikibot: публичный код вместо landing-only,15Oct2026
+
+По новому поручению пользователя website6802 сохранён, отдельный DOCXsource6803
+получил public GitHub snapshot e605529334a250d3158d546b5702c7651eb052c6.
+Источник взят unauthenticated с airlockrun/airlock; Internalне использовался.
+478файлов core/API/SQL/auth/container/docs,3,627,185sourcebytes; frontend,
+сгенерированные DB Go bindings и тесты исключены для5MBfreeKB. Снимок статичен,
+автосинхронизацииGitHubнет. Загрузка57малыхDOCX+849characterточнойвыжимки
+поместилась в существующий DOCXsource; сайт остаётся второй source type.
+
+Три крупных файла получили upload200, затем истинный owner dataset status
+TOO_LARGE; это не считалось успешной индексацией. После разделения owner API
+подтвердил57parsedDOCX3,759,731bytes +7websitepages70,276bytes; после короткой
+выжимки total65pages/indexedPages65. Vendor embedding очередь ещё hasIndexing=true,
+поэтому полная поисковая доступность всех478файлов НЕ заявляется. Реальный
+GET /bot/search уже извлёк docker-compose из public-code guide со ссылкой наDOCX.
+Приватные operator receipt/login/cookies внеGit. UserIO explicit channels.read
+не получил новое login-письмо; messenger.history(refresh=true) вернул
+provider_history_unavailable. Для этого разрешённого входа письмо прочитано
+через существующий документированный serviceIMAP,readonly/BODY.PEEK; UserIO
+runtime не менялся, дефект refresh остаётся вне текущего owning scope.
+
+Ранний многотемный Wikibotответ был корректен напрямую, но занял52.7s,
+native proxy по неизменённому core обрывает upstream30s. На широком коротком
+вопросе наблюдался необоснованный nginx/traefik; такой canary НЕ принят.
+Финальный фиксированный пример ограничен одним docker-compose.yml и70словами,
+требует правильные image-значения и immutableGitHubURL до кеширования. Старый
+ответ исключён новым exactsource marker; квоты и история не сбрасывались.
+
+| Проверка | Категория | Что обнаруживает | Ожидаемо/max | Результат |
+|---|---|---|---|---|
+| verifiedComposeAnswer actual good/bad responses | fast unit | Не выдавать прежнюю неподтверждённую nginx/traefik догадку за compose-данные |1/60s|PASS0.006s, только локальная логика |
+| Native source build666b6138 | focused integration | Реальная SDK/Go/templ компиляция/запуск |60/600s|Complete, sourceRef4009d0ff48b0bacff4f48b49371d53aae8f7367e |
+| Native guest form | focused integration | Encrypted Connection и фактический ответ Wikibot внутри Airlock |300/3000s|Настоящий POST /summary: pgvector/pgvector:pg17 и caddy:2-alpine, ссылка на docker-compose.yml, timestamp23:23:21Z |
+| Native guest tool chat64a61f0e | focused integration | Доставка реального результата обычному гостю |300/3000s|success19.957s; user/assistant/tool/assistant, readytrue, те же image-значения и GitHubfilelink; /meTENANT_ROLE_USER |
+| Source export comparison | focused integration | Опубликованный код реально доставлен |20/200s|Все25файлов Wikibot совпали byte-for-byte с native export |
+| Public snapshot builder | focused integration | Воспроизводимый экспорт без private source/credentials |30/300s|Реальный publicdownload pinnedSHA,478files3,627,185bytes →59малыхDOCX; без повторной vendorзагрузки |
+
+CTA/onboarding/webUI — отдельная работа user-requested worker в private
+megamen32/airlock-demo/main78c7eaa; source и runtime сверены. Landing основной
+VPSv16, все5карточек имеют chat+webUI; nativechatмаршрут /agents/<slug>/chat.
+Реальный headed44 DaData card→draft→manualsend→SberbankOGRN1027700132195 и
+webUIauthrelay/formPASS. Rootнезависимопросмотрел screenshot/verification.
+Wikibotquestionнакарточке теперь соответствует конкретному compose-примеру;
+worker не расходовал его квоту. Проверки описаны в airlock-demo/landing/VERIFICATION.md.
+Core/RUfrontend не менялись. Существующий whole-checkoutforeignWIP сохранён;
+строгий whole-treeGSDgateBLOCKED_REPOSITORY_STATE остаётся отдельной границей.
