@@ -137,7 +137,7 @@ GET /bot/search уже извлёк docker-compose из public-code guide со �
 не получил новое login-письмо; messenger.history(refresh=true) вернул
 provider_history_unavailable. Для этого разрешённого входа письмо прочитано
 через существующий документированный serviceIMAP,readonly/BODY.PEEK; UserIO
-runtime не менялся, дефект refresh остаётся вне текущего owning scope.
+runtime не менялся; mail provider refresh этим путём не подтверждён.
 
 Ранний многотемный Wikibotответ был корректен напрямую, но занял52.7s,
 native proxy по неизменённому core обрывает upstream30s. На широком коротком
