@@ -1,0 +1,45 @@
+package views
+
+templ Index(view HomeView) {
+	@Layout(view.Title) {
+		<header class="mb-8">
+			<h1 class="text-3xl font-semibold">{ view.Title }</h1>
+			<p class="mt-2 text-base-content/70">{ view.Subtitle }</p>
+		</header>
+
+		<form class="card bg-base-200 shadow-sm" method="post" action="/lookup">
+			<div class="card-body">
+				<label class="form-control w-full">
+					<span class="label-text mb-2">ИНН или ОГРН</span>
+				<input class="input input-bordered w-full" name="identifier" inputmode="numeric" autocomplete="off" required placeholder="Например, 7707083893"/>
+				</label>
+				<button class="btn btn-primary mt-4" type="submit">Найти компанию</button>
+				<p class="text-sm text-base-content/70">Только поиск по идентификатору. Результат содержит сведения из ответа DaData, без оценок рисков.</p>
+			</div>
+		</form>
+	}
+}
+
+templ LookupResult(view LookupView) {
+	<section class="card bg-base-200 shadow-sm mt-6">
+		<div class="card-body">
+			if view.Found {
+				<h2 class="card-title">{ view.Name }</h2>
+				<dl class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+					<div><dt class="text-sm text-base-content/70">ИНН</dt><dd>{ view.INN }</dd></div>
+					<div><dt class="text-sm text-base-content/70">ОГРН</dt><dd>{ view.OGRN }</dd></div>
+					<div><dt class="text-sm text-base-content/70">Статус</dt><dd>{ view.Status }</dd></div>
+					<div><dt class="text-sm text-base-content/70">Основной ОКВЭД</dt><dd>{ view.OKVED }</dd></div>
+					<div class="sm:col-span-2"><dt class="text-sm text-base-content/70">Адрес</dt><dd>{ view.Address }</dd></div>
+				</dl>
+			} else {
+				<div role="alert" class="alert alert-warning"><span>{ view.Message }</span></div>
+			}
+			<p class="text-sm text-base-content/70">Источник: { view.Source }.
+				if view.LookedUpAt != "" {
+					<span> Время поиска: { view.LookedUpAt }</span>
+				}
+			</p>
+		</div>
+	</section>
+}

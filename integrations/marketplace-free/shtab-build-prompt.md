@@ -24,7 +24,7 @@ structure safely, return compact task titles/status/deadlines and source Shtab.
 Never return user emails, tokens or raw debug data. Empty actual workspace
 must display "В демо-команде пока нет незавершённых задач"; never invent tasks.
 
-Use only native supported SDK/SQLite storage for persisted cache15minutes and
+Use only native SDK PostgreSQL database and goose migration storage for persisted cache15minutes and
 hard cap4external fetch_tasks calls/hour shared by all guests. Bound provider
 timeout20s and content to64KiB. Missing credentials and401/403/429 return
 short Russian setup/quota messages. No background polling, no mutation tools.
