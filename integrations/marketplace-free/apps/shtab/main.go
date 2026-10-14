@@ -11,7 +11,7 @@ import (
 func main() { newAgent().Serve() }
 func newAgent() *agentsdk.Agent {
 	a := agentsdk.New(agentsdk.Config{Description: "Сводка незавершённых задач отдельной демо-команды Shtab через настоящий MCP."})
-	m := a.RegisterMCP(&agentsdk.MCP{Slug: "shtab", Name: "Shtab", Description: "Только фиксированная статистика задач демо-команды", URL: "https://my.shtab.app/api/mcp/rpc", AuthMode: agentsdk.MCPAuthToken})
+	m := a.RegisterMCP(&agentsdk.MCP{Slug: "shtab", Name: "Shtab", URL: "https://my.shtab.app/api/mcp/rpc", AuthMode: agentsdk.MCPAuthToken})
 	s := summary.New(m, a.DB())
 	h := handlers.New(s)
 	a.RegisterTool(tool.Typed[summary.Input, summary.Result]("team_tasks").Description("Получить реальное число незавершённых задач демо-команды Shtab. Не список и не изменение задач.").Execute(s.Tool).Build(), agentsdk.AccessUser)
