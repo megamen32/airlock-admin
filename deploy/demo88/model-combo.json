@@ -1,0 +1,16 @@
+{
+  "name": "airlock-demo-subscriptions",
+  "strategy": "priority",
+  "models": [
+    {"provider": "airlock-zcp", "model": "glm-5.3-flash"},
+    {"provider": "airlock-mmcp", "model": "MiniMax-M3.1-Flash-Preview"}
+  ],
+  "airlock": {
+    "model": "combo/airlock-demo-subscriptions",
+    "modelDisplayName": "GLM 5.3 Flash / MiniMax M3.1 Flash Preview"
+  },
+  "accountingUsdPerMillion": {
+    "glm-5.3-flash": {"input": 0.15, "output": 0.5, "cached": 0.03, "source": "models.dev providers/zai/models/glm-5.3-flash.toml, 2026-10-15"},
+    "MiniMax-M3.1-Flash-Preview": {"input": 0.3, "output": 1.2, "cached": 0.06, "source": "Budget estimate using models.dev MiniMax-M3 API base tier; M3.1 API price is absent. This is not a provider billing price."}
+  }
+}

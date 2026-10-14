@@ -83,11 +83,36 @@ rootless Docker и не имеет прав root на хосте. Cpuset огр�
 Go-компилятора на88-ядерном сервере; одной CPU quota для этого недостаточно.
 Подготовка: ожидаемо180с, аварийный предел1800с.
 
-AI использует отдельный inference-ключ OmniRoute, явную проверенную модель
-`cx/gpt-6-luna`, лимиты $5/день и $20/неделю, 30запросов/минуту.
-Лимит256 идентификаторов сессий соответствует лимиту гостей; это не число
-одновременных вычислений. Источник модели: models-supplement от14.10.2026;
-маршрут подтверждён настоящим запросом, скрытого автоматического fallback нет.
+AI использует отдельный inference-ключ OmniRoute и явный native combo
+`combo/airlock-demo-subscriptions`: сначала **GLM-5.3-Flash** через Z.AI Coding
+Plan, при отказе — **MiniMax-M3.1-Flash-Preview** через MiniMax subscription.
+Конфигурация без секретов — `model-combo.json`. Оба подключения выделены для
+демо, combo закреплён за ними; cx/GPT и другие провайдеры в цепочку не входят.
+Native defaults build/exec одинаковы; существующие пять проектов наследуют их.
+
+Сохранены лимиты $5/день, $20/неделю, 30запросов/минуту и256 сессий. Это
+внутренний учёт расходов, не отдельная оплата токенов подписки. GLM учитывается
+по API цене models.dev: $0.15/$0.50 за1M input/output, cache_read$0.03.
+Для M3.1FlashPreview в models.dev есть только подписочная запись с нулями,
+публичная API цена отсутствует. Чтобы существующий бюджет не перестал работать,
+для неё явно сохранена оценка по базовой API цене M3: $0.30/$1.20, cache$0.06;
+эта оценка не выдаётся за установленную цену M3.1 или списание провайдера.
+Источник: официальный models.dev dev archive, получен15.10.2026; supplement
+от14.10 не содержит M3.1. Модель входит в MiniMax M Plan по официальному описанию.
+
+В OmniRoute используются отдельные OpenAI-compatible nodes `airlock-zcp` и
+`airlock-mmcp`, subscription endpoints `/api/coding/paas/v4` и `/v1` соответственно.
+Аккаунты закреплены за рабочим LAN HTTP proxy44:3128 штатной account assignment.
+Общий daemon на100 наследует proxy192.168.2.1:3127: Node TLS-запросы через него
+получили ECONNRESET, прямой запрос и44:3128 работают. Общие настройки, старые
+аккаунты, чужие combos и процесс OmniRoute не менялись и не перезапускались.
+Старый GLM аккаунт OmniRoute ответил429 «нет пакета»; новый защищённо переданный
+ключ установлен только в demo connection, сохранён0600 и сверен на Яндекс.Диске.
+
+`bootstrap.mjs` добавляет новую модель к зарегистрированным, затем переключает
+оба defaults; старые записи сохраняются для истории. Штатный API запрещает
+удалить модель, ещё указанную в defaults, поэтому замена всего списка до
+переключения даёт409. Не удалять историю и не обходить эту проверку.
 
 ## Права гостей
 
@@ -158,3 +183,45 @@ lifecycle-записью удалён штатнымAPI, прежнийaccessTok
 HttpOnlycookie дал101. Проверялся контролируемый agedrecord, не24часовойsoak.
 Fastunit~0.1с/max20с; focusednativecanary~30с/max300с. Первая ручнаяWSпроба
 сBearer была401: штатныйWSтребуетCookie; правильныйпутьзатемпрошёл101.
+
+## Воспроизведение конфигурации моделей
+
+Через management API OmniRoute, с существующим защищённым operator credential:
+
+1. `/api/provider-nodes`: два OpenAI-compatible chat node с prefix `airlock-zcp`
+   и `airlock-mmcp`, base URL указаны выше; не подменять Coding Plan обычным API.
+2. `/api/providers`: отдельные demo connection, существующие subscription keys,
+   maxConcurrent2. Сохранить новые доступы0600 + local100 + Яндекс.Диск/readback.
+3. `/api/provider-models`: зарегистрировать ровно модели из model-combo.json;
+   контекст1000000, output8192, vision=true. Для M3.1 не отключать reasoning.
+4. `/api/settings/proxies/assignments`: account scope для этих connection IDs
+   на проверенный LAN44 proxy; proxyEnabled=true только у этих demo connection.
+5. `/api/pricing`: PATCH только цены собственных provider IDs/prefix из policy;
+   внутреннюю оценку MiniMax отделять от фактической цены провайдера.
+6. `/api/combos`: создать priority combo по policy; каждый model step закрепить
+   connectionId и providerId, ограничить allowedProviders этими двумя node IDs.
+7. `/api/keys/<demo-key-id>`: PATCH allowedModels/allowedCombos/allowedConnections
+   только на собственные маршруты; сохранить прежние budget/RPM/session fields.
+8. Выполнить bootstrap.mjs внутри существующего demo-gateway, передав на stdin
+   объект `airlock` из model-combo.json. Повторно inference key не нужен:
+   сохранённый native provider `demo-omniroute` используется без смены ключа.
+9. Проверить defaultBuild/Exec и наследование проектов, настоящий guest tool chat,
+   затем контролируемый failover только своего GLM connection с finally restore.
+
+При откате сначала восстановить разрешение прежнего маршрута у demo key,
+затем прежние defaults из защищённого снимка. Не удалять историю моделей,
+гостевые данные и другие provider connections. Все операции выполняются через
+нативные API; SQL-перезапись, fork и restart общей OmniRoute не требуются.
+
+## Проверка смены моделей 15 октября 2026
+
+Обе модели дали настоящий ответ через публичный OmniRoute с ограниченным
+ключом демо. Combo выбрал GLM-5.3-Flash. Реальный обычный гость вызвал DaData
+через native чат: run success за4,704с, есть tool message и ОГРН1027700132195.
+Для проверки отказа только выделенное GLM demo connection временно выключено:
+тот же combo реально вернул MiniMax-M3.1-Flash-Preview; новый гостевой диалог
+с вызовом DaData завершился success за4,882с с тем же проверяемым ОГРН.
+В finally GLM включён обратно. Глобальные аккаунты/combos не выключались.
+Это focused integration (ожидаемо30с, emergency300с); новые приложения не
+собирались, тяжёлые тесты не запускались. Русский frontend и guest gateway
+не менялись. Старые проекты наследуют новые build/exec defaults.

@@ -62,3 +62,8 @@ TTL wrapper принят отдельно: guest-lifecycle.mjs и gateway.mjs о
 agedfixtureguest удалён реальнымnativeAPI, новыйгость/HttpOnlyrefresh/WS/DaData
 работают; все5appIDsсохранены. При обновлении сохранить gateway-state/guests.json
 вместе сoverlay: безнего срок существующихгостей начнётся заново.
+
+15.10.2026: demo build/exec defaults switched through native provider/settings
+APIs to a dedicated subscription combo (GLM5.3Flash → MiniMaxM3.1FlashPreview).
+Model policy is in model-combo.json; no upstream/core/RU code changed.
+bootstrap preserves registered models during the native referenced-model guard.

@@ -16,14 +16,22 @@ if(input.activationCode) {
   const result=await call('/auth/activate',{...owner,activationCode:input.activationCode,displayName:'Владелец демо',uiLocale:'ru'});
   console.log(JSON.stringify({activated:true,user:result.user.id,role:result.user.tenantRole}));
 }
-if(input.providerKey) {
+if(input.providerKey || input.model) {
+  if(typeof input.model!=='string' || !input.model.trim()) throw new Error('Explicit model route required');
   const session=await call('/auth/login',owner);
   const token=session.accessToken;
   let providers=(await call('/api/v1/providers',undefined,token,'GET')).providers||[];
   let provider=providers.find(p=>p.slug==='demo-omniroute');
-  if(!provider) provider=(await call('/api/v1/providers',{providerId:'openai-compatible',slug:'demo-omniroute',displayName:'Демо AI',apiKey:input.providerKey,baseUrl:'https://omniroute.bezrabotnyi.com/v1'},token)).provider;
-  await call(`/api/v1/providers/${provider.id}/models`,{models:[{modelId:input.model,displayName:'GPT-6 Luna',toolCall:true,reasoning:true,vision:true,structuredOutputs:true,contextLimit:'1050000',outputLimit:'8192'}]},token,'PUT');
-  // Use the explicit verified route; never an automatic model fallback.
+  if(!provider) {
+    if(!input.providerKey) throw new Error('New provider requires a protected inference key');
+    provider=(await call('/api/v1/providers',{providerId:'openai-compatible',slug:'demo-omniroute',displayName:'Демо AI',apiKey:input.providerKey,baseUrl:'https://omniroute.bezrabotnyi.com/v1'},token)).provider;
+  }
+  const model={modelId:input.model,displayName:input.modelDisplayName||input.model,toolCall:true,reasoning:true,vision:true,structuredOutputs:false,contextLimit:'1000000',outputLimit:'8192',...input.modelCapabilities,modelId:input.model};
+  // Native Airlock refuses removing a model referenced by the current defaults.
+  // Retain registered models while moving both defaults to the new route.
+  const registered=(await call(`/api/v1/providers/${provider.id}/models`,undefined,token,'GET')).models||[];
+  await call(`/api/v1/providers/${provider.id}/models`,{models:[...registered.filter(m=>m.modelId!==input.model),model]},token,'PUT');
+  // The selected demo-only combo owns its explicitly authorized fallbacks.
   const current=(await call('/api/v1/settings',undefined,token,'GET')).settings;
   const result=await call('/api/v1/settings',{settings:{...current,uiLocale:'ru',defaultBuildModel:input.model,defaultBuildProviderId:provider.id,defaultExecModel:input.model,defaultExecProviderId:provider.id}},token,'PUT');
   console.log(JSON.stringify({provider:provider.id,configured:true,model:input.model}));
