@@ -24,7 +24,7 @@ claims. Show source DaData and time of actual lookup.
 
 Keep a persisted daily request counter capped at1000 for this public demo and
 at most5 outstanding provider calls; cache a successful lookup for10minutes.
-Use supported native SDK storage/SQLite, not a new external service. Provider
+Use supported native SDK PostgreSQL Agent.DB() and goose migrations, not a new external service. Provider
 request timeout20s, max response1MiB; reject before consuming quota for invalid
 input. Missing resource credentials and401/403/429 must become short Russian
 setup/limit messages; do not leak auth/response headers or secrets to guest output.
@@ -38,3 +38,5 @@ NOTES.md: record exact official endpoint/auth/free quota10000/day, local demo
 cap1000/day, source link, native credential binding and evidence boundary:
 until the operator binds a key, external lookup is not configured.
 Build with go tool air build, then exit success only after compilation.
+
+Raw Connection.Access must be AccessAdmin; only typed tool and form are for users.

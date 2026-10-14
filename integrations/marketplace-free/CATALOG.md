@@ -11,7 +11,7 @@ Airlock_marketplace_v9.zip, 37 карточек. Архив — статичес
 |---|---|---|---|
 | [DaData](https://dadata.ru/pricing/) | До10 000 lookup/suggestions запросов в сутки; платные clean/enrichment исключены | [Регистрация и подтверждение почты](https://dadata.ru/profile/), скопировать API-ключ. Secret key не нужен | Найти реальную компанию по ИНН/ОГРН; отдельный native Connection |
 | [Shtab](https://doc.shtab.app/kak-podkliuchit-chatgpt-claude-i-drugie-ii-assistenty-k-shtab-cherez-mcp/) | MCP10запросов/час на компанию | [Создать отдельную демо-команду](https://my.shtab.app/), ИИ-ассистенты и MCP → Для разработчиков → Создать токен; добавить несколько несекретных демо-задач | Читать задачи через native MCP callback; не давать гостю raw write tools |
-| [Priceva](https://priceva.com/subscription) | Starter:20товаров/20сайтов/6200проверок в месяц, API включён, без карты | [Регистрация](https://app.priceva.com/), API-ключ и2–3 публичных товарных URL, дождаться первой проверки | Показать реальные цены/наличие; подключение следующим |
+| [Priceva](https://priceva.com/subscription) | Starter:20товаров/20сайтов/6200проверок в месяц, API включён, без карты | [Регистрация](https://app.priceva.com/), API-ключ и2–3 публичных товарных URL, дождаться первой проверки | 14.10 live API вернул403 account type для product/list/source/list/report/list. Нужна активация/уточнение доступа, платный тариф не включён. |
 
 DaData: POST https://suggestions.dadata.ru/suggestions/api/4_1/rs/findById/party,
 Authorization: Token API_KEY, JSON query/count/branch_type. [Официальный метод](https://dadata.ru/api/find-party/).
@@ -58,7 +58,7 @@ DaData и Shtab рассмотрены выше. Следующая таблиц
 | VseLLM | **Платный API**, регистрация + пополнение. Реферальные бонусы не бесплатная постоянная API-квота | Аккаунт, раздел Ключи; OpenAI-compatible https://api.vsellm.ru/v1 , Bearer | https://vsellm.ru/ ; https://vsellm.ru/docs |
 | PolzaAI | **Платный API**, минимальное пополнение 100 ₽; бесплатная IDE не даёт бесплатных токенов | Аккаунт/организация, API-ключ, баланс; OpenAI-compatible https://polza.ai/api/v1 | https://polza.ai/collections/text ; https://polza.ai/ ; https://polza.ai/software-registry/functional-characteristics |
 | Botmother | **Бесплатный Test**, до 10 ботов/5 тестеров; подходит ограниченному тесту, не массовому public demo | app.botmother.ru, бот, Настройки → События → Внешнее событие, секретный webhook URL; HTTP POST JSON | https://botmother.ru/price ; https://docs.botmother.ru/article/41072 |
-| Priceva | **Бесплатный Starter с API**, до 20 товаров/20 сайтов, 6 200 price checks/мес, без карты | app.priceva.com, API-настройки, ключ, URL публичных товаров, дождаться мониторинга; REST auth уточнить в Apiary/кабинете | https://priceva.com/subscription ; https://priceva.docs.apiary.io/ ; https://app.priceva.com/ai/client/vcr/settings/api |
+| Priceva | **Сайт обещает бесплатный Starter с API**, до20 товаров/20сайтов,6200проверок/мес. **Реальный новый аккаунт отклонил чтение:403 account type**; работающий free API пока не подтверждён | app.priceva.com, API-настройки, ключ, URL публичных товаров, дождаться мониторинга; REST auth уточнить в Apiary/кабинете | https://priceva.com/subscription ; https://priceva.docs.apiary.io/ ; https://app.priceva.com/ai/client/vcr/settings/api |
 | MoonAI | **3-дневный trial**, постоянного Free API нет | Аккаунт, агент, API-канал; платная подписка и AI-токены после пробника. Настройки авторизации канала по документации | https://mooonai.com/en/ai-salesperson ; https://mooonai.com/en/integrations/whatsapp ; https://docs.mooonai.com/channels/api_channel/ |
 | Legiscan | Бесплатный первый документ в UI, **API только бизнес/PRO** | Бизнес-аккаунт и ключ; REST `X-API-Key` или Bearer; /api/edo/analyze и /api/edo/jobs/{id} | https://legiscan.ru/docs/api ; https://legiscan.ru/fizicheskim-litsam |
 | Lexis Voice | Бесплатный первый UI-разговор не бесплатный API; **API в Стандартном от 34 000 ₽/мес** для тренировок (речевая аналитика — отдельный пакет) | Запросить ключ у команды после согласования сценария; HTTP API/webhooks, точные scopes | https://lexisvoice.ru/pricing ; https://lexisvoice.ru/integrations |
@@ -78,3 +78,12 @@ DaData и Shtab рассмотрены выше. Следующая таблиц
 - TealBand: опрос/список опросов можно подключить отдельным персональным API-токеном; содержательная AI-аналитика требует баланса и минимум 5 ответов. START5 — разовое промо, размер не подтверждён.
 
 Не публиковать пользовательские токены в архиве/лендинге и не давать анонимным гостям данные обычного рабочего аккаунта. Ключ — только в серверной конфигурации; лучше отдельный demo workspace и read scopes.
+
+## Live расхождение Priceva
+
+14.10.2026 настоящий пользовательский API-ключ проверен через официальные
+POST product/list, source/list, report/list. HTTP200 содержит JSON errors
+code403: `You are not allowed to use this method with your account type`.
+Цена/товары не получены. Успешный HTTP200 не принимается за интеграцию.
+Нужно проверить тип кампании/доступ API в кабинете или получить разъяснение
+поставщика; платные тарифы и repricing не активировались, сообщения не отправлялись.

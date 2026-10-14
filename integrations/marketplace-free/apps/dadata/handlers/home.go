@@ -29,6 +29,7 @@ func New(service *company.Service) *Handler {
 // constructed inline because there's no domain yet; replace this with
 // a converter from your own data once you add a real model.
 func (h *Handler) Home(w http.ResponseWriter, r *http.Request) error {
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	view := views.HomeView{Title: "Проверка компаний — DaData", Subtitle: "Найдите одну компанию по ИНН или ОГРН. Источник данных — DaData.", Examples: nil}
 	return views.Index(view).Render(r.Context(), w)
 }
@@ -50,5 +51,9 @@ func (h *Handler) Lookup(w http.ResponseWriter, r *http.Request) error {
 		}
 		result.Name, result.INN, result.OGRN, result.Status, result.Address, result.OKVED = out.Name, out.INN, out.OGRN, out.Status, out.Address, out.OKVED
 	}
-	return views.LookupResult(result).Render(r.Context(), w)
+	if result.Status == "ACTIVE" {
+		result.Status = "Действующая организация"
+	}
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	return views.Index(views.HomeView{Title: "Проверка компаний — DaData", Subtitle: "Настоящие сведения по ИНН или ОГРН. Источник: DaData.", Result: &result}).Render(r.Context(), w)
 }

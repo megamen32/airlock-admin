@@ -1,0 +1,13 @@
+package views
+import "strconv"
+templ Index(v HomeView){
+ @Layout(v.Title){
+ <h1 class="text-3xl font-semibold mb-4">{v.Title}</h1>
+ <p class="mb-6">Настоящее количество незавершённых задач отдельной демо-команды. Изменение задач отключено.</p>
+ <form method="post" action="/summary"><button class="btn btn-primary" type="submit">Показать сводку</button></form>
+ if v.Message!="" {<section class="card bg-base-200 mt-6"><div class="card-body"><p>{v.Message}</p>
+ if v.Ready {<p>Незавершённых задач: <strong>{strconv.Itoa(v.Total)}</strong></p><p>Источник: Shtab MCP. Данные на {v.FetchedAt}</p>}
+ </div></section>}
+ <p class="text-sm mt-6">Кэш 15 минут. Общий лимит демо: 4 обращения в час. Данные не выдумываются.</p>
+ }
+}

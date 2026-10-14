@@ -17,6 +17,9 @@ templ Index(view HomeView) {
 				<p class="text-sm text-base-content/70">Только поиск по идентификатору. Результат содержит сведения из ответа DaData, без оценок рисков.</p>
 			</div>
 		</form>
+ if view.Result != nil {
+ @LookupResult(*view.Result)
+ }
 	}
 }
 

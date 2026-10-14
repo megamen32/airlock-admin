@@ -12,15 +12,16 @@ package views
 // you add templates that need structured input.
 
 type HomeView struct {
+	Result   *LookupView
 	Title    string
 	Subtitle string
 	Examples []string
 }
 
 type LookupView struct {
-	Identifier string
-	Found bool
+	Identifier                              string
+	Found                                   bool
 	Name, INN, OGRN, Status, Address, OKVED string
-	Source, Message string
-	LookedUpAt string
+	Source, Message                         string
+	LookedUpAt                              string
 }

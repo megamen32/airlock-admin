@@ -53,13 +53,14 @@ if(input.op==='list') {
   process.stdout.write(Buffer.from(await r.arrayBuffer()));
 } else if(input.op==='upload-source') {
   const path=prefix+input.id+'/source';
-  const head=await request(path,undefined,'HEAD');
+  const head=await fetch(process.env.DEMO_API+path,{method:'HEAD',signal:AbortSignal.timeout(30000),
+    headers:{Host:process.env.DEMO_DOMAIN,Authorization:`Bearer ${token}`}});
   const state=head.headers.get('etag');
-  if(!state)throw new Error('Source state absent');
+  if(!(head.ok&&state) && !(head.status===409&&input.allowInitial===true))throw new Error('Source state absent');
   const payload=Buffer.from(input.sourceBase64,'base64');
   if(!payload.length||payload.length>5*1024*1024)throw new Error('Source payload size refused');
   const r=await fetch(process.env.DEMO_API+path,{method:'PUT',signal:AbortSignal.timeout(30000),
-    headers:{'Content-Type':'application/gzip','If-Match':state,
+    headers:{'Content-Type':'application/gzip',...(state?{'If-Match':state}:{}),
       'X-Airlock-Commit-Message':input.message||'Update marketplace app',Host:process.env.DEMO_DOMAIN,
       'X-Airlock-Proxy-Auth':process.env.REVERSE_PROXY_AUTH_SECRET,'X-Forwarded-Proto':'https',
       Authorization:`Bearer ${token}`},body:payload});
