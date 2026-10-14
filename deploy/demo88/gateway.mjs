@@ -99,6 +99,27 @@ async function createProject(req,res) {
     json(res,made.status,made.data);
   } finally {creating=false;}
 }
+async function runStatus(req,res,runId) {
+  const user=await identity(req);
+  if (['admin','TENANT_ROLE_ADMIN'].includes(user?.tenantRole)) return proxy(req,res);
+  // Native v0.7.0 restricts run detail to app admins. For guest chat polling,
+  // first prove that this run appears in the caller's own conversation.
+  let conversation;
+  try {
+    const ref=new URL(req.headers.referer);
+    if(ref.origin===`https://${domain}`) conversation=ref.searchParams.get('c');
+  } catch {}
+  if(!conversation || !/^[0-9a-f-]{36}$/.test(conversation)) return json(res,403,{error:'Недоступный диалог.'});
+  const own=await api(`/api/v1/conversations/${conversation}/messages?before=9223372036854775807&limit=100`,undefined,requestToken(req),'GET');
+  if(!own.data.messages?.some(m=>m.runId===runId)) return json(res,403,{error:'Недоступный диалог.'});
+  const result=await api(`/api/v1/runs/${runId}`,undefined,await adminToken(),'GET');
+  const source=result.data.run;
+  const run={};
+  for(const key of ['id','agentId','status','startedAt','finishedAt','durationMs','errorKind']) run[key]=source[key];
+  run.errorMessage=source.errorMessage ? 'Не удалось получить ответ AI. Попробуйте ещё раз через несколько минут.' : '';
+  // No source code, inputs, tool actions, logs or credentials leave this adapter.
+  json(res,200,{run,messages:own.data.messages.filter(m=>m.runId===runId)});
+}
 function headers(req) {
   const result={...req.headers,'X-Forwarded-Proto':'https'};
   delete result['x-airlock-proxy-auth'];delete result['x-demo-bootstrap'];
@@ -128,6 +149,8 @@ const server=http.createServer(async(req,res)=>{
     }
     if (path.includes('%') || path.includes('\\') || /\/\/|\/\.\.?\//.test(path)) return json(res,400,{error:'Некорректный адрес.'});
     if (req.method==='POST' && path==='/auth/refresh' && !req.headers.cookie && !req.headers.authorization) return await guest(res);
+    const runMatch=/^\/api\/v1\/runs\/([0-9a-f-]{36})$/.exec(path);
+    if (req.method==='GET' && runMatch) return await runStatus(req,res,runMatch[1]);
     if (['GET','HEAD','OPTIONS'].includes(req.method)) return proxy(req,res);
     if (path==='/auth/activate') return json(res,403,{error:'Демо уже настроено.'});
     if (req.headers.origin && req.headers.origin!==`https://${domain}`) return json(res,403,{error:'Откройте демо на его сайте.'});

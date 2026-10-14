@@ -48,7 +48,7 @@ Creation accepts only name/slug/description/instructions/skipInitialBuild,
 uses system model defaults, and never forwards guest Git credentials or ownership.
 Limits: two concurrent guest registrations, 256 guests, 32 projects, one create
 at a time, 128 proxy connections, 64KiB creation payload. Own AI inference key
-has $5/day and $20/week limits, one explicit model route and two sessions.
+has $5/day and $20/week limits, one explicit model route and 256 visitor session identities.
 
 `Caddyfile.vps-demo` is merged with the existing VPS site. On-demand certificates
 are allowed only for the apex, S3 and actual existing `d88-*` project hosts by
@@ -84,3 +84,12 @@ are denied by the TLS admission endpoint. No fake transport or AI was used.
 Foreign wrapper changes/branch and infrastructure WIP are preserved. Delivery
 uses a separate temporary Git index based on origin/main and a scoped remote
 commit; no branch switch, new checkout, stash or foreign staging is involved.
+
+Guest run polling is narrowed to runs proved by native messages in the caller-owned
+conversation from the same-origin Referer. The adapter returns status, a Russian
+error and that run’s messages; it excludes source, inputs, actions, logs and panic
+traces. Foreign conversations and missing ownership proof fail closed. v0.7.0
+native admin-only run detail otherwise hid provider errors from ordinary chat.
+The inference key’s session identity limit is256 (equal to the guest cap), not a
+concurrency limit; setting it to2 blocked chat after setup/build sessions. CPU,
+RAM, request rate30/min and monetary budgets remain bounded separately.
