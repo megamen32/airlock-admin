@@ -14,13 +14,14 @@ import (
 type Input struct{}
 type Result struct {
 	Ready     bool   `json:"ready"`
-	Total     int    `json:"products"`
-	Sources   int    `json:"sources"`
-	Reports   int    `json:"reports"`
+	Products  *int   `json:"products,omitempty"`
+	Sources   *int   `json:"sources,omitempty"`
+	Reports   *int   `json:"reports,omitempty"`
 	Source    string `json:"source"`
 	FetchedAt string `json:"fetched_at"`
 	Message   string `json:"message,omitempty"`
 }
+
 type Service struct {
 	c    *agentsdk.ConnectionHandle
 	db   *agentsdk.AgentDB
@@ -118,10 +119,10 @@ func (s *Service) Get(ctx context.Context) (Result, error) {
 		counts = append(counts, len(objectMap))
 	}
 	out.Ready = true
-	out.Total = counts[0]
-	out.Sources = counts[1]
-	out.Reports = counts[2]
-	out.Message = fmt.Sprintf("На первой странице Priceva: товаров %d, источников %d, отчётов %d. Подробные цены ещё проверяются.", out.Total, out.Sources, out.Reports)
+	out.Products = &counts[0]
+	out.Sources = &counts[1]
+	out.Reports = &counts[2]
+	out.Message = fmt.Sprintf("На первой странице Priceva: товаров %d, источников %d, отчётов %d. Подробные цены ещё проверяются.", counts[0], counts[1], counts[2])
 	return s.save(ctx, out)
 }
 func (s *Service) save(ctx context.Context, out Result) (Result, error) {

@@ -15,7 +15,11 @@ func (h *Handler) Home(w http.ResponseWriter, r *http.Request) error {
 }
 func (h *Handler) Refresh(w http.ResponseWriter, r *http.Request) error {
 	result, e := h.s.Get(r.Context())
-	v := views.HomeView{Title: "Данные мониторинга — Priceva", Ready: result.Ready, Total: result.Total, Message: result.Message, FetchedAt: result.FetchedAt}
+	total := 0
+	if result.Products != nil {
+		total = *result.Products
+	}
+	v := views.HomeView{Title: "Данные мониторинга — Priceva", Ready: result.Ready, Total: total, Message: result.Message, FetchedAt: result.FetchedAt}
 	if e != nil {
 		v.Message = e.Error()
 	}
