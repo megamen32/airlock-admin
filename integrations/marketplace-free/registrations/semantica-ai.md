@@ -1,0 +1,11 @@
+# Semantica AI — created+emailverified+trial7d
+- статус: created+emailverified+trial7d (триал 7 дней полного доступа активирован, карта не требовалась)
+- основание: https://ai-semantica.com/ru , приложение https://app.ai-semantica.com/ , docs MCP: https://ai-semantica.com/docs/mcp/remote-installation
+- signup/login: https://app.ai-semantica.com/login (регистрация: /register — email-код → онбординг), email: airlock@bezrabotnyi.com, auth: password
+  - ход регистрации: email → код на почту (прочитан через UserIO gmail-airlock) → телефон (обязательное поле, пропуска нет) + способ связи Email + сайт https://demo.airlockrun.ru/ → роль Основатель, размер 1–10 → пароль (сохранён в кред-файле) → кабинет
+  - примечание: предыдущий запуск воркера создал пароль и бэкап ДО сабмита, но сам сабмит не выполнил (статус был pre-signup; вход «Неверный email или пароль»), регистрация завершена в этом запуске тем же паролем — дубля нет
+- trial/квота: триал 7 дней полного доступа (активирован 2026-10-15, без карты); free-тариф: 200 промптов/неделя, 1 проект; селф-сервис: подарочный баланс 209,87 ₽ без карты, пополнение от 1000 ₽ — НЕ делали
+- account/workspace IDs: учётка «airlock» на airlock@bezrabotnyi.com; проект пока не создан («Нет проекта»)
+- креды ref: ~/.config/airlock-marketplace-accounts/semantica-ai.json (backup: yadisk:Backups/marketplace-accounts/, status OK, remote readback пройден)
+- API-проверка: не выполнялась — API-ключ/MCP-endpoint выдаются в кабинете после создания проекта; мастер онбординга («Продолжить сам») не завершается автоматизацией (кнопка вне a11y-дерева), MCP-сервер включён по условиям селф-сервиса («запросы без сканов и вызовов ИИ бесплатно»)
+- блокеры: непринципиально — создание проекта в кабинете вручную; сканы требуют пополнения от 1000 ₽ (по контракту не делаем); MCP-настройки (endpoint/OAuth) взять из «Настройки проекта» после ручного создания проекта
