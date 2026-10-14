@@ -93,3 +93,10 @@ native admin-only run detail otherwise hid provider errors from ordinary chat.
 The inference key’s session identity limit is256 (equal to the guest cap), not a
 concurrency limit; setting it to2 blocked chat after setup/build sessions. CPU,
 RAM, request rate30/min and monetary budgets remain bounded separately.
+
+Every newly-created guest also receives direct user membership on existing demo
+projects; every new project receives direct user memberships for existing guests.
+This grants the same user rights as All users, and fixes v0.7.0’s WebSocket
+auto-subscription query, which reads only direct per-user grants. Existing demo
+grants were reconciled without replaying project creation. Live chat must display
+an AI response without reloading; database persistence alone is insufficient.

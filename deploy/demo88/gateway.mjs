@@ -43,6 +43,10 @@ async function guest(res) {
     if ((users.data.users || []).length >= 256) return json(res,429,{error:'Демо заполнено. Попробуйте позже.'});
     const email=`guest-${randomBytes(12).toString('hex')}@${domain}`;
     const made = await api('/api/v1/users',{email,displayName:'Гость',tenantRole:'user'},token);
+    const projects=await api('/api/v1/agents',undefined,token,'GET');
+    for(const project of projects.data.agents||[]) {
+      await api(`/api/v1/agents/${project.id}/members`,{userId:made.data.user.id,role:'user'},token);
+    }
     const login = await api('/auth/login',{email,password:made.data.tempPassword});
     const session = await api('/auth/change-password',{currentPassword:made.data.tempPassword,newPassword:randomBytes(36).toString('base64url')},login.data.accessToken);
     json(res,200,session.data,session.cookies);
@@ -95,6 +99,12 @@ async function createProject(req,res) {
     },token);
     // Guests never receive ownership or admin membership, including on their own projects.
     await api(`/api/v1/agents/${made.data.agent.id}/members`,{userId:usersGroup,role:'user'},token);
+    // v0.7.0 WebSocket subscriptions use direct memberships, not role groups.
+    const guests=await api('/api/v1/users',undefined,token,'GET');
+    for(const user of guests.data.users||[]) {
+      if(user.tenantRole==='TENANT_ROLE_USER')
+        await api(`/api/v1/agents/${made.data.agent.id}/members`,{userId:user.id,role:'user'},token);
+    }
     made.data.agent.yourAccess='user';made.data.agent.isOwner=false;
     json(res,made.status,made.data);
   } finally {creating=false;}
