@@ -84,8 +84,10 @@ Source build05c5d427 complete;8businessfiles совпали с native export.
 По прямому поручению владельца отдельная ZCode GLM5.3Flash сессия
 airlock-marketplace-free-signups получила весь список30 партнёров, включая
 trial/UI-free с неподтверждённым API; existing аккаунты не пересоздаются.
-Служебную доменную почту и исключения AIсекретаря настраивает отдельный
-исполнитель UserIO/ServerAdministration. Пароли/ключи хранятся внеGit;
+Служебная почта airlock@bezrabotnyi.com создана на существующем DMS44
+и подключена к UserIO как gmail-airlock. Весь аккаунт исключён из AIсекретаря;
+реальные отправка и чтение проверены. [Почтовый runbook](https://github.com/megamen32/ServersAdministartion/blob/main/docs/runbooks/domain-mail.md)
+ведёт отдельный владелец UserIO/ServerAdministration. Пароли/ключи хранятся внеGit;
 пользователь выбрал немедленные обычные резервные копии на server100 и
 на Яндекс.Диске без отдельного клиентского ключа шифрования.
 Факт постановки этих задач не считается выполненными регистрациями/backup.
