@@ -177,7 +177,7 @@ const server=http.createServer(async(req,res)=>{
   }
 });
 server.on('upgrade',(req,socket,head)=>{
-  if (req.url!=='/ws' || req.headers.origin!==`https://${domain}`) {socket.end('HTTP/1.1 403 Forbidden\r\n\r\n');return;}
+  if (new URL(req.url,'http://gateway').pathname!=='/ws' || req.headers.origin!==`https://${domain}`) {socket.end('HTTP/1.1 403 Forbidden\r\n\r\n');return;}
   const request=http.request({hostname:upstream.hostname,port:upstream.port||80,path:req.url,headers:headers(req)});
   request.on('upgrade',(response,remote,remoteHead)=>{
     socket.write(`HTTP/1.1 ${response.statusCode} ${response.statusMessage}\r\n`+Object.entries(response.headers).map(([k,v])=>`${k}: ${v}`).join('\r\n')+'\r\n\r\n');
