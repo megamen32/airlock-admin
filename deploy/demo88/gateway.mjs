@@ -153,14 +153,14 @@ const server=http.createServer(async(req,res)=>{
       const suffix=`.${domain}`;
       if (!name?.endsWith(suffix)) return json(res,403,{});
       const slug=name.slice(0,-suffix.length);
-      if (!/^d88-[a-z0-9-]{1,60}$/.test(slug)) return json(res,403,{});
+      if (!/^[a-z0-9][a-z0-9-]{0,62}$/.test(slug)) return json(res,403,{});
       const list=await api('/api/v1/agents',undefined,await adminToken(),'GET');
       return json(res,(list.data.agents||[]).some(a=>a.slug===slug) ? 200:403,{});
     }
     // These hosts reach native app/S3 routing, never the dashboard API.
     // Let native per-route user grants and signed S3 requests govern app actions.
     const host=(req.headers.host||'').split(':')[0];
-    if(host===`s3.${domain}` || (host.endsWith(`.${domain}`) && /^d88-[a-z0-9-]+$/.test(host.slice(0,-domain.length-1))))
+    if(host===`s3.${domain}` || (host.endsWith(`.${domain}`) && /^[a-z0-9][a-z0-9-]{0,62}$/.test(host.slice(0,-domain.length-1))))
       return proxy(req,res);
     if (path.includes('%') || path.includes('\\') || /\/\/|\/\.\.?\//.test(path)) return json(res,400,{error:'Некорректный адрес.'});
     if (req.method==='POST' && path==='/auth/refresh' && !req.headers.cookie && !req.headers.authorization) return await guest(res);
