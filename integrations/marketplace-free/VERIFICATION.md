@@ -87,7 +87,7 @@ receipt ttl-proof.json хранитchecks иhashes. Обновленияисто
 | Edumotion guest form+tool chat67949b50 | focused integration | Public API с X-Api-Key, честный пустой каталог и trial notice | 300/3000с | ready=true,total0,sourceEdumotion; run success16.165с, настоящий tool result; trial14дней явно указан |
 | Wikibot native build eb03467e | focused integration | Реальный SDK, PostgreSQL quota/cache и запуск | 60/600с | Complete; ключ bound в native encrypted resource; All users роль user |
 | Wikibot guest form+tool chat719c118e | focused integration | Реальный ответ AI по публичной БЗ через API, не текст-заглушка | 300/3000с | Содержательный SUCCESS ответ об Airlock, источник airlockrun.ru/platform.html#control; run success30.848с с tool result, кэш совпал с формой |
-| Native export comparison | focused integration | Запущенный исходник соответствует файлам адаптера | 20/200с | Edumotion15 и Priceva18 source files byte-for-byte; Wikibot22files byte-for-byte |
+| Native export comparison | focused integration | Запущенный исходник соответствует файлам адаптера | 20/200с | Edumotion22, Priceva18 и Wikibot22source files byte-for-byte |
 
 Guest API canary использует настоящий fresh passwordless /auth/refresh accessToken
 и Bearer на subdomain. Ручной airlock_session cookie в ранней HTTP-пробе дал401:
@@ -104,3 +104,15 @@ Owned source публикуется поверх origin/main отдельным 
 переключения ветки. Поэтому строгий whole-checkout GSD verdict остаётся
 BLOCKED_REPOSITORY_STATE; это не отменяет доказанные рабочие native API/chat
 пути, но не даёт объявить весь checkout чистым или весь marketplace завершённым.
+
+Финальная проверка после публикации source: Edumotion presentation-only upgrade
+04588a99 complete37.101с, sourceRef dc4e2f8e8c2fb76aa61421ffccce3d39963402d1;
+views не импортируют domain package, controller проектирует CourseView.
+Все22файла Edumotion и22Wikibot совпали с native source export. После финальных
+build/bind/grant настоящие POST /summary трёх приложений прошли повторно:
+Edumotion total0/trial notice, Wikibot содержательный ответ Airlock, Priceva1/1/0.
+Обычный гостевой /me подтвердил TENANT_ROLE_USER; попытки POST credentials
+с пустым телом для Edumotion/Wikibot дали403 и не меняли данные.
+Это focused integration, expected300/max3000с для всей consumer-проверки;
+никакой тест не обрывался из-за оценки времени. Последний parser-only unit
+повторён перед публикацией, PASS0.006с; broad/nightly suite не запускались.
