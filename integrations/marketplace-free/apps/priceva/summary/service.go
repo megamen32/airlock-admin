@@ -99,24 +99,11 @@ func (s *Service) Get(ctx context.Context) (Result, error) {
 			}
 			return s.save(ctx, out)
 		}
-		var result map[string]json.RawMessage
-		if len(frame.Result) == 0 || json.Unmarshal(frame.Result, &result) != nil {
-			return Result{}, fail
-		}
-		raw, ok := result["objects"]
-		if !ok || string(raw) == "null" {
+		count, err := countPage(frame.Result)
+		if err != nil {
 			return Result{}, errors.New("Priceva вернула неподтверждённый формат данных. Отчёт пока не готов.")
 		}
-		var items []json.RawMessage
-		if json.Unmarshal(raw, &items) == nil {
-			counts = append(counts, len(items))
-			continue
-		}
-		var objectMap map[string]json.RawMessage
-		if json.Unmarshal(raw, &objectMap) != nil {
-			return Result{}, fail
-		}
-		counts = append(counts, len(objectMap))
+		counts = append(counts, count)
 	}
 	out.Ready = true
 	out.Products = &counts[0]

@@ -72,3 +72,35 @@ Focusednativecanary (ожидаемо30/max300с): новыйобычныйго�
 исправлена на штатноеidentifier; вappcodeдляэтогонетправок.
 Runtime gateway/module bytes совпали с опубликованным source; privateполный
 receipt ttl-proof.json хранитchecks иhashes. Обновленияисторий/паролейнетвGit.
+
+## Новые реальные подключения15.10.2026
+
+Это дополнение заменяет прежний статус Priceva401: сейчас настоящий API
+разрешает чтение каталога, но рыночные цены всё ещё не приняты.
+
+| Проверка | Категория | Что обнаруживает | Ожидаемо/max | Реальный результат |
+|---|---|---|---|---|
+| Priceva countPage шесть узких случаев | fast unit | Пустая реальная страница без objects; противоречивый count; отсутствие структуры | 1/60с | PASS0.003с; это только локальная логика разбора |
+| Priceva native upgrade9ec44e00 | focused integration | Реальная компиляция, SDK, запуск после исправления | 60/600с | Complete38с, sourceRef f71c5ba6300e1e88dd4acbf48ea8bf08efbb672c |
+| Priceva guest form+tool chat99356853 | focused integration | Настоящий encrypted Connection и доставка результата обычному гостю | 300/3000с | API и форма: products1/sources1/reports0; run success14.040с, роли user/assistant/tool/assistant; цен нет |
+| Edumotion native build5f7329ff | focused integration | Реальный SDK/templ build и запуск | 60/600с | Complete; sourceRef71fe8b246185e2c2b37e5bb3b436c6c275b022ba; предыдущая ошибка templ исправлена и не считалась GREEN |
+| Edumotion guest form+tool chat67949b50 | focused integration | Public API с X-Api-Key, честный пустой каталог и trial notice | 300/3000с | ready=true,total0,sourceEdumotion; run success16.165с, настоящий tool result; trial14дней явно указан |
+| Wikibot native build eb03467e | focused integration | Реальный SDK, PostgreSQL quota/cache и запуск | 60/600с | Complete; ключ bound в native encrypted resource; All users роль user |
+| Wikibot guest form+tool chat719c118e | focused integration | Реальный ответ AI по публичной БЗ через API, не текст-заглушка | 300/3000с | Содержательный SUCCESS ответ об Airlock, источник airlockrun.ru/platform.html#control; run success30.848с с tool result, кэш совпал с формой |
+| Native export comparison | focused integration | Запущенный исходник соответствует файлам адаптера | 20/200с | Edumotion15 и Priceva18 source files byte-for-byte; Wikibot22files byte-for-byte |
+
+Guest API canary использует настоящий fresh passwordless /auth/refresh accessToken
+и Bearer на subdomain. Ручной airlock_session cookie в ранней HTTP-пробе дал401:
+это неверный тестовый способ авторизации, не обнаруженный дефект продукта.
+Для poll native runs нужен штатный Referer с agent/conversation ownership.
+HTTP HTML form проверена настоящим POST к приложению; новый headed-browser
+прогон в этой волне пока не заявляется. Прежний browser auth relay принят ранее.
+Private admission/proof/source exports хранятся в .tmp/marketplace-wave2-20261015,
+секреты и browser auth там не публикуются. API-квоты постоянные, не сбрасывались.
+
+Общий shared checkout остаётся на чужой nginx-direct-airlock-proxy с чужим WIP
+(AIRLOCK_ADMIN.md,AIRLOCK_RUNBOOK.md,README.md,gptadmin и другими файлами).
+Owned source публикуется поверх origin/main отдельным индексом, без reset/stash/
+переключения ветки. Поэтому строгий whole-checkout GSD verdict остаётся
+BLOCKED_REPOSITORY_STATE; это не отменяет доказанные рабочие native API/chat
+пути, но не даёт объявить весь checkout чистым или весь marketplace завершённым.

@@ -1,0 +1,31 @@
+package views
+
+import "strconv"
+
+templ Index(v HomeView) {
+ @Layout(v.Title) {
+  <h1 class="text-3xl font-semibold mb-4">{ v.Title }</h1>
+  <p class="mb-4">Настоящий каталог опубликованных курсов отдельной демо-организации Edumotion.</p>
+  <p class="mb-6">Пробный API-доступ на 14 дней с 15 октября 2026 года, без карты. Это ограниченный по времени бесплатный режим.</p>
+  <form method="post" action="/summary">
+   <button class="btn btn-primary" type="submit">Показать учебные курсы</button>
+  </form>
+  if v.Message != "" {
+   <section class="card bg-base-200 mt-6">
+    <div class="card-body">
+     <p>{ v.Message }</p>
+     if v.Ready {
+      <p>Опубликованных курсов: <strong>{ strconv.Itoa(v.Total) }</strong></p>
+      for _, c := range v.Courses {
+       <article class="mt-4">
+        <h2 class="font-semibold">{ c.Title }</h2>
+       </article>
+      }
+      <p>Источник: Edumotion API. Данные на { v.FetchedAt }</p>
+     }
+    </div>
+   </section>
+  }
+  <p class="text-sm mt-6">Кэш 5 минут. Общий лимит демо: 12 обращений в час. Персональные данные и назначение обучения не доступны.</p>
+ }
+}

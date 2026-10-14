@@ -1,0 +1,23 @@
+package views
+
+templ Index(v HomeView) {
+ @Layout(v.Title) {
+  <h1 class="text-3xl font-semibold mb-4">{ v.Title }</h1>
+  <p class="mb-4">Wikibot отвечает по публичной базе знаний Airlock. Вопрос: «Что такое Airlock и как начать работу?»</p>
+  <p class="mb-6">Бесплатный тариф с ограниченными приветственными кредитами. После их исчерпания ответы остановятся; пополнение не выполняется.</p>
+  <form method="post" action="/summary">
+   <button class="btn btn-primary" type="submit">Спросить Wikibot</button>
+  </form>
+  if v.Message != "" {
+   <section class="card bg-base-200 mt-6">
+    <div class="card-body">
+     <p class="whitespace-pre-wrap">{ v.Message }</p>
+     if v.Ready {
+      <p>Источник: Wikibot API, база знаний airlockrun.ru. Данные на { v.FetchedAt }</p>
+     }
+    </div>
+   </section>
+  }
+  <p class="text-sm mt-6">Кэш 10 минут. До 4 новых ответов в час и 20 за всё время демо. Каждый новый запрос создаёт отдельный диалог. Сообщения людей и настройки бота гостям не доступны.</p>
+ }
+}

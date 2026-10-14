@@ -2,8 +2,8 @@
 
 Демо: https://demo.airlockrun.ru . Каталог: [37 карточек и условия](CATALOG.md).
 Код Airlock Internal не изменён. Приложения ниже — отдельные native SDK проекты;
-гостевой gateway/Compose и фиксация upstream находятся в ../../deploy/demo88/.
-[Отличия и обновление](../../deploy/demo88/UPSTREAM-DELTA.md).
+гостевой gateway/Compose и фиксация upstream находятся в отдельном private
+[airlock-demo](https://github.com/megamen32/airlock-demo).
 
 ## Уже подключено
 
@@ -11,6 +11,9 @@
 |---|---|---|
 | [DaData](https://d88-dadata-companies.demo.airlockrun.ru/) | Настоящие сведения по ИНН/ОГРН: название, ИНН, ОГРН, статус, адрес, основной ОКВЭД | Обычный гость, форма и find_company в чате |
 | [Shtab](https://d88-shtab-tasks.demo.airlockrun.ru/) | Реальное число незавершённых задач демо-команды | Обычный гость, кнопка и team_tasks; raw MCP скрыт |
+| [Priceva](https://d88-priceva-monitor.demo.airlockrun.ru/) | Каталог мониторинга:1товар,1источник,0отчётов; рыночные цены пока не получены | Обычный гость, форма и price_monitor |
+| [Edumotion](https://d88-edumotion-courses.demo.airlockrun.ru/) | Реальный каталог курсов: новая организация пока пуста | Обычный гость, форма и training_catalog; trial14дней с15.10.2026 |
+| [Wikibot](https://d88-wikibot-faq.demo.airlockrun.ru/) | Ответ по публичной базе знаний Airlock на фиксированный FAQ-вопрос | Обычный гость, форма и airlock_faq; ограниченные бесплатные кредиты |
 
 Проверенные реальные результаты14.10.2026: DaData вернула Сбербанк поИНН7707083893,
 ОГРН1027700132195, адресМосква/Вавилова19. Shtab вернул task_count total0:
@@ -62,22 +65,38 @@ source deployment; это не изменение платформы и не д�
 
 ## Priceva
 
-[Native приложение](https://d88-priceva-monitor.demo.airlockrun.ru/) установлено,
-но данные цен **не приняты**: поставщик ещё не разрешил их чтение.
-Создана правильная бесплатная Competitor Price Monitoring кампания3jb,
-добавлены LogitechK120 и один публичный источник Regard. Старая Assortmentujb
-сохранена. UI Priceva прямо показывает «Кампания не активна / на модерации»;
-три официальных API-чтения новым ключом дают JSON401 приHTTP200.
-Нулевое поле цены в кабинете не считается полученной рыночной ценой.
+[Native приложение](https://d88-priceva-monitor.demo.airlockrun.ru/) читает данные
+бесплатной Competitor Price Monitoring кампании3jb.15.10.2026 API впервые
+подтверждённо вернул1товар LogitechK120,1источник Regard и0отчётов. Исправлен
+разбор настоящей пустой страницы отчётов, где objects отсутствует при objects_cnt=0.
+Настоящие guest form и native tool chat прошли. Рыночные цены ещё не получены:
+поле default_price=0 не является ценой из мониторинга. Старая кампания сохранена.
 
-Отдельный apps/priceva использует native encrypted Connection Apikey,
-Admin-only raw resource и user tool price_monitor/кнопку. Реальный гостевой
-интерфейс показывает «Данные Priceva пока недоступны»; нулевые количества и
-цены при отказе не возвращаются. Кэш статуса2минуты,4обновления/час,
-один активный запрос; PostgreSQL и ограничения SDK, без repricing.
-Source build05c5d427 complete;8businessfiles совпали с native export.
-Следующий шаг после модерации — реальное чтение и проверка формата цен,
-затем новый native canary. До этого Priceva не является работающим демо цен.
+apps/priceva использует native encrypted Connection Apikey, Admin-only raw
+resource и user tool price_monitor/кнопку. Кэш2минуты,4обновления/час,
+один активный запрос; persistent PostgreSQL, без repricing и платных действий.
+
+## Edumotion и Wikibot
+
+apps/edumotion читает только опубликованные курсы отдельной организации через
+официальный Public API. Реальный каталог пока пуст — ошибок нулём не маскируем.
+Это14-дневный Professional trial без карты, не постоянный бесплатный API.
+Кэш5минут,12обращений/час,1active,20sdeadline,512KiBresponsecap.
+Персональные данные пользователей и назначение обучения не доступны.
+
+apps/wikibot вызывает официальный API отдельного FAQ-бота с публичной базой
+знаний https://airlockrun.ru/. Фиксированный вопрос «Что такое Airlock и как
+начать работу?» даёт содержательный настоящий ответ. Бесплатный тариф расходует
+welcome-кредиты; точный остаток ask-only ключу не доступен. Лимиты сохраняются
+в PostgreSQL:4новых вызова/час и20за всё время, включая ошибки; кэш10минут,
+1active,60sdeadline,128KiBresponsecap. Для каждого вызова новый случайный chatId;
+гостевые диалоги не смешиваются. Ключ без Bearer в encrypted Connection,
+raw resource Admin-only; нет оплаченных пополнений, каналов связи с людьми,
+управления ботом или автоматического обращения к оператору при ошибке API.
+
+Все три приложения проверены15.10.2026 настоящими гостевыми HTML-формами и
+нативными чатами с реальными tool results. Core и русская frontend-сборка
+Airlock Internal не менялись. Подробности: [VERIFICATION.md](VERIFICATION.md).
 
 ## Следующие регистрации
 
