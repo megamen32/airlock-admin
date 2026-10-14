@@ -1,5 +1,9 @@
 # Отличия демо от Airlock Internal
 
+> Канонический исходник demo adapter перенесён в приватный
+> [megamen32/airlock-demo](https://github.com/megamen32/airlock-demo).
+> Эта директория сохранена как исторический снимок; следующие правки — в новом репозитории.
+
 Проверено на работающем server-88 14.10.2026. **Код Airlock для этого демо
 не изменён.** Backend — официальный ghcr.io/airlockrun/airlock:v0.7.0,
 RU frontend — официальный airlock-enterprise-frontend:v0.7.0.
