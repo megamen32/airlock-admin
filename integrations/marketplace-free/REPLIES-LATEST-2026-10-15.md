@@ -52,7 +52,7 @@ SkyTrainer, ЭГО AI, Xenia AI, Тендерит, Sniper Search и НейроИ
 - Telegram:15существующих диалогов, последние8–14сообщений каждого через
   подключённый telegramhelper: MaxFrame, Анна Фидли, MoonAI, Suvvy, Legiscan,
   Noroots, Метриус, Polza, VseLLM, TealBandgroup/direct, Wikibotteam/direct,
-  Airlock/Lexis Voice, Beorg. Read-only история, без send/readHistory/replay.
+  Airlock/Lexis Voice, Beorg. Вызваны только инструменты чтения; отдельных команд отправки или отметки прочтения не вызывали.
   UserIO использован для идентификации уже существующего контакта Beorg,
   затем актуальная история прочитана по точному Telegrampeer8227098434.
 - Дополнительно открыты существующие виджеты поддержки AllDocs и DEERAY
