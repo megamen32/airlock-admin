@@ -1,0 +1,48 @@
+package views
+
+templ Index(v HomeView) {
+ @Layout("Савви — ИИ-консультант") {
+  <header class="mb-9 max-w-2xl">
+   <p class="text-sm font-medium text-base-content/60 mb-3">Савви / Учебная консультация</p>
+   <h1 class="text-3xl sm:text-4xl font-semibold tracking-tight mb-4">Спросите об Airlock</h1>
+   <p class="text-base-content/80">Опишите рабочую задачу. ИИ-консультант Савви подскажет, с чего начать внедрение, и задаст уточняющий вопрос.</p>
+  </header>
+  <section class="grid gap-5 lg:grid-cols-5 items-start">
+   <div class="card border border-base-300 bg-base-100 lg:col-span-2">
+    <div class="card-body gap-5">
+     <h2 class="card-title">Ваша задача</h2>
+     if v.Result.Question == "" {
+      <form method="post" action="/ask" class="space-y-4" hx-post="/ask" hx-target="body" hx-swap="innerHTML">
+       <label class="form-control block"><span class="label-text font-medium block mb-2">Вопрос консультанту</span><textarea class="textarea textarea-bordered w-full min-h-40" name="question" maxlength="600" required placeholder="У нас 20 филиалов. Как начать безопасно использовать ИИ-приложения?">У нас 20 филиалов. Как Airlock поможет безопасно подключить ИИ-приложения для сотрудников?</textarea></label>
+       <button class="btn btn-primary w-full" type="submit" hx-disabled-elt="this">@ActionIcon("send") Спросить Савви</button>
+      </form>
+     } else {
+      <p class="text-base-content/90 whitespace-pre-wrap break-words">{ v.Result.Question }</p>
+      <p class="text-sm text-base-content/60">Ваш вопрос сохранён. Обновление страницы не отправляет его повторно.</p>
+     }
+     <p class="text-sm text-base-content/60">Один вопрос на гостя. Используйте учебный пример без личных данных и коммерческих секретов.</p>
+    </div>
+   </div>
+   <div class="card bg-base-200 border border-base-300 lg:col-span-3" aria-live="polite">
+    <div class="card-body gap-5">
+     <div class="flex items-center justify-between gap-3"><h2 class="card-title">Ответ консультанта</h2>
+      if v.Result.Ready {
+       <span class="badge badge-success">Савви ответил</span>
+      }
+     </div>
+     if v.Result.Ready {
+      <div class="whitespace-pre-wrap break-words leading-relaxed">{ v.Result.Answer }</div>
+      <p class="text-sm text-base-content/60">Ответ получен { DisplayTime(v.Result.CompletedAt) }. Это демонстрационная консультация, а не согласованное предложение.</p>
+     } else {
+      <p role="status" class="text-base-content/80">{ v.Result.Message }</p>
+      if v.Result.Question != "" {
+       <a class="btn btn-outline self-start" href="/">@ActionIcon("refresh-cw") Проверить ответ</a>
+      }
+     }
+     <a class="link self-start text-sm" href="https://suvvy.ai/" target="_blank" rel="noopener">О платформе Савви ↗</a>
+    </div>
+   </div>
+  </section>
+  <p class="mt-8 text-sm text-base-content/60 max-w-2xl">Демо работает на пробных средствах: до четырёх новых вопросов в час и двадцати за весь показ, до 22 октября. При исчерпании лимита новые вопросы остановятся; сохранённые ответы останутся доступны.</p>
+ }
+}
