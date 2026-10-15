@@ -637,8 +637,22 @@ launcher получает emergency wall1800с при ожидаемых180; RAM
 не изменены.30минутная устойчивость модели этим не доказана.
 
 Самостоятельные карточки опубликованы другим владельцем87a0105, релиз
-20261015-independent-products-87a0105; основной каталог37уникальных продуктов.
+20261015-independent-products-9cf1e37; основной каталог37уникальных продуктов.
 Корневой агент не менял public current. Entry-only0d233d7 убирает устаревшие
 формулировки eXmanager/NoticePlace как компонентов «Штатно».
 Private receipts: .tmp/herder-demo-vm-20261015. Новые доступы primary0600,
 copy100 и Яндекс.Диск с readback; ключей в опубликованном исходнике нет.
+
+UserIO instruction-only correction0f743824: removed stale fixed MAIL001 from
+the model instruction; actual provider selected message002 unchanged. Native
+buildf7ab498e complete, native exported main.go exactly matches source. Same
+ordinary guest form read actual002 and source/credential/PATCH403; read-only
+chat18.126с showed actual002/sender/content and no old001. No SMTP send, new
+provider account or raw UserIO/runtime changes.
+
+Final owned browser n closed and unitinactive. Fresh guest sees only an empty
+studio form, no other user's iframe/source. Marketplace actual studio-link
+click reached that form without submitting a task. Updated standalone entry
+payloads returned200 without old Shtatno labels; fresh eXmanager entry had
+editable draft and0prompt requests. Private evidence stored under VM receipt
+folder; source code and cloud backups contain no new untracked credentials.
