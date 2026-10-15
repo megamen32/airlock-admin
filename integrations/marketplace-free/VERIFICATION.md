@@ -525,3 +525,67 @@ Native build/exec config обоих типов наследует combo/airlock-
 полное «Штатно» и все37исходных/33текущих карточки НЕ объявлены готовыми.
 Beorg/TealBand/Botmother и платные/manual ограничения сохраняются; общий
 мини-чат не содержит новых signup результатов после финальной волны20аккаунтов.
+
+
+## 15 октября — одиннадцатое подключение: UserIO учебная почта
+
+Предыдущий goal turn: PROGRESS — принят Exmanager10. Текущий: подключён
+UserIO11, native app a3d4f646-e68b-4725-87f3-bdf396041937/d88-userio-mail.
+Это следующий исходный self-hosted продукт, не повтор регистрации/OTP.
+Новый обычный UserIO user + отдельный ящик airlock-demo@bezrabotnyi.com;
+до native IMAP подключения account AI opt-out/all kinds ignore, read true,
+send/subscribe/download false. Дополнительный personal read_only token:
+publicHTTPS GET200, POST capability403. Пользователь видит ровно1свой ящик.
+Доступы/пароли/оба токена сразу primary0600 + copy100 + Яндекс.Диск readback;
+никакого нового ключа. App получил только отдельный readonly token через
+native encrypted admin-only Connection; owner/личная/регистрационная почта
+не используются. API UserIO PID1359622/NRestarts0/source/restart неизменны.
+
+Настоящая цепочка SMTP→IMAP→UserIO→Airlock, без fake DB injection. Первое
+письмо выявило источник UserIO: parsedate_to_datetime(-0000).timestamp на
+MSK даёт3часа смещения. Header06:43:20-0000/IMAP09:43:22+0300/API03:43:20Z.
+По официальной Python documentation такая naive Date означает UTC.
+Отдельный GMT control AIRLOCK-MAIL-002 с новымMessageID/другимbody —
+диагностический контроль, не replay первого accepted. SMTP250/queue receipt,
+независимый IMAP exactBODY/UID и UserIO epoch подтвердили06:56:43Z.
+RFC folding Message-ID нормализован strip при проверке, без повторной отправки.
+Два настоящих учебных письма сохранены; app выбирает только002 по source/
+conversation/providerID/sender/contentSHA. Cached result привязан к содержимому,
+после source upgrade прежний001не вернулся; invented timezone поправки нет.
+Общий -0000 parser defect не исправлен вне разрешённого Airlock boundary:
+userio-imap-date-issue.md и canonical UserIO .agents/tasks/
+20261015-imap-naive-date-from-airlock.md содержат доказательство/следующий шаг;
+UserIO src зарезервирован другим владельцем. Core/source/runtime не трогали.
+
+Source generation/3parser unit5.130s peak227328000. Native первый build
+f23108bc failed на обязательном Connection.Description; исправлено, добавлен
+manifest/access regression. Финальные5fastunit PASS2.105s/peak199598080/OOM0,
+expected60/max600s/source1GiBCPU2tasks128swap0temp2GiB. Final native build
+848b3f95-2fad-4b56-83ea-1860b42764c7 complete33.099s,SDK0.7.0, sourceRef
+fcb4dae2fcc82d2c0b3d53d5299c38d75c8cbb6d. Все26exportfiles byte-match published
+source main5e315363. Никаких лишних rebuild или широких/nightly тестов.
+
+Обычный guest form: реальное письмо002/дата06:56:43Z/старыйкэшотсутствует;
+source/credential/PATCH403. Final native read-chat success16.156s, real tool
+result/тема/отправитель/содержание/дата и честное учебное ограничение.
+Одна read-only preflight проверка столкнулась с gateway recreate и не принята;
+после завершения rollout тот же guest GETme200, весь consumer proof повторён.
+Не было повторного SMTP/send/создания нового user из-за этого.
+
+Headed44 userIO form/lightdark/375/1280/nooverflow PASS13.522s, correctdraft/
+0autosend. Dark mobile form screenshot просмотрен. VPSv27добавилUserIO,
+v28поверхv27даёт все4доступных component CTA «Штатно»: NoticePlace/eXmanager/
+UserIO/GPTAdmin. Все4в основной левой группе, visible375/1280 безoverflow;
+GPTAdmin draft+webUI accessible,0provider reads/newchat sends,10.560s.
+Фактический поиск «Штатно» вMarketplace.html привёл к карточке с4CTA,
+безгоризонтальногоoverflow; mobile screenshot просмотрен. Foreignportal/legal
+assets сохранены. Браузерыi/j закрыты/unitinactive. Общий scope7полных ready
+productCTA +1partialShtatno4components/11nativeintegrations; полный37original/
+33currentcatalog НЕ выполнен, подписки/платежи/менеджерские заявки не делали.
+
+Улучшены инструкции Server Administration для новых native user-owned IMAP
+аккаунтов без глобального Himalaya/release/restart. Existing infrastructure
+checkout divergence26ahead/25behind и чужой WIP сохранены; опубликован только
+owned docs/runbooks/domain-mail.md через отдельный index от origin/main.
+Обычный source/credential/task state сохранён; общий assignment/quickplan
+не заменялись и goal остаётся active. Privateproof .tmp/userio-demo-20261015/.
