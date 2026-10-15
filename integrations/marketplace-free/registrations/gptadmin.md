@@ -19,4 +19,21 @@ primary100 + вторая копия100 + Яндекс.Диск с чтение�
 Новый адаптер не принимает пути, команды, target ID или произвольные URI.
 Native MCP resource Admin-only, обычному гостю доступен только demo_workspace
 и русская форма. Quota12/h/cache2min/1active/20s/32KiBfile/512KiBenvelope.
-Состояние native-build и гостевая приёмка будут записаны после настоящей проверки.
+Native agent1b1dd024-3f7c-4112-badf-35194946806b / d88-gptadmin-workspace.
+Source main9f6ee268, build7eb0912b complete28.362с/source29ce352461f5/SDK0.7.0.
+20 прикладных файлов совпали с native export. Parser unit по настоящему MCP
+ответу и восьми отказам прошёл0.015с, ограничен1GiB/CPU2/tasks128/max60с.
+Обычный гость: форма и nativechat83e4d284 success7.437с, настоящий tool message
+readytrue/total7, корректная дата и отличие снимка от мониторинга. Изменение
+MCP credentials гостем403. Headed44 проверил начало чата на375/1280 (autoPrompt0),
+реальную вебформу/7ссылок и light/dark без выхода за экран;12.253с/max600с.
+Root просмотрел dark screenshot. App1GiB, существующие aggregate/BuildKit
+лимиты сохранены. Доступы дополнены agentid и немедленно backupreadbackPASS.
+Внешний onboarding опубликован/deployed demo/main d1760b4, gateway-only restart,
+прежний файл сохранён и смена защищена проверкой предыдущегоSHA.
+
+[Чат](https://demo.airlockrun.ru/agents/d88-gptadmin-workspace/chat?demo=1)
+· [Вебформа](https://d88-gptadmin-workspace.demo.airlockrun.ru/).
+В текущем основном каталоге отдельного GPTAdmin нет: он объединён в «Штатно».
+Этот пример чтения не объявляется полной демонстрацией ИТ-поддержки «Штатно»;
+ложная готовая CTA на эту карточку не добавлялась.

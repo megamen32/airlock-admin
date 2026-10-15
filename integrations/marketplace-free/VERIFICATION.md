@@ -266,3 +266,36 @@ tasks128/swap0; существующий browser44 2GiB/CPU2/tasks512/max2h. О�
 primary100+copy+Яндекс.Диск readback rc0.
 Private evidence `.tmp/edumotion-seed-20261015/{vendor-catalogue.json,chat-proof.json,
 guest-form.html,browser-form.json,guest-form.png,create-intent.json,lesson.txt}`.
+
+
+## GPTAdmin: настоящий scoped MCP, 15Oct
+
+Добавлен новый профиль airlock-demo-public-catalog через штатный локальный
+admin API, If-Match защищает создание/изменение; действующий CTL только в памяти
+оператора. Существующие профили/клиенты не менялись. readonly/read_only,client,
+file:server100/system_inspect + facadeschema/execute, токен30дней; немедленный
+primary100+copy+Яндекс.Диск readback. Native MCPinitialize/tools-list/read-file
+настоящие; shell_exec(true) тем же токеном отказан политикой. Это отдельный
+allowlist профиль, а не основной fleet-token. Начальный отказ без разрешения
+facade исправлен добавлением только schema/execute в новый профиль.
+
+Source9f6ee268, SDK0.7 build7eb0912b complete28.362с/source29ce352461f5;20business
+files nativeexportmatch. Узкий unitactual-MCPparser+8badcases0.015с в1GiB/CPU2/
+tasks128/max60с; неполные файлы, неверный target/path, повторы и внешниеURL
+отклоняются. Native app1b1dd024/d88-gptadmin-workspace, MCPAdmin-only, единственный
+user tool demo_workspace и русская форма. Fixedfile32KiB, envelope512KiB,
+20s,cache2min,12/h,1active; посторонних операций/параметров нет.
+
+Настоящий обычный guest form и nativechat83e4d284 success7.437с, readytrue,total7,
+корректные названия/ссылки/дата, снимок не выдан за livehealth. Credential mutation
+гостем403. Headed44: emptychat375/1280 описывает приложение и даёт редактируемый
+вопрос;autoPrompt0. Настоящий authrelay→webform→explicitbutton→7ссылок. Light/dark
+на375 читаемы, overflowfalse; dark screenshot просмотрен root. Focusedintegration
+ожидание60с/max600с, browserQA12.253с. Runner1GiB/CPU2/tasks128, browser44ownunit
+2GiB/CPU2/tasks512/swap0/IOWeight10/max3600с,profilebound512MiB; measured44free104GiB.
+App1GiB, aggregate88high8/max12GiB/CPU4/tasks4096/swap0 иодинBuildKit4GiB/CPU2
+не расширялись. Core/frontend/GPTAdmin executable не менялись. Onboardingthin
+source d1760b4 опубликован/доставленсrollbackcopy/SHAguard, gateway-onlyrecreate;
+реальныйпустойчатподтвердилновыйтекст. GPTAdmin объединён в Штатно в текущем
+основном каталоге; этот file-demo не выдаётся за весь сценарий Штатно.
+Private receipts `.tmp/gptadmin-demo-20261015/` (MCP/profiles/build/source/guest/browser).
