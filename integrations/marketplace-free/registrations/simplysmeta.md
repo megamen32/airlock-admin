@@ -1,5 +1,8 @@
 # ПростоСмета (Simplysmeta) — created + emailverified (прокси-ретрай 15.10 прошёл)
 
+> Обновление15октября2026: Ожидаем ответ. Запрос бесплатного тестового доступа отправлен; [полный отчёт](../OUTREACH-2026-10-15.md). Ранее указанные запреты на лид-формы отменены прямым текущим поручением пользователя именно для этого обращения; платные подключения по-прежнему не разрешены.
+
+
 - статус: created + emailverified
 - основание: https://simplysmeta.ru/ + https://simplysmeta.ru/help/restapi
 - signup/login: https://simplysmeta.ru/register → login https://simplysmeta.ru/login; email: airlock@bezrabotnyi.com; auth: password; подтверждение email по ссылке register2?id=2582
@@ -8,3 +11,11 @@
 - креды ref: ~/.config/airlock-marketplace-accounts/simplysmeta.json (backup: 100+Диск OK, remote=yadisk:Backups/marketplace-accounts/simplysmeta.json, rc=0)
 - API-проверка: не проводилась — POST /api/v1/auth/login → JWT, GET /api/v1/balance read-only; без баланса методы отдают 402 Payment Required → API paid-only, не пополняли (по заданию)
 - блокеры: нет. Итог среды: сабмит прошёл БЕЗ капчи на резидентном прокси 192.168.2.1:3128 + headed + --disable-blink-features=AutomationControlled (в headless на датацентровых IP и на том же прокси Google отклонял сабмит / эскалировал сетку).
+
+## Запрос бесплатного API-гранта15октября
+
+Служебная почта. SMTP250, одна точная копия вSent сPNG; внешний MX принял письмо. Ожидаем ответ.
+
+В запрос включены конкретный учебный сценарий, небольшая бесплатная квота, прямая карточка продукта, https://airlockrun.ru/startups.html и скриншот карточки (в почте/Telegram файл, в веб-форме прямаяPNG-ссылка). Платные тарифы/опции/автосписания не включались. Первичное письмо подтвержденоSMTP250/Sent, но при отказе внешнего сервера это не выдано за доставку; альтернативный канал использован только после окончательногоbounce. Принимающий маршрут и ответ вендора выше — текущий статус.
+
+Приватные квитанции `.tmp/paid-api-outreach-20261015/`. НовыхAPI-ключей пока нет; до подтверждённого доступа интеграция гостям не публикуется.

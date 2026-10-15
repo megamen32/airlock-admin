@@ -1,5 +1,8 @@
 # LexisVoice — created+emailverified (freeUI-only)
 
+> Обновление15октября2026: Ожидаем ответ. Запрос бесплатного тестового доступа отправлен; [полный отчёт](../OUTREACH-2026-10-15.md). Ранее указанные запреты на лид-формы отменены прямым текущим поручением пользователя именно для этого обращения; платные подключения по-прежнему не разрешены.
+
+
 - статус: created+emailverified; скоуп freeUI-only (API платный)
 - основание: https://lexisvoice.ru/personal (бесплатный UI-тренажёр), https://lexisvoice.ru/pricing (API в тарифе «Профессиональный», от 49 000 ₽/мес)
 - signup/login: https://app.lexisvoice.ru/register → https://app.lexisvoice.ru/login, email: airlock@bezrabotnyi.com, auth: password (email-код подтверждения обязателен)
@@ -8,3 +11,11 @@
 - креды ref: ~/.config/airlock-marketplace-accounts/lexisvoice.json (backup: yadisk:Backups/marketplace-accounts/, status OK, remote=yadisk:Backups/marketplace-accounts/lexisvoice.json)
 - API-проверка: не выполнялась — публичного бесплатного API нет, ключ выдаёт команда после согласования (https://lexisvoice.ru/integrations)
 - блокеры: API платный-only; без блокеров для freeUI
+
+## Запрос бесплатного API-гранта15октября
+
+Служебная почта. SMTP250, одна точная копия вSent сPNG; внешний MX принял письмо. Ожидаем ответ.
+
+В запрос включены конкретный учебный сценарий, небольшая бесплатная квота, прямая карточка продукта, https://airlockrun.ru/startups.html и скриншот карточки (в почте/Telegram файл, в веб-форме прямаяPNG-ссылка). Платные тарифы/опции/автосписания не включались. Первичное письмо подтвержденоSMTP250/Sent, но при отказе внешнего сервера это не выдано за доставку; альтернативный канал использован только после окончательногоbounce. Принимающий маршрут и ответ вендора выше — текущий статус.
+
+Приватные квитанции `.tmp/paid-api-outreach-20261015/`. НовыхAPI-ключей пока нет; до подтверждённого доступа интеграция гостям не публикуется.
