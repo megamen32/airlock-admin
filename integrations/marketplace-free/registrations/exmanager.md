@@ -1,6 +1,6 @@
 # eXmanager — подключены личная память и задачи
 
-- Self-hosted компонент «Штатно», без отдельной регистрации или платы за API.
+- Самостоятельный self-hosted продукт eXmanager, без отдельной регистрации или платы за API. По уточнению владельца не является компонентом «Штатно»; отдельная карточка и демо сохранены.
 - [Вебформа](https://d88-exmanager-memory.demo.airlockrun.ru/) · [Обычный чат](https://demo.airlockrun.ru/agents/d88-exmanager-memory/chat?demo=1).
 - Оригинальный проект: canonical `agents-projects/exmanager`, pinned `b57ae0637190d9d239e9786c8d912daf7f8760db`, subtree `airlock-agent`; официальный agentsdk v0.7.0. Производственный код, runtime и данные не менялись.
 - Тонкий пакет: private `airlock-demo/adapters/exmanager-demo`. Git archive, один вызов фабрики `newAgent`, отдельная русская форма и допуск сохранений. Исходные `store.remember/searchMemory/createTask/listTasks` и память L3/L2 остаются неизменными. Не новая реализация менеджера.
