@@ -1,0 +1,48 @@
+{
+  "source": "Настоящая демо-инстанция Airlock",
+  "checked_at": "2026-10-15",
+  "apps": [
+    {
+      "name": "Закупки — SNABZHENETS+",
+      "slug": "d88-snabplus-procurement",
+      "running": false,
+      "chat_url": "https://demo.airlockrun.ru/agents/d88-snabplus-procurement/chat?demo=1"
+    },
+    {
+      "name": "Видимость бренда — Semantica AI",
+      "slug": "d88-semantica-visibility",
+      "running": false,
+      "chat_url": "https://demo.airlockrun.ru/agents/d88-semantica-visibility/chat?demo=1"
+    },
+    {
+      "name": "Об Airlock — Wikibot",
+      "slug": "d88-wikibot-faq",
+      "running": false,
+      "chat_url": "https://demo.airlockrun.ru/agents/d88-wikibot-faq/chat?demo=1"
+    },
+    {
+      "name": "Учебные курсы — Edumotion",
+      "slug": "d88-edumotion-courses",
+      "running": true,
+      "chat_url": "https://demo.airlockrun.ru/agents/d88-edumotion-courses/chat?demo=1"
+    },
+    {
+      "name": "Мониторинг цен — Priceva",
+      "slug": "d88-priceva-monitor",
+      "running": false,
+      "chat_url": "https://demo.airlockrun.ru/agents/d88-priceva-monitor/chat?demo=1"
+    },
+    {
+      "name": "Задачи команды — Shtab",
+      "slug": "d88-shtab-tasks",
+      "running": false,
+      "chat_url": "https://demo.airlockrun.ru/agents/d88-shtab-tasks/chat?demo=1"
+    },
+    {
+      "name": "Проверка компаний — DaData",
+      "slug": "d88-dadata-companies",
+      "running": false,
+      "chat_url": "https://demo.airlockrun.ru/agents/d88-dadata-companies/chat?demo=1"
+    }
+  ]
+}

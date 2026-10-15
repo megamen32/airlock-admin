@@ -1,0 +1,23 @@
+package views
+import "strconv"
+templ Index(v HomeView) {
+ @Layout("Рабочее пространство — GPTAdmin") {
+  <h1 class="text-3xl font-semibold mb-4">Рабочее пространство — GPTAdmin</h1>
+  <p class="mb-4">Настоящее чтение демонстрационного файла через GPTAdmin MCP. В файле — публичный снимок каталога готовых приложений Airlock.</p>
+  <p class="mb-6">Отдельный профиль только для чтения. Посетитель не выбирает серверы и пути и не запускает команды. Это демонстрация доступа к файлу, не мониторинг вашей сети.</p>
+  <form method="post" action="/summary"><button class="btn btn-primary" type="submit">Прочитать каталог через GPTAdmin</button></form>
+  if v.Message != "" {
+   <section class="card bg-base-200 mt-6"><div class="card-body">
+    <p>{ v.Message }</p>
+    if v.Ready {
+     <p>Приложений в снимке: <strong>{ strconv.Itoa(v.Total) }</strong>. Снимок от { v.CheckedAt }.</p>
+     for _, a := range v.Apps {
+      <article class="mt-4"><h2 class="font-semibold">{ a.Name }</h2><a class="link" href={ templ.SafeURL(a.ChatURL) } target="_blank" rel="noopener noreferrer">Открыть в Airlock ↗</a></article>
+     }
+     <p>Источник: { v.Source }. Данные прочитаны { v.FetchedAt }.</p>
+    }
+   </div></section>
+  }
+  <p class="text-sm mt-6">Кэш 2 минуты, общий лимит 12 чтений в час. Ключ выдан на 30 дней с 15 октября 2026 года.</p>
+ }
+}
