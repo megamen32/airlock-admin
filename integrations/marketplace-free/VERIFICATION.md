@@ -743,3 +743,29 @@ Source runtime27files byte-match опубликованному коду,SDK omi
 
 Operational NOTES.md updated after native-code proof without a redundant rebuild;
 source byte-match claim refers to pinned code99653e82, not this later docs commit.
+
+
+## Botmother:15октября — настоящий обратный вызов и публикация
+
+Сценарий Request-only реально прошёл Airlock→Botmother→native bearer webhook
+за11.385с. Повторная кнопка не увеличила DB run/quota. Настоящий браузерный
+запуск и одновременный второй гость подтвердили общий single-inflight: только
+одна новая отправка, чужой результат недоступен. Неверный bearer401; обычному
+гостю source/credential/edit/tester403. Никаких Telegram-сообщений.
+
+Финальный nativeSDK build8e38d363 complete, все22файла совпали с main0f5df710.
+Полный локальный air build12.152с, finite1GiB/CPU2/tasks128/swap0, OOM0; ранее
+пойманные ошибки templ исправлены и не считались успешной проверкой.
+Реальная форма320/375/1280 в light/dark без overflow, результат первым на
+телефоне; desktop/mobile screenshots просмотрены. Реальная карточка сайта
+375/1280: CTA первый слева, чат с черновиком/0autosend, явный Enter → русский
+ответ19.210с с подтверждением/МСК/вебссылкой, без служебных полей и новой отправки.
+
+Overlay3b6121a; actualcurrent20261015-botmother-demo-3b6121a поверх
+20261015-product-brandmarks. JS_SHA256
+3ef2063029eacf3b9207c2bf01c4de0f1d758ae5bcf8c623289e8211449909d6.
+37products и все прочие файлы побайтно сохранены;8HTMLcache-bust только
+demo-links.js. Старый ожидаемый baseline отклонён до записи, повтор выполнен
+только после чтения фактического current и проверки прежнего SHA.
+Доступы nativeencrypted плюс primary/copy100/Яндекс.Диск/readback.
+Квитанции .tmp/botmother-connect-20261015/. Готовых13; общая цель не завершена.
