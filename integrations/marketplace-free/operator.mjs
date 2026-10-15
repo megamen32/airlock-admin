@@ -54,6 +54,10 @@ if(input.op==='list') {
   const path=input.type==='mcp'?`mcp-servers/${input.slug}/credentials`:`credentials/${input.slug}`;
   const r=await json(prefix+input.id+'/'+path,{displayName:input.displayName,apiKey:input.secret,createNew:true},'POST');
   console.log(JSON.stringify({id:input.id,slug:input.slug,status:r.status}));
+} else if(input.op==='mcp-oauth-start') {
+  // Operator-only: redirect URI is the native callback, not a third-party collector.
+  const r=await json('/api/v1/credentials/mcp/oauth/start',{agentId:input.id,slug:input.slug,redirectUri:process.env.DEMO_DOMAIN?`https://${process.env.DEMO_DOMAIN}/api/v1/credentials/oauth/callback`:input.redirectUri},'POST');
+  console.log(JSON.stringify(r));
 } else if(input.op==='source') {
   const r=await request(prefix+input.id+'/source');
   // Redirect this output to a private source artifact, never display it in chat.
