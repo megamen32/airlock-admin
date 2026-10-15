@@ -23,11 +23,11 @@ templ Index(v HomeView) {
      <p class="text-sm text-base-content/60">Один вопрос на гостя. Используйте учебный пример без личных данных и коммерческих секретов.</p>
     </div>
    </div>
-   <div class="card bg-base-200 border border-base-300 lg:col-span-3" aria-live="polite">
+   <div class={ "card bg-base-200 border border-base-300 lg:col-span-3", templ.KV("order-first lg:order-none", v.Result.Ready) } aria-live="polite">
     <div class="card-body gap-5">
-     <div class="flex items-center justify-between gap-3"><h2 class="card-title">Ответ консультанта</h2>
+     <div class="flex flex-wrap items-center justify-between gap-3"><h2 class="card-title">Ответ консультанта</h2>
       if v.Result.Ready {
-       <span class="badge badge-success">Савви ответил</span>
+       <span class="badge badge-success shrink-0 whitespace-nowrap">Савви ответил</span>
       }
      </div>
      if v.Result.Ready {
