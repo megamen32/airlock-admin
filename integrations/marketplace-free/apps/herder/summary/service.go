@@ -271,7 +271,7 @@ func (s *Service) Status(ctx context.Context) (Result, error) {
 		return r, nil
 	}
 	if state == "failed" {
-		r.Message = "Агент завершился с ошибкой. Повторный запуск не выполняется."
+		r.Message = "Агент завершил работу без готовой страницы. Повторный запуск не выполняется."
 		return r, nil
 	}
 	if sid == "" {
@@ -322,6 +322,7 @@ func (s *Service) Status(ctx context.Context) (Result, error) {
 		return r, e
 	}
 	var file struct {
+		Error      string `json:"error"`
 		Inspection struct {
 			Path      string `json:"path"`
 			Content   string `json:"content"`
@@ -331,6 +332,13 @@ func (s *Service) Status(ctx context.Context) (Result, error) {
 	}
 	if json.Unmarshal(raw, &file) != nil {
 		return r, unavailable
+	}
+	if file.Error == "lstat "+workspace(n)+"/index.html: no such file or directory" {
+		if _, e = s.db.ExecContext(ctx, "UPDATE demo_jobs SET state='failed' WHERE user_id=$1", u); e != nil {
+			return r, unavailable
+		}
+		r.Message = "Агент завершил работу без готовой страницы. Повторный запуск не выполняется."
+		return r, nil
 	}
 	i := file.Inspection
 	if i.Path != workspace(n)+"/index.html" || i.Size != i.BytesRead || i.BytesRead != len([]byte(i.Content)) || i.Size == 0 || i.Size > 32768 || !strings.Contains(strings.ToLower(i.Content), "</html>") {
