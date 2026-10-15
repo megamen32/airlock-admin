@@ -59,7 +59,7 @@ RUN --mount=type=bind,from=goproxy,target=/goproxy \
     go build -o /agent .
 
 # Runtime
-FROM ghcr.io/airlockrun/airlock-agent-base:latest
+FROM ghcr.io/airlockrun/airlock-agent-base:v0.7.0
 
 # Agent-specified system setup (optional). Same script the builder tested
 # against locally — runs as root so it can apt-get install, curl-bash an

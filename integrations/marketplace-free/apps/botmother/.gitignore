@@ -4,3 +4,7 @@ internal/db/*
 !internal/db/doc.go
 /agent
 /agent.exe
+go.work
+go.work.sum
+.airlock/local/
+.airlock/toolchain/
