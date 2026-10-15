@@ -202,3 +202,48 @@ Private receipts: .tmp/semantica-ai-20261015/{create-result.json,upload-result.j
 source-permission-proof.json,guest-form.html,chat-proof.json,publication-result.json}.
 Publicentryoverlay now includessemantica-ai; headedmarketplace/CTA acceptance
 is recorded separately in privateairlock-demo landing/verification-cta-20261015.md.
+
+## SNABZHENETS+ —15 октября 2026 года
+
+Вход существующим аккаунтом после модерации. Через настоящий интерфейс
+установлена бесплатная интеграция API/Webhooks, без исходящих endpoint или
+доставки событий. Один ключ Airlock-demo-readonly-20261015 с единственным
+scope `purchase_requisitions.read`; немедленные private100 + вторая копия100 +
+Яндекс.Диск проверены чтением. GET `/api/v1/integration-api/meta` подтвердил scope;
+GET purchase-requisitions вернул настоящий пустой портал. Через UI создана одна
+внутренняя `AIRLOCK-DEMO-001`, ID51c11e0a-f038-43ab-8f92-93ce99aa183c, draft.
+Первая форма не прошла валидацию заказчика, API оставался пуст; после указания
+текстового демонстрационного заказчика создана ровно одна запись. Поставщики,
+контакты, отправки, покупки и платежи не создавались.
+
+Native agent5e66e0c7-c265-42a8-a03d-9f2f31cdbadb / d88-snabplus-procurement.
+Source опубликован в airlock-admin/main dce4830c. Первая сборка выявила
+ошибочную запись однострочного templ if; исправлена нормальными блоками,
+без ослабления сборки или платформы. Финальная builda8c83017 complete за34.050s,
+sourceb755fb8a05bd, SDK0.7.0. Двадцать прикладных файлов совпали с native export.
+Узкий parser unit по настоящей обезличенной странице и отказам прошёл0.580s
+в1GiB/CPU2/tasks128/max50s. Ошибки/неполные страницы не превращаются в total0.
+
+Настоящий обычный гость TENANT_ROLE_USER: POST формы показал total1, номер,
+описание и «Черновик». Native run8f06e443 success12.938s, фактический результат
+procurement_summary ready=true/total1/draft, финальный русский ответ различил
+черновик и отправку поставщику и не придумал стоимость. Изменение Connection
+гостем получило403. Кэш и квота PostgreSQL;12/h,cache15min,1active,20s,512KiB,5rows.
+Суточный trial портала до16Oct явно показан. Существующие app1GiB и demo88
+high8/max12GiB/swap0/CPU4/tasks4096/disk48GiB не расширялись; один BuildKit4GiB/CPU2.
+
+Основной сайт v23 сохранён поверхv22 (и исходного portal/legalv18), не откатан.
+Новая седьмая CTA первая слева: x64/y389 на1280, x19/y523 на375; полностью
+в первом экране, без горизонтального выхода. Реальное нажатие открыло нужный
+native чат с объяснением и редактируемым вопросом, auto /prompt запросов0.
+Вебформа открылась через настоящий auth relay и по кнопке показала ту же запись.
+Светлая/тёмная тема и ширина375 проверены headed Chrome на44; оба скриншота
+просмотрены root. Первый QA остановился во время redirect из-за ещё пустого body;
+добавлено ожидание DOM, следующий реальный проход завершился7.597s. Это не
+имитация auth или API, дополнительные AI-чаты не запускались. Браузер2GiB/CPU2/
+tasks512/RuntimeMax2h; Python QA1GiB/CPU2/tasks128/RuntimeMax600s.
+
+Private receipts: `.tmp/snabplus-20261015/`: meta-read.json, purchases-seeded.json,
+seed-purchase-intent.json, key-create-intent.json, source-permission-proof.json,
+guest-form.html, chat-proof.json, browser-proof.json, cta-375.png,
+webui-light.png, webui-dark.png. Секреты не опубликованы.
