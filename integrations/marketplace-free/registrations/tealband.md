@@ -36,3 +36,9 @@ Bearer. Проверены JSON/event-stream Accept и две версии пр�
 следующий шаг — восстановленный MCP endpoint поставщика или действующий
 self-service personal API token. Контакт с менеджером не отправлялся.
 Private receipts: `.tmp/tealband-oauth-20261015/`.
+
+## Дополнение wave3 (15.10, zcode-p3): официальный OAuth/MCP путь
+- OAuth-инфраструктура полностью рабочая и заскриптована: POST /oauth/register — динамическая регистрация клиента 201 (сервер выдаёт scope mcp:use), GET /oauth/authorize c PKCE S256 — consent-страница, POST approve — 302 с code, POST /oauth/token — 200 (access+refresh). Креды: ~/.config/airlock-marketplace-accounts/tealband-mcp-oauth.json (backup 100+Диск OK rc=0). Scope по authorize принимается analytics:read (mcp:use на authorize → invalid_scope — несоответствие на стороне сервиса).
+- Блокер MCP: POST https://app.teal.band/mcp → HTTP 404 на ЛЮБОЙ запрос (с валидным Bearer, без токена, с мусорным, OPTIONS тоже 404 при allow: POST) — Streamable HTTP endpoint из официальных docs (/docs/integrations/mcp-agent, обещанный для Claude/Codex/OpenCode) фактически отсутствует/отключён на app.teal.band.
+- Блокер REST: /api/v1/{org}/surveys с OAuth Bearer → 401 Unauthenticated (REST принимает только personal API tokens, выпуск которых в нашем аккаунте Basic: POST personal-access-tokens → 403 policy, страница /{org}/profile/api-tokens зависает).
+- Рабочий бесплатный программный доступ: сессионная cookie-авторизация, GET /api/v1/{org}/surveys → 200 с нашим опросом (подтверждено ранее).
