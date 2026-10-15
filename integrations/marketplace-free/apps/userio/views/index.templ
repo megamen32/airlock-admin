@@ -1,0 +1,23 @@
+package views
+
+templ Index(v HomeView){
+ @Layout(v.Title){
+  <h1 class="text-3xl font-semibold mb-4">{v.Title}</h1>
+  <p class="mb-4">Как UserIO получает почту и отдаёт её в Airlock: тема, отправитель и текст настоящего учебного письма.</p>
+  <p class="mb-6">Письмо заранее отправлено между двумя отдельными служебными ящиками. Кнопка читает его сохранённую копию через API UserIO. Это учебный пример, не настоящая заявка клиента.</p>
+  <form method="post" action="/summary"><button type="submit" class="btn btn-primary">Прочитать учебное письмо</button></form>
+  if v.Result.Message!=""{
+   <section class="card bg-base-200 mt-6"><div class="card-body" style="overflow-wrap:anywhere;min-width:0">
+    <p role="status">{v.Result.Message}</p>
+    if v.Result.Ready{
+     <h2 class="text-xl font-semibold">{v.Result.Subject}</h2>
+     <p><strong>От:</strong> {v.Result.Sender}</p><p><strong>Кому:</strong> {v.Result.Recipient}</p>
+     <p class="whitespace-pre-wrap">{v.Result.Body}</p>
+     <p class="text-sm">Дата письма по данным UserIO: {v.Result.MessageAt}</p>
+     <p class="text-sm">Прочитано через API: {v.Result.FetchedAt}</p>
+    }
+   </div></section>
+  }
+  <p class="text-sm mt-6">Только одно учебное письмо отдельного ящика. Личная почта и регистрационные коды не подключены. Отправка писем и автоматический секретарь выключены. Кэш 5 минут, общий предел — 12 чтений API в час.</p>
+ }
+}
