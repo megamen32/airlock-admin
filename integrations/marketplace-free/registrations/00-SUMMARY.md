@@ -176,3 +176,34 @@ simplysmeta, suvvy, feedly-tech, moonai); писем людям и покупо�
 Первоочередные кандидаты с реальным API: Edumotion, Wikibot; далее по
 готовности: botmother (вебхук), tealband (cookie-read, токен 403 на free),
 semantica-ai (после завершения онбординга), SNAB+ (после модерации).
+
+## Wave3-P3 финал (15.10, zcode-p3 — SNAB+/Botmother/TealBand/MoonAI/beorg/noroots)
+- **SNABZHENETS+ — api-key-and-real-read, ГОТОВ К ПОДКЛЮЧЕНИЮ**: модерация прошла,
+  выпущен собственный ключ (scope purchase_requisitions.read), GET integration-api/meta
+  → 200, GET purchase-requisitions → 200 (реальная заявка AIRLOCK-DEMO-001).
+  ВНИМАНИЕ: лицензия портала истекает 16.10 — продление до 40 дней только вручную
+  человеком («Продлить» + подтверждение через MAX/Telegram).
+- **beorg — created+phone-verified+api-auth-live, ГОТОВ К ПОДКЛЮЧЕНИЮ**: SMS-гейт
+  закрыт (оживший UserIO-синк показал старый код P1 — принят verify_phone, поле
+  phone-code); два демо-проекта (U_RATE_3, COMMON_MARKUP) с token/machine_uid;
+  POST api.beorg.ru/api/bescan/ping/ → {"result": true} на обоих; 200 ₽ демо-бонуса
+  не тронуты (OCR требует фото документа — решение за root).
+- **noroots — created+emailverified+freeUI-only**: held-форма реально отправилась,
+  вход подтверждён; Премиум-грант «1 проверка документа» сохранён для демо;
+  self-serve API отсутствует.
+- **TealBand — externalblocked (их сторона)**: OAuth-цепочка заскриптована до токена
+  (dynamic client + PKCE + consent, access+refresh в tealband-mcp-oauth.json), но
+  POST /mcp → 404 всегда и REST отвергает OAuth-токены; программный free-доступ —
+  только cookie-read (200 с нашим опросом).
+- **Botmother — structural blocker для демо без людей**: валидное тело внешнего
+  события принято (400 → 200-обёртка), но веб-виджет канала нет, доставка требует
+  мессенджер-пользователя; решение за lead.
+- **MoonAI — externalblocked финально**: 4 попытки за день, их send-провайдер не
+  доставляет код на RU-номер; аккаунт жив (trial 7д), повторить при изменении
+  статуса провайдера.
+- Ретрай-воркеры W-P1/W-P2 финализированы: suvvy = created+emailverified, логин
+  externalblocked (баг бэкенда); feedly = externalblocked existing-account (аккаунт
+  уже существует); их записи в чате (zcode-retry2-*).
+- Карточки/креды обновлены (бекапы rc=0), коммиты b64249d0, d2c2c3fc, a7d4d7be
+  запушены. Подключаемо сейчас: SNAB+ Integration API, beorg API (+ Edumotion,
+  Wikibot из волны 1).
