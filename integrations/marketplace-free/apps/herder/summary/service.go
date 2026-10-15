@@ -204,7 +204,7 @@ func (s *Service) Start(ctx context.Context, t string) (Result, error) {
 			return e
 		}
 		var total, hour, active int
-		e = tx.QueryRowContext(ctx, "SELECT count(*),count(*) FILTER(WHERE created_at>NOW()-INTERVAL '1 hour'),count(*) FILTER(WHERE state IN('dispatching','running')) FROM demo_jobs").Scan(&total, &hour, &active)
+		e = tx.QueryRowContext(ctx, "SELECT count(*) FILTER(WHERE state<>'rejected'),count(*) FILTER(WHERE state<>'rejected' AND created_at>NOW()-INTERVAL '1 hour'),count(*) FILTER(WHERE state IN('dispatching','running')) FROM demo_jobs").Scan(&total, &hour, &active)
 		if e != nil {
 			return e
 		}
@@ -248,7 +248,7 @@ func (s *Service) Start(ctx context.Context, t string) (Result, error) {
 	if _, e = s.db.ExecContext(ctx, "UPDATE demo_jobs SET state='running',session_id=$2 WHERE user_id=$1", u, admission.Session); e != nil {
 		return Result{}, unavailable
 	}
-	return s.Status(ctx)
+	return Result{Exists: true, Pending: true, Message: "Задание передано Agent Herder. Нажмите «Проверить результат» через минуту.", Source: "GPTAdmin → Agent Herder → Fast Agent", WebURL: "https://d88-herder-coding.demo.airlockrun.ru/"}, nil
 }
 func (s *Service) Status(ctx context.Context) (Result, error) {
 	u, e := identity(ctx)
@@ -283,7 +283,9 @@ func (s *Service) Status(ctx context.Context) (Result, error) {
 	defer cancel()
 	raw, e := s.execute(ctx, herder, "agent_info", map[string]any{"harness": "fast-agent", "sessionId": sid}, "")
 	if e != nil {
-		return Result{}, e
+		r.Pending = true
+		r.Message = "Задание сохранено. Текущее состояние пока не удалось прочитать; проверьте позже. Повторного запуска нет."
+		return r, nil
 	}
 	var info struct {
 		Session *struct {
@@ -294,8 +296,16 @@ func (s *Service) Status(ctx context.Context) (Result, error) {
 			Status string `json:"status"`
 		} `json:"session"`
 	}
-	if json.Unmarshal(raw, &info) != nil || info.Session == nil || info.Session.CWD != workspace(n) {
-		return Result{}, unavailable
+	if json.Unmarshal(raw, &info) != nil {
+		return r, unavailable
+	}
+	if info.Session == nil {
+		r.Pending = true
+		r.Message = "Сессия агента пока недоступна для чтения. Задание сохранено; проверьте результат позже."
+		return r, nil
+	}
+	if info.Session.CWD != workspace(n) {
+		return r, unavailable
 	}
 	if info.Session.Meta.Execution != "completed" {
 		if info.Session.Status == "error" {
@@ -309,7 +319,7 @@ func (s *Service) Status(ctx context.Context) (Result, error) {
 	}
 	raw, e = s.execute(ctx, "file:airlock-demo-vm", "system_inspect", map[string]any{"action": "read_file", "path": workspace(n) + "/index.html", "max_bytes": 32768}, "")
 	if e != nil {
-		return Result{}, e
+		return r, e
 	}
 	var file struct {
 		Inspection struct {
@@ -320,15 +330,15 @@ func (s *Service) Status(ctx context.Context) (Result, error) {
 		} `json:"inspection"`
 	}
 	if json.Unmarshal(raw, &file) != nil {
-		return Result{}, unavailable
+		return r, unavailable
 	}
 	i := file.Inspection
 	if i.Path != workspace(n)+"/index.html" || i.Size != i.BytesRead || i.BytesRead != len([]byte(i.Content)) || i.Size == 0 || i.Size > 32768 || !strings.Contains(strings.ToLower(i.Content), "</html>") {
-		return Result{}, unavailable
+		return r, unavailable
 	}
 	_, e = s.db.ExecContext(ctx, "UPDATE demo_jobs SET state='done' WHERE user_id=$1", u)
 	if e != nil {
-		return Result{}, unavailable
+		return r, unavailable
 	}
 	r.Ready = true
 	r.HTML = i.Content
