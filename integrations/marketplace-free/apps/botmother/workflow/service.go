@@ -140,6 +140,15 @@ func (s *Service) Run(ctx context.Context) (Result, error) {
 		if !errors.Is(e, sql.ErrNoRows) {
 			return e
 		}
+		// All demo callers share one vendor tester and its last_request object.
+		// Keep a single in-flight vendor event until its callback is reconciled.
+		var busy bool
+		if e := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM demo_runs WHERE state IN ('dispatching','accepted','unknown'))`).Scan(&busy); e != nil {
+			return e
+		}
+		if busy {
+			return errors.New("Демо ещё обрабатывает предыдущую заявку. Проверьте результат позже.")
+		}
 		var quota int
 		e = tx.QueryRowContext(ctx, `UPDATE demo_quota SET hour=date_trunc('hour',NOW()),used=CASE WHEN hour=date_trunc('hour',NOW()) THEN used+1 ELSE 1 END,total=total+1 WHERE id=1 AND total<100 AND (hour<>date_trunc('hour',NOW()) OR used<6) RETURNING used`).Scan(&quota)
 		if errors.Is(e, sql.ErrNoRows) {
@@ -196,6 +205,9 @@ func (s *Service) Run(ctx context.Context) (Result, error) {
 	}
 }
 func publicAdmissionError(e error) string {
+	if e.Error() == "Демо ещё обрабатывает предыдущую заявку. Проверьте результат позже." {
+		return e.Error()
+	}
 	if e.Error() == "Демо-лимит Botmother исчерпан: 6 запусков в час и 100 всего." {
 		return e.Error()
 	}

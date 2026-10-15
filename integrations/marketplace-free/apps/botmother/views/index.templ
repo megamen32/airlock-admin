@@ -1,26 +1,62 @@
 package views
 
-templ Index(v HomeView){
- @Layout("Учебный сценарий — Botmother"){
-  <p class="text-sm mb-3">Botmother · автоматизация процессов</p>
-  <h1 class="text-3xl font-semibold mb-4">Заявка прошла через бота?</h1>
-  <p class="mb-4">Отправьте учебную заявку DEMO-001 в Botmother. Сценарий обработает её и вернёт подтверждение в это приложение Airlock.</p>
-  <form method="post" action="/run"><button class="btn btn-primary" type="submit">@ActionIcon("play") Запустить сценарий</button></form>
-  <section class="card bg-base-200 mt-6"><div class="card-body">
-   <h2 class="card-title">Результат</h2>
-   <p role="status">{v.Result.Message}</p>
-   if v.Result.Ready{
-    <p><strong>Заявка {v.Result.Order} обработана</strong></p>
-    <p>Подтверждено Botmother: {v.Result.CompletedAt}</p>
-   }
-   if v.Result.StartedAt != "" {
-    <p class="text-sm">Начало: { v.Result.StartedAt }</p>
-   }
-  </div></section>
-  <a class="link inline-block mt-4" href="/">Проверить результат без повторной отправки</a>
-  <section class="mt-8"><h2 class="font-semibold mb-2">Что происходит в демо</h2>
-   <p>Airlock запускает один заранее настроенный сценарий Botmother. Внешний сервис возвращает ответ в Airlock, и только после этого заявка считается обработанной. Содержимое заявки вымышленное. Сообщения в Telegram не отправляются.</p>
-   <p class="mt-3 text-sm">Повторное нажатие в течение 10 минут показывает тот же результат. Запрос с неизвестным исходом не повторяется. Общий лимит — 6 запусков в час и 100 за всё время демо.</p>
+templ Index(v HomeView) {
+ @Layout("Учебный сценарий — Botmother") {
+  <header class="mb-8">
+   <p class="text-sm font-medium text-base-content/70 mb-3">Botmother / Демо в Airlock</p>
+   <h1 class="text-3xl sm:text-4xl font-semibold tracking-tight mb-4">От заявки до подтверждения</h1>
+   <p class="text-base-content/80 max-w-2xl">Отправьте учебную заявку в Botmother и увидьте, как сценарий возвращает результат в Airlock.</p>
+  </header>
+  <div class="grid gap-5 md:grid-cols-2 items-start">
+   <section class="card border border-base-300 bg-base-100 shadow-sm">
+    <div class="card-body gap-5">
+     <div class="flex items-center justify-between gap-3"><h2 class="card-title">Учебная заявка</h2><span class="badge badge-outline">Демо</span></div>
+     <dl class="divide-y divide-base-300">
+      <div class="flex justify-between gap-4 py-3"><dt class="text-base-content/70">Номер</dt><dd class="font-semibold">DEMO-001</dd></div>
+      <div class="py-3"><dt class="text-base-content/70 text-sm">Сценарий</dt><dd class="mt-1">Подтверждение заявки</dd></div>
+      <div class="py-3"><dt class="text-base-content/70 text-sm">Получатель результата</dt><dd class="mt-1">Это приложение Airlock</dd></div>
+     </dl>
+     <form method="post" action="/run">
+      if v.Result.Ready {
+       <button class="btn btn-primary w-full" type="submit">@ActionIcon("check") Показать подтверждение</button>
+      } else if v.Result.State == "accepted" || v.Result.State == "unknown" || v.Result.State == "dispatching" {
+       <a class="btn btn-primary w-full" href="/">Проверить результат</a>
+      } else {
+       <button class="btn btn-primary w-full" type="submit">@ActionIcon("play") Запустить сценарий</button>
+      }
+     </form>
+     <p class="text-sm text-base-content/70">Вымышленные данные. Сообщения в Telegram не отправляются.</p>
+    </div>
+   </section>
+   <section class="card border border-base-300 bg-base-200" aria-labelledby="result-heading">
+    <div class="card-body gap-4">
+     <div class="flex flex-wrap items-center justify-between gap-3">
+      <h2 class="card-title" id="result-heading">Результат</h2>
+      if v.Result.Ready {
+       <span class="badge badge-success">Подтверждено</span>
+      }
+     </div>
+     if v.Result.Ready {
+      <p class="text-2xl font-semibold">Заявка { v.Result.Order } обработана</p>
+     }
+     <p role="status">{ v.Result.Message }</p>
+     if v.Result.Ready {
+      <p class="text-sm text-base-content/70">Ответ Botmother получен { DisplayTime(v.Result.CompletedAt) }</p>
+     } else if v.Result.StartedAt != "" {
+      <p class="text-sm text-base-content/70">Отправлено { DisplayTime(v.Result.StartedAt) }</p>
+     }
+     <a class="link text-sm" href="/">Обновить статус без новой отправки</a>
+    </div>
+   </section>
+  </div>
+  <section class="mt-10">
+   <h2 class="font-semibold mb-4">Один сценарий, три шага</h2>
+   <ol class="grid gap-4 sm:grid-cols-3">
+    <li class="rounded-box border border-base-300 p-4"><span class="text-sm text-base-content/60">01 · Airlock</span><p class="font-medium mt-2">Принимает заявку</p><p class="text-sm text-base-content/70 mt-1">Через форму или чат.</p></li>
+    <li class="rounded-box border border-base-300 p-4"><span class="text-sm text-base-content/60">02 · Botmother</span><p class="font-medium mt-2">Выполняет сценарий</p><p class="text-sm text-base-content/70 mt-1">Обрабатывает учебный запуск.</p></li>
+    <li class="rounded-box border border-base-300 p-4"><span class="text-sm text-base-content/60">03 · Результат</span><p class="font-medium mt-2">Возвращается сюда</p><p class="text-sm text-base-content/70 mt-1">Успех — после настоящего ответа.</p></li>
+   </ol>
+   <p class="mt-5 text-sm text-base-content/70">Повторное нажатие в течение 10 минут возвращает тот же результат. До 6 новых запусков в час для всего демо.</p>
   </section>
  }
 }

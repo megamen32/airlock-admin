@@ -1,8 +1,11 @@
-# Botmother demo adapter — prepared, not deployed
+# Botmother demo adapter — private runtime verification
 
-Status15Oct2026: vendor account/event and @airlockleadsbot connected; users/testers0.
-Owner /start is pending. No native app, credential binding, callback or guest
-acceptance yet. Do not add a marketplace CTA until actual roundtrip passes.
+Status15Oct2026: users/testers2, owner Nikita verified. Private native candidate
+108842fa-93a3-4afa-8ce1-977ec87447da / d88-botmother-workflow built successfully.
+Saved vendor screen contains only Request, sendTyping=false, authenticated
+callback to native RegisterWebhook. One real ordinary-guest run completed in
+11.385s. Repeated POST reused the same completed DB run/quota1. Guest config403,
+wrong callback bearer401. Public CTA awaits final UI/chat/permissions acceptance.
 
 Native SDK v0.7.0 only. MVC, Russian web form and same domain chat tool.
 Only owner setup can bind one24hex bm_id; it is immutable after first binding.
@@ -23,6 +26,17 @@ never auto-retry timeout or ambiguous response. HTTP200 is not completion.
 Verified callback may precede dispatch response; response update cannot regress
 complete. Duplicate callback preserves original completed_at. Reads scoped to
 native caller.ID; callback must reference an existing admitted UUIDv4.
+All guests share one fixed vendor tester: serialize global in-flight events
+under the same quota lock, so last_request cannot be overwritten concurrently.
+
+Callback ingress: exact POST /webhooks/<candidate-id>/botmother-result passes
+through the external demo gateway to native bearer verification. The bearer is
+not a user JWT. No broad public webhook allowance or Airlock core changes.
+Native API exposes secretMasked only. Operator resolved this newly generated
+own-webhook credential from its stored encrypted envelope using the original
+v0.7.0 crypto/secrets source and matching AAD; the master key stayed on88,
+the decoded value matched masked ends, then primary/copy100/YandexDisk readback
+completed before vendor save. Never save ciphertext as the provider bearer.
 
 Tests: fast unit callback/parser/error/state logic, expected30s/max300s;
 source job1GiB/CPU2/tasks128/swap0, disk/temp2GiB, one job; measure capacity first.
