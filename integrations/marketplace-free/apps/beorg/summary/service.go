@@ -19,13 +19,15 @@ type Service struct {
 func New(h *agentsdk.ConnectionHandle, db *agentsdk.AgentDB) *Service {
 	return &Service{h: h, db: db, busy: make(chan struct{}, 1)}
 }
-func (s *Service) Tool(ctx context.Context, _ Input) (Result, error) {
+func (s *Service) Tool(ctx context.Context, _ Input) (ToolResult, error) {
 	r, e := s.Get(ctx)
+	result := ToolResult{Ready: r.Ready, Fields: r.Fields, Items: r.Items, Message: r.Message, OriginalURL: "https://d88-beorg-invoice.demo.airlockrun.ru/static/invoice-demo.png", WebURL: "https://d88-beorg-invoice.demo.airlockrun.ru/"}
 	if e != nil {
-		return Result{Source: "Beorg", Message: e.Error()}, nil
+		result.Message = e.Error()
 	}
-	return r, nil
+	return result, nil
 }
+
 func (s *Service) Get(ctx context.Context) (Result, error) {
 	fail := errors.New("Не удалось прочитать результат распознавания Beorg. Проверьте подключение или готовность документа. Отсутствующие поля не выдумываются.")
 	select {

@@ -29,6 +29,16 @@ type Result struct {
 	Message    string  `json:"message"`
 }
 
+// Chat receives invoice facts and usable links, not provider job identifiers.
+type ToolResult struct {
+	Ready       bool    `json:"ready"`
+	Fields      []Field `json:"fields,omitempty"`
+	Items       []Item  `json:"items,omitempty"`
+	Message     string  `json:"message"`
+	OriginalURL string  `json:"original_url"`
+	WebURL      string  `json:"web_url"`
+}
+
 func Report(raw []byte) (Result, error) {
 	bad := errors.New("invalid Beorg invoice result")
 	var v struct {
