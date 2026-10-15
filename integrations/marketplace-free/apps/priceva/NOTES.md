@@ -22,3 +22,14 @@ not a complete price comparison yet. Tests: fast unit actual sanitized
 provider product/source frames plus invalid/private scope cases; focused
 integration real native build + ordinary guest form/chat + headed44 light/dark.
 Existing app1GiB, single BuildKit4GiB/CPU2. Preserve same native scaffold.
+
+REAL PRICE DELTA: regional report appeared asynchronously at04:23UTC after
+initial general_stat processing0/report0. Actual report specific to company
+tc--35b02d680cc4998163b5fb9e883d744e::yyl / regionj / productp returned
+price_min/avg/max1280RUB, competitor_cnt1, date1792037917. Own price and
+recommended_price remain0 and are NEVER market quotes. Read report/list with
+fixed company_id/region_id/client_code. Strict real parser rejects global
+aggregate companyfalse/regiona, foreign IDs, missing/zero/nonfinite quote,
+wrong currency/range/date. Empty report remains nil quote, not0. Selected
+quote with source/region/check time shown in shared UI/tool. Private versioned
+cache envelope invalidates old counter-only payload, quota unchanged.

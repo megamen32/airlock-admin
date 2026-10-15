@@ -8,13 +8,12 @@ import (
 )
 
 type CatalogItem struct {
-	Name             string   `json:"name"`
-	SKU              string   `json:"sku"`
-	Currency         string   `json:"currency"`
-	Store            string   `json:"store"`
-	URL              string   `json:"url"`
-	MonitoringStatus string   `json:"monitoring_status"`
-	Price            *float64 `json:"price"`
+	Name             string `json:"name"`
+	SKU              string `json:"sku"`
+	Currency         string `json:"currency"`
+	Store            string `json:"store"`
+	URL              string `json:"url"`
+	MonitoringStatus string `json:"monitoring_status"`
 }
 
 func Catalog(products, sources json.RawMessage) (CatalogItem, error) {

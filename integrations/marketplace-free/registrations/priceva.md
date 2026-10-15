@@ -9,3 +9,10 @@
 - Условия: Starter без карты/платежей; API включён. Кэш2мин,4обновления/час, один активный запрос; timeout60с/20с на метод,1MiB.
 - Официальный API/схемы: https://priceva.docs.apiary.io/ и https://github.com/priceva/priceva-api-sdk-php . MonitoringRunProductRequest/SourceListRequest подтверждают filters и add_monitoring.
 - Вход по старому browser export больше не действует; пароль не сбрасывали и личный M1 не использовали. Для проверки цен продолжить чтение существующей проверки/источника; новые запуски не делать без причины.
+
+15Oct04:24UTC: отчёт появился асинхронно. Настоящий report/list с фильтрами
+client_code airlock-demo-k120/company_id выбранного regard.ru/region_idj
+вернул price_min=price_avg=price_max1280RUB, competitor_cnt1, date1792037917
+(15Oct07:18:37МСК). Собственные price/recommended_price по-прежнему0,
+они НЕ используются как рыночные. Парсер quote проверен на реальном ответе
+и malformed/foreign-scope случаях; далее native build и guest price acceptance.

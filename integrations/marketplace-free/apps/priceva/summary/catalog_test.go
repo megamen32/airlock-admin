@@ -10,8 +10,8 @@ func TestObservedCatalog(t *testing.T) {
 	p, _ := os.ReadFile("testdata/product.json")
 	s, _ := os.ReadFile("testdata/source.json")
 	r, e := Catalog(p, s)
-	if e != nil || r.Name != "Logitech K120 (920-002522) — демо Airlock" || r.Price != nil || r.MonitoringStatus != "done" {
-		t.Fatalf("actual provider catalog rejected or default_price=0 leaked as quote: %+v %v", r, e)
+	if e != nil || r.Name != "Logitech K120 (920-002522) — демо Airlock" || r.MonitoringStatus != "done" {
+		t.Fatalf("actual provider catalog rejected : %+v %v", r, e)
 	}
 	for _, tc := range []struct {
 		name    string

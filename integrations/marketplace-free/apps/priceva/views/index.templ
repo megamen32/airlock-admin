@@ -3,7 +3,7 @@ import "strconv"
 templ Index(v HomeView) {
  @Layout("Товар на мониторинге — Priceva") {
   <h1 class="text-3xl font-semibold mb-4">Что отслеживает Priceva?</h1>
-  <p class="mb-6">Откройте настоящий демонстрационный товар, магазин и состояние проверки. Когда цена ещё не получена, показываем это явно.</p>
+  <p class="mb-6">Откройте настоящий демонстрационный товар, магазин и состояние проверки. Цена поступает из настоящего отчёта выбранного магазина и региона. Когда котировки нет, показываем это явно.</p>
   <form method="post" action="/summary"><button class="btn btn-primary" type="submit">Показать демо-товар</button></form>
   if v.Result.Message != "" {
    <section class="card bg-base-200 mt-6"><div class="card-body">
@@ -18,8 +18,17 @@ templ Index(v HomeView) {
       } else {
        <p>Проверка Priceva ещё выполняется.</p>
       }
-      <p class="font-semibold mt-3">Рыночная цена пока не получена</p>
-      <p>Настроенная исходная цена 0 не является предложением магазина. Она не показывается как цена товара.</p>
+      if v.Result.Quote != nil {
+       <p class="text-3xl font-semibold mt-4">{ Money(v.Result.Quote.Minimum) }</p>
+       if v.Result.Quote.Maximum != v.Result.Quote.Minimum {
+        <p>Максимальная цена: { Money(v.Result.Quote.Maximum) }. Средняя: { Money(v.Result.Quote.Average) }.</p>
+       }
+       <p>{ v.Result.Quote.Store } · { v.Result.Quote.Region }</p>
+       <p>Проверено Priceva: { CheckedAt(v.Result.Quote.CollectedAt) }. Цена могла измениться после проверки.</p>
+      } else {
+       <p class="font-semibold mt-3">Рыночная цена пока не получена</p>
+      }
+      <p>Исходная цена 0 из настроек не является предложением магазина и не используется как рыночная цена.</p>
      </article>
      if v.Result.Reports != nil {
       <p>Отчётов в ответе: { strconv.Itoa(*v.Result.Reports) }.</p>

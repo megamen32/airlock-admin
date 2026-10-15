@@ -21,6 +21,7 @@ type Result struct {
 	FetchedAt string       `json:"fetched_at"`
 	Message   string       `json:"message,omitempty"`
 	Item      *CatalogItem `json:"item,omitempty"`
+	Quote     *Quote       `json:"quote,omitempty"`
 }
 
 type Service struct {
@@ -52,12 +53,15 @@ func (s *Service) Get(ctx context.Context) (Result, error) {
 	var cached []byte
 	e := s.db.QueryRowContext(ctx, "SELECT payload FROM summary_cache WHERE id=1 AND fetched_at>NOW()-INTERVAL '2 minutes'").Scan(&cached)
 	if e == nil {
-		var r Result
-		if json.Unmarshal(cached, &r) != nil {
+		var c struct {
+			Version string `json:"version"`
+			Result  Result `json:"result"`
+		}
+		if json.Unmarshal(cached, &c) != nil {
 			return Result{}, fail
 		}
-		if r.Item != nil || !r.Ready {
-			return r, nil
+		if c.Version == "regard-moscow-price-v1" {
+			return c.Result, nil
 		}
 	}
 	if e != nil && !errors.Is(e, sql.ErrNoRows) {
@@ -76,6 +80,10 @@ func (s *Service) Get(ctx context.Context) (Result, error) {
 	pages := map[string]json.RawMessage{}
 	for _, endpoint := range []string{"product/list", "source/list", "report/list"} {
 		params := map[string]any{"filters": map[string]any{"page": 1, "limit": 20, "client_code": "airlock-demo-k120"}}
+		if endpoint == "report/list" {
+			params["filters"].(map[string]any)["company_id"] = companyID
+			params["filters"].(map[string]any)["region_id"] = regionID
+		}
 		if endpoint == "source/list" {
 			params = map[string]any{"filters": map[string]any{"page": 1, "limit": 20, "product_id": "p", "id": "f"}, "add_monitoring": true}
 		}
@@ -118,16 +126,30 @@ func (s *Service) Get(ctx context.Context) (Result, error) {
 	if err != nil {
 		return Result{}, errors.New("Priceva не вернула ожидаемый демонстрационный товар и источник. Данные не заменяются примером.")
 	}
+	quote, err := ReportQuote(pages["report/list"])
+	if err != nil {
+		return Result{}, errors.New("Priceva вернула отчёт, который нельзя подтвердить для выбранного магазина и региона. Цена не подставляется.")
+	}
+	out.Quote = quote
 	out.Item = &item
 	out.Ready = true
 	out.Products = &counts[0]
 	out.Sources = &counts[1]
 	out.Reports = &counts[2]
-	out.Message = fmt.Sprintf("В демо-кампании: товаров %d, источников %d, отчётов %d. Показаны реальные настройки мониторинга. Рыночная цена пока не получена; настроенная цена 0 не используется как результат.", counts[0], counts[1], counts[2])
+	out.Message = fmt.Sprintf("В демо-кампании: товаров %d, источников %d, отчётов %d.", counts[0], counts[1], counts[2])
+	if quote == nil {
+		out.Message += " Рыночная цена пока не получена; настроенная цена0 не используется как результат."
+	} else {
+		out.Message += " Получена настоящая цена выбранного магазина для региона Москва. Это результат проверки, а не цена в реальном времени."
+	}
+
 	return s.save(ctx, out)
 }
 func (s *Service) save(ctx context.Context, out Result) (Result, error) {
-	payload, e := json.Marshal(out)
+	payload, e := json.Marshal(struct {
+		Version string `json:"version"`
+		Result  Result `json:"result"`
+	}{Version: "regard-moscow-price-v1", Result: out})
 	if e != nil {
 		return Result{}, e
 	}
