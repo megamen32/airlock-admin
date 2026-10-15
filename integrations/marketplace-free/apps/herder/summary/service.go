@@ -266,6 +266,10 @@ func (s *Service) Status(ctx context.Context) (Result, error) {
 		return Result{}, unavailable
 	}
 	r.Exists = true
+	if state == "rejected" {
+		r.Message = "Подключение отклонило запрос до запуска агента. Этот учебный пример не запускался."
+		return r, nil
+	}
 	if state == "failed" {
 		r.Message = "Агент завершился с ошибкой. Повторный запуск не выполняется."
 		return r, nil
