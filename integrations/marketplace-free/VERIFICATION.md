@@ -247,3 +247,22 @@ Private receipts: `.tmp/snabplus-20261015/`: meta-read.json, purchases-seeded.js
 seed-purchase-intent.json, key-create-intent.json, source-permission-proof.json,
 guest-form.html, chat-proof.json, browser-proof.json, cta-375.png,
 webui-light.png, webui-dark.png. Секреты не опубликованы.
+
+
+## Edumotion: один настоящий учебный курс, 15Oct
+
+Source приложения не менялся. Через настоящий UI44 создан/наполнен вручную
+и опубликован один курс, ID28971d7b-0380-4dcc-ba37-0fd2297b32a2, с одним русским
+уроком. Сертификат отключён, персональных назначений/приглашений/рассылок нет,
+AI-генерация не использовалась. Vendor courses HTTP200 total1. Fresh ordinary
+TENANT_ROLE_USER form показывает правильный курс. Native run13e217ae success
+16.888с, настоящий training_catalog readytrue total1 и русский ответ, включая
+ограничение14дней trial. Headed44 фактическая вебформа после auth relay и
+нажатия кнопки совпадает; screenshot просмотрен root. Новый onboarding draft
+в thin overlay8b752fd отражает опубликованный курс вместо пустого каталога.
+Focused integration expected60s/emergency600s, actual20.989s. Runner1GiB/CPU2/
+tasks128/swap0; существующий browser44 2GiB/CPU2/tasks512/max2h. Остальные
+ресурсы, core, frontend, native credentials неизменны. Доступы+seed IDs backup
+primary100+copy+Яндекс.Диск readback rc0.
+Private evidence `.tmp/edumotion-seed-20261015/{vendor-catalogue.json,chat-proof.json,
+guest-form.html,browser-form.json,guest-form.png,create-intent.json,lesson.txt}`.
