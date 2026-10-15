@@ -28,7 +28,7 @@ templ Index(v HomeView) {
      <p class="text-sm text-base-content/70">Вымышленные данные. Сообщения в Telegram не отправляются.</p>
     </div>
    </section>
-   <section class="card border border-base-300 bg-base-200" aria-labelledby="result-heading">
+		<section class={ "card border border-base-300 bg-base-200", templ.KV("order-first md:order-none", v.Result.Ready) } aria-labelledby="result-heading">
     <div class="card-body gap-4">
      <div class="flex flex-wrap items-center justify-between gap-3">
       <h2 class="card-title" id="result-heading">Результат</h2>
