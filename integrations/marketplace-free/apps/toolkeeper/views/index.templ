@@ -1,0 +1,34 @@
+package views
+
+import "strconv"
+
+templ Index(v HomeView) {
+ @Layout(v.Title) {
+  <p class="text-sm mb-4">TOOLKEEPER · УЧЁТ ИМУЩЕСТВА</p>
+  <h1 class="text-3xl font-semibold mb-4">Всё оборудование на виду</h1>
+  <p class="mb-4">Посмотрите, какие инструменты есть в учебном пространстве, в каком они статусе и за кем закреплены.</p>
+  <form method="post" action="/summary" class="mb-6">
+   <button class="btn btn-primary" type="submit">Показать оборудование</button>
+  </form>
+  if v.Message != "" {
+   <section class="card bg-base-200 mt-6">
+    <div class="card-body">
+     if v.Ready {
+      <h2 class="font-semibold">В пространстве: { strconv.Itoa(v.Total) }</h2>
+      for _, c := range v.Items {
+       <article class="mt-4">
+        <h3 class="font-semibold">{ c.Title }</h3>
+        <p>{ c.Status } · Ответственный: { c.Responsible }</p>
+       </article>
+      }
+      <p class="text-sm mt-6">Источник: ToolKeeper API. Данные на { v.FetchedAt }</p>
+     } else {
+      <p>{ v.Message }</p>
+     }
+    </div>
+   </section>
+  }
+  <p class="text-sm mt-6">Два учебных инструмента, без доступа к чужому имуществу. Только чтение: передачи и изменения недоступны.</p>
+  <p class="text-sm mt-4">Пробный доступ до 22 октября 2026 года. Кэш 5 минут, до 12 обновлений в час на всё демо. Платный тариф не подключён.</p>
+ }
+}
