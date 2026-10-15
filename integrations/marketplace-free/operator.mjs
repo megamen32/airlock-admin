@@ -56,7 +56,7 @@ if(input.op==='list') {
   console.log(JSON.stringify({id:input.id,slug:input.slug,status:r.status}));
 } else if(input.op==='mcp-oauth-start') {
   // Operator-only: redirect URI is the native callback, not a third-party collector.
-  const r=await json('/api/v1/credentials/mcp/oauth/start',{agentId:input.id,slug:input.slug,redirectUri:process.env.DEMO_DOMAIN?`https://${process.env.DEMO_DOMAIN}/api/v1/credentials/oauth/callback`:input.redirectUri},'POST');
+  const r=await json('/api/v1/resource-authorizations/start',{agentId:input.id,type:'mcp_server',slug:input.slug,displayName:input.displayName||input.slug,redirectUri:input.redirectUri||`/agents/${input.id}`,createNew:false},'POST');
   console.log(JSON.stringify(r));
 } else if(input.op==='source') {
   const r=await request(prefix+input.id+'/source');
