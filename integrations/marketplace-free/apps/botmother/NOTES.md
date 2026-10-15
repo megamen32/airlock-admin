@@ -1,4 +1,14 @@
-# Botmother demo adapter — private runtime verification
+# Botmother demo adapter — published and verified
+
+Final15Oct: published as13th ready integration. Real marketplace first-left CTA
+375/1280 → editable question/zero auto-send → actual UI Enter → friendly native
+tool-chat19.210s, same confirmed receipt/no new dispatch. Real form320/375/1280
+light/dark/nooverflow, ready result first on mobile. Guest source/credential/
+metadata/tester403; wrong callback bearer401. Source0f5df710, nativebuild8e38d363,
+all22files matched before this documentation-only final status addition.
+Canonical current acceptance: ../../registrations/botmother.md and
+../../VERIFICATION.md. The private-runtime paragraphs below are retained as
+history; the stated final UI/chat/publication gates have now passed.
 
 Status15Oct2026: users/testers2, owner Nikita verified. Private native candidate
 108842fa-93a3-4afa-8ce1-977ec87447da / d88-botmother-workflow built successfully.
