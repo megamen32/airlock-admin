@@ -1,0 +1,28 @@
+package views
+import "strconv"
+templ Index(v HomeView){
+ @Layout("Закупки — SNABZHENETS+"){
+  <p class="text-sm mb-3">SNABZHENETS+ · отдельный демонстрационный портал</p>
+  <h1 class="text-3xl font-semibold mb-4">Закупки без таблиц и переписок</h1>
+  <p class="mb-4">Откройте список закупок из настоящего портала. Демонстрационная заявка создана для показа чтения данных — товары не заказываются и поставщикам ничего не отправляется.</p>
+  <form method="post" action="/summary"><button class="btn btn-primary" type="submit">@ActionIcon("clipboard-list") Показать закупки</button></form>
+  if v.Result.Message!=""{
+   <section class="card bg-base-200 mt-6"><div class="card-body">
+    <p>{v.Result.Message}</p>
+    if v.Result.Ready{
+     if v.Result.Total!=nil{<h2 class="card-title">Закупок в портале: {strconv.Itoa(*v.Result.Total)}</h2>}
+     for _,p:=range v.Result.Purchases{
+      <article class="border border-base-300 rounded-xl p-4 mt-3">
+       <h3 class="font-semibold">{p.Number}</h3><p>{p.Name}</p>
+       if p.Status=="draft"{<p class="badge badge-outline mt-2">Черновик</p>}else{<p>Статус: {p.Status}</p>}
+       if p.Comment!=""{<p class="mt-3">{p.Comment}</p>}
+      </article>
+     }
+     if v.Result.Total!=nil&&*v.Result.Total==0{<p>В демонстрационном портале пока нет закупок.</p>}
+     <p class="text-sm mt-4">Источник: {v.Result.Source}. Прочитано: {v.Result.FetchedAt}</p>
+    }
+   </div></section>
+  }
+  <section class="mt-8"><h2 class="font-semibold mb-2">Условия демонстрации</h2><p>Пробный доступ портала на 24 часа, до 16 октября 2026 года. Без карты и оплаты. API только читает закупки; изменение, отправка поставщикам и платежи закрыты.</p><p class="text-sm mt-3">Показывается до 5 закупок. Кэш 15 минут, общий лимит 12 обновлений в час.</p></section>
+ }
+}
