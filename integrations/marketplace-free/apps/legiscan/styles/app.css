@@ -1,0 +1,11 @@
+@import "tailwindcss";
+@plugin "../.airlock/toolchain/lib/tailwind/daisyui.mjs" {
+ themes: winter --default, night --prefersdark;
+}
+@source "../views";
+@source "../handlers";
+
+html { color-scheme: light dark; }
+body { font-family: ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; }
+summary { cursor: pointer; }
+blockquote, p { overflow-wrap: anywhere; }

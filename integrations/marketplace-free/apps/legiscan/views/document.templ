@@ -1,0 +1,16 @@
+package views
+
+import "github.com/airlockrun/agentsdk/lucide"
+
+templ Document(text string) {
+ @Layout("Legiscan — исходный учебный договор") {
+  <div class="my-6 flex flex-wrap justify-between gap-3">
+   <a class="btn btn-ghost" href="/">@lucide.Icon("arrow-left","size-4 shrink-0") К разбору</a>
+   <a class="btn btn-outline" href="/contract.txt">@lucide.Icon("download","size-4 shrink-0") Скачать TXT</a>
+  </div>
+  <article class="mx-auto max-w-3xl rounded-xl border border-base-300 bg-base-100 px-5 py-7 sm:px-10 sm:py-10">
+   <h1 class="mb-6 text-2xl font-semibold tracking-tight">Исходный учебный договор</h1>
+   <p class="whitespace-pre-wrap break-words text-sm leading-8">{ text }</p>
+  </article>
+ }
+}

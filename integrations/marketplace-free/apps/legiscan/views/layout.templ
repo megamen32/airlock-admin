@@ -1,0 +1,26 @@
+package views
+
+templ Layout(title string) {
+ <!DOCTYPE html>
+ <html lang="ru">
+  <head>
+   <meta charset="UTF-8"/>
+   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+   <title>{ title }</title>
+   <link rel="stylesheet" href={ AppCSSPath }/>
+  </head>
+  <body class="min-h-screen bg-base-200 text-base-content">
+   <main class="mx-auto max-w-7xl px-4 py-5 sm:px-8 sm:py-7">
+    <nav class="flex flex-wrap items-center justify-between gap-3 border-b border-base-300 pb-5" aria-label="Навигация">
+     <a class="flex items-center gap-3 text-lg font-semibold tracking-tight" href="https://demo.airlockrun.ru/">Airlock <span class="font-normal opacity-40">/</span><span class="font-medium">Legiscan</span></a>
+     <span class="badge badge-outline text-xs">Учебный договор</span>
+    </nav>
+    { children... }
+    <footer class="mt-8 flex flex-wrap justify-between gap-4 border-t border-base-300 pt-5 text-xs leading-relaxed opacity-70">
+     <p class="max-w-2xl">Настоящий ответ Legiscan от 15 октября 2026 года. Организации вымышлены. Просмотр готового разбора не запускает новый анализ. Выводы сервиса требуют проверки специалистом.</p>
+     <a class="link underline-offset-4" href="https://airlockrun.ru/index.html#/product/legiscan" target="_blank" rel="noopener">О Legiscan в Airlock</a>
+    </footer>
+   </main>
+  </body>
+ </html>
+}

@@ -1,0 +1,94 @@
+package views
+
+import "fmt"
+import "github.com/airlockrun/agentsdk/lucide"
+
+templ Index(v HomeView) {
+ @Layout("Legiscan — разбор договора") {
+  <header class="flex flex-col justify-between gap-5 py-7 sm:py-9 lg:flex-row lg:items-center">
+   <div class="max-w-2xl">
+    <p class="mb-2 text-xs font-semibold uppercase tracking-widest opacity-60">Перед подписанием</p>
+    <h1 class="text-3xl font-semibold leading-tight tracking-tight sm:text-4xl">Какие условия стоит пересмотреть?</h1>
+    <p class="mt-3 max-w-xl text-sm leading-relaxed opacity-70 sm:text-base">Legiscan разобрал учебный договор на разработку сайта. Откройте замечание, сравните его с цитатой и посмотрите предложенное изменение.</p>
+   </div>
+   <a class="btn btn-primary shrink-0" href="https://demo.airlockrun.ru/agents/d88-legiscan-contract/chat?demo=1">@lucide.Icon("messages-square","size-4 shrink-0") Спросить о договоре</a>
+  </header>
+  if v.Ready {
+   <div class="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_290px]">
+    <div class="min-w-0">
+     <section class="rounded-xl border border-base-300 bg-base-100 p-5 sm:p-6" aria-labelledby="summary-title">
+      <div class="flex items-start justify-between gap-4">
+       <div><p class="text-xs opacity-60">Вывод Legiscan</p><h2 id="summary-title" class="mt-1 text-xl font-semibold">Договор требует доработки</h2></div>
+       if v.Score!="" {
+        <div class="shrink-0 text-right"><span class="text-3xl font-semibold tabular-nums">{ v.Score }</span><span class="text-sm opacity-50"> / 100</span><p class="mt-1 text-xs opacity-60">Оценка сервиса</p></div>
+       }
+      </div>
+      <p class="mt-4 text-sm leading-7 opacity-85">{ v.Summary }</p>
+      <div class="mt-5 flex flex-wrap gap-x-5 gap-y-2 border-t border-base-300 pt-4 text-xs sm:text-sm">
+       <span><strong class="font-semibold tabular-nums">{ fmt.Sprint(v.High) }</strong> высокого уровня</span>
+       <span><strong class="font-semibold tabular-nums">{ fmt.Sprint(v.Medium) }</strong> среднего</span>
+       <span><strong class="font-semibold tabular-nums">{ fmt.Sprint(v.Low) }</strong> низкого</span>
+      </div>
+     </section>
+     <nav class="my-6 flex flex-wrap gap-2" aria-label="Разделы анализа">
+      for _,t := range v.Tabs {
+       <a href={ templ.SafeURL(t.URL) } class={ "btn btn-sm",templ.KV("btn-neutral",t.Active),templ.KV("btn-ghost",!t.Active) } aria-current={ current(t.Active) }>{ t.Name } <span class="opacity-60">{ fmt.Sprint(t.Count) }</span></a>
+      }
+     </nav>
+     <section class="overflow-hidden rounded-xl border border-base-300 bg-base-100" aria-label="Замечания Legiscan">
+      for i,f := range v.Findings {
+       <details class="collapse collapse-arrow border-b border-base-300 last:border-b-0 rounded-none" open?={ i==0 }>
+        <summary class="collapse-title flex items-start gap-3 py-5 pl-4 text-sm font-medium sm:pl-5 sm:text-base">
+         <span class="shrink-0 pt-0.5 text-xs tabular-nums opacity-40">{ f.Number }</span>
+         <span class="min-w-0"><span class="block leading-relaxed">{ f.Title }</span>
+          <span class="mt-2 flex flex-wrap items-center gap-2 text-xs font-normal">
+           if f.Level!="" {
+            <span class={ "badge badge-soft badge-sm",f.Class }>{ f.Level }</span>
+           }
+           if f.Reference!="" {
+            <span class="opacity-60">{ f.Reference }</span>
+           }
+          </span>
+         </span>
+        </summary>
+        <div class="collapse-content px-5 text-sm leading-7 sm:px-10">
+         if f.Quote!="" {
+          <div class="mb-5"><p class="mb-2 text-xs font-semibold uppercase tracking-wide opacity-50">Из договора</p><blockquote class="rounded-r-lg border-l-2 border-base-300 bg-base-200 px-4 py-3 italic">{ f.Quote }</blockquote></div>
+         }
+         if f.Description!="" {
+          <p class="mb-5">{ f.Description }</p>
+         }
+         if f.Recommendation!="" {
+          <section class="mb-2 rounded-lg bg-base-200 p-4"><h3 class="mb-2 text-xs font-semibold uppercase tracking-wide opacity-60">Что предлагает Legiscan</h3><p>{ f.Recommendation }</p></section>
+         }
+         if f.Example!="" {
+          <section class="mb-2 rounded-lg bg-base-200 p-4"><h3 class="mb-2 text-xs font-semibold uppercase tracking-wide opacity-60">Пример формулировки от Legiscan</h3><p>{ f.Example }</p></section>
+         }
+        </div>
+       </details>
+      }
+     </section>
+    </div>
+    <aside class="min-w-0 rounded-xl border border-base-300 bg-base-100 p-5 lg:sticky lg:top-6" aria-labelledby="document-title">
+     <div class="mb-5 flex h-11 w-11 items-center justify-center rounded-xl bg-base-200">@lucide.Icon("file-text","size-5")</div>
+     <p class="text-xs font-semibold uppercase tracking-wide opacity-50">Исходный документ</p>
+     <h2 id="document-title" class="mt-2 text-lg font-semibold leading-snug">Разработка сайта</h2>
+     <p class="mt-2 text-xs leading-relaxed opacity-60">AIRLOCK-DEMO-001 · 15 октября 2026<br/>Короткий вымышленный договор</p>
+     <div class="my-5 border-y border-base-300 py-4"><h3 class="mb-2 text-xs font-semibold opacity-60">Стороны</h3>
+      for _,p := range v.Parties {
+       <p class="mt-1 text-sm">{ p }</p>
+      }
+     </div>
+     <a class="btn btn-outline mb-2 w-full" href="/document">@lucide.Icon("book-open","size-4 shrink-0") Читать договор</a>
+     <a class="btn btn-ghost w-full" href="/contract.txt">@lucide.Icon("download","size-4 shrink-0") Скачать TXT</a>
+     <p class="mt-5 text-xs leading-relaxed opacity-60">В этом примере смотрим готовый разбор. Загрузка новых документов закрыта: тестовый доступ ограничен тремя анализами.</p>
+     <a class="link mt-4 inline-flex items-center gap-2 text-xs underline-offset-4" href="/report.json">@lucide.Icon("file-json","size-4 shrink-0") Полный ответ сервиса</a>
+    </aside>
+   </div>
+  } else {
+   <div class="rounded-xl border border-base-300 bg-base-100 p-7" role="status"><h2 class="text-lg font-semibold">Разбор недоступен</h2><p class="mt-2 text-sm">{ v.Error }</p></div>
+  }
+ }
+}
+
+func current(active bool) string { if active {return "page"};return "false" }

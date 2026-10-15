@@ -1,0 +1,5 @@
+.airlock/
+views/static/
+*_templ.go
+agent
+*.log
