@@ -608,3 +608,37 @@ Receipt folder .tmp/wikibot-questions-20261015/, source7f27ca60/overlay887ceb5.
 result500, никаких повторных OCR uploads; Botmother0users/0testers на07:21UTC,
 поэтому запуск через Airlock по-прежнему требует первого /start своего
 тестировщика. Это внешние блокеры, готовые CTA для них не добавлены.
+
+## Настоящая VM и студия страниц,15.10.2026
+
+| Проверка | Категория | Что обнаруживает | Ожидаемо/max | Результат |
+|---|---|---|---|---|
+| VM-only bearer → GPTAdmin shell → Herder → Fast Agent | focused integration | Настоящее исполнение и запись файла |180/1800с|demo/UID1000, реальный agent-proof.py и assertion2+2=4;~23с|
+| Перезагрузка только guest | focused integration | Потерю данных/сессии/авторизации |120/1200с|boot_id изменился, тот же hash/вывод/история/bearer и сервисы сохранены, prompt не повторялся|
+| Native guest card form и rebuild | focused integration | MCP HTTPS/binding и чтение реального файла |180/1800с|Готовый HTML8700bytes, preview sandbox, исходник; пережил SDK rebuild|
+| Native coding_demo action=status chat | focused integration | Реальный user tool callback и ответ |60/600с|success19.122с, readytrue, ссылка на веб-интерфейс; число coding jobs осталось4(2rejected,1done,1failed)|
+| Отдельные два native гостя и права | focused integration | Утечку чужого HTML/управления |30/300с|Один видит свою готовую страницу; другой — только свой отказ без чужого preview. Source/credential/PATCH403|
+| Headed44 форма375/1280 light/dark | focused integration | Нечитаемый UI/overflow/preview |60/600с|Четыре варианта прошли, мобильный dark screenshot просмотрен|
+| Source generation/compile/3unit | fast unit | Manifest/templ/parser/name ошибки |18/180с|8.254с, peak557465600bytes, OOM0/swap0; не runtime proof|
+| Native source export | focused integration | Несоответствие бизнес-кода |20/200с|21businessfile совпал с09e18518; SDK Dockerfile pinv0.7.0 и отсутствующий.gitignore документированы|
+
+Final native build2577d29c-5a4b-4cc3-a51f-08b2635ba744 complete,SDK0.7.0.
+Первый HTTP MCP URL отвергнут native HTTPS policy до transport; обе собственные
+QA-квитанции сохранены как rejected, агент/VM folder для них не запускались.
+HTTPS ingress /_mcp/airlock-vm только проксирует MCP к отдельному VM Node с
+его обычным Bearer. Source URL update не меняет уже bound reusable resource:
+штатный createNew:true создал HTTPS binding без нового VM token и core patch.
+
+Отдельная browser pricing задача fast-agent:2610150856-bw4pFO отменена ровно
+на180с до первого tool call; файла нет. Это НЕ успешное создание тарифов.
+Native adapter теперь честно показывает completed/no-file и переводит только
+свою запись в failed, освобождая очередь; запуск не повторяется. Python CLI
+launcher получает emergency wall1800с при ожидаемых180; RAM/CPU/tasks/swap
+не изменены.30минутная устойчивость модели этим не доказана.
+
+Самостоятельные карточки опубликованы другим владельцем87a0105, релиз
+20261015-independent-products-87a0105; основной каталог37уникальных продуктов.
+Корневой агент не менял public current. Entry-only0d233d7 убирает устаревшие
+формулировки eXmanager/NoticePlace как компонентов «Штатно».
+Private receipts: .tmp/herder-demo-vm-20261015. Новые доступы primary0600,
+copy100 и Яндекс.Диск с readback; ключей в опубликованном исходнике нет.
