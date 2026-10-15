@@ -656,3 +656,24 @@ click reached that form without submitting a task. Updated standalone entry
 payloads returned200 without old Shtatno labels; fresh eXmanager entry had
 editable draft and0prompt requests. Private evidence stored under VM receipt
 folder; source code and cloud backups contain no new untracked credentials.
+
+## Отзыв публикации студии владельцем,15Oct2026
+
+Технические проверки выше не подтвердили качество демонстрации для продажи.
+Владелец прямо отверг недоделанный сценарий, пример и интерфейс. По его
+поручению studio снята с публикации без повторного задания и без удаления VM.
+Native owner API:111обычных membership удалены,remainingGuestMembers0,
+statusstopped/runningfalse. Gateway пропускает её при автодоступе новых гостей
+и возвращает410 для webhost, chat/id/API/prompt и публичного VM MCP.
+Настоящий freshguest список не содержит студии, POSTprompt410; других
+приложений и учётных данных это не меняло.
+
+Overlaya1ae9ca опубликовал объединённую согласованную правку: studiooff и
+параллельное выравнивание соседних карточек владельца01a13e7f. VPS current
+20261015-withdraw-studio-a1ae9ca поверх9cf1e37; JSsha256
+1b1aad77905374614532613743ee7e80d41e07ac5c18bd5fe9a95504a1fa73e5.
+37продуктов и значения всех карточек unchanged,11protected cabinet/legal/Beorg
+files byte-identical. Ссылка отсутствует в живом JS. Runtimegateway/entry
+deployed из того же опубликованного commit с SHAguard иrollback, только
+gateway recreated. Подробная визуальная приёмка rowalignment у её владельца;
+корень не выдаёт это за свою проверку. Private receipt .tmp/withdraw-studio-20261015.

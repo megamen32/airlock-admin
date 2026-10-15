@@ -1,3 +1,9 @@
+WITHDRAWN15Oct2026 by explicit owner request: unfinished scenario and poor UI.
+Native app stopped, all ordinary memberships revoked, public studio/chat/prompt
+and VM MCP routes410, marketplace/onboarding link removed. Source, VM and
+execution history retained. Do not republish or count as an accepted demo
+without a new owner request. Historical technical evidence below is not UX acceptance.
+
 # Original agent stack demo
 
 Actual isolated KVM guest88, no host directories or working fleet sessions.

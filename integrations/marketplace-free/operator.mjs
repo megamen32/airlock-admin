@@ -19,7 +19,19 @@ async function json(path,body,method='GET') {
   return r.status===204 || r.headers.get('content-length')==='0'?{}:r.json();
 }
 const prefix='/api/v1/agents/';
-if(input.op==='list') {
+if(input.op==='withdraw-coding-demo') {
+  if(input.id!=='220d5ba5-72af-43b8-a22b-7dff57650993')throw new Error('Unexpected withdrawn application');
+  const isGuest=m=>['user','AGENT_ROLE_USER'].includes(m.role);
+  const members=(await json(prefix+input.id+'/members')).members||[];
+  let revoked=0;
+  for(const member of members.filter(isGuest)) {
+    await request(prefix+input.id+'/members/'+member.userId,undefined,'DELETE');revoked++;
+  }
+  await request(prefix+input.id+'/stop',{},'POST');
+  const remaining=(await json(prefix+input.id+'/members')).members||[];
+  const current=(await json(prefix+input.id)).agent;
+  console.log(JSON.stringify({id:input.id,revoked,remainingGuestMembers:remaining.filter(isGuest).length,status:current.status,running:current.running,dataRetained:true}));
+} else if(input.op==='list') {
   const r=await json(prefix.slice(0,-1));
   console.log(JSON.stringify((r.agents||[]).map(a=>({id:a.id,name:a.name,slug:a.slug,status:a.status,running:a.running}))));
 } else if(input.op==='create') {
