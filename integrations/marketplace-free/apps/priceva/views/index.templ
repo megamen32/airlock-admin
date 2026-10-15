@@ -1,25 +1,27 @@
 package views
-
 import "strconv"
-
 templ Index(v HomeView) {
- @Layout(v.Title) {
-  <h1 class="text-3xl font-semibold mb-4">{ v.Title }</h1>
-  <p class="mb-6">Проверка доступа к данным вашей демо-кампании Priceva. Платные действия и изменение цен отключены.</p>
-  <form method="post" action="/summary">
-   <button class="btn btn-primary" type="submit">Получить данные</button>
-  </form>
-  if v.Message != "" {
-   <section class="card bg-base-200 mt-6">
-    <div class="card-body">
-     <p>{ v.Message }</p>
-     if v.Ready {
-      <p>Товаров на первой странице: <strong>{ strconv.Itoa(v.Total) }</strong></p>
-      <p>Источник: Priceva API. Данные на { v.FetchedAt }</p>
-     }
-    </div>
-   </section>
+ @Layout("Товар на мониторинге — Priceva") {
+  <h1 class="text-3xl font-semibold mb-4">Что отслеживает Priceva?</h1>
+  <p class="mb-6">Откройте настоящий демонстрационный товар, магазин и состояние проверки. Когда цена ещё не получена, показываем это явно.</p>
+  <form method="post" action="/summary"><button class="btn btn-primary" type="submit">Показать демо-товар</button></form>
+  if v.Result.Message != "" {
+   <section class="card bg-base-200 mt-6"><div class="card-body">
+    <p>{ v.Result.Message }</p>
+    if v.Result.Ready && v.Result.Item != nil {
+     <article class="mt-4"><h2 class="card-title">{ v.Result.Item.Name }</h2>
+      <p>Артикул: { v.Result.Item.SKU }. Валюта: { v.Result.Item.Currency }.</p>
+      <p>Магазин: { v.Result.Item.Store }.</p>
+      <a class="link break-words" href={ templ.SafeURL(v.Result.Item.URL) } target="_blank" rel="noopener noreferrer">Открыть товар в магазине ↗</a>
+      if v.Result.Item.MonitoringStatus == "done" { <p>Статус проверки в Priceva: завершена. Этот статус сам по себе не подтверждает получение цены.</p> } else { <p>Проверка Priceva ещё выполняется.</p> }
+      <p class="font-semibold mt-3">Рыночная цена пока не получена</p>
+      <p>Настроенная исходная цена 0 не является предложением магазина. Она не показывается как цена товара.</p>
+     </article>
+     if v.Result.Reports != nil { <p>Отчётов в ответе: { strconv.Itoa(*v.Result.Reports) }.</p> }
+     <p class="text-sm">Источник: Priceva API. Данные на { v.Result.FetchedAt }.</p>
+    }
+   </div></section>
   }
-  <p class="text-sm mt-6">Кэш 2 минуты. Общий лимит демо: 4 обращения в час.</p>
+  <p class="text-sm mt-6">Только чтение одного учебного товара. Кнопка не запускает новые проверки и не меняет цены. Кэш 2 минуты, до 4 обновлений в час.</p>
  }
 }

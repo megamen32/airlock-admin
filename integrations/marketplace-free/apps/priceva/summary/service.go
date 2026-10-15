@@ -13,13 +13,14 @@ import (
 
 type Input struct{}
 type Result struct {
-	Ready     bool   `json:"ready"`
-	Products  *int   `json:"products,omitempty"`
-	Sources   *int   `json:"sources,omitempty"`
-	Reports   *int   `json:"reports,omitempty"`
-	Source    string `json:"source"`
-	FetchedAt string `json:"fetched_at"`
-	Message   string `json:"message,omitempty"`
+	Ready     bool         `json:"ready"`
+	Products  *int         `json:"products,omitempty"`
+	Sources   *int         `json:"sources,omitempty"`
+	Reports   *int         `json:"reports,omitempty"`
+	Source    string       `json:"source"`
+	FetchedAt string       `json:"fetched_at"`
+	Message   string       `json:"message,omitempty"`
+	Item      *CatalogItem `json:"item,omitempty"`
 }
 
 type Service struct {
@@ -55,9 +56,11 @@ func (s *Service) Get(ctx context.Context) (Result, error) {
 		if json.Unmarshal(cached, &r) != nil {
 			return Result{}, fail
 		}
-		return r, nil
+		if r.Item != nil || !r.Ready {
+			return r, nil
+		}
 	}
-	if !errors.Is(e, sql.ErrNoRows) {
+	if e != nil && !errors.Is(e, sql.ErrNoRows) {
 		return Result{}, fail
 	}
 	var used int
@@ -70,9 +73,14 @@ func (s *Service) Get(ctx context.Context) (Result, error) {
 	}
 	out := Result{Source: "Priceva", FetchedAt: time.Now().UTC().Format(time.RFC3339)}
 	counts := []int{}
+	pages := map[string]json.RawMessage{}
 	for _, endpoint := range []string{"product/list", "source/list", "report/list"} {
+		params := map[string]any{"filters": map[string]any{"page": 1, "limit": 20, "client_code": "airlock-demo-k120"}}
+		if endpoint == "source/list" {
+			params = map[string]any{"filters": map[string]any{"page": 1, "limit": 20, "product_id": "p", "id": "f"}, "add_monitoring": true}
+		}
 		callctx, stop := context.WithTimeout(ctx, 20*time.Second)
-		resp, err := s.c.RequestStream(callctx, agentsdk.RequestOpts{Method: "POST", Path: "/api/v1/" + endpoint, Body: map[string]any{"params": map[string]any{"filters": map[string]any{"page": 1, "limit": 20}}}})
+		resp, err := s.c.RequestStream(callctx, agentsdk.RequestOpts{Method: "POST", Path: "/api/v1/" + endpoint, Body: map[string]any{"params": params}})
 		if err != nil {
 			stop()
 			return Result{}, fail
@@ -104,12 +112,18 @@ func (s *Service) Get(ctx context.Context) (Result, error) {
 			return Result{}, errors.New("Priceva вернула неподтверждённый формат данных. Отчёт пока не готов.")
 		}
 		counts = append(counts, count)
+		pages[endpoint] = frame.Result
 	}
+	item, err := Catalog(pages["product/list"], pages["source/list"])
+	if err != nil {
+		return Result{}, errors.New("Priceva не вернула ожидаемый демонстрационный товар и источник. Данные не заменяются примером.")
+	}
+	out.Item = &item
 	out.Ready = true
 	out.Products = &counts[0]
 	out.Sources = &counts[1]
 	out.Reports = &counts[2]
-	out.Message = fmt.Sprintf("На первой странице Priceva: товаров %d, источников %d, отчётов %d. Подробные цены ещё проверяются.", counts[0], counts[1], counts[2])
+	out.Message = fmt.Sprintf("В демо-кампании: товаров %d, источников %d, отчётов %d. Показаны реальные настройки мониторинга. Рыночная цена пока не получена; настроенная цена 0 не используется как результат.", counts[0], counts[1], counts[2])
 	return s.save(ctx, out)
 }
 func (s *Service) save(ctx context.Context, out Result) (Result, error) {
