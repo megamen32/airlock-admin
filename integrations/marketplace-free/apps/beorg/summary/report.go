@@ -13,10 +13,17 @@ type Field struct {
 	Name  string `json:"name"`
 	Value string `json:"value"`
 }
+type Item struct {
+	Name      string `json:"name"`
+	Quantity  string `json:"quantity"`
+	UnitPrice string `json:"unit_price"`
+	Amount    string `json:"amount_without_vat"`
+}
 type Result struct {
 	Ready      bool    `json:"ready"`
 	DocumentID string  `json:"document_id,omitempty"`
 	Fields     []Field `json:"fields,omitempty"`
+	Items      []Item  `json:"items,omitempty"`
 	Source     string  `json:"source"`
 	FetchedAt  string  `json:"fetched_at,omitempty"`
 	Message    string  `json:"message"`
@@ -36,29 +43,51 @@ func Report(raw []byte) (Result, error) {
 	if len(raw) > 512<<10 || json.Unmarshal(raw, &v) != nil || v.ID != DocumentID || len(v.Documents) != 1 {
 		return Result{}, bad
 	}
-	doc := v.Documents[0]
-	if doc.Key != "INV1" || doc.Type != "INV" || doc.Broken == nil || *doc.Broken || doc.Data == nil {
+	d := v.Documents[0]
+	if d.Key != "INV1" || d.Type != "INV" || (d.Broken != nil && *d.Broken) || d.Data == nil {
 		return Result{}, bad
 	}
-	r := Result{Ready: true, DocumentID: v.ID, Source: "Beorg KYC API", Message: "Настоящий результат Beorg для вымышленного учебного счёта. Распознавание выполнено один раз 15 октября 2026 года; поля требуют проверки человеком."}
-	for _, f := range [][2]string{{"DocNumber", "Номер счёта"}, {"DocDate", "Дата счёта"}, {"SellerName", "Поставщик"}, {"CustomerName", "Покупатель"}, {"InvoiceBase", "Основание"}, {"ProductName", "Наименование"}, {"ProductUnitsNumber", "Количество"}, {"ProductPrice", "Цена"}, {"DocTotalAmountWithNDS", "Итоговая сумма"}, {"Currency", "Валюта"}} {
-		b, ok := doc.Data[f[0]]
-		if !ok || string(b) == "null" {
-			continue
+	read := func(data map[string]json.RawMessage, key string) (string, error) {
+		b := data[key]
+		if len(b) == 0 || string(b) == "null" {
+			return "", nil
 		}
 		var s string
-		if json.Unmarshal(b, &s) != nil {
+		if json.Unmarshal(b, &s) != nil || len(s) > 2000 {
+			return "", bad
+		}
+		return strings.TrimSpace(s), nil
+	}
+	r := Result{Ready: true, DocumentID: v.ID, Source: "Beorg KYC API", Message: "Результат ранее обработанного учебного счёта. OCR-поля требуют сверки с изображением: пропуски и опечатки сохранены, не исправлены по догадке. Новая обработка не запускалась."}
+	populated := 0
+	for _, f := range [][2]string{{"DocNumber", "Номер счёта"}, {"DocDate", "Дата"}, {"SellerName", "Поставщик"}, {"CustomerName", "Покупатель"}, {"InvoiceBase", "Основание"}, {"DocAmountWithoutNDS", "Сумма без НДС"}, {"DocTotalAmountWithNDS", "Итог с НДС"}, {"Currency", "Валюта"}} {
+		s, e := read(d.Data, f[0])
+		if e != nil {
 			return Result{}, bad
 		}
-		s = strings.TrimSpace(s)
-		if len(s) > 2000 {
-			return Result{}, bad
-		}
+		r.Fields = append(r.Fields, Field{Name: f[1], Value: s})
 		if s != "" {
-			r.Fields = append(r.Fields, Field{Name: f[1], Value: s})
+			populated++
 		}
 	}
-	if len(r.Fields) == 0 {
+	var products []map[string]json.RawMessage
+	if b := d.Data["Products"]; len(b) > 0 && string(b) != "null" {
+		if json.Unmarshal(b, &products) != nil || len(products) > 100 {
+			return Result{}, bad
+		}
+	}
+	for _, p := range products {
+		values := make([]string, 4)
+		for i, key := range []string{"ProductName", "ProductUnitsNumber", "ProductPrice", "ProductAmountWithoutNDS"} {
+			s, e := read(p, key)
+			if e != nil {
+				return Result{}, bad
+			}
+			values[i] = s
+		}
+		r.Items = append(r.Items, Item{Name: values[0], Quantity: values[1], UnitPrice: values[2], Amount: values[3]})
+	}
+	if populated == 0 {
 		return Result{}, bad
 	}
 	return r, nil

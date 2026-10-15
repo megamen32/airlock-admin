@@ -1,0 +1,129 @@
+{
+  "document_id": "s-1664407",
+  "documents": [
+    {
+      "key": "INV1",
+      "type": "INV",
+      "data": {
+        "DocNumber": "DEMO-001",
+        "DocDate": "15.10.2026",
+        "SellerName": "ООО \"ДЕМО ПОСТАВЩИК\"",
+        "SellerINN": "",
+        "SellerKPP": "",
+        "SellerAccountNumber": "",
+        "SellerBankName": "",
+        "SellerBankBIK": "",
+        "SellerBankCorrespondentAccountNumber": "",
+        "CustomerName": "ООО \"ДЕМО ПОКУПАТЕЛЬ\"",
+        "CustomerINN": "",
+        "CustomerKPP": "",
+        "ShipperINN": "",
+        "ShipperKPP": "",
+        "ConsigneeINN": "",
+        "ConsigneeKPP": "",
+        "InvoiceBase": "УЧЕБНЫЙ ПРИМЕР AIRLOCK",
+        "Currency": "",
+        "Products": [
+          {
+            "ProductAmountWithoutNDS": "9800,00",
+            "ProductMeasurementUnit": "ШТ.",
+            "ProductNDSAmount": "",
+            "ProductNDSRate": "",
+            "ProductName": "УЧЕБНАЯ КОНСУЛЬТАЦИЯ ПО ПЛАТФОРМЕ AIRLICK",
+            "ProductPrice": "4900,00",
+            "ProductTotalAmountWithNDS": "",
+            "ProductUnitsNumber": "2"
+          }
+        ],
+        "DocAmountWithoutNDS": "9800,00",
+        "DocNDSRate": "",
+        "DocNDSAmount": "",
+        "DocTotalAmountWithNDS": "",
+        "TotalAmountInWords": "ДЕВЯТЬ ТЫСЯ ВОСЕМЬСОТ РУБЛЕЙ 00 КОПЕЕК",
+        "HasDirectorSignature": false,
+        "HasChiefAccountantSignature": false,
+        "HasAccountantSignature": false,
+        "HasResponsibleSignature": false,
+        "HasSeal": false
+      },
+      "metadata": {
+        "confidents": {
+          "ConsigneeINN": null,
+          "ConsigneeKPP": null,
+          "Currency": null,
+          "CustomerINN": null,
+          "CustomerKPP": null,
+          "CustomerName": null,
+          "DocAmountWithoutNDS": null,
+          "DocDate": null,
+          "DocNDSAmount": null,
+          "DocNDSRate": null,
+          "DocNumber": null,
+          "DocTotalAmountWithNDS": null,
+          "HasAccountantSignature": null,
+          "HasChiefAccountantSignature": null,
+          "HasDirectorSignature": null,
+          "HasResponsibleSignature": null,
+          "HasSeal": null,
+          "InvoiceBase": null,
+          "SellerAccountNumber": null,
+          "SellerBankBIK": null,
+          "SellerBankCorrespondentAccountNumber": null,
+          "SellerBankName": null,
+          "SellerINN": null,
+          "SellerKPP": null,
+          "SellerName": null,
+          "ShipperINN": null,
+          "ShipperKPP": null,
+          "TotalAmountInWords": null
+        },
+        "confidences": null,
+        "verifications": {},
+        "metadata_check": {
+          "status": 0,
+          "checks": {
+            "source_check": 1,
+            "suspicious_app_detection": 0,
+            "suspicious_value": "",
+            "create_date": 1,
+            "make": "",
+            "model": "",
+            "not_standart_sizes": 1,
+            "incorrect_dpi": 0,
+            "color_profile": 0
+          }
+        },
+        "external_integrations": {
+          "terrorist_extremist": {
+            "value": null
+          },
+          "inn": {
+            "status": null,
+            "value": null
+          }
+        },
+        "fullness": {
+          "value": 0.47,
+          "comment": "Обнаружено низкое качество документа или рукописное заполнение. Используйте опцию «Улучшенное качество»"
+        },
+        "check_result": {
+          "status": "Approved",
+          "details": {
+            "logic": {
+              "status": "Not executed"
+            },
+            "metadata": {
+              "status": "Approved"
+            },
+            "fraud": {
+              "status": "Not executed"
+            },
+            "external_integrations": {
+              "status": "Approved"
+            }
+          }
+        }
+      }
+    }
+  ]
+}

@@ -32,5 +32,4 @@ var AppCSSName = "app." + AppCSSHash() + ".css"
 //	<link rel="stylesheet" href={ views.AppCSSPath }/>
 var AppCSSPath = "/static/" + AppCSSName
 
-//go:embed static/invoice-demo.png
-var InvoicePNG []byte
+

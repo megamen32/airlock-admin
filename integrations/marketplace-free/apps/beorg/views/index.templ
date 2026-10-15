@@ -1,27 +1,59 @@
 package views
 
+import "fmt"
+
 templ Index(v HomeView) {
- @Layout("Распознавание счёта — Beorg") {
-  <h1 class="text-3xl font-semibold mb-4">Изображение счёта → готовые поля</h1>
-  <p class="mb-4">Beorg распознал учебный счёт с вымышленными организациями. Сравните номер, дату и сумму с изображением. Это реальный ответ OCR, а не заранее заполненная форма.</p>
-  <form method="post" action="/summary"><button class="btn btn-primary" type="submit">Показать распознанные поля</button></form>
-  if v.Result.Message != "" {
-   <section class="card bg-base-200 mt-6"><div class="card-body">
-    <p>{ v.Result.Message }</p>
-    if v.Result.Ready {
-     <dl class="mt-3">
-      for _,f := range v.Result.Fields {
-       <div class="border-b border-base-300 py-3"><dt class="text-sm opacity-80">{ f.Name }</dt><dd class="font-semibold break-words">{ f.Value }</dd></div>
+ @Layout("Beorg — распознавание счёта") {
+  <nav class="ocr-top" aria-label="Навигация">
+   <a href="https://demo.airlockrun.ru/" class="ocr-brand">Airlock<span>/</span><strong>Beorg</strong></a>
+   <span class="ocr-demo-label">Интерактивное демо</span>
+  </nav>
+  <header class="ocr-heading">
+   <div><p class="ocr-eyebrow">РАСПОЗНАВАНИЕ ДОКУМЕНТОВ</p><h1>От счёта — к готовым данным</h1><p class="ocr-intro">Посмотрите, какие поля Beorg извлёк из документа, и сравните их с оригиналом.</p></div>
+   <a class="ocr-button ocr-button-primary" href="https://demo.airlockrun.ru/agents/d88-beorg-invoice/chat?demo=1">Спросить о счёте <span aria-hidden="true">↗</span></a>
+  </header>
+  <div class="ocr-workspace">
+   <section class="ocr-panel ocr-document" aria-labelledby="document-title">
+    <div class="ocr-panel-head"><div><h2 id="document-title">Исходный документ</h2><p>Учебный счёт · 1 страница</p></div><a class="ocr-text-link" href="/static/invoice-demo.png" target="_blank" rel="noopener">Открыть оригинал ↗</a></div>
+    <div class="ocr-paper"><img src="/static/invoice-demo.png" alt="Учебный счёт DEMO-001 от 15 октября 2026 года: две консультации по 4900 рублей, всего 9800 рублей без НДС. Организации вымышлены." width="1600" height="1900"/></div>
+   </section>
+   <section class="ocr-panel ocr-result" aria-labelledby="result-title">
+    <div class="ocr-panel-head"><div><h2 id="result-title">Результат распознавания</h2><p>Данные из ответа Beorg</p></div><span class="ocr-status">Нужна сверка</span></div>
+    if v.Ready {
+     <div class="ocr-result-body">
+      <p class="ocr-summary"><strong>{ fmt.Sprintf("%d из %d",v.Recognized,v.Recognized+v.Missing) }</strong> полей заполнено<span>Пропуски отмечены ниже</span></p>
+      <dl class="ocr-fields">
+       for _,f := range v.Fields {
+        <div class="ocr-field"><dt>{ f.Name }</dt><dd>
+         if f.Value != "" {
+          { f.Value }
+         } else {
+          <span class="ocr-missing">Не распознано</span>
+         }
+        </dd></div>
+       }
+      </dl>
+      if len(v.Items)>0 {
+       <section class="ocr-items" aria-labelledby="items-title"><h3 id="items-title">Позиции счёта</h3>
+        for _,i := range v.Items {
+         <article class="ocr-item"><p>{ i.Name }</p><div><span>Количество <strong>{ i.Quantity }</strong></span><span>Цена <strong>{ i.UnitPrice }</strong></span><span>Без НДС <strong>{ i.Amount }</strong></span></div></article>
+        }
+       </section>
       }
-     </dl>
-     <p class="text-sm mt-4">Источник: { v.Result.Source }. Прочитано { v.Result.FetchedAt }.</p>
+      <p class="ocr-review-note">Сверьте поля с оригиналом. Пропуски и опечатки сохранены так, как их вернул сервис.</p>
+     </div>
+    } else {
+     <div class="ocr-empty" role="status"><h3>Результат пока недоступен</h3><p>Сервис не вернул данные. Исходный счёт остаётся слева — попробуйте проверить результат позже.</p></div>
     }
-   </div></section>
-  }
-  <section class="mt-8"><h2 class="text-xl font-semibold mb-3">Исходное изображение</h2>
-   <a class="link" href="/static/invoice-demo.png" target="_blank" rel="noopener">Открыть изображение в полном размере ↗</a>
-   <img src="/static/invoice-demo.png" alt="Вымышленный демонстрационный счёт DEMO-001 от 15 октября 2026 года. Не является документом для оплаты." class="w-full h-auto border border-base-300 rounded-xl mt-3"/>
-  </section>
-  <p class="text-sm mt-6">Одна обработка на приветственном бонусе 200 ₽, без карты и пополнений. Кнопка повторно читает готовый результат, новые распознавания не запускает. Личные документы не загружаются. Кэш 15 минут, до 12 чтений в час.</p>
+    <div class="ocr-panel-foot"><span>
+     if v.ReadAt!="" {
+      Обновлено { v.ReadAt }
+     } else {
+      Ранее обработанный счёт
+     }
+    </span><form method="post" action="/summary"><button type="submit" class="ocr-button ocr-button-secondary">Проверить данные</button></form></div>
+   </section>
+  </div>
+  <footer class="ocr-footer"><p>Учебный счёт обработан Beorg 15 октября. Проверка читает готовый результат и не запускает новое распознавание.</p><a class="ocr-text-link" href="https://airlockrun.ru/#/product/beorg">О продукте Beorg ↗</a></footer>
  }
 }

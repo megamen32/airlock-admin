@@ -50,6 +50,12 @@ if(input.op==='withdraw-coding-demo') {
 } else if(input.op==='upgrade') {
   const r=await request(prefix+input.id+'/upgrade',{description:input.description},'POST');
   console.log(JSON.stringify({id:input.id,accepted:r.status===202}));
+} else if(input.op==='grant-test-user') {
+  if(!/^[0-9a-f-]{36}$/.test(input.id)||!/^[0-9a-f-]{36}$/.test(input.userId))throw new Error('Invalid test identity');
+  const user=(await json('/api/v1/users')).users.find(u=>u.id===input.userId);
+  if(user?.tenantRole!=='TENANT_ROLE_USER')throw new Error('Ordinary test user required');
+  await request(prefix+input.id+'/members',{userId:input.userId,role:'user'},'POST');
+  console.log(JSON.stringify({id:input.id,role:'user',singleTestUser:true}));
 } else if(input.op==='grant-guests') {
   const dir=(await json('/api/v1/users/selectable')).users;
   const all=dir.find(u=>u.kind==='group' && u.displayName==='All users');

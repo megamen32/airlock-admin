@@ -61,6 +61,9 @@ func (s *Service) Get(ctx context.Context) (Result, error) {
 		return Result{}, fail
 	}
 	defer resp.Body.Close()
+	if resp.StatusCode != 200 {
+		return Result{}, fail
+	}
 	raw, e := io.ReadAll(io.LimitReader(resp.Body, (512<<10)+1))
 	if e != nil || len(raw) > 512<<10 {
 		return Result{}, fail
