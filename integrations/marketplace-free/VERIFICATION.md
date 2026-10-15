@@ -164,3 +164,41 @@ Wikibotquestionнакарточке теперь соответствует ко
 worker не расходовал его квоту. Проверки описаны в airlock-demo/landing/VERIFICATION.md.
 Core/RUfrontend не менялись. Существующий whole-checkoutforeignWIP сохранён;
 строгий whole-treeGSDgateBLOCKED_REPOSITORY_STATE остаётся отдельной границей.
+
+## Semantica AI: onboarding, MCP, ordinary guest —15Oct2026
+
+Existing account only; no duplicate signup. Russian Airlock project
+1867448b-0052-47d3-9859-a7bd974dc56e created via actual headed44UI; countryru,
+one manual topic/prompt. NativeAPI/MCP key created once and immediately copied
+primary/private100/YandexDisk with realreadback. No card/payment/subscription.
+One UI scan confirmed at displayed7gift tokens; scan4e433437-a94b-4308-8067-b2647c5725cc
+completed01:50:28UTC. Real get_project/get_scan returned2received/3requested,
+0mentions,GoogleAIO1failed. ChatGPT/Perplexity answered the one fixed question;
+this does not substantiate general market awareness or a successful Google answer.
+
+Native app d2c05666-fdc9-4882-be5b-be2d195d3b4e / d88-semantica-visibility,
+SDK0.7.0. Buildc0584a1a finished36.179s, sourcee4dd8734c26d;20ownedbusinesssource
+files matched native export byte-for-byte. Published25ownedsource/cardfiles in
+main d6ccd22a; shared foreignbranch/index/WIP preserved. Normalizing generated
+scaffold trailingEOF was excluded from gitwhitespacecheck, no checks disabled
+forbusinesssource. Actual parseraccountingunit passed0.843s in1GiB/CPU2/tasks128,
+max120s; incomplete/missing/foreign/inflated reports rejected. No integration mocks.
+
+Real ordinaryuser verifiedTENANT_ROLE_USER. Native POST /summary showed2/3,
+separateGoogleAIO«Нетданных» and timestamp, no inventedanswers/mentions. Native
+chatdf35fb57 success16.779s, actualrun_jstool resultbrand_visibility readytrue,
+received2/requested3/failed1/mentions0; finalRussiananswer distinguished failure
+from absentmentions. Credentialmutation403. NativeencryptedMCP authorized,
+raw115tools defaultAccess empty; onlytypedfixedreadtoolandform exposed.
+
+Persistence: PostgreSQLquota4/h20total includesfailures,cache30min,1active,
+20sdeadline512KiBdecodedcap; two fixedreadcalls perrefresh. Sealedapp1GiB and
+demo88aggregatehigh8/max12GiB/swap0/CPU4/tasks4096/disk48GiB unchanged;
+BuildKit4GiB/CPU2,onebuild. Headedvendorbrowser44ownunit2GiB/CPU2/tasks256
+RuntimeMax2h closed and stopped afteronboarding. Newwelcomecredits arefinite;
+paid-onlyscan/writeAPI notexposed. Core/Internal/RUfrontend unchanged.
+
+Private receipts: .tmp/semantica-ai-20261015/{create-result.json,upload-result.json,
+source-permission-proof.json,guest-form.html,chat-proof.json,publication-result.json}.
+Publicentryoverlay now includessemantica-ai; headedmarketplace/CTA acceptance
+is recorded separately in privateairlock-demo landing/verification-cta-20261015.md.

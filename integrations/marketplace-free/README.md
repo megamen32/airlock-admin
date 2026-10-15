@@ -123,3 +123,22 @@ trial/UI-free с неподтверждённым API; existing аккаунты
 упоминаниеS3 отменено. Служебный адрес — airlock@bezrabotnyi.com.
 Файловый мини-чат исполнителей расположен в .agents/shared-session/
 marketplace-chat.jsonl внеGit; ключи/пароли в него не записываются.
+
+## Semantica AI
+
+[Видимость бренда в ИИ](https://d88-semantica-visibility.demo.airlockrun.ru/)
+подключена через официальный MCP. Онбординг существующего аккаунта завершён:
+проект Airlock / airlockrun.ru, Россия, русский язык, одна тема и один вопрос
+о self-hosted ИИ-платформах. В кабинете выполнен один скан за7подарочныхтокенов.
+Результат15Oct2026: ChatGPT иPerplexity ответили безупоминанийAirlock;
+GoogleAIOverview неответил. Неполученныйответ неявляетсянулевымупоминанием.
+
+apps/semantica-ai даёт только фиксированный get_project+get_scan через
+brand_visibility и русскую вебформу. Все115исходных MCPtools скрыты отгостей;
+нет arbitraryproject/scanID, запусковсканов, записей илиплатежей. Ключ хранится
+в штатном encryptedMCPresource; privateJSON немедленноскопированна100 и
+Яндекс.Диск сreadback. Доступ наwelcomeкредитах; текущееusage-basedподключение
+разрешаетчтение. Полный7дневныйtrial/бессрочнобесплатныйAPI неутверждается.
+Кэш30минут,4refresh/h20totalвключаяошибки,2MCPreadнаrefresh,1active,20s,512KiB.
+ИсходныйInternal/RUfrontendнеменялся. Обычныйguestform/toolchat приняты;
+подробныеприёмки вVERIFICATION.md.
