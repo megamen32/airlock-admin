@@ -478,3 +478,50 @@ Botmother liveheaded послеэтоговсёещёusers/testers0; неизв�
 Evidence:.tmp/noticeplace-demo-20261015/{check-a/source-check-result,
 guest-form-proof,approval-result,approved-chat-proof,friendly-chat-proof,
 final-matrix-proof,browser-proof,final-source-match-proof,scope-negative-proof}.json.
+
+
+## 15 октября: десятое приложение — оригинальная память и задачи eXmanager
+
+Доставлено отдельное демо `d88-exmanager-memory`, agent7f94d17b-d93f-4eeb-80c3-a2a05460510c.
+Исходники canonical exmanager не менялись: архив pinned b57ae063, один вызов
+фабрики и отдельный facade/UI/admission в private airlock-demo/adapters/exmanager-demo.
+Оригинальные store.remember/searchMemory/createTask/listTasks и L3/manual L2
+используются напрямую. Fresh demo DB, без внешних MCP/соединений/credentials,
+коннекторов, тем, cron/jobs и производственных данных. Пользователь может
+создать только собственный факт/задачу; общая квота6/час100всего, нормализованный
+повтор возвращает сохранённый результат, UNKNOWN не повторяется.
+
+Focused generation/unit PASS18.451s, peak849432576 B/OOM0; category fast unit,
+expected120/max1200s. Первый native build упал при компиляции optional phone
+connector из-за лимита процессов. В пакете исключены4его файла; старый runtime
+оставил пустые каталоги и попытался собрать их. Удалены только2доказанно пустых
+каталога rmdir в собственном source workspace, core не патчили. Одинаковый
+PUT не запускает rebuild — старые квитанции сохранены, неизвестные операции
+не повторялись. Исходный код SDK CLI подставлял latest; финальная сборка
+b46e7499-540d-4131-b8d8-8c319bf373fa complete48.441s, SDK0.7.0, sourceRef
+1f9a832b8fd3f8f29cacd21998a904bb2d3b8b05. Native builder нормализовал version+digest
+к v0.7.0 tag: наблюдаемый digest записан отдельно, digest-pin runtime не заявляется.
+Source export233files,232совпали с пакетом + одно объяснённое managed Dockerfile;
+прикладные методы byte-identical, optional phone connector отсутствует.
+
+Реальные формы сохранили «Орбиту»/янтарный цвет/задачу, повтор без дублей;
+другой native user видит пустые списки и получает404на чужой conversation
+с теми же валидными before/limit (первый запрос без обязательных параметров
+дал400 и не был принят как доказательство). Source/credential/PATCH403.
+Данные пережили final rebuild. Новый native chat success17.771s прочитал
+точные данные. Headed44 после final build: другой гость через вебформу
+сохранил «Луну»/синий цвет/задачу и в обычном native чате прочитал их.
+
+VPS releasev26 поверхv25 сохраняет чужие portal/legal assets. Shtatno теперь
+имеет2явно подписанных component CTA (NoticePlace/eXmanager), рядом слева;
+375/1280, корректный draft/0автоотправок, real form в light/dark, nooverflow
+PASS12.869s. Dark mobile form, CTA и настоящий chat screenshot просмотрены.
+Native build/exec config обоих типов наследует combo/airlock-demo-subscriptions.
+Браузерh закрыт/unitinactive; чужие процессы и production exmanager не трогали.
+Новых секретов/регистраций/платежей нет. Private proofs:
+.tmp/exmanager-demo-20261015/, card registrations/exmanager.md.
+
+Теперь10nativeapps, main7полных product CTA +1частичное «Штатно» с2компонентами;
+полное «Штатно» и все37исходных/33текущих карточки НЕ объявлены готовыми.
+Beorg/TealBand/Botmother и платные/manual ограничения сохраняются; общий
+мини-чат не содержит новых signup результатов после финальной волны20аккаунтов.
