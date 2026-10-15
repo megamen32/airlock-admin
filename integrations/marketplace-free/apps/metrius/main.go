@@ -20,8 +20,7 @@ func main() {
 	a.RegisterRoute(&agentsdk.Route{Method: "POST", Path: "/probe", Access: agentsdk.AccessAdmin, Handler: func(w http.ResponseWriter, r *http.Request) error {
 		ctx, cancel := context.WithTimeout(r.Context(), 20*time.Second)
 		defer cancel()
-		var out any
-		e := m.CallTool(ctx, "list_channels", map[string]any{}, &out)
+		out, e := m.CallTool(ctx, "list_channels", map[string]any{})
 		w.Header().Set("Content-Type", "application/json")
 		if e != nil {
 			w.WriteHeader(502)
