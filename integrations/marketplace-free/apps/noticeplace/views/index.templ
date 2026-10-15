@@ -1,0 +1,28 @@
+package views
+
+templ Index(v HomeView) {
+ @Layout("Учебное уведомление — NoticePlace") {
+  <p class="text-sm mb-3">NoticePlace · доставка уведомлений</p>
+  <h1 class="text-3xl font-semibold mb-4">Отправьте уведомление через Airlock</h1>
+  <p class="mb-4">Учебная заявка DEMO-001 пройдёт через NoticePlace в отдельную демонстрационную комнату Matrix.</p>
+  <section class="card bg-base-200 mb-6"><div class="card-body">
+   <h2 class="card-title">Что будет отправлено</h2>
+   <p><strong>Airlock: учебное уведомление</strong></p>
+   <p>Это проверка интеграции Airlock; никаких действий от человека не требуется.</p>
+  </div></section>
+  <form method="post" action="/send"><button class="btn btn-primary" type="submit">@ActionIcon("send") Отправить учебное уведомление</button></form>
+  <section class="card bg-base-200 mt-6"><div class="card-body">
+   <h2 class="card-title">Результат</h2>
+   <p role="status">{ v.Result.Message }</p>
+   if v.Result.Ready {
+    <p class="font-semibold">Принято NoticePlace</p>
+    <p>Время приёма, UTC: { v.Result.AcceptedAt }</p>
+   }
+  </div></section>
+  <a class="link inline-block mt-4" href="/">Проверить результат без повторной отправки</a>
+  <section class="mt-8"><h2 class="font-semibold mb-2">Как работает демо</h2>
+   <p>NoticePlace принимает уведомление и доставляет его в настроенный канал. Здесь используется отдельная служебная комната Matrix: учебная заявка не создаёт аварию и не вызывает звонки.</p>
+   <p class="mt-3 text-sm">Статус «Принято» подтверждает ответ сервиса, а доставка происходит асинхронно. Повторное нажатие в течение 10 минут показывает тот же результат. Общий лимит — 6 уведомлений в час и 100 за всё время демо.</p>
+  </section>
+ }
+}

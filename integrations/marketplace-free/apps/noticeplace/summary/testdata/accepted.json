@@ -1,0 +1,10 @@
+{
+  "event_id": "evt_50b3117cfd0c49a68e5aeabbd8423de4",
+  "incident_id": "inc_6cfc13739b604c6ba1e4b5e800386b5c",
+  "state": "open",
+  "deduplicated": false,
+  "idempotent": false,
+  "initial_delivery_id": "dlv_c49e40235a1444c6a50bede879b26683",
+  "agent_job_delivery_id": null,
+  "notifications_muted": false
+}
