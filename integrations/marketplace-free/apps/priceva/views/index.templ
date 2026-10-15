@@ -13,11 +13,17 @@ templ Index(v HomeView) {
       <p>Артикул: { v.Result.Item.SKU }. Валюта: { v.Result.Item.Currency }.</p>
       <p>Магазин: { v.Result.Item.Store }.</p>
       <a class="link break-words" href={ templ.SafeURL(v.Result.Item.URL) } target="_blank" rel="noopener noreferrer">Открыть товар в магазине ↗</a>
-      if v.Result.Item.MonitoringStatus == "done" { <p>Статус проверки в Priceva: завершена. Этот статус сам по себе не подтверждает получение цены.</p> } else { <p>Проверка Priceva ещё выполняется.</p> }
+      if v.Result.Item.MonitoringStatus == "done" {
+       <p>Статус проверки в Priceva: завершена. Этот статус сам по себе не подтверждает получение цены.</p>
+      } else {
+       <p>Проверка Priceva ещё выполняется.</p>
+      }
       <p class="font-semibold mt-3">Рыночная цена пока не получена</p>
       <p>Настроенная исходная цена 0 не является предложением магазина. Она не показывается как цена товара.</p>
      </article>
-     if v.Result.Reports != nil { <p>Отчётов в ответе: { strconv.Itoa(*v.Result.Reports) }.</p> }
+     if v.Result.Reports != nil {
+      <p>Отчётов в ответе: { strconv.Itoa(*v.Result.Reports) }.</p>
+     }
      <p class="text-sm">Источник: Priceva API. Данные на { v.Result.FetchedAt }.</p>
     }
    </div></section>
