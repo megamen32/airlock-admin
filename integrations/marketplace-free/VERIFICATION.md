@@ -425,3 +425,56 @@ Native build, настоящий PostgreSQL admission и callback, guest UI/chat
 Код подготовлен независимо от ожидаемого собственного /start; общий goal
 остаётся неполным,8готовых интеграций сохранены.
 Evidence: .tmp/botmother-root-20261015/check-{b,c,d}/source-check-result.json.
+
+
+## 15 октября: NoticePlace — девятое настоящее native приложение
+
+Создана новая private Matrix-комната, joined_members толькослужебныйaiadmin;
+нет приглашений другим людям. Через штатную admin API создан consumer одного
+project airlock-marketplace-demo: только matrix.message, maxSeverityinfo,
+maxRepeats1, без звонков/healthjobs. Основные токены, каналы, сервисы и source
+NoticePlace не менялись. Один read admin GET встретил transient mesh SQL
+connection loss, следующий GET200 и создание успешно; service restart не нужен.
+Intake токен до первой доставки primary0600/copy100/Яндекс.Диск readbackPASS.
+Один операторский notification/info202 и независимые Matrix messages/event
+GET подтвердили текст/correlation. Не использованы ложные health-инциденты.
+
+App d88-noticeplace-notifications: русские MVC form/chat, admin-only raw
+Connection с одним scoped intake, фиксированный текст/получатель/info. Intent
+доPOST,6/h100total,10min reuse поnativeuser.ID; UNKNOWN никогда не повторяется.
+Настоящий API приём отделён в UI/модели от асинхронной доставки/прочтения.
+Local air update/templ/Tailwind/go test PASS10,643с, memory.peak695103488/OOM0
+в1GiB/CPU2/tasks128/swap0/IO10/temp2GiB, expected30/max300. Fastunit проверяет
+реальный202fixture/ошибки/prohibitedfields/manifest; не заменяет acceptance.
+Native final buildd0ad027e complete36,540с/SDK0.7.0. Все23sourcefiles совпали
+с main65c01354; builder-generated base:v0.7.0 и managed ignores сохранены,
+без повторной сборки уже работающих байтов. Public source/private overlay
+синхронизированы без смены чужой ветки/index/WIP airlock-admin.
+
+Обычный guest form: принят настоящий API запрос, повтор дал ту же квитанцию;
+credentialPOST403, sourceGET403. Send-chat был suspended на штатном run_js
+request_confirmation. Свой canary approved один раз с exact resumeRunId;
+native ответ вернул новый runId, наблюдали именно продолжение18714d92,
+success12,643с (parent36a1611c success сам по себе не был завершением ответа).
+Машинные ready/state в первой реплике убраны явной app-инструкцией; новый
+status-chat success15,119с с обычным русским объяснением без полейJSON.
+Тот же запрос/approval/уведомление не переотправлялись.
+
+Headed44: две ширины375/1280, main partial-componentCTA первая слева,
+видима и явно NoticePlace/один компонент «Штатно»; верный native chat draft,
+0auto sends. Реальная webform, две системные темы с разными background/color,
+безoverflow;12,753с. Root посмотрел тёмный mobile screenshot: всё читается.
+Независимый Matrix readback и3GETevent подтвердили всего3ожидаемых сообщения
+(operator/APIguest/headedguest), без дублей после повторной формы и чата.
+Roomпо-прежнему один serviceaccount. Scopenegative: чужойprojectGET denied.
+UI не выдаёт само202 за доставку; доставку проверил внешний Matrix consumer.
+
+Main release20261015-v25-noticeplace-demo создан поверхv24, сохранил portal/
+legal и другие чужие assets; privateoverlay8b65cb2, gateway entry обновлён
+до canary, не прерывал его. Никаких рестартов core/backend/NoticePlace.
+Итог9nativeapps;7полных готовых карточек плюс явная component-demoCTA
+«Штатно». Полный набор «Штатно» и оставшиеся платные/ошибочные API не готовы.
+Botmother liveheaded послеэтоговсёещёusers/testers0; неизвестные действиянеповторять.
+Evidence:.tmp/noticeplace-demo-20261015/{check-a/source-check-result,
+guest-form-proof,approval-result,approved-chat-proof,friendly-chat-proof,
+final-matrix-proof,browser-proof,final-source-match-proof,scope-negative-proof}.json.
