@@ -5,21 +5,10 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"github.com/airlockrun/agentsdk"
-	"regexp"
-	"strconv"
 	"time"
 )
 
-type Input struct{}
-type Result struct {
-	Ready     bool   `json:"ready"`
-	Total     int    `json:"total"`
-	Source    string `json:"source"`
-	FetchedAt string `json:"fetched_at"`
-	Message   string `json:"message,omitempty"`
-}
 type Service struct {
 	m    *agentsdk.MCPHandle
 	db   *agentsdk.AgentDB
@@ -47,10 +36,10 @@ func (s *Service) Get(ctx context.Context) (Result, error) {
 	ctx, cancel := context.WithTimeout(ctx, 20*time.Second)
 	defer cancel()
 	var cached []byte
-	e := s.db.QueryRowContext(ctx, "SELECT payload FROM summary_cache WHERE id=1 AND fetched_at>NOW()-INTERVAL '15 minutes'").Scan(&cached)
+	e := s.db.QueryRowContext(ctx, "SELECT payload FROM summary_cache WHERE id=1 AND fetched_at>NOW()-INTERVAL '15 minutes' AND payload->>'scope'='airlock-demo-project-138087'").Scan(&cached)
 	if e == nil {
 		var r Result
-		if json.Unmarshal(cached, &r) != nil {
+		if json.Unmarshal(cached, &r) != nil || !r.Ready || r.Scope != scope {
 			return Result{}, fail
 		}
 		return r, nil
@@ -66,47 +55,30 @@ func (s *Service) Get(ctx context.Context) (Result, error) {
 	if e != nil {
 		return Result{}, fail
 	}
-	r, e := s.m.CallTool(ctx, "count_tasks", map[string]any{"completed": false, "archived": false, "group_by": "status"})
+	r, e := s.m.CallTool(ctx, "fetch_tasks", map[string]any{"datasource_id": datasourceID, "completed": false, "archived": false, "limit": 10})
 	if e != nil {
 		return Result{}, fail
 	}
 	if r.IsError {
-		return Result{}, errors.New("Shtab отклонил запрос. Возможно, исчерпан лимит бесплатного тарифа или нужно подключить токен.")
+		return Result{}, errors.New("Shtab отклонил запрос. Возможно, исчерпан бесплатный лимит. Задачи не заменяются пустым списком.")
 	}
-	if len(r.StructuredContent) > 65536 {
-		return Result{}, fail
-	}
-	var actual struct {
-		Type  string `json:"type"`
-		Total *int   `json:"total"`
-	}
-	if len(r.StructuredContent) > 0 {
-		if json.Unmarshal(r.StructuredContent, &actual) != nil {
-			return Result{}, fail
-		}
-	}
-	if actual.Total == nil {
-		pattern := regexp.MustCompile(`^(\d+) task\(s\) match the specified criteria\.$`)
+	raw := r.StructuredContent
+	if len(raw) == 0 {
 		for _, c := range r.Content {
-			if c.Type == "text" && len(c.Text) < 65536 {
-				if m := pattern.FindStringSubmatch(c.Text); len(m) == 2 {
-					v, err := strconv.Atoi(m[1])
-					if err == nil {
-						actual.Total = &v
-						break
-					}
-				}
+			if c.Type == "text" && json.Valid([]byte(c.Text)) {
+				raw = []byte(c.Text)
+				break
 			}
 		}
 	}
-	if actual.Total == nil || *actual.Total < 0 {
+	if len(raw) == 0 || len(raw) > 65536 {
 		return Result{}, fail
 	}
-	out := Result{Ready: true, Total: *actual.Total, Source: "Shtab", FetchedAt: time.Now().UTC().Format(time.RFC3339)}
-	out.Message = fmt.Sprintf("Незавершённых задач: %d", out.Total)
-	if out.Total == 0 {
-		out.Message = "В демо-команде пока нет незавершённых задач."
+	out, e := Report(raw)
+	if e != nil {
+		return Result{}, fail
 	}
+	out.FetchedAt = time.Now().UTC().Format(time.RFC3339)
 	payload, e := json.Marshal(out)
 	if e != nil {
 		return Result{}, fail

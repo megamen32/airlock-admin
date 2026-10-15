@@ -5,9 +5,9 @@ import "strconv"
 templ Index(v HomeView) {
  @Layout(v.Title) {
   <h1 class="text-3xl font-semibold mb-4">{ v.Title }</h1>
-  <p class="mb-6">Настоящее количество незавершённых задач отдельной демо-команды. Изменение задач отключено.</p>
+  <p class="mb-6">Учебные задачи отдельной доски Airlock: настоящие названия и статусы из Shtab MCP. Другие проекты и персональные данные не показываются. Изменение задач гостям недоступно.</p>
   <form method="post" action="/summary">
-   <button class="btn btn-primary" type="submit">Показать сводку</button>
+   <button class="btn btn-primary" type="submit">Показать демо-задачи</button>
   </form>
   if v.Message != "" {
    <section class="card bg-base-200 mt-6">
@@ -15,7 +15,13 @@ templ Index(v HomeView) {
      <p>{ v.Message }</p>
      if v.Ready {
       <p>Незавершённых задач: <strong>{ strconv.Itoa(v.Total) }</strong></p>
-      <p>Источник: Shtab MCP. Данные на { v.FetchedAt }</p>
+      for _, t := range v.Tasks {
+       <article class="mt-4">
+        <h2 class="font-semibold">{ t.Name }</h2>
+        <p>Статус: { t.Status }</p>
+       </article>
+      }
+      <p>Источник: { v.Source }. Данные на { v.FetchedAt }</p>
      }
     </div>
    </section>

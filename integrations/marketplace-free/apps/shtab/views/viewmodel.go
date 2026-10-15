@@ -1,8 +1,8 @@
 package views
 
+import "agent/summary"
+
 type HomeView struct {
-	Title              string
-	Ready              bool
-	Total              int
-	Message, FetchedAt string
+	Title string
+	summary.Result
 }
