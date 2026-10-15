@@ -1,10 +1,11 @@
-# TARGPatrol — externalblocked (CDN; ретрай 15.10 подтвердил деградацию с обоих хостов)
+# TARGPatrol — created + emailverified + login verified (freeUI; ретрай 15.10 через резидентный прокси)
 
-- статус: externalblocked
-- основание: https://targpatrol.com/pricing ; https://app.targpatrol.com/
-- signup/login: https://app.targpatrol.com/sign-up (Angular SPA), email предполагался: airlock@bezrabotnyi.com — регистрация не выполнена
-- trial/квота: (по research) Free forever до 10 пользователей; External API и Webhooks — только в платном Base ($15/user/мес); 14-дневный trial Base требует карту Stripe — активировать запрещено
-- account/workspace IDs: нет — аккаунт не создан
-- креды ref: ~/.config/airlock-marketplace-accounts/targpatrol.json (пароль зарезервирован; backup: yadisk:Backups/marketplace-accounts/, статус OK, readback rc=0 2026-10-15)
-- API-проверка: не выполнена (External API на Free отсутствует, аккаунта нет)
-- блокеры: SPA не стартует из агентского браузера (server-44): index.html-заглушка отдаётся (HTTP 200), но модуль main-GZRRGI5U.js (181 КБ) и чанки качаются со скоростью <1 КБ/с (curl: 15,6 КБ из 181 КБ за 20 с, обрыв по таймауту), `app-root` не рендерится, формы нет; маркетинговый сайт targpatrol.com/pricing тоже не отвечает из нашей сети (таймаут 25 с). Деградация/блок сетевого пути до их CDN с наших IP — не капча и не модерация. Ретрай 15.10 подтвердил: server-44 main.js 317 Б/с (7,9 КБ из 181 КБ за 25 с, таймаут), marketing-сайт 0 байт по таймауту; server-88 main.js 0 байт за 20 с. Порог <10 КБ/с превышен на обоих хостах. Пароль в бэкапе — при следующем ретрае использовать сохранённый.
+- статус: created + emailverified + login-verified; freeUI-only (организация пока не создана; External API — только платный Base, НЕ активирован, карта не вводилась)
+- основание: https://app.targpatrol.com/sign-up ; https://targpatrol.com/pricing
+- signup/login: https://app.targpatrol.com/ (Keycloak: вход email+пароль), email: airlock@bezrabotnyi.com, auth: password (зарезервированный пароль выставлен через reset-ссылку, вход проверен)
+- trial/квота: Free forever до 10 пользователей (по pricing/research); 14-дневный trial Base требует карту Stripe — не активировался
+- account/workspace IDs: Keycloak sub bc14ced0-4578-46b3-8a16-121bfa2eef6a (несекретный); организаций нет — «not currently a member of any organization»
+- креды ref: ~/.config/airlock-marketplace-accounts/targpatrol.json (backup: primary 0600 + local2 + облако с readback, store.sh rc=0 2026-10-15 05:15 MSK)
+- API-проверка: не выполнялась — External API отсутствует на Free (paid-only Base $15/user/мес); UI-вход подтверждён (personal-account загружается, профиль Никита Airlock)
+- блокеры: нет по регистрации. Пункт «организация не создана»: визард из 5 шагов требует адрес/штат/индекс/индустрию компании — данных нет в контрактной идентичности, выдумывать не стал; человек может завершить за ~2 минуты (Add organization). CDN-деградация ассетов, блокировавшая прошлые попытки, не воспроизвелась через резидентный прокси 192.168.2.1:3128 (main.js 304, Keycloak жив).
+- как пройдено: резидентный прокси + `agent-browser --headed` (авто-Xvfb) + `--args "--disable-blink-features=AutomationControlled"`; капчи нет вообще. Нюанс инфраструктуры: письма Keycloak живут 5 минут, а Gmail→UserIO может запаздывать — верификация пройдена через resend-цикл (письмо дошло за ~40 с при быстром полле); первая попытка UPDATE_PASSWORD истекла («Action expired») — пароль выставлен повторно через Forgot password.

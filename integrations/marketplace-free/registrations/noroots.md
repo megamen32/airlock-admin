@@ -1,10 +1,11 @@
-# Noroots — externalblocked (captcha-block, 4 текстовые попытки исчерпаны)
+# Noroots — created + login verified (регистрация завершена 15.10 через резидентный прокси)
 
-- статус: externalblocked (SmartCaptcha text-challenge не пройдена солвером; форма НЕ отправлена)
-- основание: https://noroots.ru/tariffs + https://app.noroots.ru/register
-- signup/login: https://app.noroots.ru/register (шаг 1 из 2); email: airlock@bezrabotnyi.com; auth: passwordless-email (пароль придёт письмом — не достигнуто)
-- trial/квота: постоянного free-тарифа нет (Базовый 4600 ₽/30 дн, Премиум 9300 ₽/30 дн)
-- account/workspace IDs: нет (регистрация не завершена)
-- креды ref: ~/.config/airlock-marketplace-accounts/noroots.json (backup: yadisk + local2 OK, readback rc=0 2026-10-15; password: null, auth passwordless-email)
-- API-проверка: невозможна — API только корпоративный, self-serve ключа нет
-- блокеры: ретрай 15.10: форма заполнена (Никита, +79260420755, airlock@bezrabotnyi.com ×2, «до 5 договоров», рассылка снята), клик «Я не робот» эскалировал в текстовое задание «Введите текст с картинки» — солвер captcha.bezrabotnyi.com/predict отвечал по искривлённому тексту с ошибками (4/4 попытки отклонены, каждый раз «Попробуйте ещё раз. Дополнительная проверка», задания усложнялись до тёмных). Пример: солвер «арбуза запутался» — совпало с картинкой, но отклонено виджетом. SMS-ветка (телефон без кода) не достигнута: сабмит формы не состоялся. Дальше — человеческая регистрация или резидентный IP, решение за lead.
+- статус: created + login-verified (аккаунт создан, вход проверен; freeUI-only — self-serve API-ключа нет)
+- основание: https://app.noroots.ru/register ; https://noroots.ru/tariffs
+- signup/login: https://app.noroots.ru/ (вход по email+паролю), email: airlock@bezrabotnyi.com, auth: password (пароль выдан письмом при регистрации, вход проверен)
+- trial/квота: постоянного free-тарифа нет (Базовый 4600 ₽/30 дн, Премиум 9300 ₽/30 дн); после входа UI показывает бейдж «Премиум» и кнопку «Выбрать тариф» — карта не вводилась, ничего не покупалось/не активировалось
+- account/workspace IDs: отдельный workspace ID в UI не показан; логин = email
+- креды ref: ~/.config/airlock-marketplace-accounts/noroots.json (backup: primary 0600 + local2 + облако с readback, store.sh rc=0 2026-10-15 04:52 MSK)
+- API-проверка: невозможна через self-serve — API только корпоративный (по карточке CATALOG), ключа нет; UI-вход подтверждён: /home открывает «Список документов», «Проверить документ», «Чат с ИИ-ассистентом»
+- блокеры: нет
+- как пройдено (ретрай 15.10): резидентный прокси 192.168.2.1:3128 (выход 212.192.31.128) + `agent-browser open --headed` (авто-Xvfb) + `--args "--disable-blink-features=AutomationControlled"` → SmartCaptcha «Я не робот» прошла невидимо (галочка без челленджа, 1 клик); форма: Никита, +79260420755 (SMS-кода в флоу нет, как и ожидал lead), email ×2, «до 5 договоров», рекламная рассылка снята; после сабмита — onboarding /questions, пароль пришёл письмом (UserIO, noreply@noroots.ru) и сохранён в JSON.
