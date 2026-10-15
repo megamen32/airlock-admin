@@ -589,3 +589,22 @@ checkout divergence26ahead/25behind и чужой WIP сохранены; опу
 owned docs/runbooks/domain-mail.md через отдельный index от origin/main.
 Обычный source/credential/task state сохранён; общий assignment/quickplan
 не заменялись и goal остаётся active. Privateproof .tmp/userio-demo-20261015/.
+
+## Wikibot: собственный вопрос вместо фиксированного — 15 октября
+
+Исправлен фактический дефект: native tool игнорировал вопрос посетителя.
+Теперь форма и чат передают question в один Service; кэш учитывает вопрос,
+квоты/бот/ключ/индекс не сбрасываются. Два реальных guest POST про Authorize
+и secret-storage вернули различные правильные ответы с source links,
+сверены с immutable публичными файлами. Native chat success19.255с,
+точный вопрос в настоящем tool result. Native SDK0.7.0 build42874909 complete,
+26/26exportfiles match published source. Source fastunit/gen6.138с/403MB/OOM0.
+Headed44:375/1280/lightdark/nooverflow, реальный ввод/ответ,13.236с; mobile
+dark screenshot просмотрен. Entry0autosend объясняет произвольный вопрос.
+Ни нового приложения, ни полной готовности37исходных карточек не заявляем.
+Receipt folder .tmp/wikibot-questions-20261015/, source7f27ca60/overlay887ceb5.
+
+Проверка существующих зависимостей: Beorg тот же document s-1664407 всё ещё
+result500, никаких повторных OCR uploads; Botmother0users/0testers на07:21UTC,
+поэтому запуск через Airlock по-прежнему требует первого /start своего
+тестировщика. Это внешние блокеры, готовые CTA для них не добавлены.
