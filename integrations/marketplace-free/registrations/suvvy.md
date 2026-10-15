@@ -1,4 +1,4 @@
-# Suvvy — externalblocked (invisible reCAPTCHA v3 не выдаёт токен)
+# Suvvy — externalblocked (invisible reCAPTCHA v3; ретрай 15.10 воспроизвёл блокер)
 
 - статус: externalblocked (captcha-submit)
 - основание: https://suvvy.ai/ (приветственные 500 ₽, без карты); docs https://docs.suvvy.ai/ru/kanaly/personalnyi-kanal-api
@@ -10,3 +10,4 @@
 - креды ref: ~/.config/airlock-marketplace-accounts/suvvy.json (backup: yadisk:Backups/marketplace-accounts/, status OK) — пароль про запас для ручной регистрации человеком
 - API-проверка: не выполнена (канал «Персональный API» создаётся только внутри кабинета)
 - разблокировка: ручная регистрация в обычном браузере (капча v3 пройдёт человеческим фингерпринтом), затем Каналы → Персональный канал (API) → токен канала в encrypted resource
+- ретрай 15.10 (server-88): состояние идентично первому прогону — модалка «Email не подтвержден» висит на странице до регистрации, «Зарегистрироваться» заблокирована без токена невидимой reCAPTCHA v3; картиночного задания нет → по правилам стоп сразу, попытка невозможна. Пароль в резерве.

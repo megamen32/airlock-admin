@@ -1,10 +1,10 @@
-# Noroots — externalblocked
+# Noroots — externalblocked (captcha-block, 4 текстовые попытки исчерпаны)
 
-- статус: externalblocked (captcha-block на шаге 1/2; аккаунт НЕ создан, форма не отправлена)
+- статус: externalblocked (SmartCaptcha text-challenge не пройдена солвером; форма НЕ отправлена)
 - основание: https://noroots.ru/tariffs + https://app.noroots.ru/register
-- signup/login: https://app.noroots.ru/register; email: airlock@bezrabotnyi.com; auth: passwordless-email (пароль присылают письмом — planned, не достигнуто)
-- trial/квота: постоянного free-тарифа нет (Базовый 4600 ₽/30 дн, Премиум 9300 ₽/30 дн); условия «Попробовать бесплатно» публично не раскрыты
+- signup/login: https://app.noroots.ru/register (шаг 1 из 2); email: airlock@bezrabotnyi.com; auth: passwordless-email (пароль придёт письмом — не достигнуто)
+- trial/квота: постоянного free-тарифа нет (Базовый 4600 ₽/30 дн, Премиум 9300 ₽/30 дн)
 - account/workspace IDs: нет (регистрация не завершена)
-- креды ref: ~/.config/airlock-marketplace-accounts/noroots.json (backup: 100+Диск OK, remote=yadisk:Backups/marketplace-accounts/noroots.json; password: null, auth passwordless-email)
+- креды ref: ~/.config/airlock-marketplace-accounts/noroots.json (backup: yadisk + local2 OK, readback rc=0 2026-10-15; password: null, auth passwordless-email)
 - API-проверка: невозможна — API только корпоративный, self-serve ключа нет
-- блокеры: Yandex SmartCaptcha на форме регистрации: клик по «Я не робот» эскалирует в advanced-режим «Введите текст с картинки» с датацентрового IP server-88; по контракту капча = СТОП (форма не отправлялась, SMS-ветка не достигнута). Телефон +79260420755 вводился только в неотправленную форму. Тот же класс блокера, что у beorg. Решение — за lead (человеческая регистрация или резидентный IP); SMS-политика не проверена из-за капчи.
+- блокеры: ретрай 15.10: форма заполнена (Никита, +79260420755, airlock@bezrabotnyi.com ×2, «до 5 договоров», рассылка снята), клик «Я не робот» эскалировал в текстовое задание «Введите текст с картинки» — солвер captcha.bezrabotnyi.com/predict отвечал по искривлённому тексту с ошибками (4/4 попытки отклонены, каждый раз «Попробуйте ещё раз. Дополнительная проверка», задания усложнялись до тёмных). Пример: солвер «арбуза запутался» — совпало с картинкой, но отклонено виджетом. SMS-ветка (телефон без кода) не достигнута: сабмит формы не состоялся. Дальше — человеческая регистрация или резидентный IP, решение за lead.
