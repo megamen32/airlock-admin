@@ -677,3 +677,69 @@ files byte-identical. Ссылка отсутствует в живом JS. Runt
 deployed из того же опубликованного commit с SHAguard иrollback, только
 gateway recreated. Подробная визуальная приёмка rowalignment у её владельца;
 корень не выдаёт это за свою проверку. Private receipt .tmp/withdraw-studio-20261015.
+
+## Beorg: восстановленный OCR и полноценный пользовательский путь15Oct
+
+Один безопасный GET существующего s-1664407 теперь200; новый документ, upload
+и OCR не создавались. Реальный ответ сохранён sanitised fixture: нет обязательного
+broken, позиции вложены Products, сумма безНДС9800,00, итогсНДС/валюта пустые,
+AIRLICK оставлен как в OCR.3meaningful parser units отказывают foreign/broken
+и неверномутипуProducts; значения и ошибки не заменяются ожидаемым текстом.
+
+| Проверка | Категория | Назначение | Expected/max | Результат |
+|---|---|---|---|---|
+| go tool air build | fast unit/source | Полная SDK generation/compile,3parser tests |18/180с|Final successful, peak215617536bytes, OOM0/swap0; runtime этим не доказывается|
+| Native encrypted Connection → реальныйresult | focused integration | Авторизация/данные/cache |60/600с|Raw invoice fields visible, matching PNG; cache survives native rebuild|
+| Admin boundaries | focused integration | Обычный гость не меняет код/ключ/проект |30/300с|source/credentials/PATCH403|
+| Native guest chat | focused integration | Деловой вопрос → actualinvoice_ocr |60/600с|18.753с; настоящие пропуски и AIRLICK, без новой обработки|
+| Headed44 actual form | focused integration | Сравнение документа/данных и читаемость |60/600с|320/375/1280lightdark,0overflow; desktop/mobile screenshots reviewed, mobile result before source|
+| Marketplace actual left CTA → native entry | focused integration | Покупатель находит Airlock и понимает задачу |60/600с|375/1280visibleleft; editable business draft,0auto-prompt; studio absent|
+| Явная отправка в настоящем браузере | focused integration | Реальный пользовательский ответ после последнего исправления |60/600с|18.654с success, факты/пропуски + рабочие original/app links, безinternalid/API/UTC|
+| Final native source export | focused integration | Доставлен именно опубликованный код |20/200с|27of28files byte-match99653e82, только.gitignore omitted bySDK|
+| Original document URL | focused integration | Новый посетитель открывает исходник без прежней appsession |60/600с|Cold browser /document: passwordless,320/375/1280nooverflow; authenticated PNG200/bytes-SHA match|
+
+Final native build296b1f65-b4d5-44b0-898b-68d1c8788d1e/SDK0.7.0, source
+99653e821061de0a47d1de194a0e027039be867d. Общая лимитированная инфраструктура
+не расширялась: source1/2GiB,CPU1,tasks128,swap0,temp512MiB, browser44
+2GiB/CPU2/tasks512/profile512MiB/wall3600. BuildKit4GiB/CPU2 single; app1GiB.
+
+Две первые старые metadata-heavy реплики помогли обнаружить плохое поведение:
+чат предлагал «подключить» уже существующий файл. Финальный ToolResult отдаёт
+только invoice facts и рабочиеURLs, системная инструкция требует ссылки для
+сверки; actual browser reply это подтвердил. Отдельной live fault injection
+провайдера не было; error handling ограничен source checks, не runtimeclaim.
+
+Operator staging apps больше не auto-grant новым посетителям: список прошедших
+демо берётся из demoApps, отдельные guest-created проекты сохраняются по
+штатному broker slug contract. Настоящий freshguest видел прежние13проектов,
+кандидатBeorg был скрыт до приёмки, снятаяstudioскрыта. После публикации тот
+же набор13 +Beorg иегоactualHTML; studio всё ещё410. AllUsers/globalgrants
+даны только после private ordinaryguest proof.
+
+Overlay9736b3b и readableentry6932da8 опубликованы/доставлены. Publiccurrent
+20261015-beorg-demo-9736b3b поверх настоящего82be8f2; первая попытка на старой
+базе отказала **до записи** и не повторялась вслепую.37catalogueproducts и
+все их значения сохранены,11cabinet/legal/Beorgasset files byte-identical.
+Peerrowalignment не отменялся. Новый CTA — единственное изменение live JS.
+Private evidence .tmp/beorg-result-20261015; новые секреты не выпускались.
+Результат по бизнес-цели:12ready integrations, studiowithdrawn; fullINT04 открыт.
+
+Последняя проверка нового посетителя нашла401 на rawstaticURL, если appsession
+ещё не была получена. Это не было GREEN для firstvisit. Исправлено обычной
+native HTML route /document (AccessUser, без новых разрешений/снятия auth),
+с настоящим исходным PNG и возвратом к полям. После очистки только своей
+headed44сессии прямой /document прошёл passwordless relay, image1600px
+загрузился на320/375/1280, raw PNG с той же appsession вернул200/точныйSHA.
+Длинная кнопка возврата давала0.6pxoverflow на375; укорочена, navwrap, теперь
+все3ширины проходят. Итоговый новый browser user из document→form→chat дал
+факты/2пропуска/правильный/documentURL за18.654с. Прежние сообщения не
+повторялись/не редактировались; каждый исправленный canary — новый read-only
+диалог, без новых OCR. Исходные raw-asset401 не выдаются за общий отказ API.
+
+Source runtime27files byte-match опубликованному коду,SDK omitted.gitignore.
+Последний источник/manifest/compiledsource build: expected18/max180с, elapsed15.054с.
+Только реплики обычного посетителя и provider tool output доказывают рабочую
+интеграцию; владелец ещё не оценивал новый дизайн.
+
+Operational NOTES.md updated after native-code proof without a redundant rebuild;
+source byte-match claim refers to pinned code99653e82, not this later docs commit.

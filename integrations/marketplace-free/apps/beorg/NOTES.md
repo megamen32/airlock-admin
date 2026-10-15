@@ -7,5 +7,17 @@ Parser now matches actual absent broken flag, nested Products, preserves raw
 AIRLICK typo and absent currency/with-VAT total. Fixture is the real sanitized
 response. UI contract in UI-SPEC.md: original document beside raw extracted
 fields, human review markers, compact light/dark/mobile, no technical landing.
-Current status: source built/unit-tested, native user journey pending. Do not
-publish ready CTA until actual native form/chat and screenshot review pass.
+Current status15Oct: deployed and real ordinary-guest consumer journey verified.
+Native d48c127c-6f4e-4b4f-99a5-a65f142cd57d (d88-beorg-invoice), code99653e82,
+build296b1f65. Actual public left CTA -> business draft (zero auto-send) ->
+explicit browser question -> real invoice_ocr facts/missing fields/working
+/document and app links18.654s. Headed44 320/375/1280 light/dark, document and
+fields, source/credential/edit403. Cold browser direct /document follows normal
+passwordless auth relay; actual PNG200/hashmatch after app auth, no overflow.
+Do not use raw /static PNG as a first chat link: it correctly requires an app
+session. /document is the user navigation, embedding the same unchanged file.
+Source input asset lives views/resources, not generated/ignored views/static.
+Parser/callback/source checks are not provider/UI proof. No new OCR/upload,
+registration, account key or payment. Old500 is historical and now resolved.
+Operational docs may be newer than the pinned native-code build. Human design
+approval is not claimed; the original coding studio stays withdrawn.
