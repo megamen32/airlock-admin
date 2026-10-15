@@ -1,0 +1,24 @@
+package views
+templ Index(v HomeView){
+ @Layout("Студия страниц — Fast Agent и Agent Herder"){
+  <h1 class="text-3xl font-semibold mb-4">Поручите агенту создать страницу</h1>
+  <p class="mb-4">Fast Agent напишет HTML, Agent Herder сохранит сессию, а GPTAdmin прочитает готовый файл. Вы увидите страницу и её исходник.</p>
+  if !v.Exists {
+   <form method="post" action="/start" class="flex flex-col gap-4 mb-6">
+    <label for="template">Что создать?</label>
+    <select id="template" name="template" class="select select-bordered w-full"><option value="card">Визитка стартапа «Орбита»</option><option value="pricing">Три тарифа для стартапа</option><option value="checklist">Чек-лист запуска</option></select>
+    <button type="submit" class="btn btn-primary">Создать страницу с агентом</button>
+   </form>
+  }
+  <p class="mb-4" role="status">{v.Message}</p>
+  if v.Exists {
+   <a href="/" class="btn btn-primary mb-6">Проверить результат</a>
+  }
+  if v.Ready {
+   <h2 class="text-xl font-semibold mb-3">Ваша страница</h2>
+   <iframe title="Страница, которую создал агент" sandbox="" referrerpolicy="no-referrer" srcdoc={v.Preview} class="w-full h-[600px] border rounded mb-6"></iframe>
+   <details class="mb-6"><summary class="cursor-pointer font-semibold">Посмотреть исходный HTML</summary><pre class="overflow-auto whitespace-pre-wrap break-words p-4 bg-base-200 rounded mt-3">{v.HTML}</pre></details>
+  }
+  <p class="text-sm mt-6">Задача выполняется в отдельной виртуальной машине. Один учебный пример на гостя, до трёх новых страниц в час. Готовый результат сохраняется; повторная проверка не запускает агента заново.</p>
+ }
+}
