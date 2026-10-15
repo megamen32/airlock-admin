@@ -16,3 +16,9 @@ client_code airlock-demo-k120/company_id выбранного regard.ru/region_i
 (15Oct07:18:37МСК). Собственные price/recommended_price по-прежнему0,
 они НЕ используются как рыночные. Парсер quote проверен на реальном ответе
 и malformed/foreign-scope случаях; далее native build и guest price acceptance.
+
+Приёмка завершена: final native buildbcc6f56f, обычный guest form1280₽ и
+chat20,163с с реальной котировкой; credentials403. Headed44 actualCTA375/1280,
+правильный чат/черновик/0автоотправок, webform1280₽/Москва/время/light-dark.
+Полный native export совпал с owned source, core не менялся. Первые абзацы
+про отсутствие цены выше — история до появления первого отчёта.

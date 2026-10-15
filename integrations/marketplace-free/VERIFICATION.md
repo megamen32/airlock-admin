@@ -329,3 +329,43 @@ ac488219 complete35.765с/source90585a528e3d;20businessfilesnativeexportmatch и
 Исходники:7ecb7198 (Shtab),87404e84 (5 layout); overlaycc404dc.
 Доказательства: .tmp/shtab-seed-20261015/{chat-proof,browser-proof}.json,
 .tmp/theme-fix-20261015/browser-proof.json и build-result.json каждого приложения.
+
+
+## 15 октября: Priceva — первая настоящая региональная котировка
+
+Причина прежнего отсутствия цены: расписание существовало, но last_start0 и
+очередь пустая. Одна операторская monitoring/run_product для существующего
+товараp/источникаf принята urls_count1 в04:17:51UTC. Не повторялась.
+General_stat processing0 ещё не означал готовность отчёта: он появился позже.
+Реальный report/list выбранного regard.ru/Москвы вернул min/avg/max1280RUB,
+competitor_cnt1, date1792037917=15Oct07:18:37МСК. Собственные price/
+default_price/recommended_price0 не являются рыночными значениями.
+
+Тонкий адаптер теперь выбирает настоящий товар, источник и региональный отчёт,
+строго проверяет IDs/связь/URL/регион/валюту/время/ценовой диапазон. Пустой отчёт
+остаётся без котировки. Кэш приватно версионирован, persistent4/h не сбрасывался.
+Fast unit реальных fixtures+malformed/foreign-scope cases PASS0,013с;
+1GiB/CPU2/tasks128/swap0, ожидаемо6с, аварийный60с. Никаких mock в приёмке.
+
+Native final build bcc6f56f complete33,616с; source/published main d3077309.
+Обычная гостевая форма показывает1280₽/товар/магазин/Москву/время; credentials403.
+Финальный native tool-chat success20,163с, реальная quote из API, человеку
+обычный русский ответ без ready/quote/имён методов. До этого один принятый
+price-chat пришлось перечитать после gateway recreate: run/prompt/scan не
+повторяли. Финальный canary прошёл уже после последней сборки без deployment.
+
+Headed44: две ширины375/1280, настоящая основная CTA первой слева и видима,
+новый чат с нужным черновиком и0автоотправок, переход в форму с1280₽/Москвой/
+07:18МСК, реальные light/dark, без горизонтального переполнения.13,636с.
+Root посмотрел настоящий тёмный скриншот: цена видна на телефоне.
+Сайт v24 добавлен поверх livev23 без потери portal/legal/чужих файлов;
+изменён только Priceva note в owned JS и его HTML include.
+
+Receipt: .tmp/priceva-details-20261015/{monitor-run-result,report-specific-region,
+friendly-chat-proof,browser-proof,source-match-proof}.json, финальные картинки
+priceva-quote-light.png/priceva-quote-dark.png. Доступ и no-replayreceipt
+сохранены в primary0600, второй копии100 и Яндекс.Диске с readback.
+Beorg по тому же документу снова500; upload не повторён. NoticePlace quiet
+профиль через штатные consumers не поддерживается: generic требует реального
+получателя, пустые/disabled policies отклоняются. Никаких рабочих рассылок/
+звонков, новых scopes и рестартов NoticePlace в исследовании не делалось.
