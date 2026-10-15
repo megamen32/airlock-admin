@@ -11,7 +11,7 @@ import (
 func main() { newAgent().Serve() }
 func newAgent() *agentsdk.Agent {
 	a := agentsdk.New(agentsdk.Config{Description: "Выберите учебную страницу: настоящий Fast Agent создаст HTML в отдельной виртуальной машине. Agent Herder ведёт сессию, GPTAdmin запускает задачу и читает файл."})
-	m := a.RegisterMCP(&agentsdk.MCP{Slug: "vm", Name: "Отдельная виртуальная машина Airlock", URL: "http://192.168.2.75:19490/mcp", AuthMode: agentsdk.MCPAuthToken})
+	m := a.RegisterMCP(&agentsdk.MCP{Slug: "vm", Name: "Отдельная виртуальная машина Airlock", URL: "https://demo.airlockrun.ru/_mcp/airlock-vm", AuthMode: agentsdk.MCPAuthToken})
 	s := summary.New(m, a.DB())
 	h := handlers.New(s)
 	a.RegisterTool(tool.Typed[summary.Input, summary.Result]("coding_demo").Description("action=start запускает один учебный проект пользователя в отдельной VM; template=card/pricing/checklist. action=status только читает результат. Повтор не запускает вторую задачу. Нет произвольных команд/путей/выбора сервера.").Execute(s.Tool).Build(), agentsdk.AccessUser)
