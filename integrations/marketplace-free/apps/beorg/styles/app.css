@@ -53,3 +53,5 @@ body{background:var(--ocr-bg);color:var(--ocr-text);font-family:Inter,ui-sans-se
 
 .ocr-mobile-link{display:none}.ocr-field{font-size:13px}.ocr-field dt{font-size:12px}.ocr-item>p{font-size:12px}#document-title{scroll-margin-top:20px}
 @media(max-width:850px){.ocr-result{order:0}.ocr-document{order:1}.ocr-mobile-link{display:inline-block;font-size:12px;color:var(--ocr-accent);text-decoration:underline;text-underline-offset:3px;margin:10px 0 0}}
+
+.ocr-top{flex-wrap:wrap}
