@@ -3,3 +3,12 @@ views/static/
 *_templ.go
 agent
 *.log
+go.work
+go.work.sum
+.airlock/local/
+.airlock/toolchain/
+views/static/app.css
+internal/db/*
+!internal/db/doc.go
+/agent
+/agent.exe
