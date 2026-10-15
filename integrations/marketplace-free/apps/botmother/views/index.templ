@@ -1,0 +1,26 @@
+package views
+
+templ Index(v HomeView){
+ @Layout("Учебный сценарий — Botmother"){
+  <p class="text-sm mb-3">Botmother · автоматизация процессов</p>
+  <h1 class="text-3xl font-semibold mb-4">Заявка прошла через бота?</h1>
+  <p class="mb-4">Отправьте учебную заявку DEMO-001 в Botmother. Сценарий обработает её и вернёт подтверждение в это приложение Airlock.</p>
+  <form method="post" action="/run"><button class="btn btn-primary" type="submit">@ActionIcon("play") Запустить сценарий</button></form>
+  <section class="card bg-base-200 mt-6"><div class="card-body">
+   <h2 class="card-title">Результат</h2>
+   <p role="status">{v.Result.Message}</p>
+   if v.Result.Ready{
+    <p><strong>Заявка {v.Result.Order} обработана</strong></p>
+    <p>Подтверждено Botmother: {v.Result.CompletedAt}</p>
+   }
+   if v.Result.StartedAt != "" {
+    <p class="text-sm">Начало: { v.Result.StartedAt }</p>
+   }
+  </div></section>
+  <a class="link inline-block mt-4" href="/">Проверить результат без повторной отправки</a>
+  <section class="mt-8"><h2 class="font-semibold mb-2">Что происходит в демо</h2>
+   <p>Airlock запускает один заранее настроенный сценарий Botmother. Внешний сервис возвращает ответ в Airlock, и только после этого заявка считается обработанной. Содержимое заявки вымышленное. Сообщения в Telegram не отправляются.</p>
+   <p class="mt-3 text-sm">Повторное нажатие в течение 10 минут показывает тот же результат. Запрос с неизвестным исходом не повторяется. Общий лимит — 6 запусков в час и 100 за всё время демо.</p>
+  </section>
+ }
+}

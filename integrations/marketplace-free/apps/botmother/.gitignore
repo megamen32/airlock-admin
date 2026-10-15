@@ -1,0 +1,6 @@
+*_templ.go
+views/static/app.css
+internal/db/*
+!internal/db/doc.go
+/agent
+/agent.exe

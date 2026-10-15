@@ -400,3 +400,28 @@ ok=true/17accounts. Ранее наблюдённая транспортная �
 UserIO source/runtime/ключи не менялись. Повторная регистрация/OTP не выполнялись.
 Evidence: .tmp/botmother-root-20261015/{telegram-bind-intent,telegram-bind-summary}.json;
 полные Bot API receipts private0600, без копирования секретов в документацию.
+
+
+## 15 октября: исходники Botmother подготовлены без публикации незавершённого демо
+
+apps/botmother: MVC native web form + botmother_demo(status/run), owner setup
+одного bm_id, admin-only credential Connection, native bearer callback. SQL
+admission сохраняет intent до HTTP; pending/unknown своего пользователя
+переиспользуется без повторной отправки; поздний callback не регрессирует,
+дубли не меняют время завершения.6/h,100total; нет users=everyone/пустых users.
+Callback требует существующий admitted UUIDv4 и фиксированные scenario/order/result.
+Результаты читаются по native caller user.ID; модель не получает bm_id/секреты.
+
+SDK air update, templ и Tailwind generation PASS. Исправлены синтаксис templ и
+слишком широкая тестовая проверка: native SDK сам добавляет public GET
+/static/{name}, он оставлен как положено; остальные routes user/admin.
+Финальный go test -count=1 ./... PASS1,576с:5fast unit, compile whole app.
+Собственный конечный source unit1GiB/CPU2/tasks128/swap0/IO10/temp2GiB,
+expected30/max300с; свежий MemAvailable~28GiB при20GiB host reserve.
+Финальный native memory.peak139083776bytes/OOM0; generationcheck578351104/OOM0.
+Проверки строго local logic/manifest, без fake network/process providers.
+Native build, настоящий PostgreSQL admission и callback, guest UI/chat/themes
+не проверены и не заявлены. Botmother native агент пока не создавался.
+Код подготовлен независимо от ожидаемого собственного /start; общий goal
+остаётся неполным,8готовых интеграций сохранены.
+Evidence: .tmp/botmother-root-20261015/check-{b,c,d}/source-check-result.json.
