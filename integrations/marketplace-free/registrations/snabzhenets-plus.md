@@ -1,10 +1,10 @@
-# SNABZHENETS+ — created+emailverified+pending-moderation
-- статус: created+emailverified+pending-moderation (портал создан, почта подтверждена, 1 день бесплатного доступа активен; логин/пароль придут письмом после ручной модерации)
-- основание: https://snabplus.com/register , оферта https://snabplus.com/legal/offer , API docs https://docs.snabplus.com/api/
-- signup/login: https://snabplus.com/register → подтверждение кодом на почту → автологин; email: airlock@bezrabotnyi.com, auth: password-sent-after-moderation (пароль придёт отдельным письмом — дописать в кред-файл при получении)
-- портал: airlock-demo.snabplus.com (https://airlock-demo.snabplus.com/)
-- trial/квота: 1 день бесплатно сразу после подтверждения почты; расширение до 40 дней — ручной шаг «Продлить» в портале через MAX или Telegram (требует человека, НЕ делали); тариф «Профи» от 8 630 ₽/мес — не покупаем
-- account/workspace IDs: портал airlock-demo (поддомен airlock-demo.snabplus.com)
-- креды ref: ~/.config/airlock-marketplace-accounts/snabzhenets-plus.json (backup: yadisk:Backups/marketplace-accounts/, status OK, remote readback пройден)
-- API-проверка: отложена — GET https://airlock-demo.snabplus.com/api/v1/integration-api/meta (заголовок X-API-Key, формат spk_…) выполнить, когда модерация выдаст доступ и появится ключ (Настройки → Интеграции → API/Webhooks)
-- блокеры: ручная модерация (пароль/доступ), продление до 40 дней вручную через MAX/Telegram — вне автоматизации
+# SNABZHENETS+ — api-key-and-real-read (Integration API работает)
+- статус: created+emailverified+moderation-passed → API-ключ выпущен, реальный read подтверждён
+- основание: https://snabplus.com/register , API docs https://docs.snabplus.com/api/ , OpenAPI https://airlock-demo.snabplus.com/docs-json
+- signup/login: https://airlock-demo.snabplus.com/login , email: airlock@bezrabotnyi.com, auth: password (пароль сервиса получен письмом после модерации 15.10)
+- портал: airlock-demo.snabplus.com; tenant 43c06f65-6e60-4439-b374-80e476f1b5e5, user 93f719b6-03c0-4b84-b684-f03a960168ba, департамент 4295305d-74f7-4143-8ab7-4ace3b9bc9d2
+- trial/квота: лицензия 1 день активирована 15.10 и истекает 16.10.26; продление до 40 дней — ручной шаг «Продлить» в портале с подтверждением через MAX/Telegram (требует человека, НЕ делали)
+- креды ref: ~/.config/airlock-marketplace-accounts/snabzhenets-plus.json (пароль + api_key; backup: yadisk:Backups/marketplace-accounts/, status OK rc=0 2026-10-15)
+- API-проверка: POST /api/v1/api-keys (Bearer-сессия) → ключ airlock-wave3-readonly-20261015 (id cb7c6101-43d9-4581-9412-b16b0a3c7c75, scope purchase_requisitions.read); GET /api/v1/integration-api/meta c X-API-Key → 200 (v1, scopes, resources: purchase-requisitions list/get); GET /api/v1/integration-api/purchase-requisitions?limit=5 → 200, items содержит реальную заявку number AIRLOCK-DEMO-001 (id 51c11e0a-f038-43ab-8f92-93ce99aa183c)
+- ключи в портале: наш + отдельный «Airlock-demo-readonly-20261015» (создан 02:13Z 15.10 другим владельцем процесса, вероятно root; не трогали)
+- блокеры: срок лицензии — после 16.10.26 часть функций ограничится; продление только вручную человеком
