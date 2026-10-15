@@ -22,6 +22,7 @@ templ Index(v HomeView) {
     if v.Ready {
      <div class="ocr-result-body">
       <p class="ocr-summary"><strong>{ fmt.Sprintf("%d из %d",v.Recognized,v.Recognized+v.Missing) }</strong> полей заполнено<span>Пропуски отмечены ниже</span></p>
+      <a href="#document-title" class="ocr-mobile-link">К исходному счёту ↓</a>
       <dl class="ocr-fields">
        for _,f := range v.Fields {
         <div class="ocr-field"><dt>{ f.Name }</dt><dd>
@@ -43,7 +44,7 @@ templ Index(v HomeView) {
       <p class="ocr-review-note">Сверьте поля с оригиналом. Пропуски и опечатки сохранены так, как их вернул сервис.</p>
      </div>
     } else {
-     <div class="ocr-empty" role="status"><h3>Результат пока недоступен</h3><p>Сервис не вернул данные. Исходный счёт остаётся слева — попробуйте проверить результат позже.</p></div>
+     <div class="ocr-empty" role="status"><h3>Результат пока недоступен</h3><p>Сервис не вернул данные. Исходный счёт остаётся на этой странице — попробуйте проверить результат позже.</p></div>
     }
     <div class="ocr-panel-foot"><span>
      if v.ReadAt!="" {
