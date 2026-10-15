@@ -3,22 +3,24 @@ package views
 templ Index(v HomeView) {
  @Layout(v.Title) {
   <h1 class="text-3xl font-semibold mb-4">{ v.Title }</h1>
-  <p class="mb-4">Wikibot отвечает по публичному коду GitHub. Пример: какие образы базы данных и reverse proxy заданы в docker-compose.yml? Сайт используется как дополнительный источник.</p>
+  <p class="mb-4">Задайте вопрос об устройстве Airlock. Wikibot ищет ответ в публичном коде GitHub. Например: какие образы базы данных и reverse proxy заданы в docker-compose.yml? Сайт используется как дополнительный источник.</p>
   <p class="mb-4">Основной источник: <a class="link" href="https://github.com/airlockrun/airlock" target="_blank" rel="noopener noreferrer">airlockrun/airlock на GitHub</a> (снимок 15 октября 2026 года). Дополнительный: <a class="link" href="https://airlockrun.ru/" target="_blank" rel="noopener noreferrer">сайт Airlock</a>.</p>
   <p class="mb-6">Бесплатный тариф с ограниченными приветственными кредитами. После их исчерпания ответы остановятся; пополнение не выполняется.</p>
   <form method="post" action="/summary">
-   <button class="btn btn-primary" type="submit">Разобрать docker-compose.yml</button>
+   <label class="block mb-2 font-medium" for="question">Ваш вопрос об Airlock</label>
+   <textarea class="textarea textarea-bordered w-full min-h-28 mb-3" id="question" name="question" maxlength="600" required rows="4">{ v.Question }</textarea>
+   <button class="btn btn-primary" type="submit">@ActionIcon("message-circle") Спросить Wikibot</button>
   </form>
   if v.Message != "" {
    <section class="card bg-base-200 mt-6">
     <div class="card-body">
-     <p class="whitespace-pre-wrap">{ v.Message }</p>
+     <p class="whitespace-pre-wrap break-words">{ v.Message }</p>
      if v.Ready {
       <p>Источник: Wikibot API; публичный код GitHub и сайт Airlock. Данные на { v.FetchedAt }</p>
      }
     </div>
    </section>
   }
-  <p class="text-sm mt-6">Кэш 10 минут. До 4 новых ответов в час и 20 за всё время демо. Каждый новый запрос создаёт отдельный диалог. Сообщения людей и настройки бота гостям не доступны.</p>
+  <p class="text-sm mt-6">Ответы могут содержать ошибки — проверяйте ссылки на код. Кэш одного вопроса — 10 минут. До 4 новых ответов в час и 20 за всё время демо. Каждый новый запрос создаёт отдельный диалог. Сообщения людей и настройки бота гостям не доступны.</p>
  }
 }

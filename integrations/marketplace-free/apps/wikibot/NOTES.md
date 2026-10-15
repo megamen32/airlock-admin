@@ -61,3 +61,12 @@ and the source URL before caching/display. This is fixed-demo validation, not
 a general guarantee against model errors. A849character architecture excerpt
 from actual public compose/authz source was also uploaded as DOCX file7687.
 58DOCX files total; full provider embedding queue remains separately observable.
+
+## Вопросы посетителей — 15 октября
+Форма и native tool принимают question (до600Unicodeсимволов), общий Service
+передаёт его настоящему Wikibot API. Пустой ввод сохраняет прежний compose
+пример; проверка его точных image остаётся. Для остальных вопросов выводится
+настоящий ответ поставщика, без выдуманного универсального факт-чекера.
+Инструкция просит публичный код в приоритете, ссылки на файлы и честный отказ
+при отсутствии сведений. Кэш связан с конкретным нормализованным вопросом;
+квоты4/час/20всего, ключ, бот и БЗ не пересоздаются/не сбрасываются.
