@@ -21,7 +21,7 @@ func New(h *agentsdk.ConnectionHandle, db *agentsdk.AgentDB) *Service {
 }
 func (s *Service) Tool(ctx context.Context, _ Input) (ToolResult, error) {
 	r, e := s.Get(ctx)
-	result := ToolResult{Ready: r.Ready, Fields: r.Fields, Items: r.Items, Message: r.Message, OriginalURL: "https://d88-beorg-invoice.demo.airlockrun.ru/static/invoice-demo.png", WebURL: "https://d88-beorg-invoice.demo.airlockrun.ru/"}
+	result := ToolResult{Ready: r.Ready, Fields: r.Fields, Items: r.Items, Message: r.Message, OriginalURL: "https://d88-beorg-invoice.demo.airlockrun.ru/document", WebURL: "https://d88-beorg-invoice.demo.airlockrun.ru/"}
 	if e != nil {
 		result.Message = e.Error()
 	}

@@ -35,3 +35,8 @@ func (h *Handler) render(w http.ResponseWriter, r *http.Request) error {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	return views.Index(v).Render(r.Context(), w)
 }
+
+func (h *Handler) Document(w http.ResponseWriter, r *http.Request) error {
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	return views.Document().Render(r.Context(), w)
+}
