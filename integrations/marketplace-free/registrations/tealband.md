@@ -42,3 +42,22 @@ Private receipts: `.tmp/tealband-oauth-20261015/`.
 - Блокер MCP: POST https://app.teal.band/mcp → HTTP 404 на ЛЮБОЙ запрос (с валидным Bearer, без токена, с мусорным, OPTIONS тоже 404 при allow: POST) — Streamable HTTP endpoint из официальных docs (/docs/integrations/mcp-agent, обещанный для Claude/Codex/OpenCode) фактически отсутствует/отключён на app.teal.band.
 - Блокер REST: /api/v1/{org}/surveys с OAuth Bearer → 401 Unauthenticated (REST принимает только personal API tokens, выпуск которых в нашем аккаунте Basic: POST personal-access-tokens → 403 policy, страница /{org}/profile/api-tokens зависает).
 - Рабочий бесплатный программный доступ: сессионная cookie-авторизация, GET /api/v1/{org}/surveys → 200 с нашим опросом (подтверждено ранее).
+
+## Запрос поставщику — 15 октября, 13:28 МСК
+
+По прямому поручению Никиты отправлен один запрос от его ИИ-секретаря
+в существующую группу Telegram `TealbandxAirlock`, с обращением к Дмитрию
+Карпуничеву `@dimakarpunichev`. Telegram chat `5536412756`, сообщение
+`1987479`, ответ на существующее обсуждение `1987353`; отправка через
+telegramhelper и обратное чтение подтверждены. В личный диалог не дублировали.
+
+Приложены точный JSON-RPC initialize, заголовки без настоящего токена,
+свежий MCP404 (15 октября, 13:22 МСК), прежний personal-token403 и задание
+разработчику проверить маршрут, middleware, прокси и HTTP-статусы OAuth
+discovery. Причина 404 не объявляется установленной; ограничение Basic
+на personal tokens запрошено как вопрос. Условия повторной проверки:
+initialize → initialized → tools/list → чтение собственных опросов с
+analytics:read и сохранением изоляции организаций. Никаких секретов,
+новых регистраций, выпусков токенов или платежей. Готовность интеграции
+не заявляется; следующий шаг — ответ поставщика или исправленный endpoint.
+Локальное намерение и результат: `.tmp/tealband-support-20261015/`.
