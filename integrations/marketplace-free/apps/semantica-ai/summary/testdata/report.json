@@ -1,0 +1,73 @@
+{
+  "project": {
+    "id": "1867448b-0052-47d3-9859-a7bd974dc56e",
+    "domain": "airlockrun.ru",
+    "brandName": "Airlock",
+    "country": "ru",
+    "status": "pending",
+    "queries": [
+      "Какие self-hosted платформы позволяют запускать ИИ-приложения и подключать MCP-сервисы?"
+    ],
+    "promptsCount": 1,
+    "selectedProviders": [
+      "chatgpt",
+      "google_aio",
+      "perplexity"
+    ],
+    "lastScanDate": null,
+    "createdAt": "2026-10-15T01:44:55.677208+00:00",
+    "updatedAt": "2026-10-15T01:44:55.618+00:00",
+    "trackedCompetitors": [],
+    "mentionedSitesAndBrands": []
+  },
+  "scan": {
+    "id": "4e433437-a94b-4308-8067-b2647c5725cc",
+    "status": "completed",
+    "domain": "airlockrun.ru",
+    "brandName": "Airlock",
+    "createdAt": "2026-10-15T01:50:01.557851+00:00",
+    "completedAt": "2026-10-15T01:50:28.646637+00:00",
+    "summary": {
+      "totalQueries": 1,
+      "totalResponses": 3,
+      "totalMentions": 0,
+      "mentionRate": 0,
+      "byProvider": {
+        "chatgpt": {
+          "rate": 0,
+          "failed": 0,
+          "queries": 1,
+          "mentions": 0
+        },
+        "google_aio": {
+          "rate": 0,
+          "failed": 1,
+          "queries": 1,
+          "mentions": 0
+        },
+        "perplexity": {
+          "rate": 0,
+          "failed": 0,
+          "queries": 1,
+          "mentions": 0
+        }
+      }
+    },
+    "results": [
+      {
+        "query": "Какие self-hosted платформы позволяют запускать ИИ-приложения и подключать MCP-сервисы?",
+        "provider": "perplexity",
+        "hasMention": false,
+        "mentions": [],
+        "noCompanyMention": false
+      },
+      {
+        "query": "Какие self-hosted платформы позволяют запускать ИИ-приложения и подключать MCP-сервисы?",
+        "provider": "chatgpt",
+        "hasMention": false,
+        "mentions": [],
+        "noCompanyMention": false
+      }
+    ]
+  }
+}
