@@ -1,0 +1,27 @@
+package views
+
+templ Index(v HomeView) {
+ @Layout("Распознавание счёта — Beorg") {
+  <h1 class="text-3xl font-semibold mb-4">Изображение счёта → готовые поля</h1>
+  <p class="mb-4">Beorg распознал учебный счёт с вымышленными организациями. Сравните номер, дату и сумму с изображением. Это реальный ответ OCR, а не заранее заполненная форма.</p>
+  <form method="post" action="/summary"><button class="btn btn-primary" type="submit">Показать распознанные поля</button></form>
+  if v.Result.Message != "" {
+   <section class="card bg-base-200 mt-6"><div class="card-body">
+    <p>{ v.Result.Message }</p>
+    if v.Result.Ready {
+     <dl class="mt-3">
+      for _,f := range v.Result.Fields {
+       <div class="border-b border-base-300 py-3"><dt class="text-sm opacity-80">{ f.Name }</dt><dd class="font-semibold break-words">{ f.Value }</dd></div>
+      }
+     </dl>
+     <p class="text-sm mt-4">Источник: { v.Result.Source }. Прочитано { v.Result.FetchedAt }.</p>
+    }
+   </div></section>
+  }
+  <section class="mt-8"><h2 class="text-xl font-semibold mb-3">Исходное изображение</h2>
+   <a class="link" href="/static/invoice-demo.png" target="_blank" rel="noopener">Открыть изображение в полном размере ↗</a>
+   <img src="/static/invoice-demo.png" alt="Вымышленный демонстрационный счёт DEMO-001 от 15 октября 2026 года. Не является документом для оплаты." class="w-full h-auto border border-base-300 rounded-xl mt-3"/>
+  </section>
+  <p class="text-sm mt-6">Одна обработка на приветственном бонусе 200 ₽, без карты и пополнений. Кнопка повторно читает готовый результат, новые распознавания не запускает. Личные документы не загружаются. Кэш 15 минут, до 12 чтений в час.</p>
+ }
+}
