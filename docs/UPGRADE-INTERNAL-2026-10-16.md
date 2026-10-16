@@ -107,3 +107,36 @@ S3 inventory returned0objects/0bytes. An isolated operator bucket
 original migration, never the live bucket. Migration-only helper invokes
 original db.RunMigrations; it starts no server, prompt worker, rebuild or
 pruning loop. Stage result is recorded after actual completion.
+
+### Actual isolated result, 16 October 21:47 MSK
+
+Original db.RunMigrations completed successfully on the real restored demo DB
+and source snapshot in16seconds, ledger011→013. Imported20retained apps and
+64source revisions/64source packs into the isolated stage bucket. A first clone
+run failed before version012 because CREATE privilege on the newly created
+clone DB had not been copied. Original live DB grants were then copied to the
+clone (live grants unchanged); ledger remained011 before retry. This was a
+staging-setup defect, not evidence of an upstream migration defect. Both
+attempt logs/receipts retained, no source publication had occurred on the first
+failed attempt.
+
+Actual row-count comparison covered220pre-existing tables/views against the
+restorable dump. The migration added two ledger rows and exposed old shared
+history through system_conversations/system_messages views (12/54rows).
+Other existing counts retained; this is count preservation, not a full
+field-by-field audit or live guest acceptance. New source refs and credential
+values were never printed. Exited migration containers and stage DB/bucket
+remain operator-owned checkpoints; no running extra service/browser is left.
+
+Live installations remain on the old images. Required remaining work:
+- Distribute the paired private runtime images through a supported registry
+  available to both Docker and rootless BuildKit; bare local tags cannot be
+  assumed resolvable by remote BuildKit for future app builds.
+- Back up current live state at cutover, migrate demo, rebuild SDK apps within
+  the existing one-build budget, verify real guest forms/chat/Russian UI and
+  all guest denials. No successful source build or stage migration substitutes
+  for these checks.
+- Private100 additionally needs deliberate legacy-schema reconciliation and
+  the existing incomplete-object recovery resolved for original013 inventory.
+  No fake empty catalog, guard removal or live ledger edit is authorized as
+  a shortcut. Preserve the storage recovery owner's catalog and originals.
