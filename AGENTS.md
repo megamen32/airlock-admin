@@ -5,11 +5,15 @@ Airlock product code. Read `AIRLOCK_RUNBOOK.md` and `AIRLOCK_ADMIN.md`. Begin
 infrastructure discovery in `/home/roomhacker/ServersAdministartion` using its
 root instructions, topology, and inventory.
 
-The active platform runs as system `airlock.service`, working directory
-`/home/roomhacker/airlock-admin/airlock`, binary `bin/airlock serve`, protected
-EnvironmentFile `.env`. Do not start another nohup/go-run copy or escape its
-systemd resource boundaries. Core/submodules belong to their maintainers;
-use native SDK MCP declarations, resource credentials, and thin app adapters.
+Since 14 October 2026 the private platform runs in the original Docker backend
+`airlock-airlock-1` and frontend `airlock-frontend-1`. The legacy `airlock.service`
+is inactive/disabled; retain its binary/env for rollback and never start it
+alongside Docker. The canonical live Compose order, mounts and budgets are in
+`/home/roomhacker/agents-projects/exmanager/docs/airlock-original-docker.md`.
+The separate public demo runs on88; its external wrapper belongs to
+`/home/roomhacker/airlock-demo`. Verify live state before upgrading either.
+Core/submodules belong to their maintainers; use native SDK MCP declarations,
+resource credentials, and thin app adapters. Preserve the existing keys/data.
 
 X-manager source is `/home/roomhacker/agents-projects/exmanager`; its existing
 Todo panel source is `/home/roomhacker/excode`, deployed from

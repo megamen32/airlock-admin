@@ -5,7 +5,33 @@ metadata:
   type: project
 ---
 
-Airlock публично поднят через `nginx 127.0.0.1:8444 ssl → нативный airlock backend на 127.0.0.1:8080`. Caddy-proxy убран из цепочки 2026-09-29 (PR #TBD): nginx теперь сам терминирует TLS и проксирует SPA-статику + API + agent-subdomains. S3-сабдомен `s3.airlock.bezrabotnyi.com` обслуживается отдельным vhost (`sites-available/s3.airlock.bezrabotnyi.com`).
+## Действующая установка — Docker, проверено 16 октября 2026
+
+С14октября private Airlock на server-100 работает в оригинальных контейнерах
+`airlock-airlock-1` и `airlock-frontend-1`. `airlock.service` остановлен и
+отключён; его нельзя запускать параллельно с Docker. Сохранённые binary/env
+относятся к runtime rollback, а не к обычному запуску или обновлению.
+
+Канонический порядок четырёх Compose-файлов, прежние volumes/UID/mount paths,
+ресурсные лимиты и реальная приёмка описаны в
+`/home/roomhacker/agents-projects/exmanager/docs/airlock-original-docker.md`.
+Изменять только выбранные сервисы через этот сохранный Compose-контракт.
+Не применять старый `update-airlock-prerelease`: он обновляет исторический
+systemd backend из публичного prerelease и не обслуживает нынешние установки.
+
+Отдельное демо88: `/home/roomhacker/airlock-demo/deploy/demo88/README.md` и
+`UPSTREAM-DELTA.md`. Сохранять русский enterprise frontend и внешний guest
+gateway. Новые теги/образы проверять в приватном `airlockrun/airlock-internal`,
+сопоставляя version/revision/source; `main` без нового тега не равен релизу.
+Перед изменением runtime сохранять текущую конфигурацию, PostgreSQL, данные
+приложений/S3 и protected env/keys вне Git. Старую БД автоматически не откатывать.
+
+## Историческая установка до 14 октября 2026
+
+Следующие разделы описывают прежний native backend. Их команды запуска и
+обновления нельзя применять к нынешней Docker-установке.
+
+Airlock публично поднят через официальный ingress: `nginx 127.0.0.1:8444 ssl (TLS edge, wildcard-серт) → caddy-proxy в докере (127.0.0.1:4280, TLS_MODE=proxy) → нативный airlock backend 127.0.0.1:8080`. Caddy маршрутизирует по Host: apex → SPA+API, `*.airlock` → airlock SubdomainProxy (сам проставляет X-Airlock-Proxy-Auth), `s3.*` → S3-upstream. Возвращено 2026-10-06 по рекомендации апстрима (nginx-direct-эксперимент 2026-09-29 откатан; vhost — чистый passthrough в `nginx-dev`, отдельные s3/forenergo vhost'ы удалены). Поднимать caddy только через `docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d postgres rustfs caddy-proxy` — без dev-оверлея теряются host-биндинги postgres 42432 / rustfs 42900.
 
 ## Действующий запуск на server-100 (проверено 2026-10-06)
 
