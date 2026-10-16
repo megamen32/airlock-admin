@@ -17,25 +17,32 @@ templ Index(v HomeView) {
        <article class="mt-4 border-t border-base-300 pt-4">
         <h3 class="text-xl font-semibold"><a class="link" href={ templ.SafeURL(c.Link) } target="_blank" rel="noopener noreferrer">{ c.Title } ↗</a></h3>
         <p class="mt-2 whitespace-pre-line break-words">{ c.Description }</p>
-        if c.Category != "" { <p class="mt-2">Категория: {
+        if c.Category != "" {
+         <p class="mt-2">Категория: {
          c.Category }</p>
         }
-        if c.Followers != "" { <p class="mt-3 font-semibold">Подписчиков: {
+        if c.Followers != "" {
+         <p class="mt-3 font-semibold">Подписчиков: {
          c.Followers }</p>
         }
-        if c.Views24 != "" { <p>Просмотры за 24 часа: {
+        if c.Views24 != "" {
+         <p>Просмотры за 24 часа: {
          c.Views24 }</p>
         }
-        if c.Views48 != "" { <p>Просмотры за 48 часов: {
+        if c.Views48 != "" {
+         <p>Просмотры за 48 часов: {
          c.Views48 }</p>
         }
-        if c.ER24 != "" { <p>ER за 24 часа: {
+        if c.ER24 != "" {
+         <p>ER за 24 часа: {
          c.ER24 }</p>
         }
-        if c.ER48 != "" { <p>ER за 48 часов: {
+        if c.ER48 != "" {
+         <p>ER за 48 часов: {
          c.ER48 }</p>
         }
-        if c.UpdatedAt != "" { <p class="text-sm mt-3">Обновлено у источника: {
+        if c.UpdatedAt != "" {
+         <p class="text-sm mt-3">Обновлено у источника: {
          c.UpdatedAt }</p>
         }
        </article>

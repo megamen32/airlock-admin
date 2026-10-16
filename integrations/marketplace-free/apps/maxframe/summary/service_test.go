@@ -2,7 +2,7 @@ package summary
 
 import "testing"
 
-// Fast unit, expected1s/max10s: untrusted chat/form URLs must never become
+// Fast unit, expected60s/max600s including compilation: untrusted chat/form URLs must never become
 // arbitrary provider fetches. This test makes no runtime/integration claim.
 func TestNormalizeLink(t *testing.T) {
 	for in, want := range map[string]string{"": "", " https://max.ru/ria ": "https://max.ru/ria", "https://web.max.ru/hello-world/": "https://max.ru/hello-world", "https://max.ru/abc_123": "https://max.ru/abc_123"} {

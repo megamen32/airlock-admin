@@ -21,4 +21,11 @@ before form, wrapping buttons, no custom colour palette or font CDN.
 
 Readiness gate: successful actual API, ordinary guest form/chat, both themes and
 mobile before public grants or CTA. Initial documented header and query auth on
-16Oct returned401. Support followup1988012 sent once; no synthetic channel data.
+16Oct returned401. Support followup1988012 sent once; after vendor response
+1988013 the same header request returned200/100 real channels and channel ria
+returned real subscriber/view/ER values. No synthetic channel data.
+
+Focused source checks: URL validation unit and actual templ generation, bounded
+on100 at2GiB/no swap/2CPU/256tasks, expected60s/max600s including compilation.
+Native integration expected300s/max3000s; headed44 one owned browser2GiB/no swap/
+2CPU/512tasks/wall3600s/profile512MiB. Budgets measured before admission.
