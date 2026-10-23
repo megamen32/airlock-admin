@@ -1,0 +1,22 @@
+{
+  "fragment": "universal-userio-history",
+  "fragment_version": 1,
+  "app_slug": "universal-userio",
+  "app_id": "d45583e2-649b-44e7-865d-2ea1817b4167",
+  "operation": "insert_allowlist_operation",
+  "insert_after": "userio.channels.read",
+  "entry": {
+    "tool": "userio.messenger.history",
+    "title": "История контакта",
+    "args": {
+      "account_ref": "",
+      "conversation_id": "",
+      "limit": 100,
+      "refresh": false
+    }
+  },
+  "immutable_base_archive_sha256": "563a70e3779ab453dd2c80024376f4f48fb02443155907f822c66d14f767ec80",
+  "immutable_candidate_archive_sha256": "4a09850ce342f56e5d6521cec3efd2f12a0886eab24fd2e15a16ba330a5ce168",
+  "phase": "prepare_only_not_uploaded",
+  "scope": "one existing read operation; no binding, credential, grant, account default or source behavior changes"
+}

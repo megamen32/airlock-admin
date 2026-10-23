@@ -73,6 +73,16 @@
         }
       },
       {
+        "tool": "userio.messenger.history",
+        "title": "История контакта",
+        "args": {
+          "account_ref": "",
+          "conversation_id": "",
+          "limit": 100,
+          "refresh": false
+        }
+      },
+      {
         "tool": "userio.channels.send_draft",
         "title": "Сохранить черновик",
         "mutation": true,
