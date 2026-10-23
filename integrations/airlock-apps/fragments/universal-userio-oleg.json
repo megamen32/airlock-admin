@@ -1,0 +1,115 @@
+{
+  "fragment": "universal-userio-oleg",
+  "fragment_version": 1,
+  "purpose": "Registration fragment for the Universal UserIO application binding of principal Oleg (98daa037). Merges into integrations/airlock-apps/apps.json; the registry itself is read-only for this task.",
+  "app": {
+    "name": "Universal UserIO",
+    "slug": "universal-userio",
+    "agent_id": "d45583e2-649b-44e7-865d-2ea1817b4167",
+    "product_url": "https://msg.bezrabotnyi.com/",
+    "ui_url": "http://host.docker.internal:19419/universal-userio"
+  },
+  "bindings": [
+    {
+      "slug": "userio_oleg",
+      "url": "https://msg.bezrabotnyi.com/mcp",
+      "auth_mode": "token",
+      "principal": "98daa037-a87d-49b1-ba07-cd9e6f451864"
+    }
+  ],
+  "_registration": {
+    "binding": "userio_oleg",
+    "principal": {
+      "id": "98daa037-a87d-49b1-ba07-cd9e6f451864",
+      "userio_username": "cyberteaborg@gmail.com",
+      "role": "admin"
+    },
+    "platform_rule": {
+      "source": "running binary /airlock, sqlc query ResolveBoundMCPServer",
+      "text": "binding.user_id IS NOT DISTINCT FROM CASE WHEN need.binding_mode='shared' THEN NULL ELSE $1::uuid END AND (m.owner_principal_id = creator.id OR EXISTS (resource_grants with 'use' for creator))",
+      "consequence": "A shared MCP resource resolves only while its owner_principal_id equals the binding creator (binding.created_by_user_id), or the creator holds a 'use' grant. Flipping owner_principal_id alone makes the binding unresolvable.",
+      "verified_by": "read-only SELECT reproduction: current state -> 1 row; owner_principal_id=98daa037 with creator=5e438326 -> 0 rows; creator=98daa037 with owner=98daa037 -> 1 row."
+    },
+    "current_state": {
+      "need": {
+        "id": "2bd3f7c1-e232-4f64-93a2-cc7b523caa2c",
+        "slug": "userio_oleg",
+        "type": "mcp_server",
+        "binding_mode": "shared",
+        "expected_url": "https://msg.bezrabotnyi.com/mcp"
+      },
+      "binding": {
+        "id": "e77b37cb-e668-4103-90d1-176952d5b0b9",
+        "binding_mode": "shared",
+        "user_id": null,
+        "created_by_user_id": "5e438326-6339-4ac8-a328-59dae1d6241f"
+      },
+      "mcp_resource": {
+        "id": "ff33baaa-e863-42a8-8537-055bd2c0171d",
+        "slug": "res-ff33baaae86342a88537055bd2c0171d",
+        "lifecycle": "active",
+        "auth_mode": "token",
+        "credential_mode": "shared",
+        "owner_principal_id": "5e438326-6339-4ac8-a328-59dae1d6241f",
+        "credential_owner": "98daa037-a87d-49b1-ba07-cd9e6f451864",
+        "credential_verified": "sha256(access_token_ref) matches userio api_tokens row token_30581bf4ca504d23a826d0d95079b8ab of userio user user_9e5e0ee9efbe4cd5aaabeaa3ddaad716 (cyberteaborg@gmail.com), not revoked"
+      },
+      "defect": "The credential belongs to principal 98daa037 but the resource is registered under the owner's principal 5e438326 and was created by the owner. Effective identity is correct today (calls act as Oleg), yet the platform attributes Oleg's credential to the owner's resource.",
+      "risk": "POST /api/v1/agents/{agent_id}/mcp-servers/userio_oleg/credentials replaces access_token_ref of this very resource. The owner (or any admin holding the credential UI) can therefore silently re-key the userio_oleg binding to the owner's UserIO token, after which the 'Oleg' binding would return the owner's chats. Oleg also cannot rotate or revoke his own credential independently.",
+      "live_status": "functional, hardening pending"
+    },
+    "target_state": {
+      "resource_owner_principal_id": "98daa037-a87d-49b1-ba07-cd9e6f451864",
+      "binding_created_by_user_id": "98daa037-a87d-49b1-ba07-cd9e6f451864",
+      "credential": "Oleg's own UserIO personal access token (already the stored credential)",
+      "alternative": "keep owner as creator and add a resource_grants row (mcp_server_id=ff33baaa..., grantee_id=5e438326..., capabilities=[use]) - resource_grants is currently empty platform-wide",
+      "not_supported_today": "per-user member credentials (agent_mcp_member_credentials) - the table holds 0 rows and no live flow creates them; do not use credential_mode=member_token for this binding"
+    },
+    "apply": [
+      {
+        "step": 1,
+        "actor": "principal 98daa037-a87d-49b1-ba07-cd9e6f451864 (Oleg) with a live Airlock session",
+        "why": "platform_rule requires the binding creator to be the resource owner; only the token's owner can create a credential he owns",
+        "requests": [
+          "POST /api/v1/agents/d45583e2-649b-44e7-865d-2ea1817b4167/mcp-servers/userio_oleg/credentials  {\"apiKey\": <Oleg's UserIO personal token>, \"displayName\": \"Universal UserIO Airlock\"}",
+          "POST /api/v1/agents/d45583e2-649b-44e7-865d-2ea1817b4167/needs/mcp_server/userio_oleg/bind  {\"resourceId\": <resource id owned by 98daa037>}",
+          "POST /api/v1/agents/d45583e2-649b-44e7-865d-2ea1817b4167/members  {\"userId\": \"5e438326-6339-4ac8-a328-59dae1d6241f\", \"role\": \"admin\"}"
+        ],
+        "note": "The token value is never stored in this fragment and must never be committed; take it from Oleg's UserIO session only."
+      },
+      {
+        "step": 2,
+        "actor": "owner 5e438326-6339-4ac8-a328-59dae1d6241f",
+        "why": "the owner must not be able to re-key Oleg's binding",
+        "requests": [
+          "rotate the owner-side credential of the userio_owner binding only; never touch userio_oleg after step 1"
+        ]
+      }
+    ],
+    "verify": [
+      {
+        "check": "binding resolves and acts as Oleg",
+        "command": "POST https://airlock.bezrabotnyi.com/api/agent/mcp/userio_oleg/tools/call  Authorization: Bearer <agent token for d45583e2>  body {\"tool\":\"userio.channels.list\",\"arguments\":{\"channel\":\"telegram\",\"limit\":1}}",
+        "expected": "HTTP 200, structuredContent.ok=true (chats list belongs to Oleg)",
+        "observed_2026_10_23": "HTTP 200 {\"ok\":true,\"chats\":[]}, serverInfo universal-userio 0.2.0"
+      },
+      {
+        "check": "platform sees the UserIO tool set",
+        "command": "MCP tools/list against https://msg.bezrabotnyi.com/mcp with the stored credential",
+        "expected": "61 userio.* tools",
+        "observed_2026_10_23": "61 tools, incl. userio.accounts.list, userio.channels.list, userio.channels.read"
+      },
+      {
+        "check": "attribution",
+        "command": "SELECT m.owner_principal_id, binding.created_by_user_id FROM agent_resource_needs n JOIN agent_resource_bindings binding ON binding.need_id=n.id JOIN agent_mcp_servers m ON m.id=binding.mcp_server_id WHERE n.agent_id='d45583e2-649b-44e7-865d-2ea1817b4167' AND n.slug='userio_oleg'",
+        "expected": "both equal 98daa037-a87d-49b1-ba07-cd9e6f451864"
+      }
+    ],
+    "blockers": [
+      "Owner session is not usable from the worker host: /home/roomhacker/.config/airlock/server-session.json access token expired (exp 1792757580) and POST /auth/refresh is rejected with HTTP 401. A device-login by the owner is required before any bind/credential/upgrade call can be made.",
+      "Database writes are out of scope for this task (SELECT only), so the attribution fix could not be applied directly.",
+      "Oleg's UserIO account has 0 connected provider accounts, so read-only calls return empty lists until he connects an account in UserIO.",
+      "The Universal UserIO agent runtime is not deployed: agent d45583e2 is status=active but upgrade_status=failed, no container and no image exist, and the upgrade build of 2026-10-23 12:25-12:41 UTC failed with 'sol codegen failed: step 63 error: stream error: context deadline exceeded' (failure_kind=infra). The MCP proxy path works, the app runtime does not."
+    ]
+  }
+}
