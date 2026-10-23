@@ -50,9 +50,9 @@ func (a *app) home(w http.ResponseWriter, r *http.Request) error {
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-store")
-	w.Header().Set("Referrer-Policy", "no-referrer")
+	w.Header().Set("Referrer-Policy", "same-origin")
 	w.Header().Set("Content-Security-Policy", "default-src 'none'; form-action 'self' https://new.auto-gram.ru; frame-ancestors 'self' https://airlock.bezrabotnyi.com; base-uri 'none'")
-	_, err := w.Write([]byte(`<!doctype html><html lang="ru"><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>Автограмм · AirLock</title><main><h1>Автограмм · AirLock</h1><p>Общий кабинет для Room Hacker и Олега.</p><form action="/open" method="post" target="_blank" rel="noopener noreferrer"><button type="submit">Открыть кабинет Автограмм</button></form></main></html>`))
+	_, err := w.Write([]byte(`<!doctype html><html lang="ru"><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>Автограмм · AirLock</title><main><h1>Автограмм · AirLock</h1><p>Общий кабинет для Room Hacker и Олега.</p><form action="/open" method="post" target="_blank" rel="noopener"><button type="submit">Открыть кабинет Автограмм</button></form></main></html>`))
 	return err
 }
 func (a *app) open(w http.ResponseWriter, r *http.Request) error {

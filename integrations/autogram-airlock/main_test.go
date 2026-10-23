@@ -47,6 +47,9 @@ func TestUserLandingAndOrigin(t *testing.T) {
 	if !strings.Contains(w.Header().Get("Content-Security-Policy"), "frame-ancestors 'self' https://airlock.bezrabotnyi.com") {
 		t.Fatal("native Airlock iframe blocked")
 	}
+	if w.Header().Get("Referrer-Policy") != "same-origin" || strings.Contains(w.Body.String(), "noreferrer") {
+		t.Fatal("same-origin POST must retain its Origin header")
+	}
 	if !strings.Contains(w.Body.String(), `target="_blank"`) || !strings.Contains(w.Header().Get("Content-Security-Policy"), "form-action 'self' https://new.auto-gram.ru") {
 		t.Fatal("handoff must leave iframe through user action")
 	}
