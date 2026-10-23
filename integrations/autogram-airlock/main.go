@@ -4,8 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"github.com/airlockrun/agentsdk"
 	"github.com/airlockrun/goai/tool"
+	"html"
 	"net/http"
 	"net/url"
 	"regexp"
@@ -44,15 +46,21 @@ type app struct {
 }
 
 func (a *app) home(w http.ResponseWriter, r *http.Request) error {
-	if _, err := admitted(r.Context()); err != nil {
+	w.Header().Set("Cache-Control", "no-store")
+	id, err := admitted(r.Context())
+	if err != nil {
 		http.Error(w, err.Error(), 403)
 		return nil
 	}
+	handoffURL, err := a.handoff(r.Context(), id)
+	if err != nil {
+		http.Error(w, err.Error(), 502)
+		return nil
+	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	w.Header().Set("Cache-Control", "no-store")
 	w.Header().Set("Referrer-Policy", "same-origin")
-	w.Header().Set("Content-Security-Policy", "default-src 'none'; form-action 'self' https://new.auto-gram.ru; frame-ancestors 'self' https://airlock.bezrabotnyi.com; base-uri 'none'")
-	_, err := w.Write([]byte(`<!doctype html><html lang="ru"><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>Автограмм · AirLock</title><main><h1>Автограмм · AirLock</h1><p>Общий кабинет для Room Hacker и Олега.</p><form action="/open" method="post" target="_blank" rel="noopener"><button type="submit">Открыть кабинет Автограмм</button></form></main></html>`))
+	w.Header().Set("Content-Security-Policy", "default-src 'none'; frame-src https://new.auto-gram.ru; style-src 'sha256-4rQgUPuuPB4oqIOpejlta6xlfQZC5JGgG7UsTV9u4nU='; frame-ancestors 'self' https://airlock.bezrabotnyi.com; base-uri 'none'; form-action 'none'")
+	_, err = fmt.Fprintf(w, `<!doctype html><html lang="ru"><meta charset="utf-8"><meta name="viewport" content="width=device-width"><meta name="referrer" content="same-origin"><title>Автограмм · AirLock</title><style>html,body{height:100%%;margin:0}iframe{display:block;width:100%%;height:100%%;border:0}</style><iframe title="Кабинет Автограмм AirLock" src="%s" referrerpolicy="same-origin"></iframe></html>`, html.EscapeString(handoffURL))
 	return err
 }
 func (a *app) open(w http.ResponseWriter, r *http.Request) error {
@@ -65,25 +73,32 @@ func (a *app) open(w http.ResponseWriter, r *http.Request) error {
 		http.Error(w, "Запрос с другого сайта отклонён", 403)
 		return nil
 	}
-	ctx, cancel := context.WithTimeout(r.Context(), 15*time.Second)
+	handoffURL, err := a.handoff(r.Context(), id)
+	if err != nil {
+		http.Error(w, err.Error(), 502)
+		return nil
+	}
+	w.Header().Set("Cache-Control", "no-store")
+	w.Header().Set("Referrer-Policy", "no-referrer")
+	http.Redirect(w, r, handoffURL, http.StatusSeeOther)
+	return nil
+}
+
+func (a *app) handoff(ctx context.Context, id string) (string, error) {
+	ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
 	defer cancel()
 	data, err := a.issue(ctx, id)
 	if err != nil {
-		http.Error(w, "Вход в Автограмм временно недоступен", 502)
-		return nil
+		return "", errors.New("Вход в Автограмм временно недоступен")
 	}
 	var out struct {
 		URL     string `json:"url"`
 		Expires int    `json:"expires_in"`
 	}
 	if json.Unmarshal(data, &out) != nil || !validHandoff(out.URL) || out.Expires <= 0 || out.Expires > 60 {
-		http.Error(w, "Автограмм вернул некорректный ответ входа", 502)
-		return nil
+		return "", errors.New("Автограмм вернул некорректный ответ входа")
 	}
-	w.Header().Set("Cache-Control", "no-store")
-	w.Header().Set("Referrer-Policy", "no-referrer")
-	http.Redirect(w, r, out.URL, http.StatusSeeOther)
-	return nil
+	return out.URL, nil
 }
 func newAgent() *agentsdk.Agent {
 	a := agentsdk.New(agentsdk.Config{Description: "Общий кабинет Автограмм AirLock", Emoji: "🔎"})

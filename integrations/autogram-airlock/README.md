@@ -2,13 +2,15 @@
 
 Нативное приложение Airlock для общего кабинета Автограмм 208. Доступ получают только Room Hacker и Олег по двум фиксированным Airlock UUID. Олегу достаточно app role `user`.
 
-GET `/` показывает кнопку без входа в AFC. POST `/open` проверяет точный Origin и caller, затем через SDK Connection запрашивает одноразовый переход в AFC. AFC выдаёт штатную browser cookie после одноразового обмена. Код приходит во fragment и не является долговечным MCP bearer.
+GET `/` проверяет caller, через существующий SDK Connection выпускает одноразовый handoff и сразу показывает кабинет в полноэкранном iframe. Кнопки и новой вкладки нет. Код приходит во fragment и не является долговечным MCP bearer. Ответ no-store; wrapper допускает frame-src только `https://new.auto-gram.ru` и parent только свой origin/`https://airlock.bezrabotnyi.com`.
+
+Совместимый POST `/open` сохраняет точную Origin/caller проверку и303, но встроенный интерфейс его не использует. Upstream handoff/кабинет должен разрешать оба ancestor origins (outer Airlock и wrapper) и выдавать рабочую cross-site iframe cookie. Одного изменения CSP недостаточно: Secure/SameSite=None и partitioned-cookie поведение проверяются реальным browser canary, backend AFC принадлежит отдельному владельцу. Пока backend readiness и browser result не получены, локальный inline patch не означает установленный результат.
 
 MCP `autogram` использует shared encrypted resource; app tool `cabinet_profile` читает профиль. Дополнительный direct resource grant `use` Олегу предоставляет инструменты самого AFC MCP согласно upstream scopes. Shared MCP token и отдельный handoff credential не попадают в app source, HTML, browser storage или URL. Connection credential injects платформа.
 
 ## Проверка
 
-`go test ./...` проверяет оба разрешённых UUID, отрицательный третий, user route context, отсутствие mutation при GET, Origin до issue, exact redirect и TTL.
+`go test ./...` проверяет оба разрешённых UUID, отрицательный третий без handoff, автоматический iframe с одним handoff на GET, full-viewport CSP style hash, Origin до legacy POST issue, exact URL и TTL. Эти тесты не доказывают iframe cookie или браузерную авторизацию.
 
 `provision.py` использует только собственный receipt app `autogram-airlock` и protected session. Операции разделены: create, upload, status, configure, readback. Upload не повторяет тот же digest; неизвестный результат сверять перед повтором. Секреты остаются вне Git в `/home/roomhacker/.local/share/airlock-afc/` с 0700/0600. Script не восстанавливает login и не ищет чужие токены.
 
