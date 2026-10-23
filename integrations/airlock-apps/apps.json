@@ -265,15 +265,7 @@
         "slug": "airlockplan",
         "url": "https://airlockplan.bezrabotnyi.com/airlock-mcp",
         "auth_mode": "token",
-        "binding_mode": "shared",
-        "principal": "5e438326-6339-4ac8-a328-59dae1d6241f"
-      },
-      {
-        "slug": "userio_owner",
-        "url": "https://msg.bezrabotnyi.com/mcp",
-        "auth_mode": "token",
-        "binding_mode": "shared",
-        "principal": "5e438326-6339-4ac8-a328-59dae1d6241f"
+        "binding_mode": "shared"
       }
     ],
     "operations": [

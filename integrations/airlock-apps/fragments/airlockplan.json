@@ -1,7 +1,7 @@
 {
   "fragment": "airlockplan",
-  "fragment_version": 1,
-  "purpose": "Registration fragment for the Airlock Plan application: the owner binding of Universal UserIO (userio_owner) plus the agentsdk 0.8 migration that made the app buildable again. Merges into integrations/airlock-apps/apps.json; the registry itself is read-only for this task.",
+  "fragment_version": 3,
+  "purpose": "Registration fragment for the Airlock Plan application: the app's own MCP binding only. The app declares its own service; the UserIO account belongs to the Universal UserIO app and is reached through that app's operations, not through a binding on its resource. Merges into integrations/airlock-apps/apps.json.",
   "app": {
     "name": "Airlock Plan",
     "slug": "airlockplan",
@@ -13,48 +13,58 @@
     {
       "slug": "airlockplan",
       "url": "https://airlockplan.bezrabotnyi.com/airlock-mcp",
-      "auth_mode": "token"
+      "auth_mode": "token",
+      "binding_mode": "shared"
     }
   ],
+  "_canon": {
+    "question": "How does an application reach the MCP resource of another application?",
+    "answer": "Option (a): the application declares a need (a manifest binding) for that resource and the platform binds it. The credential never leaves the platform: the broker injects it per call and scrubs it from the response. Option (b) is the authorization half of the same mechanism (resource_grants 'use' lets a principal other than the owner bind the resource), not an alternative to declaring the need. Option (c) is not a platform mechanism: service_read exists only in the app template (integrations/airlock-apps/main.go:96), the core exposes no cross-application call route, and the agent-scoped call injects only the credential, not the caller (service/runtime/integrations.go:113-146).",
+    "evidence": [
+      "db/queries/resource_needs.sql:117-119 - 'a need's slug resolves to its bound resource row. The credential proxy then keys off the resolved resource's own id/owner, never the calling agent - that is what lets one resource back many agents.'",
+      "service/needs/bind.go:509-600 (bindExisting) - the binder must hold authz.ResourceUse on the resource (owner or a 'use' grant); the credential lives in agent_mcp_servers, not in the app.",
+      "db/migrations/012_platform_runtime.sql:59-75 - no uniqueness on mcp_server_id, so one resource may back the needs of many agents.",
+      "live: resource 365c1a4b (Universal UserIO) backs the needs userio_owner of universal-userio and userio_owner of airlockplan - the platform already runs that way."
+    ],
+    "app_level_rule": "The shared adapter's slot selection (integrations/airlock-apps/main.go:59-69) picks one binding per calling principal, so the bindings of one application are slots of ONE service. Two bindings of one principal are ambiguous (the first match wins) and the plan's second binding put the owner's personal UserIO credential behind a shared slot that every administrator of the app could reach. The application therefore declares its own service only, and the platform's contract test says so: integrations/airlock-apps/plan_binding_test.go.",
+    "personal_resource_rule": "docs/AIRLOCK_FIVE_APPS_TASK.md:188-190,210 - the callback picks the slot strictly by principal and the owner's token is never substituted into Oleg's slot. The live feed stays the owner's: the app's own MCP refuses it on the platform-facing endpoint (reason 'scope') and the product refuses it to any other administrator of the platform."
+  },
   "_registration": {
-    "binding": "userio_owner",
+    "binding": "airlockplan",
     "principal": {
-      "id": "5e438326-6339-4ac8-a328-59dae1d6241f",
-      "role": "admin",
-      "note": "The binding reuses the owner's own Universal UserIO resource; no per-user member credential exists for it (agent_mcp_member_credentials holds 0 rows platform-wide)."
+      "id": "",
+      "note": "No principal: the service of the app is shared, so every administrator of the app reaches the app's own MCP. A principal would make the slot personal and would exclude the second administrator from the board."
     },
     "platform_rule": {
       "source": "running binary /airlock, sqlc query ResolveBoundMCPServer",
       "text": "binding.user_id IS NOT DISTINCT FROM CASE WHEN need.binding_mode='shared' THEN NULL ELSE $1::uuid END AND (m.owner_principal_id = creator.id OR EXISTS (resource_grants with 'use' for creator))",
       "consequence": "A shared MCP resource resolves only while its owner_principal_id equals the binding creator (binding.created_by_user_id), or the creator holds a 'use' grant.",
-      "verified_by": "read-only SELECT: resource 365c1a4b owner_principal_id=5e438326 and both bindings (airlockplan c2abb3bf, universal-userio 54968a2c) created_by_user_id=5e438326 -> the rule holds for both."
+      "verified_by": "read-only SELECT: the plan's binding (dad13179-9eb7-4554-8157-3db7d2dffe39) points at resource 200e258f (owner 5e438326), created_by_user_id=5e438326 -> the rule holds."
     },
     "current_state": {
       "need": {
         "id": "9c2d7ce3-8b60-4609-b674-4387e6a09f50",
-        "slug": "userio_owner",
+        "slug": "airlockplan",
         "type": "mcp_server",
         "binding_mode": "shared",
-        "expected_url": "https://msg.bezrabotnyi.com/mcp"
+        "expected_url": "https://airlockplan.bezrabotnyi.com/airlock-mcp"
       },
       "binding": {
-        "id": "c2abb3bf-f92c-455c-88f7-17767ee19f51",
+        "id": "dad13179-9eb7-4554-8157-3db7d2dffe39",
         "binding_mode": "shared",
         "user_id": null,
         "created_by_user_id": "5e438326-6339-4ac8-a328-59dae1d6241f"
       },
       "mcp_resource": {
-        "id": "365c1a4b-24a7-41f1-8aa2-67050f8004e6",
-        "slug": "res-365c1a4b24a741f18aa267050f8004e6",
-        "name": "Universal UserIO",
+        "id": "200e258f-df74-4f3a-9037-ebce5a6f7fec",
+        "name": "Airlock Plan",
         "lifecycle": "active",
         "auth_mode": "token",
         "credential_mode": "shared",
-        "owner_principal_id": "5e438326-6339-4ac8-a328-59dae1d6241f",
-        "shared_with": "the same resource backs the universal-userio app binding userio_owner (54968a2c); re-keying it rotates the owner-side credential for both, exactly the step the universal-userio-oleg fragment prescribes for the owner side"
+        "owner_principal_id": "5e438326-6339-4ac8-a328-59dae1d6241f"
       },
       "build": {
-        "id": "b0aef826-1e2b-469f-aee1-9cac98b4dc63",
+        "id": "7499c6c6",
         "status": "complete",
         "sdk_version": "0.8.1-alpha.12",
         "deployment_phase": "complete",
@@ -73,9 +83,14 @@
         "fix": "integrations/airlock-apps/main.go: the binding struct gained an optional binding_mode field and RegisterMCP now passes BindingMode (manifest value, default shared, which matches the platform need spec binding_mode=shared)"
       },
       {
-        "symptom": "go mod tidy failed against agentsdk 0.8: 'package github.com/airlockrun/agentsdk/agenttest provided by ... at latest version v0.7.0 but not at required version v0.8.1-alpha.12'",
-        "cause": "SDK 0.8 removed the agentsdk/agenttest local-host harness (see /libs/agentsdk/UPGRADING.md, v0.8.1-alpha.12); the app tests imported it",
-        "fix": "main_test.go and ui_proxy_test.go migrated to the SDK 0.8 offline fixtures (agentsdk/testutil.WithCaller with a validated wire.Caller). Tests that needed the removed local host now assert the guard and delegation behaviour that is reachable offline; the MCP proxy round-trip and the runtime-backed parts of the UI proxy need a real Airlock runner and are not covered by the unit tests any more."
+        "symptom": "the curated wrapper service_read routed every airlock_* operation to the UserIO MCP for the owner, and the second administrator matched no slot at all",
+        "cause": "the adapter picks one binding per calling principal (first exact match, then a single-binding fallback). Two bindings of the same principal are ambiguous, and the plan's own service was not distinguishable from a foreign resource in the same manifest.",
+        "fix": "the plan declares one binding - its own service, without a principal - so every caller of the app reaches the app's own MCP. The contract test states the rule for the whole registry: every binding of an app points at that app's own product host, and no principal has two slots."
+      },
+      {
+        "symptom": "the owner's personal UserIO credential was reachable through the app for every administrator of the app",
+        "cause": "a shared binding on the owner's personal UserIO resource: the platform injects the resource credential for any caller of the app, so the second administrator (an admin member of the app) received the owner's private chats.",
+        "fix": "the plan holds no binding on the UserIO resource any more. The live feed goes through the Universal UserIO app by the owner's platform session (POST /api/v1/agents/d45583e2-649b-44e7-865d-2ea1817b4167/integrations/mcp/userio_owner/call); the app's own MCP refuses the live tools on the platform-facing endpoint (reason 'scope') and the product refuses them to any administrator other than the owner."
       },
       {
         "symptom": "the first call through the new binding returned 'MCP HTTP 401 Unauthorized' from https://msg.bezrabotnyi.com/mcp",
@@ -89,43 +104,57 @@
         "actor": "owner session on server-100 (5e438326-6339-4ac8-a328-59dae1d6241f)",
         "requests": [
           "python3 /home/roomhacker/airlock-admin/scripts/airlock_apps.py upload --app airlockplan --credential-file /tmp/airlockplan-session.json --state /tmp/airlockplan-state.json",
-          "POST /api/v1/agents/4bbb8bd0-e5ee-43be-babb-48e763d6eafb/needs/mcp_server/userio_owner/bind {\"resourceId\":\"365c1a4b-24a7-41f1-8aa2-67050f8004e6\"}",
-          "python3 /home/roomhacker/airlock-admin/scripts/airlock_apps.py credential --app airlockplan --binding userio_owner --token-file /tmp/userio_owner_token --credential-file /tmp/airlockplan-session.json --state /tmp/airlockplan-state.json",
+          "DELETE /api/v1/agents/4bbb8bd0-e5ee-43be-babb-48e763d6eafb/needs/mcp_server/userio_owner/bind",
+          "POST /api/v1/agents/4bbb8bd0-e5ee-43be-babb-48e763d6eafb/needs/mcp_server/airlockplan/bind {\"resourceId\":\"200e258f-df74-4f3a-9037-ebce5a6f7fec\"}",
           "POST /api/v1/agents/4bbb8bd0-e5ee-43be-babb-48e763d6eafb/start {}"
         ],
-        "status": "applied 2026-10-23 13:19-13:49 UTC; the need only exists after a successful build, so the bind had to follow the upload"
+        "status": "applied 2026-10-23 22:40-22:55 MSK; build 7499c6c6 complete, the plan's need set is now exactly one need"
       }
     ],
     "verify": [
       {
-        "check": "platform sees both bindings and their tools",
-        "command": "GET /api/v1/agents/4bbb8bd0-e5ee-43be-babb-48e763d6eafb/integrations/mcp/<binding>/tools",
-        "expected": "airlockplan: 17 airlock_* tools; userio_owner: 61 userio.* tools",
-        "observed_2026_10_23": "airlockplan 17 tools, userio_owner 61 tools (incl. userio.channels.list)"
+        "check": "the plan's needs: one binding, its own service",
+        "command": "GET /api/v1/agents/4bbb8bd0-e5ee-43be-babb-48e763d6eafb/needs",
+        "expected": "one need: mcp_server/airlockplan, bound, binding_mode=shared",
+        "observed_2026_10_23": "one need: airlockplan -> 200e258f-df74-4f3a-9037-ebce5a6f7fec, bound, shared"
       },
       {
-        "check": "live read-only call through the agent token",
-        "command": "POST https://airlock.bezrabotnyi.com/api/agent/mcp/userio_owner/tools/call  Authorization: Bearer <agent token>  body {\"tool\":\"userio.channels.list\",\"arguments\":{\"channel\":\"telegram\",\"limit\":1}}",
-        "expected": "HTTP 200, ok=true, one chat identifier",
-        "observed_2026_10_23": "HTTP 200 isError=false {\"ok\":true,\"chats\":[{\"id\":\"conv_f9505f1de653de31f6a1e3b2\",\"channel\":\"telegram\",\"title\":\"MariM\",\"unread\":1}]} (the response also carries a message snippet; it is not reproduced here)"
-      },
-      {
-        "check": "the pre-existing binding still works",
+        "check": "the app's own tool through the agent token",
         "command": "POST https://airlock.bezrabotnyi.com/api/agent/mcp/airlockplan/tools/call  body {\"tool\":\"airlock_status\",\"arguments\":{}}",
         "expected": "HTTP 200, ok=true",
-        "observed_2026_10_23": "HTTP 200 isError=false ok=true revision=v395-chats-airlock-bridge-20261023"
+        "observed_2026_10_23": "HTTP 200 isError=false ok=true revision=v399-new-partners-w380-20261023"
       },
       {
-        "check": "the sibling app that shares the UserIO resource is unaffected",
-        "command": "POST /api/v1/agents/d45583e2-649b-44e7-865d-2ea1817b4167/integrations/mcp/userio_owner/call",
-        "expected": "isError=false",
-        "observed_2026_10_23": "isError=false ok=true, 1 chat"
+        "check": "the plan holds no UserIO resource any more",
+        "command": "POST /api/agent/mcp/userio_owner/tools/call",
+        "expected": "HTTP 404 - the slug is not declared by the agent",
+        "observed_2026_10_23": "HTTP 404 {\"error\":\"MCP server \\\"userio_owner\\\" is not declared\"}"
+      },
+      {
+        "check": "the live feed of the owner still works, through the Universal UserIO app",
+        "command": "POST /api/v1/agents/d45583e2-649b-44e7-865d-2ea1817b4167/integrations/mcp/userio_owner/call body {\"tool\":\"userio.channels.list\",\"arguments\":{\"channel\":\"telegram\",\"limit\":1}}",
+        "expected": "HTTP 200, ok=true",
+        "observed_2026_10_23": "HTTP 200 ok=true, 100 telegram chats"
+      },
+      {
+        "check": "the platform-facing MCP endpoint does not serve the live feed",
+        "command": "POST http://127.0.0.1:19421/airlockplan body {\"method\":\"tools/call\",\"params\":{\"name\":\"airlock_live_conversations\"}} with the app's MCP credential",
+        "expected": "refusal with reason 'scope'",
+        "observed_2026_10_23": "reason=scope, message 'Живая переписка - личная лента владельца приложения...'"
+      },
+      {
+        "check": "the shared-source contract test of the platform release gate",
+        "command": "cd integrations/airlock-apps && GOWORK=off go test -count=1 ./...",
+        "expected": "ok",
+        "observed_2026_10_23": "ok agent, ok agent/bridgeauth, ok agent/cmd/ui-gateway"
       }
     ],
     "notes": [
       "The app container is idle-reaped by the platform ('stopping idle container' in the backend log). It is reconciled again on the next admitted request or with POST /api/v1/agents/{id}/start; the agent token lives in the container environment, so a probe that needs the token must start the container first.",
-      "The app's own operation allowlist (apps.json operations) still lists only the airlock_* operations; the platform-level userio_owner binding is independent of that list. Exposing userio.* through the app's own service_read tool would need an apps.json change, which was out of scope here.",
-      "The go.mod/go.sum/test migration lives in the shared integrations/airlock-apps source, so every app uploaded from it inherits the SDK 0.8 pin; re-uploads of the other apps pick it up."
+      "The app's own operation allowlist (apps.json operations) still lists only the airlock_* operations; the userio.* tools of the Universal UserIO app are exposed by that app, not by the plan."
     ]
-  }
+  },
+  "notes": [
+    "The live tools are served by the app's own MCP but only on the scoped (narrow token) endpoint of the product: the live feed reads a personal account, and the platform does not substitute the owner's token for somebody else's call."
+  ]
 }
