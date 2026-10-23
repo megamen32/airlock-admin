@@ -234,5 +234,298 @@
     ],
     "product_url": "https://grep.bezrabotnyi.com/",
     "ui_url": "http://host.docker.internal:19419/grepmesh"
+  },
+  {
+    "name": "Airlock Plan",
+    "slug": "airlockplan",
+    "product_url": "https://airlockplan.bezrabotnyi.com/",
+    "bindings": [
+      {
+        "slug": "airlockplan",
+        "url": "https://airlockplan.bezrabotnyi.com/airlock-mcp",
+        "auth_mode": "token",
+        "binding_mode": "shared",
+        "principal": "5e438326-6339-4ac8-a328-59dae1d6241f"
+      },
+      {
+        "slug": "userio_owner",
+        "url": "https://msg.bezrabotnyi.com/mcp",
+        "auth_mode": "token",
+        "binding_mode": "shared",
+        "principal": "5e438326-6339-4ac8-a328-59dae1d6241f"
+      }
+    ],
+    "operations": [
+      {
+        "tool": "airlock_status",
+        "title": "Состояние общей базы",
+        "args": {}
+      },
+      {
+        "tool": "airlock_stats",
+        "title": "Сводка по базе",
+        "args": {
+          "segment": ""
+        }
+      },
+      {
+        "tool": "airlock_list_projects",
+        "title": "Карточки партнёров",
+        "args": {
+          "status": "",
+          "category": "",
+          "owner": "",
+          "wave": true,
+          "query": "",
+          "limit": 25
+        }
+      },
+      {
+        "tool": "airlock_search_projects",
+        "title": "Поиск по карточкам",
+        "args": {
+          "query": "",
+          "status": "",
+          "owner": "",
+          "segment": "",
+          "category": "",
+          "fit": "",
+          "limit": 25,
+          "offset": 0
+        }
+      },
+      {
+        "tool": "airlock_get_project",
+        "title": "Открыть карточку",
+        "args": {
+          "entity": ""
+        }
+      },
+      {
+        "tool": "airlock_get_focus",
+        "title": "Текущий фокус",
+        "args": {
+          "section": "all"
+        }
+      },
+      {
+        "tool": "airlock_list_tasks",
+        "title": "План действий",
+        "args": {
+          "id": "",
+          "projectId": "",
+          "status": "",
+          "owner": "",
+          "query": "",
+          "limit": 25,
+          "offset": 0
+        }
+      },
+      {
+        "tool": "airlock_list_gates",
+        "title": "Условия допуска",
+        "args": {
+          "id": "",
+          "projectId": "",
+          "status": "",
+          "owner": "",
+          "query": "",
+          "limit": 25,
+          "offset": 0
+        }
+      },
+      {
+        "tool": "airlock_list_conversations",
+        "title": "Переписка по карточкам",
+        "args": {
+          "project": "",
+          "actor": "",
+          "kind": "",
+          "awaiting": "any",
+          "since": "",
+          "includeMessages": true,
+          "maxMessages": 5,
+          "limit": 25
+        }
+      },
+      {
+        "tool": "airlock_live_conversations",
+        "title": "Живая переписка UserIO",
+        "args": {
+          "channel": "",
+          "limit": 25
+        }
+      },
+      {
+        "tool": "airlock_live_conversation",
+        "title": "Живой диалог UserIO",
+        "args": {
+          "channel": "telegram",
+          "chat_id": "",
+          "limit": 100
+        }
+      },
+      {
+        "tool": "airlock_backup",
+        "title": "Выгрузить журнал",
+        "args": {
+          "includeHtml": false
+        }
+      },
+      {
+        "tool": "airlock_set_project_field",
+        "title": "Изменить карточку",
+        "mutation": true,
+        "args": {
+          "entity": "",
+          "field": "status",
+          "value": "",
+          "actor": "Никита"
+        }
+      },
+      {
+        "tool": "airlock_add_log_entry",
+        "title": "Записать контакт",
+        "mutation": true,
+        "args": {
+          "entity": "",
+          "kind": "Сообщение",
+          "note": "",
+          "actor": "Никита"
+        }
+      },
+      {
+        "tool": "airlock_set_task_result",
+        "title": "Результат действия",
+        "mutation": true,
+        "args": {
+          "entity": "",
+          "status": "В работе",
+          "evidence": "",
+          "actor": "Никита"
+        }
+      },
+      {
+        "tool": "airlock_set_gate_result",
+        "title": "Результат допуска",
+        "mutation": true,
+        "args": {
+          "entity": "",
+          "status": "В работе",
+          "evidence": "",
+          "actor": "Никита"
+        }
+      },
+      {
+        "tool": "airlock_catalog_admission",
+        "title": "Передать допуск в ExManager",
+        "mutation": true,
+        "args": {
+          "command": {
+            "payload": "",
+            "signature": ""
+          }
+        }
+      }
+    ],
+    "ui_url": "https://airlockplan.bezrabotnyi.com/sso"
+  },
+  {
+    "name": "Todo",
+    "slug": "todo-board",
+    "product_url": "https://todo.bezrabotnyi.com/",
+    "bindings": [
+      {
+        "slug": "todo_board",
+        "url": "https://todo.bezrabotnyi.com/mcp",
+        "auth_mode": "token",
+        "binding_mode": "shared"
+      }
+    ],
+    "operations": [
+      {
+        "tool": "kanban.list",
+        "title": "Список карточек",
+        "args": {
+          "limit": 20
+        }
+      },
+      {
+        "tool": "kanban.read",
+        "title": "Открыть карточку",
+        "args": {
+          "cardId": ""
+        }
+      },
+      {
+        "tool": "kanban.project.list",
+        "title": "Список проектов",
+        "args": {}
+      },
+      {
+        "tool": "kanban.change",
+        "title": "Создать или изменить карточку",
+        "mutation": true,
+        "args": {
+          "mode": "",
+          "cardId": "",
+          "title": ""
+        }
+      },
+      {
+        "tool": "kanban.delete",
+        "title": "Удалить карточку",
+        "mutation": true,
+        "args": {
+          "cardId": ""
+        }
+      },
+      {
+        "tool": "kanban.project.ensure",
+        "title": "Создать или обновить проект",
+        "mutation": true,
+        "args": {
+          "name": "",
+          "externalKey": ""
+        }
+      },
+      {
+        "tool": "kanban.capture_inbox",
+        "title": "Записать в Инбокс",
+        "mutation": true,
+        "args": {
+          "transcript": ""
+        }
+      },
+      {
+        "tool": "kanban.source.admit",
+        "title": "Принять подписанный источник",
+        "mutation": true,
+        "args": {
+          "envelope": {
+            "payload": "",
+            "purpose": "",
+            "issuedAtMs": 0,
+            "expiresAtMs": 0,
+            "signature": ""
+          }
+        }
+      },
+      {
+        "tool": "kanban.catalog.link",
+        "title": "Связать карточку с каталогом Airlock Plan",
+        "mutation": true,
+        "args": {
+          "envelope": {
+            "payload": "",
+            "purpose": "catalog-link",
+            "issuedAtMs": 0,
+            "expiresAtMs": 0,
+            "signature": ""
+          }
+        }
+      }
+    ],
+    "ui_url": "https://todo-board.airlock.bezrabotnyi.com/"
   }
 ]

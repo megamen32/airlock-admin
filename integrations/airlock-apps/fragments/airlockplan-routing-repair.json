@@ -1,0 +1,19 @@
+{
+  "fragment": "airlockplan-routing-repair",
+  "fragment_version": 1,
+  "app": {
+    "slug": "airlockplan",
+    "agent_id": "4bbb8bd0-e5ee-43be-babb-48e763d6eafb"
+  },
+  "operation": "replace_bindings",
+  "bindings": [
+    {
+      "slug": "airlockplan",
+      "url": "https://airlockplan.bezrabotnyi.com/airlock-mcp",
+      "auth_mode": "token"
+    }
+  ],
+  "reason": "Plan operations must never select caller-specific UserIO binding; preserves all existing resources and credentials",
+  "supersedes_active_bindings_in": "airlockplan.json",
+  "historical_registration_receipts": "preserved unchanged; not re-executable instructions"
+}

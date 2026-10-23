@@ -1,0 +1,154 @@
+{
+  "fragment": "grepmesh",
+  "fragment_version": 1,
+  "purpose": "Registration fragment for the GrepMesh application: the native app runtime that was stopped (the app route answered HTTP 502 'agent unavailable') and the SDK 0.8 rebuild that made it runnable again. The need -> binding -> resource -> credential chain was already correct and was left untouched; apps.json is read-only for this task.",
+  "app": {
+    "name": "GrepMesh",
+    "slug": "grepmesh",
+    "agent_id": "eb9c7250-33c4-46c0-ae49-1b0e756b4e81",
+    "product_url": "https://grep.bezrabotnyi.com/",
+    "ui_url": "https://grepmesh.airlock.bezrabotnyi.com/ui/"
+  },
+  "bindings": [
+    {
+      "slug": "grepmesh",
+      "url": "https://grep.bezrabotnyi.com/airlock-mcp",
+      "auth_mode": "token"
+    }
+  ],
+  "_registration": {
+    "binding": "grepmesh",
+    "principal": {
+      "id": "5e438326-6339-4ac8-a328-59dae1d6241f",
+      "role": "admin",
+      "note": "The binding is shared (binding_mode=shared, user_id IS NULL) and the resource owner is the owner principal, so every app admin resolves the same stored credential."
+    },
+    "platform_rule": {
+      "source": "running binary /airlock, sqlc query ResolveBoundMCPServer",
+      "text": "binding.user_id IS NOT DISTINCT FROM CASE WHEN need.binding_mode='shared' THEN NULL ELSE $1::uuid END AND (m.owner_principal_id = creator.id OR EXISTS (resource_grants with 'use' for creator))",
+      "consequence": "A shared MCP resource resolves only while its owner_principal_id equals the binding creator (binding.created_by_user_id), or the creator holds a 'use' grant.",
+      "verified_by": "read-only SELECT: resource 82e71ab9 owner_principal_id=5e438326 and binding 2573f6a4 created_by_user_id=5e438326 -> the rule holds."
+    },
+    "current_state": {
+      "need": {
+        "id": "735ebb28-5dae-4fc5-af0c-1443f217d97f",
+        "slug": "grepmesh",
+        "type": "mcp_server",
+        "binding_mode": "shared",
+        "expected_url": "https://grep.bezrabotnyi.com/airlock-mcp"
+      },
+      "binding": {
+        "id": "2573f6a4-175e-45d6-8655-6b12adac5276",
+        "binding_mode": "shared",
+        "user_id": null,
+        "created_by_user_id": "5e438326-6339-4ac8-a328-59dae1d6241f"
+      },
+      "mcp_resource": {
+        "id": "82e71ab9-598f-4347-b691-b6378998c57e",
+        "slug": "res-82e71ab9598f4347b691b6378998c57e",
+        "url": "https://grep.bezrabotnyi.com/airlock-mcp",
+        "auth_mode": "token",
+        "credential_mode": "shared",
+        "owner_principal_id": "5e438326-6339-4ac8-a328-59dae1d6241f",
+        "lifecycle": "active",
+        "access_token_ref": "present (encrypted; the value is never printed or stored here)",
+        "tool_schemas": 8,
+        "last_synced_at": "2026-10-23T14:05:10Z"
+      },
+      "runtime": {
+        "agent_status": "active",
+        "upgrade_status": "idle",
+        "agent_token_version": 7,
+        "sdk_version": "0.8.1-alpha.12",
+        "image_ref": "eb9c7250-33c4-46c0-ae49-1b0e756b4e81:b2be0c3687cb",
+        "container": "airlock-dev-agent-eb9c7250-33c4-46c0-ae49-1b0e756b4e81 (single, label run.airlock.agent=<agent_id>)",
+        "host": "server-100 (the only enrolled host in the hosts table)",
+        "runtime_budget": {
+          "memory": 268435456,
+          "memory_reservation": 134217728,
+          "memory_swap": 268435456,
+          "nano_cpus": 1000000000,
+          "pids_limit": 128
+        }
+      }
+    },
+    "defects_found_and_fixed": [
+      {
+        "symptom": "grepmesh.airlock.bezrabotnyi.com answered HTTP 502 {\"error\":\"agent unavailable\"} for an authenticated owner request; no app container existed and agents.status was 'stopped' with upgrade_status 'failed'.",
+        "cause": "the native app image was gone from the docker host (no eb9c7250-* tag in docker images) while agents.image_ref still pointed at the 19.10 revision, so the container could not be recreated; the agent had been parked in 'stopped' by the failed upgrade of 2026-10-19 04:08 UTC (sol codegen, HTTP 429 'Rate limit reached for requests').",
+        "fix": "re-upload the shared integrations/airlock-apps source (SDK 0.8.1-alpha.12 pin) -> build c36c3f48 complete -> POST /api/v1/agents/<id>/start recreated the container from image eb9c7250-...:b2be0c3687cb."
+      },
+      {
+        "symptom": "every rebuild of the native adapter failed with 'rebuild failed to compile against the current agentsdk' and the build log line `air: unknown command \"stage-runtime-files\"`.",
+        "cause": "the app tree pinned github.com/airlockrun/agentsdk v0.7.0, so `go tool air` resolved to the 0.7.0 CLI, while the platform builder ships the 0.8.1-alpha.12 scaffold whose generated Dockerfile ends with `go tool air stage-runtime-files /build /runtime-files` - a command that exists only in the 0.8 CLI (verified against the module proxy: agentsdk@v0.7.0 has no such command, agentsdk@v0.8.1-alpha.9 and later do).",
+        "fix": "the shared source integrations/airlock-apps/{go.mod,go.sum,main.go,main_test.go,ui_proxy_test.go} was already migrated to agentsdk v0.8.1-alpha.12 / goai v0.3.2 (RegisterMCP now passes BindingMode, tests use agentsdk/testutil); re-uploading that source rebuilt the app without touching the registry."
+      },
+      {
+        "symptom": "POST /api/v1/agents/<id>/upgrade ran for 6-11 minutes and then failed with 'sol codegen failed: step N error: stream error: context deadline exceeded' (failure_kind=infra).",
+        "cause": "the Sol codegen path is slow/throttled from server-100 (models.airlock.run downloads at ~1 KB/s) - a shared infrastructure blocker that hit airlockplan (11:03 UTC) and universal-userio (12:25 UTC) the same day, not a GrepMesh defect.",
+        "fix": "do not use Upgrade for this app: an upload without a description runs the source_deploy rebuild with codegen skipped (builder/codegen.go returns immediately when plan.Instruction is empty), so the build needs no LLM at all."
+      },
+      {
+        "symptom": "the need -> binding -> resource -> credential chain was suspected to be broken because the app could not call its tools.",
+        "cause": "it was correct: need 735ebb28 (slug grepmesh, expected_url https://grep.bezrabotnyi.com/airlock-mcp) is bound to resource 82e71ab9 with binding_mode=shared and an encrypted credential; the platform's own MCP discovery refreshed the 8 tool schemas at 2026-10-23 14:01-14:05 UTC, which only happens with a working credential.",
+        "fix": "no change to need/binding/credential (read-only SELECT only); the registration was verified instead of rewritten."
+      }
+    ],
+    "apply": [
+      {
+        "step": 1,
+        "actor": "owner session on server-100 (5e438326-6339-4ac8-a328-59dae1d6241f)",
+        "requests": [
+          "python3 /home/roomhacker/airlock-admin/scripts/airlock_apps.py upload --app grepmesh --credential-file /tmp/airlock-grepmesh-session.json --state /tmp/airlock-grepmesh-state.json",
+          "GET /api/v1/agents/eb9c7250-33c4-46c0-ae49-1b0e756b4e81/builds -> build c36c3f48-3637-4ef7-abc7-027df523bf12 status complete (19 s, no codegen, sdk 0.8.1-alpha.12)",
+          "python3 /tmp/airlock-api.py POST /api/v1/agents/eb9c7250-33c4-46c0-ae49-1b0e756b4e81/start {}",
+          "python3 /home/roomhacker/airlock-admin/scripts/airlock_apps.py budget --app grepmesh --credential-file /tmp/airlock-grepmesh-session.json --state /tmp/airlock-grepmesh-state.json"
+        ],
+        "status": "applied 2026-10-23 13:59-14:02 UTC; the credential file is a copy of the refreshed owner session (~/.config/airlock/server-session.json); no token value is stored in this fragment",
+        "notes": [
+          "POST /api/v1/agents/<id>/builds/cancel was used first to stop the in-flight codegen upgrade (build 6bf5806d, 'cancelled by user'); the agent was already stopped, so nothing was lost.",
+          "bind/credential were NOT re-applied: the existing shared binding and its encrypted credential were already valid (platform discovery refreshed the tool schemas after the rebuild)."
+        ]
+      }
+    ],
+    "verify": [
+      {
+        "check": "the platform sees the GrepMesh tools",
+        "command": "GET /api/v1/agents/eb9c7250-33c4-46c0-ae49-1b0e756b4e81/integrations/mcp/grepmesh/tools",
+        "expected": "8 tools",
+        "observed_2026_10_23": "compute_status, find_paths, list_directory, list_locations, ocr_extract, read_text, search, search_status"
+      },
+      {
+        "check": "live read-only call through the agent token (canonical path)",
+        "command": "POST https://airlock.bezrabotnyi.com/api/agent/mcp/grepmesh/tools/call  Authorization: Bearer <token from docker exec airlock-dev-agent-eb9c7250-... env | grep AIRLOCK_AGENT_TOKEN>  body {\"tool\":\"list_locations\",\"arguments\":{\"hosts\":\"local\"}}",
+        "expected": "HTTP 200 with the configured browse locations of the agent host",
+        "observed_2026_10_23": "HTTP 200, host_id=server-100, host_status[0].state=ok, locations: /etc, /home/roomhacker (local), /opt, /opt/mobile-browser, /var/lib/grepmesh-mcp/userio-cache"
+      },
+      {
+        "check": "live read-only search through the platform (owner session path, narrow root)",
+        "command": "POST /api/v1/agents/<id>/integrations/mcp/grepmesh/call {\"tool\":\"search\",\"argumentsJson\":base64({\"query\":\"stage-runtime-files\",\"hosts\":\"local\",\"roots\":[\"/home/roomhacker/airlock-admin\"],\"max_matches\":3,\"wait_ms\":3000})}",
+        "expected": "isError=false and matches inside the named root only",
+        "observed_2026_10_23": "isError=false, job_id job-d320a82f..., host_id=server-100; the follow-up search_status returned the hits inside /home/roomhacker/airlock-admin (integrations/airlock-apps/fragments/airlockplan.json documents the same SDK/CLI mismatch)"
+      },
+      {
+        "check": "the original product UI is served through the native app route",
+        "command": "GET https://grepmesh.airlock.bezrabotnyi.com/ui/ with the owner bearer (anonymous -> 401), then GET /ui/console.css and /api/host-status",
+        "expected": "anonymous denied, authenticated 200 with the title 'GrepMesh - Files', assets and the product API served, exactly one container, runtime budget applied",
+        "observed_2026_10_23": "401 anonymous; 200 authed with the title and no wrapper form; /ui/console.css 200 (30829 B), /ui/markdown-it.js 200 (100786 B); /api/host-status 200 JSON (server-100 ok, mac-m1 present); 1 container; budget Memory=256 MiB, MemoryReservation=128 MiB, MemorySwap=256 MiB, NanoCpus=1, PidsLimit=128"
+      },
+      {
+        "check": "the resource URL is reachable from the host where the agent runs",
+        "command": "on server-100: ss -lntp | grep 9419 ; curl -sS -o /dev/null -w '%{http_code}' https://grep.bezrabotnyi.com/airlock-mcp ; docker ps --filter label=run.airlock.agent=<agent_id>",
+        "expected": "the agent runs on server-100 and the bound URL reaches the GrepMesh MCP there",
+        "observed_2026_10_23": "the only enrolled host is server-100; grepmesh-mcp listens on 127.0.0.1:9419 and 192.168.2.100:9419; the protected ingress airlock-mcp-proxy listens on 127.0.0.1:19418 and forwards /grepmesh to 9419/mcp; the public URL resolves to 95.165.165.65 and answers 401 without a bearer (200 with it). The 127.0.0.1:9419 loopback in the registry is therefore correct for this host - expected_url was NOT changed."
+      }
+    ],
+    "notes": [
+      "The MCP registration itself was never broken: need -> binding -> resource -> credential were correct from 2026-10-09, and the platform could call GrepMesh's tools while the app container was down (the platform calls the bound resource itself).",
+      "The app container is idle-reaped by the platform ('stopping idle container' in the backend log). It is reconciled again on the next admitted request or with POST /api/v1/agents/{id}/start; a probe that needs the agent token must start the container first.",
+      "The SDK 0.8 migration lives in the shared integrations/airlock-apps source, so every app uploaded from it inherits the 0.8.1-alpha.12 pin; the other native apps (noticeplace, gptadmin, universal-userio, agent-herder) still need their own upload + start.",
+      "scripts/airlock_apps_verify.py checks all five apps in one pass and fails fast on the first broken one (noticeplace), so the GrepMesh part of that check was executed standalone with the same assertions and passed 8/8.",
+      "Build log excerpt of the failed rebuild (build 8133e13d): 'air: unknown command \"stage-runtime-files\"; run air help for usage' at Dockerfile line 50 - the app code itself compiled (go build -o /agent . ran before that step)."
+    ]
+  }
+}

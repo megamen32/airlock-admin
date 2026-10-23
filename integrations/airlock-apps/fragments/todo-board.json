@@ -1,0 +1,217 @@
+{
+  "fragment": "todo-board",
+  "fragment_version": 1,
+  "purpose": "Registration fragment for the Todo board application. The platform side already exists and works: agent 19620bec serves the board through the authenticated Airlock app and the Todo MCP resource is already registered in the platform. What is missing is the catalogue entry in integrations/airlock-apps/apps.json and the UI-gateway entry. Merges into apps.json; the registry itself is read-only for this task and nothing was rebuilt.",
+  "app": {
+    "name": "Todo",
+    "slug": "todo-board",
+    "agent_id": "19620bec-17f0-4515-b6aa-0cf09976217f",
+    "product_url": "https://todo.bezrabotnyi.com/",
+    "ui_url": "https://todo-board.airlock.bezrabotnyi.com/"
+  },
+  "bindings": [
+    {
+      "slug": "todo_board",
+      "url": "https://todo.bezrabotnyi.com/mcp",
+      "auth_mode": "token"
+    }
+  ],
+  "catalog_entry_to_merge": {
+    "name": "Todo",
+    "slug": "todo-board",
+    "product_url": "https://todo.bezrabotnyi.com/",
+    "bindings": [
+      {
+        "slug": "todo_board",
+        "url": "https://todo.bezrabotnyi.com/mcp",
+        "auth_mode": "token"
+      }
+    ],
+    "operations": [
+      {"tool": "kanban.list", "title": "Список карточек", "args": {"limit": 20}},
+      {"tool": "kanban.read", "title": "Открыть карточку", "args": {"cardId": ""}},
+      {"tool": "kanban.project.list", "title": "Список проектов", "args": {}},
+      {"tool": "kanban.change", "title": "Изменить карточку", "mutation": true, "args": {"mode": "", "cardId": ""}},
+      {"tool": "kanban.delete", "title": "Удалить карточку", "mutation": true, "args": {"cardId": ""}},
+      {"tool": "kanban.project.ensure", "title": "Создать или обновить проект", "mutation": true, "args": {"name": "", "externalKey": ""}},
+      {"tool": "kanban.capture_inbox", "title": "Записать в Инбокс", "mutation": true, "args": {"transcript": ""}}
+    ],
+    "operations_note": "The MCP resource advertises 9 tools. kanban.source.admit and kanban.catalog.link are left out on purpose: both take a signed canonical envelope and are not meant to be typed into a console. The arguments above come from the tool schemas stored with the resource (kanban.list: limit/tag/column/project; kanban.read: cardId; kanban.change: mode + optional fields; kanban.delete: cardId; kanban.project.ensure: name/externalKey; kanban.capture_inbox: transcript)."
+  },
+  "_registration": {
+    "binding": "todo_board",
+    "principal": {
+      "id": "5e438326-6339-4ac8-a328-59dae1d6241f",
+      "role": "admin",
+      "note": "The binding carries no principal field: with a single binding and an empty principal the shared adapter serves it to every app admin. The Todo MCP resource is shared (credential_mode=shared), so its stored credential is reused without a second secret."
+    },
+    "platform_rule": {
+      "source": "running binary /airlock, sqlc query ResolveBoundMCPServer",
+      "text": "binding.user_id IS NOT DISTINCT FROM CASE WHEN need.binding_mode='shared' THEN NULL ELSE $1::uuid END AND (m.owner_principal_id = creator.id OR EXISTS (resource_grants with 'use' for creator))",
+      "consequence": "A shared MCP resource resolves only while its owner_principal_id equals the binding creator (binding.created_by_user_id), or the creator holds a 'use' grant.",
+      "verified_by": "read-only SELECT: resource 4b0302bc owner_principal_id=5e438326 and the existing binding (exmanager / todo_board) created_by_user_id=5e438326 -> the rule holds; the platform refreshed the tool schemas of this resource on 2026-10-23 10:42 UTC, which only happens with a working credential."
+    },
+    "current_state": {
+      "agent": {
+        "id": "19620bec-17f0-4515-b6aa-0cf09976217f",
+        "name": "Todo",
+        "slug": "todo-board",
+        "created": "2026-10-12 11:07",
+        "status": "active",
+        "upgrade_status": "idle",
+        "sdk_version": "0.8.1-alpha.12",
+        "image_ref": "19620bec-17f0-4515-b6aa-0cf09976217f:eeae3d39de37",
+        "image_on_host": true,
+        "container": "airlock-dev-agent-19620bec-17f0-4515-b6aa-0cf09976217f (label run.airlock.agent=19620bec-...), it is idle-reaped by the platform and reconciled on the next admitted request",
+        "needs": 0,
+        "bindings": 0,
+        "tools": 0,
+        "run_apps": 54,
+        "deployments": 1,
+        "source_lineage": "its own adapter, not the shared integrations/airlock-apps one: the last builds are upgrades ('Deploy reviewed Airlock Todo workspace proxy', 'Declare explicit Todo workspace homepage route') and the runtime manifest carries its own routes, a public /link-preview and a static asset todo-preview.a322669a5f08.png",
+        "runtime_manifest": {
+          "tools": [],
+          "mcpServers": [],
+          "routes": "catch-all for GET/POST/PUT/PATCH/DELETE/OPTIONS with access=user, plus public /link-preview and /static/{name}"
+        }
+      },
+      "mcp_resource": {
+        "id": "4b0302bc-da78-4a06-8905-8203fb2af213",
+        "slug": "res-4b0302bcda784a0689058203fb2af213",
+        "name": "Доска задач Todo",
+        "url": "https://todo.bezrabotnyi.com/mcp",
+        "auth_mode": "token",
+        "credential_mode": "shared",
+        "owner_principal_id": "5e438326-6339-4ac8-a328-59dae1d6241f",
+        "lifecycle": "active",
+        "access_token_ref": "present (encrypted; the value is never printed)",
+        "tool_schemas": 9,
+        "member_credentials": 0,
+        "last_synced_at": "2026-10-23T10:42:32Z"
+      },
+      "existing_binding": {
+        "consumer": "exmanager",
+        "need_slug": "todo_board",
+        "binding_mode": "shared",
+        "note": "the only current consumer of the Todo MCP resource; the resource and its credential are shared and must survive any cleanup of this application"
+      },
+      "product": {
+        "name": "Доска задач (kanban board)",
+        "repository": "megamen32/kanban-board",
+        "checkout": "/home/roomhacker/excode",
+        "deployment": "/home/roomhacker/services/kanban-board",
+        "container": "kanban-board-kanban-1, host port 43327 -> gateway 3000",
+        "mcp_routing": "public /mcp -> the Next app on 43327; the legacy REST service kanban-mini-mcp on 8767 stays for legacy callers",
+        "auth": "outer cookie auth gateway in front of the board; the board code reads no Airlock identity header (no X-Authenticated-User-* handling found in /home/roomhacker/excode)"
+      },
+      "ingress": {
+        "vhost": "/etc/nginx/sites-enabled/todo-board.airlock.bezrabotnyi.com",
+        "main_path": "location / -> http://127.0.0.1:4280 (the platform ingress, so the request is authenticated by Airlock and reaches the app agent)",
+        "special_paths": "location = /link-preview and location = /static/todo-preview.a322669a5f08.png -> http://127.0.0.1:43327 (the board itself, public metadata only)",
+        "live_probe": "GET https://todo-board.airlock.bezrabotnyi.com/ without a bearer -> HTTP 401 (measured 2026-10-23); the authenticated answer needs a valid owner session"
+      },
+      "ui_gateway": {
+        "present": false,
+        "file": "~/.config/airlock-apps/ui-gateway.json (5 entries: noticeplace, universal-userio, gptadmin, agent-herder, grepmesh)",
+        "env_var": "no ui_gateway_key for this agent (the 5 gateway apps have one)",
+        "why_it_matters": "the application does not need the gateway today: its own adapter already serves the board through the authenticated Airlock app. The gateway is only required if the application is rebuilt from the shared adapter, whose UI path signs a bridgeauth assertion and expects the gateway to proxy to the product."
+      }
+    },
+    "blockers": [
+      {
+        "id": "upload-replaces-the-working-source",
+        "severity": "blocking for the MCP variant, harmless for the catalogue variant",
+        "symptom": "scripts/airlock_apps.py upload --app todo-board would PUT the shared adapter source to agent 19620bec and replace its own Todo workspace proxy",
+        "cause": "one agent holds one source; the shared adapter has no Todo routes, no static asset and no /link-preview, and its UI path needs ui_gateway_key plus a ui-gateway.json entry, otherwise the native route answers 503 'Подключение интерфейса пока не настроено'",
+        "fix": "two variants, both prepared below: variant A touches only apps.json and changes nothing at runtime; variant B does the upload and therefore requires the ui-gateway entry, the bridgeauth key and the env var to be in place BEFORE the upload",
+        "verified": "read-only comparison of the runtime manifests and the shared source (integrations/airlock-apps/main.go registers one catch-all route plus the service_read tool; the todo-board manifest carries its own routes and a static asset)"
+      },
+      {
+        "id": "board-does-not-accept-the-airlock-identity",
+        "severity": "blocking for the UI-gateway variant",
+        "symptom": "the gateway proxy would reach the board without a board session and the board would answer its own login page",
+        "cause": "cmd/ui-gateway/main.go passes X-Authenticated-User-* headers and drops the Authorization header; the modes it knows are noticeplace, userio, gptadmin, herder and grepmesh, and the board reads none of them (its own work-auth cookie gateway is the only gate)",
+        "fix": "either give the board a mode that maps the Airlock principal to a board session, or keep variant A and leave the board UI where it is (the application agent already serves it). This is a product-side decision for the owner.",
+        "verified": "grep over /home/roomhacker/excode (excluding node_modules) found no Airlock identity handling"
+      }
+    ],
+    "apply": [
+      {
+        "step": 1,
+        "variant": "A - catalogue only (safe, recommended first)",
+        "actor": "owner session on server-100",
+        "requests": [
+          "merge catalog_entry_to_merge into integrations/airlock-apps/apps.json",
+          "python3 -c 'import json; d=json.load(open(\"integrations/airlock-apps/apps.json\")); print([a[\"slug\"] for a in d])' -> 8 entries with todo-board",
+          "no upload, no build, no start: the running application is not touched"
+        ],
+        "status": "not applied - the registry is read-only for this task",
+        "note": "the catalogue entry alone is metadata: apps.json is read only by scripts/airlock_apps.py, and nothing serves it at runtime"
+      },
+      {
+        "step": 2,
+        "variant": "B - UI gateway (only if variant B1 is wanted)",
+        "actor": "owner session on server-100",
+        "requests": [
+          "install -m 0700 ~/.config/airlock-apps/ui-todo-board.token (bridgeauth key, one random value, never printed)",
+          "add to ~/.config/airlock-apps/ui-gateway.json: \"todo-board\": {\"app_id\": \"19620bec-17f0-4515-b6aa-0cf09976217f\", \"url\": \"http://127.0.0.1:43327\", \"key_file\": \"/home/roomhacker/.config/airlock-apps/ui-todo-board.token\", \"mode\": \"todo\", \"principals\": {\"5e438326-6339-4ac8-a328-59dae1d6241f\": \"roomhacker@bezrabotnyi.com\", \"98daa037-a87d-49b1-ba07-cd9e6f451864\": \"cyberteaborg@gmail.com\"}}",
+          "POST /api/v1/agents/19620bec-17f0-4515-b6aa-0cf09976217f/env-vars/ui_gateway_key {\"value\": \"<same key>\"}",
+          "mode 'todo' is new: cmd/ui-gateway/main.go must learn how to give the board a session for the admitted principal, otherwise the proxy ends in the board login page (blocker 2)"
+        ],
+        "status": "not applied"
+      },
+      {
+        "step": 3,
+        "variant": "B1 - wire the Todo MCP into the platform application (only together with step 2)",
+        "actor": "owner session on server-100",
+        "requests": [
+          "python3 /home/roomhacker/airlock-admin/scripts/airlock_apps.py upload --app todo-board --credential-file /tmp/airlock-session.json --state /tmp/airlock-apps-state.json",
+          "GET /api/v1/agents/19620bec-17f0-4515-b6aa-0cf09976217f/builds -> wait for status=complete (upload without description skips codegen)",
+          "POST /api/v1/agents/19620bec-17f0-4515-b6aa-0cf09976217f/start {}",
+          "POST /api/v1/agents/19620bec-17f0-4515-b6aa-0cf09976217f/needs/mcp_server/todo_board/bind {\"resourceId\": \"4b0302bc-da78-4a06-8905-8203fb2af213\"} (the resource already exists and already holds the shared credential - no new secret)",
+          "python3 /home/roomhacker/airlock-admin/scripts/airlock_apps.py budget --app todo-board --credential-file /tmp/airlock-session.json --state /tmp/airlock-apps-state.json"
+        ],
+        "status": "not applied",
+        "warning": "this step replaces the working Todo adapter of agent 19620bec; the rollback is a re-upload of the previous source revision (agent_source_revisions holds 46 revisions for the whole platform, the ones of this agent are recoverable), and the board UI must already work through the gateway"
+      }
+    ],
+    "verify": [
+      {
+        "check": "the catalogue lists Todo",
+        "command": "python3 -c 'import json; print([a[\"slug\"] for a in json.load(open(\"integrations/airlock-apps/apps.json\"))])'",
+        "expected": "8 slugs including todo-board",
+        "observed_2026_10_23": "7 slugs, todo-board is missing (that is the gap this fragment closes)"
+      },
+      {
+        "check": "the Todo MCP resource is alive and its tools are known to the platform",
+        "command": "read-only SELECT on agent_mcp_servers where name = 'Доска задач Todo' (tool_schemas, access_token_ref, last_synced_at)",
+        "expected": "9 tools, credential present, last_synced_at fresh",
+        "observed_2026_10_23": "9 tools (kanban.capture_inbox, kanban.catalog.link, kanban.change, kanban.delete, kanban.list, kanban.project.ensure, kanban.project.list, kanban.read, kanban.source.admit), credential present, last_synced_at 2026-10-23 10:42 UTC"
+      },
+      {
+        "check": "the public MCP endpoint asks for the bearer",
+        "command": "curl -s -o /dev/null -w '%{http_code}' -X POST https://todo.bezrabotnyi.com/mcp -H 'Content-Type: application/json' -d '{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/list\"}'",
+        "expected": "401 without the bearer",
+        "observed_2026_10_23": "401"
+      },
+      {
+        "check": "the native application route is protected",
+        "command": "curl -s -o /dev/null -w '%{http_code}' https://todo-board.airlock.bezrabotnyi.com/",
+        "expected": "401 anonymous",
+        "observed_2026_10_23": "401"
+      },
+      {
+        "check": "after variant B1 - the platform sees the Todo tools of this application",
+        "command": "GET /api/v1/agents/19620bec-17f0-4515-b6aa-0cf09976217f/integrations/mcp/todo_board/tools",
+        "expected": "9 kanban.* tools",
+        "observed_2026_10_23": "not executed - the application is not wired to the resource yet (it has 0 needs and 0 bindings)"
+      }
+    ],
+    "notes": [
+      "The Todo board is a real product with a live MCP endpoint and 54 run-app records; it was never a canary. What was missing is only the catalogue entry and the gateway entry.",
+      "The Todo MCP resource 4b0302bc and its encrypted credential must survive any registry cleanup: the resource lives in agent_mcp_servers and is shared, only the binding rows belong to an agent. The current consumer is exmanager.",
+      "The application agent 19620bec has 0 needs and 0 tools, so the platform cannot call the board through this application yet - the board is only reachable through the resource via exmanager.",
+      "Adding the catalogue entry changes nothing at runtime; only an upload of the shared adapter would change the running application, and that is the step that needs the owner's decision."
+    ]
+  }
+}
