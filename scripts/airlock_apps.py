@@ -31,9 +31,6 @@ CATALOG = SOURCE / "apps.json"
 TOKEN_DIR = Path.home() / ".config/airlock-apps"
 ADMINS = ["5e438326-6339-4ac8-a328-59dae1d6241f", "98daa037-a87d-49b1-ba07-cd9e6f451864"]
 OWNED_SOURCE = ["go.mod", "go.sum", "main.go", "main_test.go", "ui_proxy.go", "ui_proxy_test.go", "runtime_budget.go", "bridgeauth/auth.go", "bridgeauth/auth_test.go", "db/migrations/doc.go", "styles/app.css"]
-# The manifest must carry an explicit binding mode: an MCP need without one
-# panics RegisterMCP in the SDK and never reaches the platform.
-BINDING_MODE = "shared"
 # SDK 0.8 removed the local-host harness, so a source that still imports it
 # cannot build against the current SDK.
 FORBIDDEN_SOURCE = ["agentsdk/agenttest"]
