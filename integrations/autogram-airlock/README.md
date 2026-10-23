@@ -30,6 +30,10 @@ MCP direct HTTP200 и app tool run6d4a73d9-9380-4cff-8107-f68a21857b58 верн�
 
 Protected receipts deployment.json, needs-readback.json, grants-readback.json, mcp-direct-receipt.json, mcp-app-receipt.json и собственная airlock-session.json находятся под /home/roomhacker/.local/share/airlock-afc/ (0700/0600). Session получена штатным RoomHacker login через SSS stdin, exact /me UUID подтверждён. Это API session, не browser fixture. Raw credentials и одноразовые handoff URL в отчёты не выводить.
 
-При первом consumer open найден собственный CSP defect: frame-ancestors none блокировал штатный Airlock split-view. Исправлено на self + exact https://airlock.bezrabotnyi.com. Кнопка использует обычную пользовательскую form-навигацию в новую вкладку с noopener/noreferrer; form-action разрешает только self и exact AFC origin, включая303redirect. Политика embedding AFC не ослабляется. Регрессия проверяет exact parent и выход из iframe.
+## История прежнего запуска через кнопку
+
+Следующие два исправления относятся к прежней версии. Их кнопка/новая вкладка и exact-parent policy заменены текущим inline contract и разрешёнными владельцем HTTPS-поддоменами выше; это не инструкция отката текущего поведения.
+
+При первом consumer open найден собственный CSP defect: frame-ancestors none блокировал штатный Airlock split-view. Тогда исправлено на self + exact https://airlock.bezrabotnyi.com. Кнопка использовала обычную пользовательскую form-навигацию в новую вкладку с noopener/noreferrer; form-action разрешал только self и exact AFC origin, включая303redirect. Политика embedding AFC тогда не ослаблялась. Прежняя регрессия проверяла exact parent и выход из iframe.
 
 Следующий browser canary выявил отказ core origin mismatch до AFC: исходный no-referrer/noreferrer делал Origin opaque для POST form. Исправлен landing Referrer-Policy:same-origin и form rel=noopener; POST response сохраняет no-referrer. Это сохраняет Origin для своей формы и не посылает Referer внешнему AFC. Unit regression проверяет политику. Core CSRF не менялся.
