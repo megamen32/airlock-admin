@@ -6,6 +6,8 @@ GET `/` проверяет caller, через существующий SDK Conne
 
 Совместимый POST `/open` сохраняет точную Origin/caller проверку и303, но встроенный интерфейс его не использует. Upstream handoff/кабинет должен разрешать оба ancestor origins (outer Airlock и wrapper) и выдавать рабочую cross-site iframe cookie. Одного изменения CSP недостаточно: Secure/SameSite=None и partitioned-cookie поведение проверяются реальным browser canary, backend AFC принадлежит отдельному владельцу. Пока backend readiness и browser result не получены, локальный inline patch не означает установленный результат.
 
+Автоматический GET передаёт typed issue request `{audience, caller_id, browser_profile:"airlock_embed"}` и требует такой же `browser_profile` в ответе вместе с прежними URL/TTL. Без подтверждённого профиля ответ502 с понятной ошибкой, iframe не создаётся. Legacy POST `/open` опускает browser_profile и принимает только omitted/top_level ответ; embed-профиль не подменяет обычную top-level cookie. AFC хранит проверенный профиль в одноразовом grant, wrapper не управляет cookie.
+
 MCP `autogram` использует shared encrypted resource; app tool `cabinet_profile` читает профиль. Дополнительный direct resource grant `use` Олегу предоставляет инструменты самого AFC MCP согласно upstream scopes. Shared MCP token и отдельный handoff credential не попадают в app source, HTML, browser storage или URL. Connection credential injects платформа.
 
 ## Проверка

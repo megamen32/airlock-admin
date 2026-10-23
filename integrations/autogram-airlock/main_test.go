@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/base64"
+	"encoding/json"
 	"github.com/airlockrun/agentsdk/testutil"
 	"github.com/airlockrun/agentsdk/wire"
 	"net/http"
@@ -38,9 +39,9 @@ func TestHandoffValidation(t *testing.T) {
 }
 func TestUserLandingAndOrigin(t *testing.T) {
 	calls := 0
-	a := &app{issue: func(context.Context, string) ([]byte, error) {
+	a := &app{issue: func(_ context.Context, request handoffRequest) ([]byte, error) {
 		calls++
-		return []byte(`{"url":"https://new.auto-gram.ru/cabinet/handoff#code=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","expires_in":60}`), nil
+		return json.Marshal(handoffResponse{URL: "https://new.auto-gram.ru/cabinet/handoff#code=" + strings.Repeat("a", 40), Expires: 60, BrowserProfile: request.BrowserProfile})
 	}}
 	ctx := caller("98daa037-a87d-49b1-ba07-cd9e6f451864")
 	r := httptest.NewRequest("GET", appOrigin+"/", nil).WithContext(ctx)
@@ -85,12 +86,12 @@ func TestInlineHandoffBoundary(t *testing.T) {
 	for _, id := range []string{"5e438326-6339-4ac8-a328-59dae1d6241f", "98daa037-a87d-49b1-ba07-cd9e6f451864", "third"} {
 		t.Run(id, func(t *testing.T) {
 			calls := 0
-			a := &app{issue: func(_ context.Context, actual string) ([]byte, error) {
+			a := &app{issue: func(_ context.Context, actual handoffRequest) ([]byte, error) {
 				calls++
-				if actual != id {
+				if actual.CallerID != id || actual.Audience != audience || actual.BrowserProfile != embedProfile {
 					t.Fatal("caller attribution changed")
 				}
-				return []byte(`{"url":"https://new.auto-gram.ru/cabinet/handoff#code=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","expires_in":60}`), nil
+				return []byte(`{"url":"https://new.auto-gram.ru/cabinet/handoff#code=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","expires_in":60,"browser_profile":"airlock_embed"}`), nil
 			}}
 			w := httptest.NewRecorder()
 			_ = a.home(w, httptest.NewRequest("GET", appOrigin+"/", nil).WithContext(caller(id)))
@@ -116,11 +117,46 @@ func TestInlineHandoffBoundary(t *testing.T) {
 		})
 	}
 	for _, response := range []string{`{"url":"https://evil.test/","expires_in":60}`, `{"url":"https://new.auto-gram.ru/cabinet/handoff#code=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","expires_in":61}`} {
-		a := &app{issue: func(context.Context, string) ([]byte, error) { return []byte(response), nil }}
+		a := &app{issue: func(context.Context, handoffRequest) ([]byte, error) { return []byte(response), nil }}
 		w := httptest.NewRecorder()
 		_ = a.home(w, httptest.NewRequest("GET", appOrigin+"/", nil).WithContext(caller("5e438326-6339-4ac8-a328-59dae1d6241f")))
 		if w.Code != 502 || strings.Contains(w.Body.String(), "<iframe") {
 			t.Fatal("invalid handoff embedded")
+		}
+	}
+}
+
+func TestInlineRequiresConfirmedEmbedProfile(t *testing.T) {
+	for _, profile := range []string{"", "top_level", "unknown"} {
+		a := &app{issue: func(context.Context, handoffRequest) ([]byte, error) {
+			return []byte(`{"url":"https://new.auto-gram.ru/cabinet/handoff#code=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","expires_in":60,"browser_profile":"` + profile + `"}`), nil
+		}}
+		w := httptest.NewRecorder()
+		_ = a.home(w, httptest.NewRequest("GET", appOrigin+"/", nil).WithContext(caller("5e438326-6339-4ac8-a328-59dae1d6241f")))
+		if w.Code != 502 || strings.Contains(w.Body.String(), "<iframe") {
+			t.Fatalf("unconfirmed embed profile %q accepted", profile)
+		}
+	}
+}
+
+func TestLegacyHandoffKeepsTopLevelProfile(t *testing.T) {
+	for _, echoed := range []string{"", "top_level"} {
+		a := &app{issue: func(_ context.Context, request handoffRequest) ([]byte, error) {
+			wire, err := json.Marshal(request)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if request.Audience != audience || request.CallerID != "5e438326-6339-4ac8-a328-59dae1d6241f" || strings.Contains(string(wire), "browser_profile") {
+				t.Fatal("legacy request must omit embed profile")
+			}
+			return json.Marshal(handoffResponse{URL: "https://new.auto-gram.ru/cabinet/handoff#code=" + strings.Repeat("a", 40), Expires: 60, BrowserProfile: echoed})
+		}}
+		r := httptest.NewRequest("POST", appOrigin+"/open", nil).WithContext(caller("5e438326-6339-4ac8-a328-59dae1d6241f"))
+		r.Header.Set("Origin", appOrigin)
+		w := httptest.NewRecorder()
+		_ = a.open(w, r)
+		if w.Code != http.StatusSeeOther {
+			t.Fatal("top-level compatibility failed")
 		}
 	}
 }
