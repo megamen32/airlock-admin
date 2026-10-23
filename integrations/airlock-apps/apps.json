@@ -429,5 +429,103 @@
       }
     ],
     "ui_url": "https://airlockplan.bezrabotnyi.com/sso"
+  },
+  {
+    "name": "Todo",
+    "slug": "todo-board",
+    "product_url": "https://todo.bezrabotnyi.com/",
+    "bindings": [
+      {
+        "slug": "todo_board",
+        "url": "https://todo.bezrabotnyi.com/mcp",
+        "auth_mode": "token",
+        "binding_mode": "shared"
+      }
+    ],
+    "operations": [
+      {
+        "tool": "kanban.list",
+        "title": "Список карточек",
+        "args": {
+          "limit": 20
+        }
+      },
+      {
+        "tool": "kanban.read",
+        "title": "Открыть карточку",
+        "args": {
+          "cardId": ""
+        }
+      },
+      {
+        "tool": "kanban.project.list",
+        "title": "Список проектов",
+        "args": {}
+      },
+      {
+        "tool": "kanban.change",
+        "title": "Создать или изменить карточку",
+        "mutation": true,
+        "args": {
+          "mode": "",
+          "cardId": "",
+          "title": ""
+        }
+      },
+      {
+        "tool": "kanban.delete",
+        "title": "Удалить карточку",
+        "mutation": true,
+        "args": {
+          "cardId": ""
+        }
+      },
+      {
+        "tool": "kanban.project.ensure",
+        "title": "Создать или обновить проект",
+        "mutation": true,
+        "args": {
+          "name": "",
+          "externalKey": ""
+        }
+      },
+      {
+        "tool": "kanban.capture_inbox",
+        "title": "Записать в Инбокс",
+        "mutation": true,
+        "args": {
+          "transcript": ""
+        }
+      },
+      {
+        "tool": "kanban.source.admit",
+        "title": "Принять подписанный источник",
+        "mutation": true,
+        "args": {
+          "envelope": {
+            "payload": "",
+            "purpose": "",
+            "issuedAtMs": 0,
+            "expiresAtMs": 0,
+            "signature": ""
+          }
+        }
+      },
+      {
+        "tool": "kanban.catalog.link",
+        "title": "Связать карточку с каталогом Airlock Plan",
+        "mutation": true,
+        "args": {
+          "envelope": {
+            "payload": "",
+            "purpose": "catalog-link",
+            "issuedAtMs": 0,
+            "expiresAtMs": 0,
+            "signature": ""
+          }
+        }
+      }
+    ],
+    "ui_url": "https://todo-board.airlock.bezrabotnyi.com/"
   }
 ]
