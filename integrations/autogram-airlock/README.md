@@ -2,13 +2,17 @@
 
 Нативное приложение Airlock для общего кабинета Автограмм 208. Доступ получают только Room Hacker и Олег по двум фиксированным Airlock UUID. Олегу достаточно app role `user`.
 
-GET `/` показывает кнопку без входа в AFC. POST `/open` проверяет точный Origin и caller, затем через SDK Connection запрашивает одноразовый переход в AFC. AFC выдаёт штатную browser cookie после одноразового обмена. Код приходит во fragment и не является долговечным MCP bearer.
+GET `/` проверяет caller, через существующий SDK Connection выпускает одноразовый handoff и сразу показывает кабинет в полноэкранном iframe. Кнопки и новой вкладки нет. Код приходит во fragment и не является долговечным MCP bearer. Ответ no-store; wrapper допускает frame-src только `https://new.auto-gram.ru`. По прямому указанию владельца frame-ancestors разрешает self и все HTTPS-поддомены `*.bezrabotnyi.com`; CORS/CSRF это не расширяет.
+
+Совместимый POST `/open` сохраняет точную Origin/caller проверку и303, но встроенный интерфейс его не использует. Upstream handoff/кабинет должен разрешать оба ancestor origins (outer Airlock и wrapper) и выдавать рабочую cross-site iframe cookie. Одного изменения CSP недостаточно: Secure/SameSite=None и partitioned-cookie поведение проверяются реальным browser canary, backend AFC принадлежит отдельному владельцу. Пока backend readiness и browser result не получены, локальный inline patch не означает установленный результат.
+
+Автоматический GET передаёт typed issue request `{audience, caller_id, browser_profile:"airlock_embed"}` и требует такой же `browser_profile` в ответе вместе с прежними URL/TTL. Без подтверждённого профиля ответ502 с понятной ошибкой, iframe не создаётся. Legacy POST `/open` опускает browser_profile и принимает только omitted/top_level ответ; embed-профиль не подменяет обычную top-level cookie. AFC хранит проверенный профиль в одноразовом grant, wrapper не управляет cookie.
 
 MCP `autogram` использует shared encrypted resource; app tool `cabinet_profile` читает профиль. Дополнительный direct resource grant `use` Олегу предоставляет инструменты самого AFC MCP согласно upstream scopes. Shared MCP token и отдельный handoff credential не попадают в app source, HTML, browser storage или URL. Connection credential injects платформа.
 
 ## Проверка
 
-`go test ./...` проверяет оба разрешённых UUID, отрицательный третий, user route context, отсутствие mutation при GET, Origin до issue, exact redirect и TTL.
+`go test ./...` проверяет оба разрешённых UUID, отрицательный третий без handoff, автоматический iframe с одним handoff на GET, full-viewport CSP style hash, Origin до legacy POST issue, exact URL и TTL. Эти тесты не доказывают iframe cookie или браузерную авторизацию.
 
 `provision.py` использует только собственный receipt app `autogram-airlock` и protected session. Операции разделены: create, upload, status, configure, readback. Upload не повторяет тот же digest; неизвестный результат сверять перед повтором. Секреты остаются вне Git в `/home/roomhacker/.local/share/airlock-afc/` с 0700/0600. Script не восстанавливает login и не ищет чужие токены.
 
@@ -26,6 +30,10 @@ MCP direct HTTP200 и app tool run6d4a73d9-9380-4cff-8107-f68a21857b58 верн�
 
 Protected receipts deployment.json, needs-readback.json, grants-readback.json, mcp-direct-receipt.json, mcp-app-receipt.json и собственная airlock-session.json находятся под /home/roomhacker/.local/share/airlock-afc/ (0700/0600). Session получена штатным RoomHacker login через SSS stdin, exact /me UUID подтверждён. Это API session, не browser fixture. Raw credentials и одноразовые handoff URL в отчёты не выводить.
 
-При первом consumer open найден собственный CSP defect: frame-ancestors none блокировал штатный Airlock split-view. Исправлено на self + exact https://airlock.bezrabotnyi.com. Кнопка использует обычную пользовательскую form-навигацию в новую вкладку с noopener/noreferrer; form-action разрешает только self и exact AFC origin, включая303redirect. Политика embedding AFC не ослабляется. Регрессия проверяет exact parent и выход из iframe.
+## История прежнего запуска через кнопку
+
+Следующие два исправления относятся к прежней версии. Их кнопка/новая вкладка и exact-parent policy заменены текущим inline contract и разрешёнными владельцем HTTPS-поддоменами выше; это не инструкция отката текущего поведения.
+
+При первом consumer open найден собственный CSP defect: frame-ancestors none блокировал штатный Airlock split-view. Тогда исправлено на self + exact https://airlock.bezrabotnyi.com. Кнопка использовала обычную пользовательскую form-навигацию в новую вкладку с noopener/noreferrer; form-action разрешал только self и exact AFC origin, включая303redirect. Политика embedding AFC тогда не ослаблялась. Прежняя регрессия проверяла exact parent и выход из iframe.
 
 Следующий browser canary выявил отказ core origin mismatch до AFC: исходный no-referrer/noreferrer делал Origin opaque для POST form. Исправлен landing Referrer-Policy:same-origin и form rel=noopener; POST response сохраняет no-referrer. Это сохраняет Origin для своей формы и не посылает Referer внешнему AFC. Unit regression проверяет политику. Core CSRF не менялся.
