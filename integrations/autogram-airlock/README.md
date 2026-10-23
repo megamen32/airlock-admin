@@ -2,7 +2,7 @@
 
 Нативное приложение Airlock для общего кабинета Автограмм 208. Доступ получают только Room Hacker и Олег по двум фиксированным Airlock UUID. Олегу достаточно app role `user`.
 
-GET `/` проверяет caller, через существующий SDK Connection выпускает одноразовый handoff и сразу показывает кабинет в полноэкранном iframe. Кнопки и новой вкладки нет. Код приходит во fragment и не является долговечным MCP bearer. Ответ no-store; wrapper допускает frame-src только `https://new.auto-gram.ru` и parent только свой origin/`https://airlock.bezrabotnyi.com`.
+GET `/` проверяет caller, через существующий SDK Connection выпускает одноразовый handoff и сразу показывает кабинет в полноэкранном iframe. Кнопки и новой вкладки нет. Код приходит во fragment и не является долговечным MCP bearer. Ответ no-store; wrapper допускает frame-src только `https://new.auto-gram.ru`. По прямому указанию владельца frame-ancestors разрешает self и все HTTPS-поддомены `*.bezrabotnyi.com`; CORS/CSRF это не расширяет.
 
 Совместимый POST `/open` сохраняет точную Origin/caller проверку и303, но встроенный интерфейс его не использует. Upstream handoff/кабинет должен разрешать оба ancestor origins (outer Airlock и wrapper) и выдавать рабочую cross-site iframe cookie. Одного изменения CSP недостаточно: Secure/SameSite=None и partitioned-cookie поведение проверяются реальным browser canary, backend AFC принадлежит отдельному владельцу. Пока backend readiness и browser result не получены, локальный inline patch не означает установленный результат.
 

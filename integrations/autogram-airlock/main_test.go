@@ -46,7 +46,7 @@ func TestUserLandingAndOrigin(t *testing.T) {
 	r := httptest.NewRequest("GET", appOrigin+"/", nil).WithContext(ctx)
 	w := httptest.NewRecorder()
 	_ = a.home(w, r)
-	if !strings.Contains(w.Header().Get("Content-Security-Policy"), "frame-ancestors 'self' https://airlock.bezrabotnyi.com") {
+	if !strings.Contains(w.Header().Get("Content-Security-Policy"), "frame-ancestors 'self' https://*.bezrabotnyi.com") {
 		t.Fatal("native Airlock iframe blocked")
 	}
 	if w.Header().Get("Referrer-Policy") != "same-origin" || strings.Contains(w.Body.String(), "noreferrer") {

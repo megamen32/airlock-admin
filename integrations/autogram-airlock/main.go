@@ -59,7 +59,7 @@ func (a *app) home(w http.ResponseWriter, r *http.Request) error {
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Header().Set("Referrer-Policy", "same-origin")
-	w.Header().Set("Content-Security-Policy", "default-src 'none'; frame-src https://new.auto-gram.ru; style-src 'sha256-4rQgUPuuPB4oqIOpejlta6xlfQZC5JGgG7UsTV9u4nU='; frame-ancestors 'self' https://airlock.bezrabotnyi.com; base-uri 'none'; form-action 'none'")
+	w.Header().Set("Content-Security-Policy", "default-src 'none'; frame-src https://new.auto-gram.ru; style-src 'sha256-4rQgUPuuPB4oqIOpejlta6xlfQZC5JGgG7UsTV9u4nU='; frame-ancestors 'self' https://*.bezrabotnyi.com; base-uri 'none'; form-action 'none'")
 	_, err = fmt.Fprintf(w, `<!doctype html><html lang="ru"><meta charset="utf-8"><meta name="viewport" content="width=device-width"><meta name="referrer" content="same-origin"><title>Автограмм · AirLock</title><style>html,body{height:100%%;margin:0}iframe{display:block;width:100%%;height:100%%;border:0}</style><iframe title="Кабинет Автограмм AirLock" src="%s" referrerpolicy="same-origin"></iframe></html>`, html.EscapeString(handoffURL))
 	return err
 }
