@@ -72,8 +72,8 @@ func (a *app) home(w http.ResponseWriter, r *http.Request) error {
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Header().Set("Referrer-Policy", "same-origin")
-	w.Header().Set("Content-Security-Policy", "default-src 'none'; frame-src https://new.auto-gram.ru; style-src 'sha256-HSTRxTwnYLlrdNVtud5mZTo9wGQXOred7C9RQuDL3kY='; frame-ancestors 'self' https://*.bezrabotnyi.com; base-uri 'none'; form-action 'none'")
-	_, err = fmt.Fprintf(w, `<!doctype html><html lang="ru"><meta charset="utf-8"><meta name="viewport" content="width=device-width"><meta name="referrer" content="same-origin"><title>Автограмм · AirLock</title><style>html,body{height:100%%;margin:0}body{display:flex;flex-direction:column;font:16px system-ui,sans-serif}nav{display:flex;align-items:center;gap:16px;padding:10px 14px;background:#f5f6fa;border-bottom:1px solid #d6dbe5}nav a{font-weight:700;color:#174ea6}nav span{font-size:13px;color:#454c59}iframe{display:block;width:100%%;flex:1;min-height:0;border:0}</style><nav aria-label="Разделы кабинета"><a href="https://new.auto-gram.ru/clients?cabinet=208#source-unit-drafts" target="autogram-cabinet">Черновики</a><span>Сохранённые тексты · без отправки</span></nav><iframe name="autogram-cabinet" title="Кабинет Автограмм AirLock" src="%s" referrerpolicy="same-origin"></iframe></html>`, html.EscapeString(handoffURL))
+	w.Header().Set("Content-Security-Policy", "default-src 'none'; frame-src https://new.auto-gram.ru; style-src 'sha256-4rQgUPuuPB4oqIOpejlta6xlfQZC5JGgG7UsTV9u4nU='; frame-ancestors 'self' https://*.bezrabotnyi.com; base-uri 'none'; form-action 'none'")
+	_, err = fmt.Fprintf(w, `<!doctype html><html lang="ru"><meta charset="utf-8"><meta name="viewport" content="width=device-width"><meta name="referrer" content="same-origin"><title>Автограмм · AirLock</title><style>html,body{height:100%%;margin:0}iframe{display:block;width:100%%;height:100%%;border:0}</style><iframe title="Кабинет Автограмм AirLock" src="%s" referrerpolicy="same-origin"></iframe></html>`, html.EscapeString(handoffURL))
 	return err
 }
 func (a *app) open(w http.ResponseWriter, r *http.Request) error {

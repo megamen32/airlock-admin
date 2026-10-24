@@ -241,20 +241,3 @@ func TestDraftReadSchemaAndDefaults(t *testing.T) {
 		t.Fatalf("get schema mismatch: %s", get.InputSchema)
 	}
 }
-
-func TestVisibleDraftNavigationUsesExistingFrame(t *testing.T) {
-	calls := 0
-	a := &app{issue: func(context.Context, handoffRequest) ([]byte, error) {
-		calls++
-		return []byte(`{"url":"https://new.auto-gram.ru/cabinet/handoff#code=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","expires_in":60,"browser_profile":"airlock_embed"}`), nil
-	}}
-	w := httptest.NewRecorder()
-	_ = a.home(w, httptest.NewRequest("GET", appOrigin+"/", nil).WithContext(caller("5e438326-6339-4ac8-a328-59dae1d6241f")))
-	body := w.Body.String()
-	if !strings.Contains(body, `href="https://new.auto-gram.ru/clients?cabinet=208#source-unit-drafts" target="autogram-cabinet">Черновики</a>`) || !strings.Contains(body, `name="autogram-cabinet"`) {
-		t.Fatal("opening app must expose visible drafts navigation in the same iframe")
-	}
-	if calls != 1 || strings.Contains(body, "<script") || strings.Contains(body, "onload=") {
-		t.Fatal("navigation must not issue another handoff or race iframe load")
-	}
-}
