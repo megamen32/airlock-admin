@@ -111,3 +111,30 @@ func TestPlanProjectFactsAffectVersionNotLink(t *testing.T) {
 		t.Fatal("project fact change lost or minted new identity")
 	}
 }
+
+func TestPlanSourceTupleMatchesAgreedBackendShape(t *testing.T) {
+	in := planFixture()
+	envelope, err := adaptPlanContact(in)
+	if err != nil {
+		t.Fatal(err)
+	}
+	source, err := planCRMSource(envelope)
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw, _ := json.Marshal(source)
+	var fields map[string]any
+	_ = json.Unmarshal(raw, &fields)
+	if len(fields) != 4 || fields["system"] != "airlockplan" || fields["instance_id"] != in.SourceInstance || fields["entity_type"] != "source_contact" || fields["entity_id"] != in.SourceContactKey {
+		t.Fatalf("unexpected source tuple: %s", raw)
+	}
+	if fields["owner_id"] != nil || fields["external_version"] != nil {
+		t.Fatal("admission/version mixed into source identity")
+	}
+	in.Revision = "opaque-version-2"
+	changed, _ := adaptPlanContact(in)
+	again, _ := planCRMSource(changed)
+	if source != again {
+		t.Fatal("external version changed stable source tuple")
+	}
+}

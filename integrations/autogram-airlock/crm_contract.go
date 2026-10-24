@@ -100,3 +100,13 @@ type CRMOperationReceipt struct {
 	NativeReference       *CRMNativeReference  `json:"native_reference,omitempty"`
 	OriginalSourceVersion CRMSourceVersion     `json:"original_source_version"`
 }
+
+// CRMSourceIdentity is the source tuple agreed by the AFC owner. Owner and
+// connection admission stay outside this source object; external_version stays
+// a separate opaque observation value. This type registers no transport.
+type CRMSourceIdentity struct {
+	System     string `json:"system"`
+	InstanceID string `json:"instance_id"`
+	EntityType string `json:"entity_type"`
+	EntityID   string `json:"entity_id"`
+}

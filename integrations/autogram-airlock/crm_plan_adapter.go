@@ -80,3 +80,12 @@ func adaptPlanContact(in PlanAdapterInput) (CRMContactEnvelope, error) {
 	err = json.Unmarshal(raw, &snapshot)
 	return snapshot, err
 }
+
+// planCRMSource prepares only the agreed source tuple. The full import request,
+// capability and receipt decoder await the backend's exact published v1 schema.
+func planCRMSource(envelope CRMContactEnvelope) (CRMSourceIdentity, error) {
+	if envelope.SchemaVersion != crmEnvelopeVersion || envelope.Identity.SourceInstance == "" || envelope.Identity.ObjectType != "source_contact" || !strings.HasPrefix(envelope.Identity.ExternalObjectID, "airlockplan:") {
+		return CRMSourceIdentity{}, errors.New("not a qualified Plan source observation")
+	}
+	return CRMSourceIdentity{System: "airlockplan", InstanceID: envelope.Identity.SourceInstance, EntityType: envelope.Identity.ObjectType, EntityID: envelope.Identity.ExternalObjectID}, nil
+}
