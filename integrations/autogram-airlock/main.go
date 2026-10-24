@@ -98,7 +98,9 @@ func (a *app) open(w http.ResponseWriter, r *http.Request) error {
 }
 
 func (a *app) handoff(ctx context.Context, id, profile string) (string, error) {
-	ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
+	// The existing host connection transport has a 30s limit. Allow its full
+	// bounded request plus dispatch overhead; do not retry one-use handoffs.
+	ctx, cancel := context.WithTimeout(ctx, 35*time.Second)
 	defer cancel()
 	data, err := a.issue(ctx, handoffRequest{Audience: audience, CallerID: id, BrowserProfile: profile})
 	if err != nil {

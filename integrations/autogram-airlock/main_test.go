@@ -14,7 +14,51 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 )
+
+func TestLandingHandoffAllowsHostBudgetWithoutRetry(t *testing.T) {
+	calls := 0
+	a := &app{issue: func(ctx context.Context, request handoffRequest) ([]byte, error) {
+		calls++
+		deadline, ok := ctx.Deadline()
+		remaining := time.Until(deadline)
+		// The existing host transport permits 30s. Observed successful AFC
+		// responses took 28s; the wrapper must not cancel that valid request at 15s.
+		if !ok || remaining < 30*time.Second || remaining > 35*time.Second {
+			t.Fatalf("handoff budget must cover bounded host transport: %v", remaining)
+		}
+		return json.Marshal(handoffResponse{URL: "https://new.auto-gram.ru/cabinet/handoff#code=" + strings.Repeat("a", 40), Expires: 60, BrowserProfile: request.BrowserProfile})
+	}}
+	w := httptest.NewRecorder()
+	_ = a.home(w, httptest.NewRequest("GET", appOrigin+"/", nil).WithContext(caller("a6bd0a81-73c6-4478-911d-9ef53779a9f9")))
+	if w.Code != http.StatusOK || calls != 1 {
+		t.Fatalf("one successful issue required: status=%d calls=%d", w.Code, calls)
+	}
+}
+
+func TestHandoffPreservesCallerDeadlineAndCancellation(t *testing.T) {
+	parent, cancel := context.WithTimeout(caller("a6bd0a81-73c6-4478-911d-9ef53779a9f9"), time.Second)
+	defer cancel()
+	expected, _ := parent.Deadline()
+	calls := 0
+	a := &app{issue: func(ctx context.Context, _ handoffRequest) ([]byte, error) {
+		calls++
+		if got, _ := ctx.Deadline(); !got.Equal(expected) {
+			t.Fatal("caller deadline must remain authoritative")
+		}
+		cancel()
+		if ctx.Err() != context.Canceled {
+			t.Fatal("caller cancellation was detached")
+		}
+		return nil, ctx.Err()
+	}}
+	w := httptest.NewRecorder()
+	_ = a.home(w, httptest.NewRequest("GET", appOrigin+"/", nil).WithContext(parent))
+	if w.Code != http.StatusBadGateway || calls != 1 {
+		t.Fatalf("canceled issue must not retry: status=%d calls=%d", w.Code, calls)
+	}
+}
 
 func caller(id string) context.Context {
 	return testutil.WithCaller(context.Background(), wire.Caller{Kind: "user", Access: wire.AccessUser, User: &wire.CallerUser{ID: id, PlatformMember: true}, Initiator: &wire.CallerUser{ID: id, PlatformMember: true}, Origin: wire.CallerOrigin{Interface: "http", Execution: "request"}})
