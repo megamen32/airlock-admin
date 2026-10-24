@@ -27,7 +27,7 @@ func admitted(ctx context.Context) (string, error) {
 		return "", errors.New("Требуется вход в Airlock")
 	}
 	switch u.ID {
-	case "5e438326-6339-4ac8-a328-59dae1d6241f", "98daa037-a87d-49b1-ba07-cd9e6f451864":
+	case "5e438326-6339-4ac8-a328-59dae1d6241f", "98daa037-a87d-49b1-ba07-cd9e6f451864", "a6bd0a81-73c6-4478-911d-9ef53779a9f9":
 		return u.ID, nil
 	default:
 		return "", errors.New("Доступ к кабинету не предоставлен")

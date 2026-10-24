@@ -20,7 +20,7 @@ func caller(id string) context.Context {
 	return testutil.WithCaller(context.Background(), wire.Caller{Kind: "user", Access: wire.AccessUser, User: &wire.CallerUser{ID: id, PlatformMember: true}, Initiator: &wire.CallerUser{ID: id, PlatformMember: true}, Origin: wire.CallerOrigin{Interface: "http", Execution: "request"}})
 }
 func TestAdmission(t *testing.T) {
-	for _, id := range []string{"5e438326-6339-4ac8-a328-59dae1d6241f", "98daa037-a87d-49b1-ba07-cd9e6f451864"} {
+	for _, id := range []string{"5e438326-6339-4ac8-a328-59dae1d6241f", "98daa037-a87d-49b1-ba07-cd9e6f451864", "a6bd0a81-73c6-4478-911d-9ef53779a9f9"} {
 		if _, err := admitted(caller(id)); err != nil {
 			t.Fatal(err)
 		}
