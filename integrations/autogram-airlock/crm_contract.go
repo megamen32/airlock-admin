@@ -122,3 +122,17 @@ func (h *CRMHistoryObservation) UnmarshalJSON(raw []byte) error {
 	*h = CRMHistoryObservation(value)
 	return nil
 }
+
+// tool.Typed calls json.Unmarshal before forwarding. Preserve numbers in every
+// untyped JSON subtree here as well as in the optional Plan adapter.
+func (envelope *CRMContactEnvelope) UnmarshalJSON(raw []byte) error {
+	type plainEnvelope CRMContactEnvelope
+	var value plainEnvelope
+	decoder := json.NewDecoder(bytes.NewReader(raw))
+	decoder.UseNumber()
+	if err := decoder.Decode(&value); err != nil {
+		return err
+	}
+	*envelope = CRMContactEnvelope(value)
+	return nil
+}

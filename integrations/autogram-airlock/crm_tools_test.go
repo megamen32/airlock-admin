@@ -115,3 +115,31 @@ func TestCRMImportBackendDefaultsAndOwnerBoundary(t *testing.T) {
 		t.Fatal("unsupported wire/owner field exposed")
 	}
 }
+
+func TestCRMImportTypedForwardPreservesLargeSourceInteger(t *testing.T) {
+	// Exact factory registered by newAgent: raw input -> tool.Typed -> upstream JSON.
+	forwarded := []string{}
+	write := crmImportTool(func(_ context.Context, name string, args any) (*agentsdk.MCPToolCallResponse, error) {
+		if name != "import_crm_entity" {
+			t.Fatal("wrong upstream operation")
+		}
+		serialized, err := json.Marshal(args)
+		if err != nil {
+			t.Fatal(err)
+		}
+		forwarded = append(forwarded, string(serialized))
+		return &agentsdk.MCPToolCallResponse{}, nil
+	})
+	for _, number := range []string{"9007199254740993", "9007199254740992"} {
+		input := json.RawMessage(`{"schema_version":"autogram.crm.v1","identity":{"system":"airlock_plan","connection_id":"plan-a","source_instance":"instance-a","object_type":"source_contact","external_object_id":"airlockplan:I003:contact"},"source_version":{"revision":"v1","observed_at":"2026-10-24T12:00:00Z"},"operation":{"kind":"import_link","idempotency_key":"00000000-0000-4000-8000-000000000001"},"expected_link_revision":0,"contact":{},"source_payload":{"id":"I003","research_numeric_id":` + number + `},"history":[],"send_allowed":false}`)
+		if _, err := write.Execute(caller("a6bd0a81-73c6-4478-911d-9ef53779a9f9"), input, tool.CallOptions{}); err != nil {
+			t.Fatal(err)
+		}
+		if !strings.Contains(forwarded[len(forwarded)-1], `"research_numeric_id":`+number) {
+			t.Fatalf("typed forwarding rounded source integer %s", number)
+		}
+	}
+	if len(forwarded) != 2 || forwarded[0] == forwarded[1] {
+		t.Fatal("distinct immutable payloads collapsed")
+	}
+}
