@@ -5,10 +5,13 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
+	"github.com/airlockrun/agentsdk"
 	"github.com/airlockrun/agentsdk/testutil"
 	"github.com/airlockrun/agentsdk/wire"
+	"github.com/airlockrun/goai/tool"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"strings"
 	"testing"
 )
@@ -158,5 +161,83 @@ func TestLegacyHandoffKeepsTopLevelProfile(t *testing.T) {
 		if w.Code != http.StatusSeeOther {
 			t.Fatal("top-level compatibility failed")
 		}
+	}
+}
+
+func TestDraftReadManifest(t *testing.T) {
+	raw, err := json.Marshal(newAgent().Manifest())
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"list_source_unit_drafts", "get_source_unit_draft"} {
+		if !strings.Contains(string(raw), `"name":"`+name+`"`) {
+			t.Fatalf("missing native READ %s", name)
+		}
+	}
+}
+
+func TestDraftReadCallerAndArguments(t *testing.T) {
+	for _, tc := range []struct {
+		name, input string
+		build       func(func(context.Context, string, any) (*agentsdk.MCPToolCallResponse, error)) tool.Tool
+	}{
+		{"list_source_unit_drafts", `{"plan_project_id":"I001","source_unit_id":"airlockplan:I001:/project/contact","status":"ready","limit":5}`, draftListTool},
+		{"get_source_unit_draft", `{"draft_id":"draft_123"}`, draftGetTool},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			calls := 0
+			read := tc.build(func(_ context.Context, name string, args any) (*agentsdk.MCPToolCallResponse, error) {
+				calls++
+				raw, _ := json.Marshal(args)
+				var got, want any
+				_ = json.Unmarshal(raw, &got)
+				_ = json.Unmarshal([]byte(tc.input), &want)
+				if name != tc.name || !reflect.DeepEqual(got, want) {
+					t.Fatalf("forward changed: %s %s", name, raw)
+				}
+				return &agentsdk.MCPToolCallResponse{}, nil
+			})
+			if _, err := read.Execute(caller("third"), json.RawMessage(tc.input), tool.CallOptions{}); err == nil || calls != 0 {
+				t.Fatal("denied caller reached backend")
+			}
+			for _, id := range []string{"5e438326-6339-4ac8-a328-59dae1d6241f", "98daa037-a87d-49b1-ba07-cd9e6f451864"} {
+				if _, err := read.Execute(caller(id), json.RawMessage(tc.input), tool.CallOptions{}); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if calls != 2 {
+				t.Fatal(calls)
+			}
+		})
+	}
+}
+
+func TestDraftReadSchemaAndDefaults(t *testing.T) {
+	list := draftListTool(func(_ context.Context, _ string, args any) (*agentsdk.MCPToolCallResponse, error) {
+		raw, _ := json.Marshal(args)
+		if string(raw) != "{}" {
+			t.Fatalf("backend defaults overridden: %s", raw)
+		}
+		return &agentsdk.MCPToolCallResponse{}, nil
+	})
+	if _, err := list.Execute(caller("98daa037-a87d-49b1-ba07-cd9e6f451864"), json.RawMessage(`{}`), tool.CallOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	var schema struct {
+		Properties map[string]map[string]any `json:"properties"`
+		Required   []string                  `json:"required"`
+	}
+	if err := json.Unmarshal(list.InputSchema, &schema); err != nil {
+		t.Fatal(err)
+	}
+	if len(schema.Required) != 0 || schema.Properties["limit"]["minimum"] != float64(1) || schema.Properties["limit"]["maximum"] != float64(100) {
+		t.Fatalf("list schema mismatch: %s", list.InputSchema)
+	}
+	get := draftGetTool(nil)
+	if err := json.Unmarshal(get.InputSchema, &schema); err != nil {
+		t.Fatal(err)
+	}
+	if len(schema.Required) != 1 || schema.Required[0] != "draft_id" {
+		t.Fatalf("get schema mismatch: %s", get.InputSchema)
 	}
 }

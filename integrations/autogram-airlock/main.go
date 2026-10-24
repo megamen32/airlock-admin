@@ -116,6 +116,37 @@ func (a *app) handoff(ctx context.Context, id, profile string) (string, error) {
 	}
 	return out.URL, nil
 }
+
+// Inputs mirror the owner-scoped AFC READ contract; omitted fields retain backend defaults.
+type draftListRequest struct {
+	ProjectKey    string `json:"project_key,omitempty" pattern:"^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"`
+	PlanProjectID string `json:"plan_project_id,omitempty" pattern:"^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"`
+	SourceUnitID  string `json:"source_unit_id,omitempty" pattern:"^[A-Za-z0-9][A-Za-z0-9._:/-]{0,511}$"`
+	Status        string `json:"status,omitempty" enum:"generating,ready,edited,cancelled,failed,unknown"`
+	AfterDraftID  string `json:"after_draft_id,omitempty" pattern:"^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"`
+	Limit         *int   `json:"limit,omitempty" minimum:"1" maximum:"100"`
+}
+type draftGetRequest struct {
+	DraftID string `json:"draft_id" pattern:"^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"`
+}
+
+func draftListTool(call func(context.Context, string, any) (*agentsdk.MCPToolCallResponse, error)) tool.Tool {
+	return tool.Typed[draftListRequest, *agentsdk.MCPToolCallResponse]("list_source_unit_drafts").Description("Прочитать сохранённые несендящие черновики общего кабинета; модель не запускается").Execute(func(ctx context.Context, in draftListRequest) (*agentsdk.MCPToolCallResponse, error) {
+		if _, err := admitted(ctx); err != nil {
+			return nil, err
+		}
+		return call(ctx, "list_source_unit_drafts", in)
+	}).Build()
+}
+func draftGetTool(call func(context.Context, string, any) (*agentsdk.MCPToolCallResponse, error)) tool.Tool {
+	return tool.Typed[draftGetRequest, *agentsdk.MCPToolCallResponse]("get_source_unit_draft").Description("Прочитать один сохранённый черновик общего кабинета по draft_id").Execute(func(ctx context.Context, in draftGetRequest) (*agentsdk.MCPToolCallResponse, error) {
+		if _, err := admitted(ctx); err != nil {
+			return nil, err
+		}
+		return call(ctx, "get_source_unit_draft", in)
+	}).Build()
+}
+
 func newAgent() *agentsdk.Agent {
 	a := agentsdk.New(agentsdk.Config{Description: "Общий кабинет Автограмм AirLock", Emoji: "🔎"})
 	mcp := a.RegisterMCP(&agentsdk.MCP{Slug: "autogram", Name: "Автограмм AirLock", URL: "https://new.auto-gram.ru/api/cabinet-mcp", AuthMode: agentsdk.MCPAuthToken, BindingMode: agentsdk.BindingShared})
@@ -131,6 +162,8 @@ func newAgent() *agentsdk.Agent {
 		}
 		return mcp.CallTool(ctx, "cabinet_profile", map[string]any{})
 	}).Build(), agentsdk.AccessUser)
+	a.RegisterTool(draftListTool(mcp.CallTool), agentsdk.AccessUser)
+	a.RegisterTool(draftGetTool(mcp.CallTool), agentsdk.AccessUser)
 	return a
 }
 func main() { newAgent().Serve() }
