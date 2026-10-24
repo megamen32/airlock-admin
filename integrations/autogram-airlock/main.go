@@ -164,6 +164,9 @@ func newAgent() *agentsdk.Agent {
 	}).Build(), agentsdk.AccessUser)
 	a.RegisterTool(draftListTool(mcp.CallTool), agentsdk.AccessUser)
 	a.RegisterTool(draftGetTool(mcp.CallTool), agentsdk.AccessUser)
+	a.RegisterTool(crmReceiptTool(mcp.CallTool), agentsdk.AccessUser)
+	a.RegisterTool(crmLinkTool(mcp.CallTool), agentsdk.AccessUser)
+	a.RegisterTool(crmImportTool(mcp.CallTool), agentsdk.AccessUser)
 	return a
 }
 func main() { newAgent().Serve() }

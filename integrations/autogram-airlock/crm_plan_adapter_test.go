@@ -2,12 +2,14 @@ package main
 
 import (
 	"encoding/json"
+	"os"
 	"reflect"
+	"strings"
 	"testing"
 )
 
 func planFixture() PlanAdapterInput {
-	return PlanAdapterInput{OwnerID: "208", ConnectionID: "plan-connection-a", SourceInstance: "plan-instance-a", ProjectID: "I003", SourceContactKey: "airlockplan:I003:C258-I003-ILYA-SHCHENNIKOV", Revision: "revision-1", ObservedAt: "2026-10-24T11:00:00Z", RawProject: json.RawMessage(`{"id":"I003","name":"Source company","sources":[{"url":"https://example.invalid/source"}],"unknown_field":{"keep":true}}`), RawContact: json.RawMessage(`{"contactId":"C258-I003-ILYA-SHCHENNIKOV","person":"Source person","role":"Source role","channels":{"telegram":"source_alias","email":"source@example.invalid"},"extra":{"untouched":true}}`), SourceRefs: []string{"source:/project/contacts/0"}, History: []CRMHistoryObservation{{Status: "UNKNOWN", AccountRef: "account-1", ObservedAt: "2026-10-24T10:00:00Z", Partial: true, Coverage: json.RawMessage(`{"retained_only":true,"team":false}`)}}}
+	return PlanAdapterInput{OperationID: "00000000-0000-4000-8000-000000000001", OwnerID: "208", ConnectionID: "plan-connection-a", SourceInstance: "plan-instance-a", ProjectID: "I003", SourceContactKey: "airlockplan:I003:C258-I003-ILYA-SHCHENNIKOV", Revision: "revision-1", ObservedAt: "2026-10-24T11:00:00Z", RawProject: json.RawMessage(`{"id":"I003","name":"Source company","sources":[{"url":"https://example.invalid/source"}],"unknown_field":{"keep":true}}`), RawContact: json.RawMessage(`{"contactId":"C258-I003-ILYA-SHCHENNIKOV","person":"Source person","role":"Source role","channels":{"telegram":"source_alias","email":"source@example.invalid"},"extra":{"untouched":true}}`), SourceRefs: []string{"source:/project/contacts/0"}, History: []CRMHistoryObservation{{Status: "UNKNOWN", AccountRef: "account-1", ObservedAt: "2026-10-24T10:00:00Z", Partial: true, Coverage: map[string]any{"retained_only": true, "team": false}}}}
 }
 
 func TestPlanAdapterPreservesSourceAndScopedUnknown(t *testing.T) {
@@ -18,8 +20,15 @@ func TestPlanAdapterPreservesSourceAndScopedUnknown(t *testing.T) {
 	}
 	var before, after any
 	_ = json.Unmarshal(in.RawContact, &before)
-	_ = json.Unmarshal(out.Contact, &after)
-	if !json.Valid(out.SourcePayload) {
+	var payload map[string]json.RawMessage
+	payloadBytes, _ := json.Marshal(out.SourcePayload)
+	_ = json.Unmarshal(payloadBytes, &payload)
+	var provenance struct {
+		Contact json.RawMessage `json:"contact"`
+	}
+	_ = json.Unmarshal(payload["_airlock_plan_adapter"], &provenance)
+	_ = json.Unmarshal(provenance.Contact, &after)
+	if out.SourcePayload == nil {
 		t.Fatal("raw project snapshot lost")
 	}
 	if !reflect.DeepEqual(before, after) || out.Identity.ExternalObjectID != in.SourceContactKey || out.SourceVersion.Revision != in.Revision {
@@ -65,7 +74,14 @@ func TestPlanAdapterLegacyResearchIDIsNotAllocatedIdentity(t *testing.T) {
 		t.Fatal("research ID replaced semantic key")
 	}
 	var raw map[string]any
-	_ = json.Unmarshal(out.Contact, &raw)
+	var payload map[string]json.RawMessage
+	payloadBytes, _ := json.Marshal(out.SourcePayload)
+	_ = json.Unmarshal(payloadBytes, &payload)
+	var provenance struct {
+		Contact json.RawMessage `json:"contact"`
+	}
+	_ = json.Unmarshal(payload["_airlock_plan_adapter"], &provenance)
+	_ = json.Unmarshal(provenance.Contact, &raw)
 	if raw["contactId"] != "preexisting-research-id" || raw["nativeCatalogContactId"] != nil {
 		t.Fatal("raw research/native distinction lost")
 	}
@@ -125,7 +141,7 @@ func TestPlanSourceTupleMatchesAgreedBackendShape(t *testing.T) {
 	raw, _ := json.Marshal(source)
 	var fields map[string]any
 	_ = json.Unmarshal(raw, &fields)
-	if len(fields) != 4 || fields["system"] != "airlockplan" || fields["instance_id"] != in.SourceInstance || fields["entity_type"] != "source_contact" || fields["entity_id"] != in.SourceContactKey {
+	if len(fields) != 5 || fields["system"] != "airlock_plan" || fields["source_instance"] != in.SourceInstance || fields["object_type"] != "source_contact" || fields["external_object_id"] != in.SourceContactKey {
 		t.Fatalf("unexpected source tuple: %s", raw)
 	}
 	if fields["owner_id"] != nil || fields["external_version"] != nil {
@@ -136,5 +152,45 @@ func TestPlanSourceTupleMatchesAgreedBackendShape(t *testing.T) {
 	again, _ := planCRMSource(changed)
 	if source != again {
 		t.Fatal("external version changed stable source tuple")
+	}
+}
+
+// Optional protected real-source fixture: no network, credentials or app writes.
+func TestPlanProtectedContractFixture(t *testing.T) {
+	inputPath, outputPath := os.Getenv("AIRLOCK_PLAN_ADAPTER_INPUT"), os.Getenv("AIRLOCK_PLAN_ADAPTER_OUTPUT")
+	if inputPath == "" || outputPath == "" {
+		t.Skip("protected real-source fixture not selected")
+	}
+	raw, err := os.ReadFile(inputPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var input PlanAdapterInput
+	if err := json.Unmarshal(raw, &input); err != nil {
+		t.Fatal(err)
+	}
+	envelope, err := adaptPlanContact(input)
+	if err != nil {
+		t.Fatal(err)
+	}
+	out, err := json.MarshalIndent(envelope, "", "  ")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(outputPath, append(out, '\n'), 0600); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestPlanRawNumericSourceIdentityIsLossless(t *testing.T) {
+	in := planFixture()
+	in.RawProject = json.RawMessage(`{"id":"I003","research_numeric_id":9007199254740993}`)
+	envelope, err := adaptPlanContact(in)
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw, _ := json.Marshal(envelope.SourcePayload)
+	if !strings.Contains(string(raw), "9007199254740993") {
+		t.Fatal("raw source integer rounded")
 	}
 }
