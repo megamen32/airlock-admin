@@ -98,3 +98,16 @@ func TestPlanAdapterRejectsWrongProjectAndSyntheticExposure(t *testing.T) {
 		t.Fatal("import claimed exposure")
 	}
 }
+
+func TestPlanProjectFactsAffectVersionNotLink(t *testing.T) {
+	in := planFixture()
+	a, _ := adaptPlanContact(in)
+	in.RawProject = json.RawMessage(`{"id":"I003","name":"Changed source company fact"}`)
+	b, err := adaptPlanContact(in)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if a.Identity != b.Identity || a.SourceVersion.PayloadFingerprint == b.SourceVersion.PayloadFingerprint {
+		t.Fatal("project fact change lost or minted new identity")
+	}
+}

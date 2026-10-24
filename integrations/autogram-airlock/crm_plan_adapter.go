@@ -61,7 +61,14 @@ func adaptPlanContact(in PlanAdapterInput) (CRMContactEnvelope, error) {
 	if in.Draft != nil && in.Draft.DraftID == "" {
 		return empty, errors.New("draft reference requires actual native draft ID")
 	}
-	digest := sha256.Sum256(in.RawContact)
+	sourceBytes, err := json.Marshal(struct {
+		Project json.RawMessage `json:"project"`
+		Contact json.RawMessage `json:"contact"`
+	}{in.RawProject, in.RawContact})
+	if err != nil {
+		return empty, err
+	}
+	digest := sha256.Sum256(sourceBytes)
 	// Deep-copy the envelope so subsequent edits to caller-owned arrays/JSON cannot
 	// alter this source observation. No native IDs or operation receipts are minted.
 	out := CRMContactEnvelope{SchemaVersion: crmEnvelopeVersion, Identity: CRMExternalIdentity{in.OwnerID, in.ConnectionID, in.SourceInstance, "source_contact", in.SourceContactKey}, SourceVersion: CRMSourceVersion{in.Revision, in.ObservedAt, hex.EncodeToString(digest[:])}, SourceRefs: in.SourceRefs, Contact: in.RawContact, SourcePayload: in.RawProject, History: in.History, Experiment: in.Experiment, Draft: in.Draft, SendAllowed: false}
