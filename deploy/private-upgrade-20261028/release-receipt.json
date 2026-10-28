@@ -1,0 +1,79 @@
+{
+  "source_sha": "d1924f854444a892ec7c71950ffd3aec1af6a3cc",
+  "images": [
+    {
+      "container": "/airlock-airlock-1",
+      "image_id": "sha256:570d9bc5e8fa1b6b48c0e1f82e2187912dd65ac58a2dfc3d2541d14e952d2115",
+      "revision": "d1924f854444a892ec7c71950ffd3aec1af6a3cc"
+    },
+    {
+      "container": "/airlock-frontend-1",
+      "image_id": "sha256:af03827a9b9c003e19cce83a21f48a7fbc04ed27610ab57157d34dc14f32e10d",
+      "revision": "d1924f854444a892ec7c71950ffd3aec1af6a3cc"
+    }
+  ],
+  "binary_sha256": "3d3c8ef12c9c7d1e616c9637438a8327440285584716dd346d192253bae7e586",
+  "frontend_asset_count": 259,
+  "frontend_asset_hashes_match": true,
+  "source_dump_sha256": "5cea552faf2723be83edcf6a742a1a17572334df65911b47d84c2217d903e423",
+  "canonical_dump_sha256": "3e159d9b0af742322e3e89da550a8f88e70f5845e4c46f1fe0eeca101cf85083",
+  "core_ledger": 15,
+  "enterprise_ledger": 1,
+  "retained_database": "airlock_pre_20261028",
+  "retained_database_allow_connections": false,
+  "live_database": "airlock",
+  "runtime_database_role": "airlock_app",
+  "background_actions_paused": false,
+  "health": {
+    "status": "ok",
+    "db": true,
+    "s3": true
+  },
+  "authorized_archive": {
+    "userbot_conversations": 16,
+    "messages": 1112,
+    "terminal_runs": 172
+  },
+  "source_app_write_freeze": {
+    "ingress_backend_stopped": true,
+    "labeled_app_containers_stopped": 3,
+    "source_clients_before_gate": 0,
+    "source_allow_connections_before_swap": false
+  },
+  "metadata_proof": {
+    "common_public_objects": 205,
+    "app_objects": 462,
+    "schemas": 21,
+    "database_grants": 61,
+    "mismatches": 0
+  },
+  "data_proof": {
+    "public_table_projections": 143,
+    "app_tables": 391,
+    "owned_sequences": 41,
+    "matches": true
+  },
+  "consumer_owner_inventory": {
+    "http_status": 200,
+    "apps_visible": 15
+  },
+  "competitor_analysis": {
+    "status": "pending SDK migration publication",
+    "candidate_native_build": "PASS",
+    "source_head_http_status": 403,
+    "uploads_accepted": 0,
+    "blocker": "Existing roomhacker session lacks app source-development authority"
+  },
+  "rollback_after_admission": "Do not overwrite accepted new writes with old snapshot; reconcile deliberately.",
+  "independent_qa": {
+    "normal_login_http": 200,
+    "workspace_opened": true,
+    "conversation_id": "48b05a0e-c2ae-4c6b-8983-5015d5d01eb6",
+    "run_id": "605694b5-ffbf-4516-b98b-01040b23fe9c",
+    "run_status": "complete",
+    "app_tool_calls_succeeded": 10,
+    "final_assistant_persisted": true,
+    "ui_terminal_readback": "root independent verifier",
+    "provider_replay": false
+  }
+}

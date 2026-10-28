@@ -1,0 +1,44 @@
+{
+  "app_id": "87539d2c-d146-4a4f-b22f-8f024618e16c",
+  "original_head": "6f66c0ae7e2fdba56e4d33d5f3e27b6b1f574aef",
+  "original_archive_sha256": "03efa8a923b2bf9305265c6426ed77ebb32a9431c57429d4536f6053a5a4b918",
+  "candidate": "/home/roomhacker/.local/state/airlock-upgrade/20261028-d1924f85/artifacts/private-apps/competitor-analysis",
+  "sdk": "v0.8.1-alpha.12",
+  "source_paths": [
+    "go.mod",
+    "go.sum",
+    "main.go",
+    "main_test.go"
+  ],
+  "source_sha256": {
+    "go.mod": "84128afd30bedaaef66b6f3919e7250c4e84e28d46aee1e47d22862bdc6051e8",
+    "go.sum": "a690f76a2adba6351b6318973edac8eb178aec4c4fb9f9831deaedb8447f8a71",
+    "main.go": "9d497f38320606d2b0e21731af66849a605c9cd028df836578d536906964df8f",
+    "main_test.go": "cbf278513571b245d40369895304e44aede168add28b98e273a982ab9b365750"
+  },
+  "native_build": {
+    "command": "GOTOOLCHAIN=go1.26.10 GOWORK=off GOMAXPROCS=3 go tool air build",
+    "exit": 0,
+    "stages": [
+      "go mod tidy",
+      "sqlc generate",
+      "templ generate",
+      "tailwindcss",
+      "go test -p=1 -count=1 ./...",
+      "go build"
+    ]
+  },
+  "tests": {
+    "composition_authority_gates": "passed",
+    "checko_service_cache": "5 tests unchanged passed",
+    "handlers": "2 tests unchanged passed"
+  },
+  "live_uploaded": false,
+  "live_DB_acceptance": "NOT_RUN: platform migration up/down/up + installed app read-only DB consumer required",
+  "nonowner_grants": "NOT_VERIFIED: deployment owner must verify existing grants without changes",
+  "test_scope_change": "Owner approved replacing old agenttest started mux + SDK DB.Ping scaffold tests with strict offline manifest authority gates. DB proof moves to actual platform migration and installed readback; domain tests unchanged.",
+  "source_upload": "NOT PERFORMED; fresh HEAD and GET403 under existing session",
+  "runtime_install": "NOT PERFORMED",
+  "candidate_archive_sha256": "60f0b1ab3618b6f01c2199d6d6c52ac7cf8ed3f33afd46d17f13cd9264983834",
+  "blocker": "Existing app-admin authorized login required; no role/password changes"
+}
