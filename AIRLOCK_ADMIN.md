@@ -8,8 +8,9 @@
 > дерево GPTAdmin лежало прямо здесь, — теперь соответствующие пути находятся
 > внутри сабмодулей (`go-hub/…` → `gptadmin/go-hub/…` и т.п.). История
 > старого объединённого дерева полностью сохранена в истории этого репо.
-> Прод-сервис `airlock.service` работает из `airlock/` (сабмодуль + нетрекаемый
-> рантайм-оверлей `.env*`, `bin/`, `frontend/dist`).
+> На дату этой заметки сервис `airlock.service` работал из `airlock/`
+> (сабмодуль + нетрекаемый рантайм-оверлей `.env*`, `bin/`, `frontend/dist`).
+> Это историческое состояние; действующий Docker-путь описан в AIRLOCK_RUNBOOK.md.
 
 Объединённая система: **GPTAdmin × Airlock**. GPTAdmin — удобный сайдкар на машины
 для ИИ (MCP-хаб управления инфраструктурой), Airlock — готовый слой безопасности учётных
@@ -21,6 +22,29 @@ Airlock — пропуск (решает, кому и что можно), обе
 ExManager как ИИ-секретарь**. Зачем это как продукт —
 [PRODUCT_VISION.md](PRODUCT_VISION.md); этот документ — операционный ранбук
 живого стенда.
+
+## Историческое состояние на 2026-10-06
+
+Приведённые ниже планы и канарии 2026-09-10 являются историей, а не командами
+восстановления текущего инстанса. Следуйте [AGENTS.md](AGENTS.md) и
+[AIRLOCK_RUNBOOK.md](AIRLOCK_RUNBOOK.md). На 6 октября Airlock работал как
+системный `airlock.service` с бинарником `airlock/bin/airlock serve`, рабочим
+каталогом сабмодуля и защищённым `.env`; ingress проксировал backend 8080.
+С 14 октября private Airlock работает в Docker: `airlock-airlock-1` и
+`airlock-frontend-1`. `airlock.service` остановлен и отключён; не запускайте его
+параллельно с Docker. Актуальный Compose-контракт и порядок обновления —
+в [AIRLOCK_RUNBOOK.md](AIRLOCK_RUNBOOK.md).
+
+Внешние MCP подключаются штатным `RegisterMCP` и encrypted resource credentials.
+Для существующей Todo-доски (`todo.bezrabotnyi.com`) используйте
+`/home/roomhacker/agents-projects/exmanager/docs/todo-mcp.md`: источник доски
+`/home/roomhacker/excode`, Compose проект `services/kanban-board`, gateway 43327.
+Старый mini listener 8767 работает в REST-режиме и не является HTTP MCP.
+Доска и Airlock core не переписываются; X-manager проверяет проектные права
+в своих callback tools. Инфраструктурная карта:
+`/home/roomhacker/ServersAdministartion/docs/inventory/sites/todo.md`.
+
+## Исторический интеграционный план
 
 ## Провенанс
 
