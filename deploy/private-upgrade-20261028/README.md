@@ -23,3 +23,7 @@ Remaining app boundary: competitor-analysis is the sole active v2 app. Its bound
 Frontend follow-up: minimal owner/conversation/run-scoped personal-topic chat fix installed on both platforms as `d1924f85-chat-a2c84992`, base d1924f85 plus patch a2c84992 (not the deferred custom frontend/plugin). Enterprise build, 47 regression tests and both typechecks passed; all259 served files match approved manifest, index-BwyejHNf.js. Independent QA final answer appeared automatically without reload and with unchanged page timeOrigin. Backend/DB were unchanged by this frontend rollout. Prior `upstream-d1924f85` frontend image retained; rollback is a frontend-only override to that tag using the same existing service, no DB rollback. See frontend-chat-hotfix.patch, frontend-chat-receipt.json and frontend-chat.override.json.
 
 Owner explicitly deferred app-specific SDK migrations: competitor-analysis publication and remaining eXmanager demo migration are outside this completed platform-update scope; no self-grant/reset or further provider prompt was attempted.
+
+## Home-route matching correction (L12)
+
+Approved minimal platform patch recognizes SDK catch-all GET routes through the existing native route matcher and uses the typed server `hasHomeRoute` flag in the app list. Backend base remains d1924f85; frontend includes the preceding L10 chat correction. No database, grants, app source or SDK migrations were changed. Apply the home-route override last; rollback by restoring the previous backend/frontend image references recorded in the protected runtime snapshot.

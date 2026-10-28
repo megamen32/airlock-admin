@@ -1,0 +1,12 @@
+{
+  "services": {
+    "airlock": {
+      "image": "localhost/airlock-enterprise:d1924f85-home-576880ea",
+      "pull_policy": "never"
+    },
+    "frontend": {
+      "image": "localhost/airlock-enterprise-frontend:d1924f85-chat-home-576880ea",
+      "pull_policy": "never"
+    }
+  }
+}

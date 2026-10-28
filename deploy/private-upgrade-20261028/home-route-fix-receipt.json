@@ -1,0 +1,95 @@
+{
+  "base_source_sha": "d1924f854444a892ec7c71950ffd3aec1af6a3cc",
+  "patch_sha256": "576880eae70fd819c1bdb42b90aa83f4eb86cbb0f2b9e8db63227c440d81df5b",
+  "patch": "home-route.patch",
+  "owned_paths": [
+    "service/agents/service.go",
+    "service/agents/routes_test.go",
+    "frontend/src/views/AgentListView.vue",
+    "frontend/src/views/AgentListView.test.ts"
+  ],
+  "source_manifest_files": 1464,
+  "source_baseline_restored": true,
+  "baseline_differences": [],
+  "candidate_sha256": {
+    "service/agents/service.go": "1ef55671736f163ff06172e7c5c016622a526331344032ef514b6e5ec34bfb6a",
+    "service/agents/routes_test.go": "4d6536ada4312b88b3fa54093e341e23ad17bbfceac1521988f2dd070c7192ec",
+    "frontend/src/views/AgentListView.vue": "5c8eed1f20553d89823f7532bed86bc380fa6d3196d370897265553f5099535a",
+    "frontend/src/views/AgentListView.test.ts": "093e9081bdc9d80eceac8578d6b3290404d2e643dcfad5d9efa63dcc3b769162"
+  },
+  "red": {
+    "backend": "TestHasHomeRoute/catch_all_GET expected true got false",
+    "frontend": "admin catch-all form hidden; 1 failed/37 passed"
+  },
+  "green": {
+    "has_home_route": "PASS",
+    "execution_route_access": "3 existing tests PASS",
+    "frontend": "38 tests PASS",
+    "typecheck": "PASS",
+    "enterprise_typecheck": "PASS",
+    "enterprise_build": "PASS"
+  },
+  "variant": "enterprise",
+  "distribution": "../enterprise/frontend/src/i18n/distribution.ts",
+  "node": "22.22.2",
+  "pnpm": "10.33.0",
+  "go": "go1.26.10",
+  "cumulative_frontend_patches": [
+    "../frontend-hotfix/workspace-user-topic.patch",
+    "home-route.patch frontend paths"
+  ],
+  "chat_patch_sha256": "a2c849923ff226db40d21182fba3e6926586cf9e9fce46d724ef61072a415d7a",
+  "assets_count": 259,
+  "assets_manifest_sha256": "c797219142672a0c8adb2950f66aec347c290edc08f2b18325ad5a4a12922e67",
+  "backend_binary_built": true,
+  "deployed": true,
+  "live_consumer_proof": {
+    "typedPlanHomeRoute": true,
+    "authenticatedPlanHTTP": {
+      "subdomainStatus": 200,
+      "nativeProxyStatus": 200,
+      "htmlBytes": 34169711
+    },
+    "independentBrowser": "pending parent final readback; initial iframe Chrome transient error is not consumer acceptance"
+  },
+  "created_utc": "2026-10-28T17:54:16.888948+00:00",
+  "backend_binary": "/home/roomhacker/.local/state/airlock-upgrade/20261028-d1924f85/artifacts/home-route-fix/airlock-enterprise-d1924f85-home-route",
+  "backend_sha256": "c371583621853cefb1de8e37a3b996fb45b364db0494ecaf8576d974856210bc",
+  "backend_bytes": 83864633,
+  "backend_build_command": "CGO_ENABLED=0 GOOS=linux GOARCH=amd64 GOMAXPROCS=4 GOTOOLCHAIN=go1.26.10 go build -mod=readonly -buildvcs=false -p=4 -o <output> ./cmd/airlock-enterprise",
+  "backend_build_cwd": "/home/roomhacker/.local/state/airlock-upgrade/20261028-d1924f85/artifacts/build-materialization/source/enterprise",
+  "backend_module_inputs_sha256": {
+    "go.mod": "454c2eeda5c42b0d5f01db2b2009469b75da65c0b36fdd6f526882780c833b40",
+    "go.sum": "4028a75cc1d46d84f90eaf646b336fad1d365cb1524c3450a88d0c49e0d5dd9b",
+    "enterprise/go.mod": "1d059424d83829772da48e8a0c7fbe88a709ca9f208f3becceed14322ce111df",
+    "enterprise/go.sum": "1c06d403b2b829a739f85d7353b7e5bdc633a248ba19a070af2d03bcb6e3fee7"
+  },
+  "deployment": {
+    "private": {
+      "backendImage": "sha256:f1c6725e8dd64dcf1426b3a0b522994960699e49042ec57b46128175a7646831",
+      "frontendImage": "sha256:0d44b98768340b9c3965d2d8e8a63b4e8d2b0abd739e628934d6b44bb5555c91",
+      "health": 200,
+      "planHasHomeRoute": true,
+      "planHomeRouteAccess": "ok",
+      "frontendFilesVerified": 259
+    },
+    "databaseMutation": false,
+    "appSourceMutation": false,
+    "frontendIncludesL10PatchSha256": "a2c849923ff226db40d21182fba3e6926586cf9e9fce46d724ef61072a415d7a",
+    "imagesArchiveSha256": "341c4e679f7d5b5080d6cb4dd162d1a2da55f97598a7de12b00aa3ec890d741b",
+    "demo": {
+      "backendImage": "sha256:5546f9e8639089ea7eee91ad18123d9be0dfe14c470fb50b3873156b370c1c72",
+      "frontendImage": "sha256:f9c47f0b8ac890b974a9e2e88a6949a5ff88ce6fa6de23de3f2f6dfdc28de097",
+      "runtimeBinarySha256": "c371583621853cefb1de8e37a3b996fb45b364db0494ecaf8576d974856210bc",
+      "frontendFilesVerified": 259,
+      "health": 200,
+      "logos": {
+        "sourceCommit": "174ff0e1da3cc30533741291857d551df768a70d",
+        "exactPublicAssetHashes": 17,
+        "entryCacheControl": "no-store",
+        "guestStateModified": false,
+        "ownerConfigurationModified": false
+      }
+    }
+  }
+}

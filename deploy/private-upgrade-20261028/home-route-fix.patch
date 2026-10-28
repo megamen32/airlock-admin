@@ -1,0 +1,102 @@
+--- a/service/agents/service.go
++++ b/service/agents/service.go
+@@ -13,6 +13,7 @@
+ 	"errors"
+ 	"fmt"
+ 	"io"
++	"net/http"
+ 	"os"
+ 	"path"
+ 	"path/filepath"
+@@ -1390,12 +1391,19 @@
+ }
+ 
+ func hasHomeRoute(routes []dbq.AgentRoute) bool {
+-	for _, route := range routes {
+-		if strings.EqualFold(route.Method, "GET") && (route.Path == "/" || route.Path == "") {
+-			return true
+-		}
+-	}
+-	return false
++	// Use the same matcher as RouteAccess and the app listener. In particular,
++	// a catch-all route can serve GET / without declaring a literal root.
++	normalized := make([]dbq.AgentRoute, len(routes))
++	copy(normalized, routes)
++	for i := range normalized {
++		normalized[i].Method = strings.ToUpper(normalized[i].Method)
++		if normalized[i].Path == "" {
++			normalized[i].Path = "/"
++		}
++	}
++	req, _ := http.NewRequest(http.MethodGet, "http://app/", nil)
++	_, matched, err := execution.MatchRoute(normalized, req)
++	return err == nil && matched
+ }
+ 
+ // Update applies a partial update; each nil field on the request keeps
+--- a/service/agents/routes_test.go
++++ b/service/agents/routes_test.go
+@@ -14,6 +14,12 @@
+ 	}{
+ 		{name: "registered root GET", routes: []dbq.AgentRoute{{Method: "GET", Path: "/"}}, want: true},
+ 		{name: "legacy empty root GET", routes: []dbq.AgentRoute{{Method: "get", Path: ""}}, want: true},
++		{name: "catch all GET", routes: []dbq.AgentRoute{{Method: "GET", Path: "/{path...}"}}, want: true},
++		{name: "root subtree GET", routes: []dbq.AgentRoute{{Method: "GET", Path: "/"}}, want: true},
++		{name: "non root catch all", routes: []dbq.AgentRoute{{Method: "GET", Path: "/assets/{path...}"}}},
++		{name: "single segment wildcard", routes: []dbq.AgentRoute{{Method: "GET", Path: "/{path}"}}},
++		{name: "POST catch all", routes: []dbq.AgentRoute{{Method: "POST", Path: "/{path...}"}}},
++		{name: "malformed pattern", routes: []dbq.AgentRoute{{Method: "GET", Path: "/{path..."}}},
+ 		{name: "other GET route", routes: []dbq.AgentRoute{{Method: "GET", Path: "/chat"}}},
+ 		{name: "non GET root route", routes: []dbq.AgentRoute{{Method: "POST", Path: "/"}}},
+ 		{name: "no routes"},
+--- a/frontend/src/views/AgentListView.vue
++++ b/frontend/src/views/AgentListView.vue
+@@ -105,10 +105,12 @@
+       webUiAvailability.set(agent.id, 'no')
+       return
+     }
++    // The server uses the runtime route matcher, including catch-all routes.
++    // Route metadata visibility must not change home-form discovery.
+     const canInspectRoutes = agent.yourAccess === 'admin' || agent.isOwner
+-    const hasHome = canInspectRoutes
++    const hasHome = detail.hasHomeRoute ?? (canInspectRoutes
+       ? detail.routes.some(route => route.method.toUpperCase() === 'GET' && (route.path === '/' || route.path === ''))
+-      : detail.hasHomeRoute ?? Boolean(detail.routeBaseUrl)
++      : Boolean(detail.routeBaseUrl))
+     webUiAvailability.set(agent.id, Boolean(detail.routeBaseUrl) && hasHome ? 'yes' : 'no')
+   } catch {
+     webUiAvailability.set(agent.id, 'unknown')
+--- a/frontend/src/views/AgentListView.test.ts
++++ b/frontend/src/views/AgentListView.test.ts
+@@ -440,12 +440,29 @@
+     scope.stop()
+   })
+ 
+-  it('claims chat only when the server denies access to the app home route', async () => {
++  it('offers an admin the catch-all home form reported by the canonical route matcher', async () => {
+     route.query = { q: 'sample' }
+     apiGet.mockResolvedValue({ data: {
+       routeBaseUrl: 'https://sample-app.airlock.example',
+       hasHomeRoute: true,
+-      routes: [{ method: 'GET', path: '/' }],
++      homeRouteAccess: 'ok',
++      routes: [{ method: 'GET', path: '/{path...}', access: 'admin' }],
++    } })
++    const { wrapper, scope } = mountHome()
++    await flushPromises()
++    expect(wrapper.find('.app-action-webui').exists()).toBe(true)
++    await wrapper.find('.app-action-webui').trigger('click')
++    expect(push).toHaveBeenCalledWith({ path: '/agents/app-1/workspace', query: { panel: 'app' } })
++    wrapper.unmount()
++    scope.stop()
++  })
++
++  it('claims chat only when the server denies access to the app home route', async () => {
++    route.query = { q: 'sample' }
++    apiGet.mockResolvedValue({ data: {
++      routeBaseUrl: 'https://sample-app.airlock.example',
++      hasHomeRoute: true,
++      routes: [{ method: 'GET', path: '/{path...}', access: 'admin' }],
+       // The API checked the route with our token and the app refused us.
+       homeRouteAccess: 'denied',
+     } })
