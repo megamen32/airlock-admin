@@ -1,0 +1,11 @@
+[Unit]
+Description=Проверка общего файла Airlock каждые пять минут
+
+[Timer]
+OnBootSec=1min
+OnUnitInactiveSec=5min
+AccuracySec=10s
+Unit=airlock-marketplace-watch.service
+
+[Install]
+WantedBy=timers.target

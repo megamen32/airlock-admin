@@ -1,0 +1,362 @@
+#!/usr/bin/env bash
+# Historical systemd updater, not the current Docker upgrade route.
+# Do not execute against current private/demo deployments; follow AIRLOCK_RUNBOOK.md.
+set -Eeuo pipefail
+
+readonly ROOT=/home/roomhacker/airlock-admin/airlock
+readonly ADMIN_ROOT=/home/roomhacker/airlock-admin
+readonly TMP_ROOT="$ADMIN_ROOT/.tmp"
+readonly PUBLIC_REPO=https://github.com/airlockrun/airlock.git
+readonly RELEASES_API=/repos/airlockrun/airlock/releases
+readonly SERVICE=airlock.service
+readonly POSTGRES_CONTAINER=airlock-postgres-1
+readonly CADDY_CONTAINER=airlock-caddy-proxy-1
+readonly HEALTH_URL=http://127.0.0.1:8080/health
+readonly TAG_RE='^v[0-9]+\.[0-9]+\.[0-9]+-(alpha|beta|rc)\.[0-9]+$'
+
+CHECK_ONLY=0
+TARGET_TAG=
+WORKTREE=
+FETCHED_REF=
+MUTATION_STARTED=0
+SERVICE_STOPPED=0
+BACKUP_DIR=
+
+log() { printf '==> %s\n' "$*"; }
+warn() { printf '[warn] %s\n' "$*" >&2; }
+die() { printf '[error] %s\n' "$*" >&2; exit 1; }
+
+usage() {
+	cat <<'EOF'
+Usage: update-airlock-prerelease [--check] [--tag vX.Y.Z-rc.N]
+
+Update the native Airlock deployment to the latest public prerelease. Discovery
+prefers GitHub Releases and falls back to annotated public origin tags.
+
+Options:
+  --check       Show current/latest versions and verify prerequisites only.
+  --tag TAG     Use an explicit public prerelease tag instead of discovery.
+  -h, --help    Show this help.
+
+The update builds in an isolated worktree, creates a binary/static/PostgreSQL
+backup, checks out the verified public tag, installs the artifacts, and restarts
+only airlock.service. Database migrations run during normal Airlock startup.
+EOF
+}
+
+cleanup() {
+	local status=$?
+	trap - EXIT HUP INT TERM
+	if [[ -n "$WORKTREE" && -d "$WORKTREE" ]]; then
+		git -C "$ROOT" worktree remove --force "$WORKTREE" >/dev/null 2>&1 || \
+			warn "temporary worktree remains at $WORKTREE"
+	fi
+	if [[ -n "$FETCHED_REF" ]]; then
+		git -C "$ROOT" update-ref -d "$FETCHED_REF" >/dev/null 2>&1 || \
+			warn "temporary Git ref remains: $FETCHED_REF"
+	fi
+	if (( status != 0 && MUTATION_STARTED )); then
+		warn "update failed after deployment mutation began"
+		[[ -n "$BACKUP_DIR" ]] && warn "backup: $BACKUP_DIR"
+		if (( SERVICE_STOPPED )); then
+			warn "$SERVICE is stopped; inspect the source/artifacts and run: sudo systemctl start $SERVICE"
+		else
+			warn "inspect: sudo systemctl status $SERVICE; sudo journalctl -u $SERVICE -n 200"
+		fi
+		warn "do not restore the database automatically after migrations"
+	fi
+	exit "$status"
+}
+trap cleanup EXIT HUP INT TERM
+
+for arg in "$@"; do
+	case "$arg" in
+		--check) CHECK_ONLY=1 ;;
+		-h|--help) usage; exit 0 ;;
+		--tag) : ;;
+		*)
+			if [[ "${expect_tag:-0}" == 1 ]]; then
+				TARGET_TAG=$arg
+				expect_tag=0
+			else
+				die "unknown argument: $arg"
+			fi
+			;;
+	esac
+	if [[ "$arg" == --tag ]]; then
+		[[ "${expect_tag:-0}" == 0 ]] || die "--tag specified more than once"
+		expect_tag=1
+	fi
+done
+[[ "${expect_tag:-0}" == 0 ]] || die "--tag requires a value"
+
+[[ $EUID -ne 0 ]] || die "run this script as roomhacker, not root"
+[[ $(id -un) == roomhacker ]] || die "this deployment must be updated by roomhacker"
+
+exec 9<"$0"
+flock -n 9 || die "another Airlock update/check is running"
+
+need_command() {
+	command -v "$1" >/dev/null 2>&1 || die "required command not found: $1"
+}
+
+for command in git curl jq flock go pnpm node docker systemctl sudo rsync tar ss; do
+	need_command "$command"
+done
+sudo -n true || die "passwordless noninteractive sudo is required"
+
+[[ $(git -C "$ROOT" rev-parse --is-inside-work-tree 2>/dev/null) == true ]] || die "not a Git worktree: $ROOT"
+[[ -f "$ROOT/.env" ]] || die "deployment environment file is missing: $ROOT/.env"
+[[ -x "$ROOT/bin/airlock" ]] || die "current Airlock binary is missing"
+[[ -d "$ROOT/frontend/dist" ]] || die "current frontend static directory is missing"
+[[ $(stat -c %U "$ROOT") == roomhacker ]] || die "$ROOT is not owned by roomhacker"
+[[ $(stat -c %U "$ROOT/bin/airlock") == roomhacker ]] || die "current binary is not owned by roomhacker"
+
+service_property() {
+	systemctl show "$SERVICE" -p "$1" --value
+}
+
+[[ $(service_property User) == roomhacker ]] || die "$SERVICE has an unexpected User"
+[[ $(service_property WorkingDirectory) == "$ROOT" ]] || die "$SERVICE has an unexpected WorkingDirectory"
+exec_start=$(service_property ExecStart)
+[[ "$exec_start" == *"path=$ROOT/bin/airlock"* && "$exec_start" == *"argv[]=$ROOT/bin/airlock serve"* ]] || \
+	die "$SERVICE has an unexpected ExecStart"
+
+docker inspect "$POSTGRES_CONTAINER" >/dev/null 2>&1 || die "missing container: $POSTGRES_CONTAINER"
+docker inspect "$CADDY_CONTAINER" >/dev/null 2>&1 || die "missing container: $CADDY_CONTAINER"
+[[ $(docker inspect -f '{{.State.Running}}' "$POSTGRES_CONTAINER") == true ]] || die "$POSTGRES_CONTAINER is not running"
+[[ $(docker inspect -f '{{.State.Running}}' "$CADDY_CONTAINER") == true ]] || die "$CADDY_CONTAINER is not running"
+caddy_static_source=$(docker inspect -f '{{range .Mounts}}{{if eq .Destination "/srv/dist"}}{{.Source}}{{end}}{{end}}' "$CADDY_CONTAINER")
+[[ "$caddy_static_source" == "$ROOT/frontend/dist" ]] || die "Caddy /srv/dist is not mounted from the expected frontend directory"
+
+current_commit=$(git -C "$ROOT" rev-parse HEAD)
+current_tag=$(git -C "$ROOT" tag --points-at HEAD | awk -v re="$TAG_RE" '$0 ~ re { print; exit }')
+current_version=$(git -C "$ROOT" show HEAD:version.go 2>/dev/null | sed -nE 's/^const Version = "([^"]+)"$/v\1/p' | head -n 1)
+[[ "$current_version" =~ $TAG_RE ]] || die "cannot determine a prerelease version from HEAD:version.go"
+if [[ -n "$current_tag" && "$current_tag" != "$current_version" ]]; then
+	die "exact source tag $current_tag disagrees with version $current_version"
+fi
+
+validate_tag() {
+	[[ "$1" =~ $TAG_RE ]] || die "invalid prerelease tag: $1"
+}
+
+version_parts() {
+	local tag=$1 label
+	[[ "$tag" =~ ^v([0-9]+)\.([0-9]+)\.([0-9]+)-(alpha|beta|rc)\.([0-9]+)$ ]] || return 1
+	case ${BASH_REMATCH[4]} in
+		alpha) label=0 ;;
+		beta) label=1 ;;
+		rc) label=2 ;;
+	esac
+	printf '%d %d %d %d %d\n' "$((10#${BASH_REMATCH[1]}))" "$((10#${BASH_REMATCH[2]}))" \
+		"$((10#${BASH_REMATCH[3]}))" "$label" "$((10#${BASH_REMATCH[5]}))"
+}
+
+compare_versions() {
+	local -a left right
+	read -r -a left <<<"$(version_parts "$1")"
+	read -r -a right <<<"$(version_parts "$2")"
+	local i
+	for i in 0 1 2 3 4; do
+		(( left[i] < right[i] )) && { printf '%s\n' -1; return; }
+		(( left[i] > right[i] )) && { printf '%s\n' 1; return; }
+	done
+	printf '%s\n' 0
+}
+
+highest_prerelease() {
+	local tag best=
+	while IFS= read -r tag; do
+		[[ "$tag" =~ $TAG_RE ]] || continue
+		if [[ -z "$best" ]] || (( $(compare_versions "$tag" "$best") > 0 )); then
+			best=$tag
+		fi
+	done
+	printf '%s\n' "$best"
+}
+
+latest_public_tag() {
+	local json candidates best refs
+	if json=$(curl --fail --silent --location --retry 2 --retry-delay 1 \
+		-H 'Accept: application/vnd.github+json' \
+		-H 'X-GitHub-Api-Version: 2022-11-28' \
+		"https://api.github.com$RELEASES_API?per_page=100" 2>/dev/null) && \
+		jq -e 'type == "array"' >/dev/null 2>&1 <<<"$json"; then
+		candidates=$(jq -r --arg re "$TAG_RE" \
+			'.[] | select(.draft == false and .prerelease == true and (.tag_name | test($re))) | .tag_name' \
+			<<<"$json")
+		best=$(highest_prerelease <<<"$candidates")
+		if [[ -n "$best" ]]; then
+			printf '%s\n' "$best"
+			return
+		fi
+	fi
+
+	refs=$(git ls-remote --tags "$PUBLIC_REPO" 'refs/tags/v*') || \
+		die "could not query prerelease tags from public origin"
+	# Only peeled lines prove that the matching public ref is an annotated tag.
+	candidates=$(awk '$2 ~ /^refs\/tags\/v.*\^\{\}$/ {sub(/^refs\/tags\//, "", $2); sub(/\^\{\}$/, "", $2); print $2}' <<<"$refs")
+	best=$(highest_prerelease <<<"$candidates")
+	[[ -n "$best" ]] || die "public origin contains no valid annotated prerelease tags"
+	printf '%s\n' "$best"
+}
+
+if [[ -z "$TARGET_TAG" ]]; then
+	TARGET_TAG=$(latest_public_tag)
+fi
+validate_tag "$TARGET_TAG"
+
+resolve_public_tag() {
+	local tag=$1 refs direct peeled
+	refs=$(git ls-remote --tags "$PUBLIC_REPO" "refs/tags/$tag" "refs/tags/$tag^{}") || \
+		die "could not query public tag $tag"
+	direct=$(awk -v ref="refs/tags/$tag" '$2 == ref {print $1}' <<<"$refs")
+	peeled=$(awk -v ref="refs/tags/$tag^{}" '$2 == ref {print $1}' <<<"$refs")
+	[[ "$direct" =~ ^[0-9a-f]{40}$ ]] || die "public tag not found: $tag"
+	[[ "$peeled" =~ ^[0-9a-f]{40}$ ]] || die "public tag is not a valid annotated tag: $tag"
+	printf '%s\n' "$peeled"
+}
+
+target_commit=$(resolve_public_tag "$TARGET_TAG")
+
+comparison=$(compare_versions "$TARGET_TAG" "$current_version")
+printf 'Current: %s (%s)\n' "$current_version" "${current_commit:0:12}"
+printf 'Latest:  %s (%s)\n' "$TARGET_TAG" "${target_commit:0:12}"
+if (( comparison < 0 )); then
+	die "refusing downgrade from $current_version to $TARGET_TAG"
+fi
+
+tracked_clean=yes
+git -C "$ROOT" diff --quiet || tracked_clean=no
+git -C "$ROOT" diff --cached --quiet || tracked_clean=no
+[[ "$tracked_clean" == yes ]] || die "tracked checkout changes must be committed or removed before updating"
+
+health=$(curl --fail --silent --show-error --max-time 5 "$HEALTH_URL") || die "current health endpoint failed: $HEALTH_URL"
+jq -e '.status == "ok" and .db == true and .s3 == true' >/dev/null <<<"$health" || die "current health is not status=ok, db=true, s3=true"
+systemctl is-active --quiet "$SERVICE" || die "$SERVICE is not active"
+
+printf 'Prerequisites: ok (tracked source clean; service, DB, S3, Caddy, sudo, and build tools available)\n'
+if (( comparison == 0 )); then
+	printf 'Already current: %s\n' "$current_version"
+	exit 0
+fi
+if (( CHECK_ONLY )); then
+	printf 'Update available: %s -> %s (check only; nothing changed)\n' "$current_version" "$TARGET_TAG"
+	exit 0
+fi
+
+mkdir -p "$TMP_ROOT"
+chmod 700 "$TMP_ROOT"
+WORKTREE="$TMP_ROOT/build-${TARGET_TAG//[^A-Za-z0-9_.-]/_}-$$"
+
+log "fetching and verifying public $TARGET_TAG"
+FETCHED_REF="refs/airlock-update/tags/$TARGET_TAG"
+git -C "$ROOT" fetch --quiet --no-tags "$PUBLIC_REPO" "+refs/tags/$TARGET_TAG:$FETCHED_REF" || die "fetch of public tag failed"
+[[ $(git -C "$ROOT" cat-file -t "$FETCHED_REF") == tag ]] || die "fetched public ref is not an annotated tag"
+fetched_commit=$(git -C "$ROOT" rev-parse "$FETCHED_REF^{}")
+[[ "$fetched_commit" == "$target_commit" ]] || die "fetched tag does not match the public tag commit"
+
+candidate_version=$(git -C "$ROOT" show "$fetched_commit:version.go" | sed -nE 's/^const Version = "([^"]+)"$/v\1/p' | head -n 1)
+[[ "$candidate_version" == "$TARGET_TAG" ]] || die "target version.go does not match $TARGET_TAG"
+
+while IFS= read -r -d '' path; do
+	if git -C "$ROOT" cat-file -e "$fetched_commit:$path" 2>/dev/null; then
+		die "untracked deployment file would collide with target source: $path"
+	fi
+done < <(git -C "$ROOT" ls-files --others --exclude-standard -z)
+
+git -C "$ROOT" worktree add --detach --quiet "$WORKTREE" "$fetched_commit" || die "could not create build worktree"
+
+log "building frontend candidate"
+(
+	cd "$WORKTREE/frontend"
+	pnpm install --frozen-lockfile
+	pnpm run build
+) || die "frontend candidate build failed; deployment is unchanged"
+[[ -f "$WORKTREE/frontend/dist/index.html" ]] || die "frontend build did not produce dist/index.html"
+
+log "building backend candidate"
+mkdir -p "$WORKTREE/bin"
+(
+	cd "$WORKTREE"
+	GOWORK=off CGO_ENABLED=0 go build -o bin/airlock ./cmd/airlock
+) || die "backend candidate build failed; deployment is unchanged"
+[[ -x "$WORKTREE/bin/airlock" ]] || die "backend build did not produce an executable"
+[[ $(go version -m "$WORKTREE/bin/airlock" | awk '$1 == "path" {print $2}') == github.com/airlockrun/airlock/cmd/airlock ]] || \
+	die "candidate binary has an unexpected Go main package"
+
+timestamp=$(date -u +%Y%m%dT%H%M%SZ)
+BACKUP_DIR="$TMP_ROOT/backup-$timestamp-$$"
+mkdir -m 700 "$BACKUP_DIR"
+umask 077
+printf '%s\n' "$current_commit" >"$BACKUP_DIR/source-revision"
+printf '%s\n' "$current_version" >"$BACKUP_DIR/source-version"
+cp -p "$ROOT/bin/airlock" "$BACKUP_DIR/airlock"
+tar -C "$ROOT/frontend" -cpf "$BACKUP_DIR/frontend-dist.tar" dist
+
+log "creating PostgreSQL backup"
+dump_tmp="$BACKUP_DIR/database.dump.tmp"
+sudo -n docker exec "$POSTGRES_CONTAINER" sh -eu -c \
+	'export PGPASSWORD="$POSTGRES_PASSWORD"; exec pg_dump --format=custom --no-owner --no-acl --username="$POSTGRES_USER" --dbname="$POSTGRES_DB"' \
+	>"$dump_tmp" || die "PostgreSQL dump failed; deployment is unchanged"
+[[ -s "$dump_tmp" ]] || die "PostgreSQL dump is empty; deployment is unchanged"
+mv "$dump_tmp" "$BACKUP_DIR/database.dump"
+printf '%s\n' "$TARGET_TAG" >"$BACKUP_DIR/intended-target"
+log "backup ready: $BACKUP_DIR"
+
+MUTATION_STARTED=1
+log "stopping $SERVICE"
+sudo -n systemctl stop "$SERVICE"
+SERVICE_STOPPED=1
+
+log "installing verified source and artifacts"
+git -C "$ROOT" checkout --quiet --detach "$fetched_commit" || die "source checkout failed"
+
+binary_tmp="$ROOT/bin/.airlock.update.$$"
+install -m 0755 "$WORKTREE/bin/airlock" "$binary_tmp"
+mv -f "$binary_tmp" "$ROOT/bin/airlock"
+rsync --archive --delete --delay-updates "$WORKTREE/frontend/dist/" "$ROOT/frontend/dist/"
+
+log "starting $SERVICE"
+start_time=$(date --iso-8601=seconds)
+sudo -n systemctl start "$SERVICE"
+SERVICE_STOPPED=0
+
+log "waiting for healthy Airlock"
+healthy=0
+for (( attempt=1; attempt<=60; attempt++ )); do
+	if systemctl is-active --quiet "$SERVICE"; then
+		health=$(curl --silent --show-error --max-time 3 "$HEALTH_URL" 2>/dev/null || true)
+		if jq -e '.status == "ok" and .db == true and .s3 == true' >/dev/null 2>&1 <<<"$health"; then
+			healthy=1
+			break
+		fi
+	fi
+	sleep 3
+done
+(( healthy )) || die "Airlock did not become healthy within 180 seconds"
+systemctl is-active --quiet "$SERVICE" || die "$SERVICE is not active after health check"
+
+health_version=$(jq -r '.version // .metadata.version // empty' <<<"$health")
+if [[ -n "$health_version" && "v${health_version#v}" != "$TARGET_TAG" ]]; then
+	die "health endpoint reports unexpected version: $health_version"
+fi
+
+if journalctl -u "$SERVICE" --since "$start_time" --no-pager | grep -Eiq '(^|[^a-z])(fatal|panic)([^a-z]|$)|migration[^[:cntrl:]]*(fail|error)'; then
+	die "startup log contains a fatal, panic, or migration failure"
+fi
+
+if pgrep -af "($ROOT/frontend[^ ]*(node|vite)|(node|vite)[^ ]*.*$ROOT/frontend)" >/dev/null 2>&1; then
+	die "an Airlock frontend node/vite process is running unexpectedly"
+fi
+if ss -ltnH 'sport = :5173' | grep -q .; then
+	die "unexpected listener on TCP port 5173"
+fi
+
+installed_commit=$(git -C "$ROOT" rev-parse HEAD)
+[[ "$installed_commit" == "$target_commit" ]] || die "installed source commit does not match verified target"
+
+MUTATION_STARTED=0
+log "updated Airlock to $TARGET_TAG ($target_commit)"
+log "health: status=ok db=true s3=true; backup: $BACKUP_DIR"
