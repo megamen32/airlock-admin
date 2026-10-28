@@ -116,3 +116,23 @@ func TestDelegationHeaderCarriesExactNativePrincipal(t *testing.T) {
 		t.Fatal("delegation header accepted for another request line")
 	}
 }
+
+// A Plan save carries its session CSRF token independently of delegated identity.
+func TestProductUIKeepsCSRFButStripsCallerIdentity(t *testing.T) {
+	h := http.Header{
+		"X-Airlock-Csrf":        {"session-csrf"},
+		"x-aIrLoCk-uSeR":        {"forged-user"},
+		"X-Airlock-Ui-Identity": {"forged-identity"},
+		"Authorization":         {"Bearer private-token"},
+		"Content-Type":          {"application/json"},
+	}
+	stripProductUIIdentityHeaders(h)
+	if got := h.Get("X-Airlock-CSRF"); got != "session-csrf" {
+		t.Fatalf("product session CSRF lost: %q", got)
+	}
+	for k := range h {
+		if k != "X-Airlock-Csrf" && k != "Content-Type" {
+			t.Fatalf("caller identity header survived: %s", k)
+		}
+	}
+}

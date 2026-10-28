@@ -51,12 +51,7 @@ func (a *application) productUI(w http.ResponseWriter, r *http.Request) error {
 			p.SetURL(target)
 			p.Out.Host = target.Host
 			p.SetXForwarded()
-			for h := range p.Out.Header {
-				if strings.HasPrefix(strings.ToLower(h), "x-airlock-") {
-					p.Out.Header.Del(h)
-				}
-			}
-			p.Out.Header.Del("Authorization")
+			stripProductUIIdentityHeaders(p.Out.Header)
 			p.Out.Header.Set(bridgeauth.Header, assertion)
 		},
 		FlushInterval: -1,
@@ -66,4 +61,14 @@ func (a *application) productUI(w http.ResponseWriter, r *http.Request) error {
 	}
 	proxy.ServeHTTP(w, r)
 	return nil
+}
+
+// stripProductUIIdentityHeaders keeps browser input out of the signed identity boundary.
+func stripProductUIIdentityHeaders(header http.Header) {
+	for h := range header {
+		if strings.HasPrefix(strings.ToLower(h), "x-airlock-") && !strings.EqualFold(h, "X-Airlock-CSRF") {
+			delete(header, h)
+		}
+	}
+	header.Del("Authorization")
 }
