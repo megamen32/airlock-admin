@@ -1,0 +1,45 @@
+{
+  "verifiedAt": "2026-10-14",
+  "images": [
+    {
+      "image": "ghcr.io/airlockrun/airlock:v0.7.0",
+      "id": "sha256:d2220baa38a73f098295b48412eb57f9a9140dc6d5661d01980b4e1670e8c903",
+      "repoDigests": [
+        "ghcr.io/airlockrun/airlock@sha256:d2220baa38a73f098295b48412eb57f9a9140dc6d5661d01980b4e1670e8c903"
+      ],
+      "revision": "690a90e7bafd781e39c5618f12598e42f5d9c306"
+    },
+    {
+      "image": "ghcr.io/airlockrun/airlock-enterprise-frontend:v0.7.0",
+      "id": "sha256:3822a8154b70c1516e4c8191e69f9e2c9e87158a24371420ddc4313bcc9fdd4d",
+      "repoDigests": [
+        "ghcr.io/airlockrun/airlock-enterprise-frontend@sha256:3822a8154b70c1516e4c8191e69f9e2c9e87158a24371420ddc4313bcc9fdd4d"
+      ],
+      "revision": "690a90e7bafd781e39c5618f12598e42f5d9c306"
+    },
+    {
+      "image": "ghcr.io/airlockrun/airlock-agent-builder:v0.7.0",
+      "id": "sha256:8a721f7cfcf4b38ff69dff119e85bc50f6d71bacdcf11ef860f66c785efd2634",
+      "repoDigests": [
+        "ghcr.io/airlockrun/airlock-agent-builder@sha256:8a721f7cfcf4b38ff69dff119e85bc50f6d71bacdcf11ef860f66c785efd2634"
+      ],
+      "revision": "690a90e7bafd781e39c5618f12598e42f5d9c306"
+    },
+    {
+      "image": "ghcr.io/airlockrun/airlock-agent-base:v0.7.0",
+      "id": "sha256:f76f5e14f19f10523ec4fd0354ef1554ba3c065ae14282fb85ea4bb3b64cc91c",
+      "repoDigests": [
+        "ghcr.io/airlockrun/airlock-agent-base@sha256:f76f5e14f19f10523ec4fd0354ef1554ba3c065ae14282fb85ea4bb3b64cc91c"
+      ],
+      "revision": "690a90e7bafd781e39c5618f12598e42f5d9c306"
+    },
+    {
+      "image": "ghcr.io/airlockrun/airlock-js-executor:v0.7.0",
+      "id": "sha256:460592372756ec350e30c3c7701481733b31368d42565eecc709bb9619090cd6",
+      "repoDigests": [
+        "ghcr.io/airlockrun/airlock-js-executor@sha256:460592372756ec350e30c3c7701481733b31368d42565eecc709bb9619090cd6"
+      ],
+      "revision": "690a90e7bafd781e39c5618f12598e42f5d9c306"
+    }
+  ]
+}

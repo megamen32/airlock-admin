@@ -1,0 +1,22 @@
+# Add to the existing VPS Caddyfile; preserve its airlockrun.ru site.
+{
+    on_demand_tls {
+        ask http://127.0.0.1:8099/_demo/tls
+    }
+}
+
+http://127.0.0.1:8099 {
+    reverse_proxy https://demo.airlock.bezrabotnyi.com {
+        header_up Host demo.airlockrun.ru
+    }
+}
+
+demo.airlockrun.ru, *.demo.airlockrun.ru {
+    tls {
+        on_demand
+    }
+    reverse_proxy https://demo.airlock.bezrabotnyi.com {
+        header_up Host {http.request.host}
+        header_up X-Forwarded-Proto https
+    }
+}
