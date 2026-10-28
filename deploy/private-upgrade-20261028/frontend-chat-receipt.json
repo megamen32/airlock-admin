@@ -1,0 +1,67 @@
+{
+  "base_source_sha": "d1924f854444a892ec7c71950ffd3aec1af6a3cc",
+  "patch": "workspace-user-topic.patch",
+  "patch_sha256": "a2c849923ff226db40d21182fba3e6926586cf9e9fce46d724ef61072a415d7a",
+  "owned_paths": [
+    "frontend/src/stores/chat.ts",
+    "frontend/src/stores/chat.test.ts"
+  ],
+  "source_baseline_restored": true,
+  "baseline_manifest_files": 1464,
+  "baseline_manifest_differences": [],
+  "candidate_source_sha256": {
+    "src/stores/chat.ts": "bdeb4d98dbfb037e8d09694a670698648e095b892acdb606c4e6bba0d1e71f04",
+    "src/stores/chat.test.ts": "542ff46ebe5ca7acb1efee26491aa8896e8e893af14ffb63f32c8f5ea4a8ed4d"
+  },
+  "original_source_sha256": {
+    "src/stores/chat.ts": "9749c010365f95cbd66fb4a78860f4630f7e7e976afcc38496064b3c651b3bca",
+    "src/stores/chat.test.ts": "647b7a9fd4f53db41ce5a20aef15310324a80b7720b43e2650d6edff8f92f6fe"
+  },
+  "node": "22.22.2",
+  "pnpm": "10.33.0",
+  "vite": "8.1.6",
+  "package_json_sha256": "bc715db8cc6a35a3ba719a02aa28d182b3bbf46d16a234fe2a6ac0519c9f1b20",
+  "lock_sha256": "8070592bff1721befeec658d5289f26e5e05a9d8d46aa2674a722deebb238b53",
+  "variant": "enterprise",
+  "AIRLOCK_I18N_DISTRIBUTION": "../enterprise/frontend/src/i18n/distribution.ts",
+  "distribution_sha256": "f528f03393613a66dff89a2517ad3a4fbb860fad1e106c83f9ed139239a4565f",
+  "red": "baseline personal-topic text_delta dropped (1 failure, 4 existing passing)",
+  "green": "47 tests / 3 files passed",
+  "typecheck": "community and enterprise vue-tsc PASS",
+  "build": "enterprise vite build PASS",
+  "assets_count": 259,
+  "assets_manifest_sha256": "ab0a2974a0981886f6b640c96db4b64a57f3724baa497f64737fee294b0c5d35",
+  "out_dir": "/home/roomhacker/.local/state/airlock-upgrade/20261028-d1924f85/artifacts/frontend-hotfix/dist",
+  "deployed": true,
+  "business_canary": {
+    "root_independent_result": "PASS",
+    "new_messages": 1,
+    "visible_final": "Обновление проверено.",
+    "without_reload": true,
+    "performance_time_origin_unchanged": true,
+    "conversation_id": "16bb5410-fba4-4fa3-a940-be8f7c827b18",
+    "screenshot": "private-qa-realtime-success.png"
+  },
+  "created_utc": "2026-10-28T17:31:21.272364+00:00",
+  "image_tag": "localhost/airlock-enterprise-frontend:d1924f85-chat-a2c84992",
+  "image_id": "sha256:10cdc2c406e02e30139c07625b78d817d030e28bd679b83e9934d02f92652c12",
+  "private_frontend_image_id": "sha256:10cdc2c406e02e30139c07625b78d817d030e28bd679b83e9934d02f92652c12",
+  "demo_frontend_image_id": "sha256:8973f1c25dcc4bc1525c3be17ed619c4e807542de1bfd4981db3fcdab7945058",
+  "previous_private_image_id": "sha256:af03827a9b9c003e19cce83a21f48a7fbc04ed27610ab57157d34dc14f32e10d",
+  "previous_demo_image_id": "sha256:c9dc30d63144a0da5429681955883979034671ebb485e421f009c0dff8f4f051",
+  "image_archive_sha256": "f71e91431a19b9d798652c0579be8364c46d7129d0df3165f3ee025a64b37fcd",
+  "private_asset_readback": "all259files exact",
+  "demo_asset_readback": "all259files exact",
+  "served_index_asset": "/assets/index-BwyejHNf.js",
+  "backend_database_changed": false,
+  "deferred_apps": "Owner explicitly deferred app SDK migrations; no competitor publication",
+  "demo_guest_form_smoke": {
+    "result": "PASS",
+    "app": "MaxFrame",
+    "form_visible": true,
+    "provider_calls": 0,
+    "messages_sent": 0,
+    "snapshot": "demo-guest-form.snapshot.txt",
+    "screenshot": "demo-guest-form.png"
+  }
+}

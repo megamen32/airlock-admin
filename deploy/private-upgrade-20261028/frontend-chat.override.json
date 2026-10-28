@@ -1,0 +1,13 @@
+{
+  "services": {
+    "frontend": {
+      "image": "localhost/airlock-enterprise-frontend:d1924f85-chat-a2c84992",
+      "pull_policy": "never",
+      "labels": {
+        "org.opencontainers.image.revision": "d1924f854444a892ec7c71950ffd3aec1af6a3cc",
+        "airlock.source.patch-sha256": "a2c849923ff226db40d21182fba3e6926586cf9e9fce46d724ef61072a415d7a",
+        "airlock.frontend.distribution": "enterprise"
+      }
+    }
+  }
+}

@@ -1,0 +1,116 @@
+--- a/frontend/src/stores/chat.ts
++++ b/frontend/src/stores/chat.ts
+@@ -13,6 +13,7 @@
+ import { enrichMessages as enrichMessagesShared, formatToolArgs, toolDescription, toolLabel, type MsgBlock, type ToolBlock } from '@/utils/messageGroup'
+ import { useConversationFeedStore } from '@/stores/conversationFeed'
+ import { useAirlockI18n } from '@/i18n'
++import { useAuthStore } from '@/stores/auth'
+ 
+ // Sliding-window pagination keeps the browser's in-memory message list
+ // bounded. Scrolling up past the top fetches an older page; if the window
+@@ -164,7 +165,16 @@
+   function onRunMessage(type: string, handler: (payload: unknown) => void) {
+     return ws.onMessage(type, (payload, env) => {
+       if (!env) return
+-      if (!boundAgentId.value || env.topicId !== boundAgentId.value) return
++      if (!boundAgentId.value) return
++      // App-addressed human prompts run in the shared conversation runtime,
++      // which publishes on the owner's topic. Admit only this exact thread
++      // and the run acknowledged by HTTP/history; never adopt another chat.
++      if (env.topicId !== boundAgentId.value) {
++        const owner = useAuthStore().user?.id
++        if (!owner || env.topicId !== owner || !conversationId.value || env.conversationId !== conversationId.value) return
++        const runId = payload && typeof payload === 'object' && 'runId' in payload ? payload.runId : undefined
++        if (!currentRunId.value || runId !== currentRunId.value) return
++      }
+       if (conversationId.value) {
+         // Known conversation: reject other conversations on this agent.
+         // Some terminal events carry no conversationId — allow them; the
+@@ -408,7 +418,7 @@
+       // only — not run/conversation — so handled directly, not via the
+       // address-gated onRunMessage.
+       ws.onMessage('resync', (_payload, env) => {
+-        if (!boundAgentId.value || (env?.topicId && env.topicId !== boundAgentId.value)) return
++        if (!boundAgentId.value || (env?.topicId && env.topicId !== boundAgentId.value && env.topicId !== useAuthStore().user?.id)) return
+         void reconcileThread()
+       }),
+       // On every (re)connect, reconcile the confirmation gate with
+@@ -1024,6 +1034,10 @@
+       // delivered. Its terminal handler already finalized the UI.
+       if (compactRequest?.terminal) return
+       currentRunId.value = response.runId
++      needsSnapshot = true
++      // A new thread's user-topic events can precede its HTTP identity. Read
++      // its admitted state once so an already completed reply is not lost.
++      if (wasNew) await reconcileThread()
+ 
+       // Safety timeout: if run.complete/run.error never arrives (e.g., WS down),
+       // unblock the input so the user isn't stuck.
+--- a/frontend/src/stores/chat.test.ts
++++ b/frontend/src/stores/chat.test.ts
+@@ -20,6 +20,7 @@
+ vi.mock('@/stores/conversationFeed', () => ({
+   useConversationFeedStore: () => ({ loadFirst }),
+ }))
++vi.mock('@/stores/auth', () => ({ useAuthStore: () => ({ user: { id: 'user-1' } }) }))
+ vi.mock('@/i18n', () => ({ useAirlockI18n: () => ({ t: (id: string) => id }) }))
+ 
+ import { useChatStore } from './chat'
+@@ -39,6 +40,57 @@
+       handler(payload, { topicId: 'app-1', conversationId: 'conv-1' })
+     }
+   }
++
++  it('receives the first workspace reply on its owner topic and rejects other runs', async () => {
++    get.mockResolvedValueOnce({ data: { conversations: [] } })
++      .mockResolvedValueOnce({ data: { conversations: [{ id: 'conv-1', source: 'web' }] } })
++      .mockResolvedValueOnce({ data: { conversation: { id: 'conv-1' }, inFlightRunId: 'run-1', messages: [] } })
++    post.mockResolvedValueOnce({ data: { runId: 'run-1', conversationId: 'conv-1' } })
++    const chat = useChatStore()
++    await chat.loadConversation('app-1')
++    chat.initListeners()
++    await chat.sendMessage('app-1', 'Read my tasks')
++    const personal = (type: string, payload: unknown, conversationId = 'conv-1', topicId = 'user-1') => {
++      for (const handler of wsHandlers.get(type) ?? []) handler(payload, { topicId, conversationId })
++    }
++    personal('run.started', { runId: 'other-run' })
++    personal('run.text_delta', { runId: 'run-1', text: 'wrong conversation' }, 'other-conv')
++    personal('run.text_delta', { runId: 'run-1', text: 'wrong owner' }, 'conv-1', 'other-user')
++    personal('run.error', { runId: 'other-run', error: 'unrelated' })
++    expect(chat.currentRunId).toBe('run-1')
++    expect(chat.messages.some(message => message.source === 'error')).toBe(false)
++    expect(chat.streamingText).toBe('')
++    personal('run.text_delta', { runId: 'run-1', text: 'No tasks.' })
++    expect(chat.streamingText).toBe('No tasks.')
++    get.mockResolvedValueOnce({ data: { conversation: { id: 'conv-1' }, messages: [{ id: 'answer-1', role: 'assistant', content: 'No tasks.' }] } })
++    personal('run.complete', { runId: 'run-1', finishReason: 'stop' })
++    await vi.waitFor(() => expect(chat.sending).toBe(false))
++    await vi.waitFor(() => expect(chat.messages).toContainEqual(expect.objectContaining({ id: 'answer-1' })))
++    get.mockResolvedValueOnce({ data: { conversation: { id: 'conv-1' }, messages: [{ id: 'answer-2', role: 'assistant', content: 'Reconciled.' }] } })
++    personal('resync', {})
++    await vi.waitFor(() => expect(chat.messages).toContainEqual(expect.objectContaining({ id: 'answer-2' })))
++  })
++
++  it('reconciles a first reply that completed before HTTP admitted its identity', async () => {
++    get.mockResolvedValueOnce({ data: { conversations: [] } })
++      .mockResolvedValueOnce({ data: { conversations: [{ id: 'conv-1', source: 'web' }] } })
++      .mockResolvedValueOnce({ data: { conversation: { id: 'conv-1' }, messages: [{ id: 'fast-answer', role: 'assistant', content: 'Done.' }] } })
++    let admit!: (value: unknown) => void
++    post.mockImplementationOnce(() => new Promise(resolve => { admit = resolve }))
++    const chat = useChatStore()
++    await chat.loadConversation('app-1')
++    chat.initListeners()
++    const sending = chat.sendMessage('app-1', 'Read tasks')
++    for (const handler of wsHandlers.get('run.complete') ?? []) {
++      handler({ runId: 'run-1' }, { topicId: 'user-1', conversationId: 'conv-1' })
++    }
++    expect(chat.conversationId).toBeNull()
++    admit({ data: { runId: 'run-1', conversationId: 'conv-1' } })
++    await sending
++    expect(chat.sending).toBe(false)
++    expect(chat.currentRunId).toBeNull()
++    expect(chat.messages).toContainEqual(expect.objectContaining({ id: 'fast-answer' }))
++  })
+ 
+   it('shows the persisted answer when the final text delta was not delivered', async () => {
+     get
