@@ -1,0 +1,12 @@
+<!doctype html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>{{.Name}} · Airlock</title></head>
+<body><main><h1>{{.Name}}</h1><p>Приложение подключает действующий сервис к Airlock. Вы вошли как администратор приложения.</p>
+{{if .ProductURL}}<p><a href="{{.ProductURL}}" target="_blank" rel="noopener">Открыть {{.Name}}</a></p>{{end}}
+<p>Личные подключения используют вашу учётную запись. Авторизация самого сервиса сохраняется в его штатном интерфейсе.</p>
+<p><a href="https://airlock.bezrabotnyi.com/agents/{{.AgentID}}">Настроить моё подключение</a></p>
+{{if or (eq .Slug "universal-userio") (eq .Slug "gptadmin")}}<p>Для Олега нужно отдельно авторизовать его собственное подключение {{.Name}} в настройках Airlock. Права администратора приложения уже выданы.</p>{{end}}
+<details><summary>Администратор: проверить подключение и выполнить MCP-запрос</summary>
+<form id="operation-form"><label>Операция <select id="operation"></select></label><p id="effect"></p>
+<label>Параметры операции (JSON)<br><textarea id="arguments" rows="12" cols="70">{}</textarea></label>
+<p><label><input type="checkbox" id="confirm"> Подтверждаю выбранную операцию и точные параметры</label></p>
+<button id="execute" type="submit">Выполнить</button></form><p id="status" role="status"></p><pre id="result"></pre></details>
+</main><script src="/static/app.js" defer></script></body></html>

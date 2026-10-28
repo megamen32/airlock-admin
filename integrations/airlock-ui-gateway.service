@@ -1,0 +1,30 @@
+[Unit]
+Description=Caller-bound native Airlock access to existing product interfaces
+After=docker.service network.target
+Requires=docker.service
+
+[Service]
+Type=simple
+User=roomhacker
+Group=roomhacker
+Environment=AIRLOCK_UI_GATEWAY_ADDR=172.17.0.1:19419
+Environment=AIRLOCK_UI_GATEWAY_CONFIG=/home/roomhacker/.config/airlock-apps/ui-gateway.json
+Environment=GOMAXPROCS=1
+Environment=GOMEMLIMIT=128MiB
+ExecStart=/home/roomhacker/.local/lib/airlock-apps/ui-gateway
+Restart=on-failure
+RestartSec=3
+MemoryHigh=128M
+MemoryMax=256M
+MemorySwapMax=0
+CPUQuota=100%
+TasksMax=96
+IOWeight=20
+TimeoutStopSec=10
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+
+[Install]
+WantedBy=multi-user.target
