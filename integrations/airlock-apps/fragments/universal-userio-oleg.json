@@ -7,7 +7,7 @@
     "slug": "universal-userio",
     "agent_id": "d45583e2-649b-44e7-865d-2ea1817b4167",
     "product_url": "https://msg.bezrabotnyi.com/",
-    "ui_url": "http://host.docker.internal:19419/universal-userio"
+    "ui_url": "http://172.17.0.1:19419/universal-userio"
   },
   "bindings": [
     {
