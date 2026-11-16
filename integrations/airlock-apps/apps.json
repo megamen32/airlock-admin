@@ -82,7 +82,7 @@
         }
       }
     ],
-    "ui_url": "http://host.docker.internal:19419/universal-userio"
+    "ui_url": "http://172.17.0.1:19419/universal-userio"
   },
   {
     "name": "GPTAdmin",
