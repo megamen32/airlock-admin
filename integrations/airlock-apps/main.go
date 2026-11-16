@@ -84,7 +84,14 @@ func makeApplication(c appConfig) *application {
 	// Go's native GET route also serves HEAD; a separate catch-all HEAD
 	// conflicts with the SDK's more specific GET asset routes.
 	for _, method := range []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"} {
-		a.RegisterRoute(&agentsdk.Route{Method: method, Path: "/{path...}", Access: agentsdk.AccessAdmin, Description: "Existing " + c.Name + " interface", Handler: app.productUI})
+		path := "/{path...}"
+		if method == "GET" && c.Slug == "universal-userio" {
+			// Airlock detects an embedded web UI only from an explicit GET /.
+			// ServeMux's GET / also handles deeper paths for the original UI;
+			// declaring it alongside GET /{path...} would be ambiguous.
+			path = "/"
+		}
+		a.RegisterRoute(&agentsdk.Route{Method: method, Path: path, Access: agentsdk.AccessAdmin, Description: "Existing " + c.Name + " interface", Handler: app.productUI})
 	}
 	a.RegisterTool(tool.Typed[callInput, *agentsdk.MCPToolCallResponse]("service_read").Description("Read an allowlisted service operation; changes use the existing product interface.").Execute(func(ctx context.Context, in callInput) (*agentsdk.MCPToolCallResponse, error) {
 		for _, op := range c.Operations {
